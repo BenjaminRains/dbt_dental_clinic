@@ -161,9 +161,9 @@ provider_enhanced as (
         
         -- Provider specialty categorization
         case
-            when def_specialty.item_name = 'General' then 'General Practice'
-            when def_specialty.item_name in ('Orthodontics', 'Oral Surgery', 'Endodontics', 'Periodontics') then 'Specialist'
-            when def_specialty.item_name = 'Hygiene' then 'Hygiene'
+            when p.specialty_description = 'General' then 'General Practice'
+            when p.specialty_description in ('Orthodontics', 'Oral Surgery', 'Endodontics', 'Periodontics') then 'Specialist'
+            when p.specialty_description = 'Hygiene' then 'Hygiene'
             else 'Other'
         end as provider_specialty_category,
         
