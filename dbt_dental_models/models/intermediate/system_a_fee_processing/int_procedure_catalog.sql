@@ -80,7 +80,11 @@ definition_lookup as (
 
 treatment_area_definitions as (
     select
-        item_value::integer as treatment_area_id,
+        -- Cast to smallint to match procedurecode.treatment_area type
+        case 
+            when item_value ~ '^[0-9]+$' then item_value::smallint
+            else null
+        end as treatment_area_id,
         item_name as treatment_area_description
     from definition_lookup
     where category_id = 5  -- Treatment areas
@@ -88,7 +92,11 @@ treatment_area_definitions as (
 
 fee_type_definitions as (
     select
-        item_value::integer as fee_type_id,
+        -- Cast to bigint to match feesched.fee_schedule_type_id type
+        case 
+            when item_value ~ '^[0-9]+$' then item_value::bigint
+            else null
+        end as fee_type_id,
         item_name as fee_type_description
     from definition_lookup
     where category_id = 6  -- Fee schedule types
