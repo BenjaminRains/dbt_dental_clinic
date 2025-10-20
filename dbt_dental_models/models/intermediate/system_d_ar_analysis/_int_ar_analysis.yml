@@ -1002,27 +1002,20 @@ models:
               JOIN (
                 SELECT
                   patient_id,
-                  SUM(payment_amount) as expected_payment_amount
-                FROM (
-                  SELECT
-                    c.patient_id,
-                    cp.claim_payment_id,
-                    MAX(cp.insurance_payment_amount) as payment_amount
-                  FROM {{ ref('stg_opendental__claimproc') }} cp
-                  JOIN {{ ref('stg_opendental__claim') }} c
-                    ON cp.claim_id = c.claim_id
-                  WHERE cp.claim_payment_id IS NOT NULL
-                  GROUP BY c.patient_id, cp.claim_payment_id
-                ) distinct_payments
+                  COUNT(DISTINCT claim_payment_id) as expected_payment_count,
+                  SUM(paid_amount) as expected_payment_amount
+                FROM {{ ref('int_claim_payments') }}
+                WHERE claim_payment_id IS NOT NULL
                 GROUP BY patient_id
               ) expected ON ar.patient_id = expected.patient_id
               WHERE ABS(ar.total_claim_payments - expected.expected_payment_amount) > 0.01
+                 OR ar.claim_payment_count != expected.expected_payment_count
             )
           config:
             severity: error
             description: >
-              The total_claim_payments in int_ar_analysis should match the sum of
-              distinct payment amounts from source data.
+              The total_claim_payments in int_ar_analysis should match the sum from
+              int_claim_payments (the actual source used by the model).
 
     meta:
       business_owners: ["dental_finance_team", "insurance_team"]
