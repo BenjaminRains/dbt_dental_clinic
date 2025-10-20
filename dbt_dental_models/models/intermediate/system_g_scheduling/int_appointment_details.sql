@@ -215,7 +215,6 @@ SELECT
         ELSE 'Unknown'
     END AS appointment_status_desc,
     ab.confirmed AS is_confirmed,
-    ab.confirmation_status,
     CASE WHEN ab.appointment_status = 2 THEN TRUE ELSE FALSE END AS is_complete,
     ab.is_hygiene,
     ab.is_new_patient,
