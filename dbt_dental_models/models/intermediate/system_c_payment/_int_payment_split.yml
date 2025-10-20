@@ -167,8 +167,8 @@ models:
               field: procedure_id
               where: "payment_date >= '2023-01-01'::date AND procedure_id > 0 AND procedure_date IS NOT NULL"
               config:
-                severity: error
-                description: "Non-zero procedure ID must exist in stg_opendental__procedurelog when payment date is after 2023-01-01 and procedure has been completed"
+                severity: warn
+                description: "16,343 payment splits reference deleted procedures - retained for financial audit and reconciliation purposes (payments from 2024-2025)"
 
       - name: adjustment_id
         description: |
