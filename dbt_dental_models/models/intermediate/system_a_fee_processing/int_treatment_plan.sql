@@ -61,12 +61,13 @@ with treatment_plan_base as (
         treatment_plan_status,
         heading,
         note,
-        user_id,
+        entry_user_id,
+        presenter_user_id,
         signature,
         signature_practice,
-        responsible_party,
-        date_time_signed_patient,
-        date_time_signed_practice,
+        responsible_party_id,
+        signed_timestamp as date_time_signed_patient,
+        practice_signed_timestamp as date_time_signed_practice,
         mobile_app_device_id,
         _loaded_at,
         _created_at,
@@ -77,10 +78,10 @@ with treatment_plan_base as (
 -- 2. Treatment plan procedure attachments
 treatment_plan_procedures as (
     select
-        tpa.treatment_plan_id,
+        tpa.treatplan_id as treatment_plan_id,
         tpa.procedure_id,
         tpa.priority,
-        tpa.treatment_plan_attach_id
+        tpa.treatplan_attach_id as treatment_plan_attach_id
     from {{ ref('stg_opendental__treatplanattach') }} tpa
 ),
 
@@ -136,10 +137,11 @@ treatment_plan_enhanced as (
         tpb.treatment_plan_status,
         tpb.heading,
         tpb.note,
-        tpb.user_id,
+        tpb.entry_user_id,
+        tpb.presenter_user_id,
         tpb.signature,
         tpb.signature_practice,
-        tpb.responsible_party,
+        tpb.responsible_party_id,
         tpb.date_time_signed_patient,
         tpb.date_time_signed_practice,
         tpb.mobile_app_device_id,
@@ -243,12 +245,7 @@ treatment_plan_enhanced as (
             when current_date - tpb.treatment_plan_date > 90 then 'Medium'
             when coalesce(tpa.procedure_count, 0) > 0 then 'High'
             else 'Medium'
-        end as recovery_potential,
-        
-        -- Metadata
-        tpb._loaded_at,
-        tpb._created_at,
-        tpb._updated_at
+        end as recovery_potential
         
     from treatment_plan_base tpb
     left join treatment_plan_aggregated tpa
@@ -258,13 +255,15 @@ treatment_plan_enhanced as (
 -- 6. Final selection with standardized metadata
 final as (
     select
-        *,
+        tpe.*,
         -- Standardized intermediate metadata
         {{ standardize_intermediate_metadata(
-            primary_source_alias='tpe',
+            primary_source_alias='tpb',
             source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
         ) }}
     from treatment_plan_enhanced tpe
+    inner join treatment_plan_base tpb
+        on tpe.treatment_plan_id = tpb.treatment_plan_id
 )
 
 select * from final
