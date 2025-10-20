@@ -83,25 +83,22 @@ fee_schedule_enhanced as (
         case 
             when is_global_flag = true then 'Global Fee Schedule'
             else 'Local Fee Schedule'
-        end as fee_schedule_category,
-        
-        -- Metadata
-        _loaded_at,
-        _created_at,
-        _updated_at
+        end as fee_schedule_category
         
     from fee_schedule_base
 ),
 
 final as (
     select
-        *,
+        fse.*,
         -- Standardized intermediate metadata
         {{ standardize_intermediate_metadata(
-            primary_source_alias='fse',
+            primary_source_alias='fsb',
             source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
         ) }}
     from fee_schedule_enhanced fse
+    inner join fee_schedule_base fsb
+        on fse.fee_schedule_id = fsb.fee_schedule_id
 )
 
 select * from final
