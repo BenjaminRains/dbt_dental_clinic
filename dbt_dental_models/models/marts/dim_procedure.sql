@@ -123,7 +123,7 @@ final as (
         -- Standardized mart metadata
         {{ standardize_mart_metadata(
             primary_source_alias='pc',
-            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_transformed_at']
+            source_metadata_fields=['_created_at', '_updated_at', '_transformed_at']
         ) }}
         
     from source_procedure_catalog pc
