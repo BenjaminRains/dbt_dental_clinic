@@ -100,7 +100,7 @@ appointment_calculated as (
         coalesce(ab.appointment_type_name, 'Unknown') as appointment_type,
 
         ab.priority,
-        ab.confirmation_status,
+        ab.is_confirmed as confirmation_status,
         ab.is_hygiene as is_hygiene_appointment,
         ab.is_new_patient,
 
