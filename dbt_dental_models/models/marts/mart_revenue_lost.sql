@@ -145,8 +145,8 @@ missed_appointments as (
         
         -- Metadata fields
         fa._loaded_at,
-        fa._created_at,
-        fa._updated_at
+        fa._updated_at,
+        fa._created_by
         
     from appointment_base fa
 ),
@@ -181,8 +181,8 @@ claim_rejections as (
         
         -- Metadata fields
         fc._loaded_at,
-        fc._created_at,
-        fc._updated_at
+        fc._updated_at,
+        null::bigint as _created_by
         
     from claim_base fc
 ),
@@ -205,8 +205,8 @@ treatment_plan_delays as (
         
         -- Metadata fields
         tp._loaded_at,
-        tp._created_at,
-        tp._updated_at
+        tp._updated_at,
+        null::bigint as _created_by  -- int_treatment_plan has _created_at not _created_by
         
     from treatment_base tp
 ),
@@ -237,8 +237,8 @@ write_offs as (
         
         -- Metadata fields
         adj._loaded_at,
-        adj._created_at,
-        adj._updated_at
+        adj._updated_at,
+        adj._created_by
         
     from adjustment_base adj
 ),
@@ -413,7 +413,7 @@ final as (
         -- Metadata
         {{ standardize_mart_metadata(
             primary_source_alias='oe',
-            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+            source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']
         ) }}
         
     from opportunities_enhanced oe
