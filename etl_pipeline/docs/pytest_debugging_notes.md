@@ -1,5 +1,7 @@
 # ETL Pipeline Pytest Debugging Guide
 
+> 💡 **See Also**: [FIXTURE_USAGE_GUIDE.md](FIXTURE_USAGE_GUIDE.md) - Comprehensive guide to using the ETL pipeline's fixture system, with examples for all fixture types (environment, configuration, database, test data, CLI, etc.).
+
 ## Quick Reference - Common Issues
 
 | Error Pattern | Section | Quick Fix |
@@ -30,6 +32,7 @@
 3. **Mock at highest abstraction level possible** - Don't over-mock
 4. **Add debug logging** - Use `logger.debug()` to understand execution flow
 5. **Fix one issue at a time** - Don't try to fix everything simultaneously
+6. **Use appropriate fixtures** - Refer to [FIXTURE_USAGE_GUIDE.md](FIXTURE_USAGE_GUIDE.md) for fixture selection and usage patterns
 
 ### 🔧 **Standard Debugging Workflow**
 ```python
