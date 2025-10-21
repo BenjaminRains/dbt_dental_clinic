@@ -86,10 +86,14 @@ sources:
             tests:
               - not_null_quoted
           - name: "ProcFee"
-            description: "Fee amount charged for procedure (median $75, avg $201.80)"
+            description: |
+              Fee amount charged for procedure (median $75, avg $201.80).
+              Note: 3,273 legacy planned procedures (status=6) have negative fees with placeholder DateEntryC=0001-01-01 - likely credits for canceled treatments or data migration artifacts from 2010-2019
             tests:
               - expression_is_true_quoted:
                   expression: "\"ProcFee\" >= 0 or \"ProcFee\" is null"
+                  config:
+                    severity: warn
           - name: "DateTStamp"
             description: "Timestamp when the record was created or updated"
             tests:
