@@ -22,10 +22,10 @@ renamed_columns as (
         -- Timestamps
         {{ clean_opendental_date('"TimeEntry"') }} as time_entry_ts,
         
-        -- Time durations - convert time values to hours
-        EXTRACT(EPOCH FROM "RegHours")/3600 as regular_hours,
-        EXTRACT(EPOCH FROM "OTimeHours")/3600 as overtime_hours,
-        EXTRACT(EPOCH FROM "PtoHours")/3600 as pto_hours,
+        -- Time durations - convert time values to hours (rounded to 2 decimal places)
+        ROUND((EXTRACT(EPOCH FROM "RegHours")/3600)::numeric, 2) as regular_hours,
+        ROUND((EXTRACT(EPOCH FROM "OTimeHours")/3600)::numeric, 2) as overtime_hours,
+        ROUND((EXTRACT(EPOCH FROM "PtoHours")/3600)::numeric, 2) as pto_hours,
         
         -- Flags and attributes using boolean conversion macro
         {{ convert_opendental_boolean('"IsAuto"') }} as is_auto,
