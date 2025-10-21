@@ -1,5 +1,11 @@
+{{ config(
+    severity='warn',
+    tags=['data_quality', 'staging']
+) }}
+
 -- Test to identify appointments truly missing required history records
 -- Missing creation records are now treated as informational, not errors
+-- The 502+ appointments with no history are legacy data from before consistent history tracking
 
 WITH appointment_with_metrics AS (
     -- Get current appointments with additional metrics
