@@ -12,10 +12,12 @@ models:
       data_scope: "All tooth initial records from OpenDental system"
       
       known_issues:
-        - description: "271 records have empty string values for tooth_num, which is a data quality issue as every tooth initial record should have a valid tooth number"
+        - description: "360 records have NULL/empty tooth_num values - ONGOING DATA QUALITY ISSUE: 279 records (77.5%) were created/updated in 2024-2025, with latest on 2025-10-13. Staff are actively entering incomplete records. Requires immediate cleanup and staff training/form validation."
           severity: "error"
           identified_date: "2024-03-20"
-          test: "tooth_num_not_empty"
+          updated_date: "2025-10-20"
+          test: "tooth_num_not_null"
+          action_required: "1) Fix 360 existing records with missing tooth numbers, 2) Train staff to always enter tooth numbers, 3) Add form validation in OpenDental to prevent NULL entries"
         - description: "Multiple tooth numbering systems are in use (standard 1-32, letters A-T, and some non-standard numbers)"
           severity: "warn"
           identified_date: "2024-03-20"
@@ -65,7 +67,7 @@ models:
       # Business Attributes
       - name: tooth_num
         description: >
-          The specific tooth number being tracked. Must be in one of the following formats:
+          The specific tooth number being tracking. Must be in one of the following formats:
           - Standard dental notation (1-32)
           - Letter notation (A-T)
           - Non-standard numbers (51, 57, 58, 66, 67, 70, 71, 77, 78, 79)
