@@ -54,7 +54,7 @@ import threading
 import concurrent.futures
 
 from etl_pipeline.core.connections import ConnectionFactory, create_connection_manager
-from etl_pipeline.config import get_settings, Settings
+from etl_pipeline.config import get_settings
 
 # Configure timeout for database operations
 DB_TIMEOUT = 30  # seconds
@@ -173,69 +173,20 @@ def setup_environment():
     return environment
 
 class OpenDentalSchemaAnalyzer:
-    """
-    Analyzes OpenDental database schema and generates ETL configuration.
+    """Coordinates complete OpenDental schema analysis using direct database connections."""
     
-    This analyzer is the single source of truth for:
-    - Schema structure discovery (tables, columns, types, constraints)
-    - Extraction strategy determination (full vs incremental)
-    - Performance optimization (batch sizing, priorities)
-    - Slowly Changing Dimension (SCD) detection (schema changes over time)
-    
-    Method Organization:
-    ┌─────────────────────────────────────────────────┐
-    │ 1. Initialization & Setup                       │
-    │ 2. Database Queries (Single Responsibility)     │
-    │ 3. Discovery Methods (Find things)              │
-    │ 4. Incremental Loading Strategy                 │
-    │ 5. Performance Analysis                         │
-    │ 6. SCD Detection (Schema Change Detection)      │
-    │ 7. Batch Processing Utilities                   │
-    │ 8. Configuration Generation                     │
-    │ 9. Reporting & Output                           │
-    │ 10. Validation & Helpers                        │
-    └─────────────────────────────────────────────────┘
-    
-    Key Architectural Decisions:
-    - All information_schema queries go through _query_table_metrics()
-    - Public methods have clear, simple interfaces
-    - Private methods (prefixed with _) contain implementation details
-    - Batch operations for performance (analyze 5 tables at a time)
-    - Timeout protection on all database operations (30s default)
-    
-    Data Contract (tables.yml):
-    - This script outputs tables.yml which is consumed by SimpleMySQLReplicator
-    - Critical fields: extraction_strategy, batch_size, incremental_columns, primary_incremental_column
-    - All other fields are metadata and can be modified freely
-    - See docs/refactor_schema_analyzer_methods.md for complete contract definition
-    """
-    
-    # =========================================================================
-    # SECTION 1: INITIALIZATION & SETUP
-    # =========================================================================
-    
-    def __init__(self, settings: Optional[Settings] = None):
-        """
-        Initialize with source database connection using Settings injection pattern.
-        
-        Args:
-            settings: Settings instance (uses global if None)
-        """
+    def __init__(self):
+        """Initialize with source database connection using modern connection handling."""
         # Setup environment first
         self.environment = setup_environment()
         
-        # Use provided settings or get global settings (Settings injection pattern)
-        self.settings = settings or get_settings()
-        
-        # Get database connections using Settings injection
-        self.source_engine = ConnectionFactory.get_source_connection(self.settings)
-        
-        # Get source database name from connection config
-        source_config = self.settings.get_source_connection_config()
-        self.source_db = source_config.get('database')
+        # Use explicit production connection
+        settings = get_settings()
+        self.source_engine = ConnectionFactory.get_source_connection(settings)
+        self.source_db = os.getenv('OPENDENTAL_SOURCE_DB')
         
         if not self.source_db:
-            raise ValueError("Source database is not configured in settings")
+            raise ValueError("OPENDENTAL_SOURCE_DB environment variable is required")
         
         # Get dbt project root (current directory)
         self.dbt_project_root = str(Path(__file__).parent.parent.parent)
@@ -243,15 +194,26 @@ class OpenDentalSchemaAnalyzer:
         # Initialize inspector for schema analysis
         self.inspector = inspect(self.source_engine)
         
-        logger.info("Schema analyzer initialized with Settings injection pattern")
+        logger.info("Schema analyzer initialized with existing ConnectionManager architecture")
     
-    # =========================================================================
-    # SECTION 2: DATABASE QUERIES (Single Responsibility)
-    # =========================================================================
-    # All information_schema queries for table metrics go through _query_table_metrics()
-    # Public methods (get_estimated_row_count, get_table_size_info, get_table_schema)
-    # provide clean interfaces for callers
-    # =========================================================================
+    def discover_all_tables(self) -> List[str]:
+        """Discover all tables in the source database."""
+        try:
+            logger.info("Discovering all tables in database...")
+            tables = self.inspector.get_table_names()
+            
+            # Filter out excluded patterns
+            filtered_tables = []
+            for table in tables:
+                table_lower = table.lower()
+                if not any(pattern in table_lower for pattern in EXCLUDED_PATTERNS):
+                    filtered_tables.append(table)
+            
+            logger.info(f"Discovered {len(filtered_tables)} tables in database (filtered from {len(tables)} total)")
+            return filtered_tables
+        except Exception as e:
+            logger.error(f"Failed to discover tables: {e}")
+            raise
     
     def get_table_schema(self, table_name: str) -> Dict:
         """Get detailed schema information for a table using existing ConnectionManager."""
@@ -286,136 +248,97 @@ class OpenDentalSchemaAnalyzer:
             logger.error(f"Failed to get schema for table {table_name}: {e}")
             return {'table_name': table_name, 'error': str(e)}
     
-    # =========================================================================
-    # SECTION 3: DISCOVERY METHODS (Find things)
-    # =========================================================================
-    # Methods that discover what exists: tables, dbt models
-    # =========================================================================
-    
-    def discover_all_tables(self) -> List[str]:
-        """Discover all tables in the source database."""
-        try:
-            logger.info("Discovering all tables in database...")
-            tables = self.inspector.get_table_names()
-            
-            # Filter out excluded patterns
-            filtered_tables = []
-            for table in tables:
-                table_lower = table.lower()
-                if not any(pattern in table_lower for pattern in EXCLUDED_PATTERNS):
-                    filtered_tables.append(table)
-            
-            logger.info(f"Discovered {len(filtered_tables)} tables in database (filtered from {len(tables)} total)")
-            return filtered_tables
-        except Exception as e:
-            logger.error(f"Failed to discover tables: {e}")
-            raise
-    
-    def _query_table_metrics(self, table_name: str) -> Dict:
-        """
-        Single source of truth: Query all table metrics from information_schema.
-        
-        This is the ONLY method that queries information_schema.tables for metrics.
-        All other metric methods should call this one.
-        
-        Returns:
-            Dict with keys:
-            - estimated_rows (int): TABLE_ROWS or estimated from data_length
-            - size_mb (float): Total size in megabytes
-            - data_length (int): Data size in bytes
-            - index_length (int): Index size in bytes
-        """
-        with create_connection_manager(self.source_engine) as conn_manager:
-            result = conn_manager.execute_with_retry(f"""
-                SELECT 
-                    COALESCE(TABLE_ROWS, 0) as estimated_rows,
-                    COALESCE(data_length, 0) as data_length,
-                    COALESCE(index_length, 0) as index_length,
-                    COALESCE(ROUND(((data_length + index_length) / 1024 / 1024), 2), 0) AS size_mb
-                FROM information_schema.tables 
-                WHERE table_schema = '{self.source_db}' 
-                AND table_name = '{table_name}'
-            """)
-            
-            row = result.fetchone() if result else None
-            if not row:
-                return {
-                    'estimated_rows': 0,
-                    'size_mb': 0.0,
-                    'data_length': 0,
-                    'index_length': 0
-                }
-            
-            estimated_rows = row[0] or 0
-            data_length = row[1] or 0
-            
-            # Fallback: if TABLE_ROWS is 0, estimate from data_length
-            if estimated_rows == 0 and data_length > 0:
-                estimated_rows = max(1, int(data_length / 1024))  # Assume ~1KB per row
-            
-            return {
-                'estimated_rows': int(estimated_rows),
-                'size_mb': float(row[3] or 0.0),
-                'data_length': int(data_length),
-                'index_length': int(row[2] or 0)
-            }
-
     def get_estimated_row_count(self, table_name: str) -> int:
-        """
-        Get estimated row count for a table.
+        """Get estimated row count using MySQL's TABLE_ROWS from information_schema.
         
-        Purpose: 
-            Provide a simple int return for callers who only need row count.
-            
-        Implementation:
-            Uses information_schema.TABLE_ROWS (fast, no table locks).
-            Falls back to size-based estimation if TABLE_ROWS is NULL.
-            
-        Returns:
-            int: Estimated row count, or 0 if table doesn't exist or on error
+        This method is much faster than COUNT(*) and avoids locking large tables.
+        TABLE_ROWS provides an estimate that is updated by MySQL's statistics.
+        If TABLE_ROWS is unavailable, falls back to size-based estimation.
         """
+        def _get_estimated_count():
+            with create_connection_manager(self.source_engine) as conn_manager:
+                # Use TABLE_ROWS from information_schema for estimated count (much faster than COUNT(*))
+                estimated_count_result = conn_manager.execute_with_retry(f"""
+                    SELECT TABLE_ROWS 
+                    FROM information_schema.tables 
+                    WHERE table_schema = '{self.source_db}' 
+                    AND table_name = '{table_name}'
+                """)
+                estimated_count = estimated_count_result.scalar() if estimated_count_result else 0
+                
+                # Handle None values from database
+                if estimated_count is None:
+                    estimated_count = 0
+                
+                # If TABLE_ROWS is NULL or 0, try to get a rough estimate from table size
+                if not estimated_count:
+                    # Get table size and estimate rows based on average row size
+                    size_result = conn_manager.execute_with_retry(f"""
+                        SELECT 
+                            data_length,
+                            index_length,
+                            ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
+                        FROM information_schema.tables 
+                        WHERE table_schema = '{self.source_db}' 
+                        AND table_name = '{table_name}'
+                    """)
+                    
+                    if size_result:
+                        row = size_result.fetchone()
+                        if row and row[0]:  # data_length exists
+                            data_length = row[0]
+                            # Estimate based on average row size of 1KB (conservative estimate)
+                            estimated_count = max(1, int(data_length / 1024))
+                        else:
+                            estimated_count = 0
+                    else:
+                        estimated_count = 0
+                
+                return estimated_count
+        
         try:
-            metrics = run_with_timeout(
-                lambda: self._query_table_metrics(table_name), 
-                DB_TIMEOUT
-            )
-            return metrics['estimated_rows']
+            result = run_with_timeout(_get_estimated_count, DB_TIMEOUT)
+            # Ensure we always return an integer
+            return int(result) if result is not None else 0
         except TimeoutError:
-            logger.warning(f"Timeout getting row count for {table_name}")
+            logger.warning(f"Timeout getting estimated row count for table {table_name}")
             return 0
         except Exception as e:
-            logger.error(f"Failed to get row count for {table_name}: {e}")
+            logger.error(f"Failed to get estimated row count for table {table_name}: {e}")
             return 0
 
     def get_table_size_info(self, table_name: str) -> Dict:
-        """
-        Get table size and row count information.
+        """Get table size and estimated row count information using existing ConnectionManager."""
+        def _get_size_info():
+            # Use the existing ConnectionManager for proper connection handling
+            with create_connection_manager(self.source_engine) as conn_manager:
+                # Get estimated row count (much faster than COUNT(*))
+                estimated_row_count = self.get_estimated_row_count(table_name)
+                
+                # Get table size (approximate)
+                size_result = conn_manager.execute_with_retry(f"""
+                    SELECT 
+                        ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
+                    FROM information_schema.tables 
+                    WHERE table_schema = '{self.source_db}' 
+                    AND table_name = '{table_name}'
+                """)
+                size_mb = size_result.scalar() if size_result else 0
+                # Ensure size_mb is a number, not None
+                if size_mb is None:
+                    size_mb = 0.0
+                
+                return {
+                    'table_name': table_name,
+                    'estimated_row_count': estimated_row_count,
+                    'size_mb': size_mb,
+                    'source': 'information_schema_estimate'
+                }
         
-        Purpose:
-            Provide complete size info for performance analysis.
-            Used by configuration generator to determine batch sizes.
-            
-        Returns:
-            Dict with keys:
-            - table_name (str): Name of the table
-            - estimated_row_count (int): Estimated rows
-            - size_mb (float): Total size in MB
-            - source (str): Always 'information_schema_estimate'
-            - error (str, optional): Error message if query failed
-        """
         try:
-            metrics = run_with_timeout(
-                lambda: self._query_table_metrics(table_name),
-                DB_TIMEOUT
-            )
-            return {
-                'table_name': table_name,
-                'estimated_row_count': metrics['estimated_rows'],
-                'size_mb': metrics['size_mb'],
-                'source': 'information_schema_estimate'
-            }
+            return run_with_timeout(_get_size_info, DB_TIMEOUT)
         except TimeoutError:
-            logger.warning(f"Timeout getting size info for {table_name}")
+            logger.warning(f"Timeout getting size info for table {table_name}")
             return {
                 'table_name': table_name,
                 'estimated_row_count': 0,
@@ -423,7 +346,7 @@ class OpenDentalSchemaAnalyzer:
                 'error': 'timeout'
             }
         except Exception as e:
-            logger.error(f"Failed to get size info for {table_name}: {e}")
+            logger.error(f"Failed to get size info for table {table_name}: {e}")
             return {
                 'table_name': table_name,
                 'estimated_row_count': 0,
@@ -441,7 +364,7 @@ class OpenDentalSchemaAnalyzer:
         }
         
         try:
-            models_dir = Path(self.dbt_project_root) / 'dbt_dental_models' / 'models'
+            models_dir = Path(self.dbt_project_root) / 'models'
             if not models_dir.exists():
                 logger.warning(f"dbt models directory not found: {models_dir}")
                 return dbt_models
@@ -484,17 +407,6 @@ class OpenDentalSchemaAnalyzer:
             logger.error(f"Failed to discover dbt models: {e}")
             return dbt_models
     
-    # =========================================================================
-    # SECTION 4: INCREMENTAL LOADING STRATEGY
-    # =========================================================================
-    # Methods that determine how to extract data incrementally:
-    # - find_incremental_columns(): Identify timestamp columns
-    # - validate_incremental_column_data_quality(): Check column reliability
-    # - select_primary_incremental_column(): Choose best column
-    # - determine_incremental_strategy(): OR/AND/single column logic
-    # - determine_extraction_strategy(): full_table vs incremental vs chunked
-    # =========================================================================
-    
     def _validate_extraction_strategy(self, strategy: str) -> bool:
         """Validate that the extraction strategy is supported by SimpleMySQLReplicator."""
         # These must match the strategies in SimpleMySQLReplicator
@@ -505,6 +417,36 @@ class OpenDentalSchemaAnalyzer:
             return False
         return True
 
+    def determine_extraction_strategy(self, table_name: str, schema_info: Dict, size_info: Dict) -> str:
+        """Determine optimal extraction strategy for a table based on size and available incremental columns."""
+        estimated_row_count = size_info.get('estimated_row_count', 0)
+        
+        # Handle None values from database queries
+        if estimated_row_count is None:
+            estimated_row_count = 0
+            logger.warning(f"Estimated row count is None for table {table_name}, defaulting to 0")
+        
+        # Find available incremental columns
+        incremental_columns = self.find_incremental_columns(table_name, schema_info)
+        has_incremental_columns = len(incremental_columns) > 0
+        
+        # Determine strategy
+        if not has_incremental_columns:
+            strategy = 'full_table'
+        elif estimated_row_count > 1_000_000:
+            strategy = 'incremental_chunked'  # ✅ FIXED: Consistent naming
+        elif estimated_row_count > 10_000:
+            strategy = 'incremental'
+        else:
+            strategy = 'incremental'  # ✅ FIXED: Clear business logic
+        
+        # Validate the strategy before returning
+        if not self._validate_extraction_strategy(strategy):
+            strategy = 'full_table'  # Safe fallback
+            logger.warning(f"Using fallback strategy 'full_table' for {table_name}")
+        
+        return strategy
+    
     def determine_incremental_strategy(self, table_name: str, schema_info: Dict, incremental_columns: List[str]) -> str:
         """
         Determine the optimal incremental strategy for a table.
@@ -671,7 +613,10 @@ class OpenDentalSchemaAnalyzer:
             if column_name not in prioritized_columns:
                 prioritized_columns.append(column_name)
         
-        # Special case: Add primary key for auto-incrementing tables BEFORE limiting
+        # Limit to 2-3 most reliable columns to avoid complexity
+        final_columns = prioritized_columns[:3]
+        
+        # Special case: Add primary key for auto-incrementing tables
         primary_keys = schema_info.get('primary_keys', [])
         if primary_keys:
             primary_key = primary_keys[0]
@@ -679,13 +624,10 @@ class OpenDentalSchemaAnalyzer:
             primary_key_info = columns.get(primary_key, {})
             primary_key_type = str(primary_key_info.get('type', '')).lower()
             
-            # Add primary key at the beginning if it's auto-incrementing and not already included
-            if ('bigint' in primary_key_type or 'int' in primary_key_type) and primary_key not in prioritized_columns:
-                prioritized_columns.insert(0, primary_key)  # Add at the beginning for highest priority
+            # Add primary key if it's auto-incrementing (bigint/int) and not already included
+            if ('bigint' in primary_key_type or 'int' in primary_key_type) and primary_key not in final_columns:
+                final_columns.insert(0, primary_key)  # Add at the beginning for highest priority
                 logger.debug(f"Added auto-incrementing primary key '{primary_key}' to incremental columns for {table_name}")
-        
-        # Limit to 3 most reliable columns AFTER adding primary key to avoid complexity
-        final_columns = prioritized_columns[:3]
         
         if len(final_columns) != len(timestamp_columns):
             logger.info(f"Filtered incremental columns for {table_name}: {len(timestamp_columns)} -> {len(final_columns)} columns")
@@ -749,17 +691,7 @@ class OpenDentalSchemaAnalyzer:
         logger.debug(f"Selected primary incremental column '{selected_column}' as fallback (no priority columns found)")
         return selected_column
     
-    # =========================================================================
-    # SECTION 5: PERFORMANCE ANALYSIS
-    # =========================================================================
-    # Methods that calculate performance characteristics:
-    # - get_table_performance_profile(): Main performance analysis
-    # - _calculate_processing_priority(): Assign priority levels
-    # - _estimate_processing_time(): Calculate expected duration
-    # - _estimate_memory_requirements(): Calculate memory needs
-    # =========================================================================
-    
-    def get_table_performance_profile(self, table_name: str, schema_info: Dict, size_info: Dict) -> Dict:
+    def analyze_table_performance_characteristics(self, table_name: str, schema_info: Dict, size_info: Dict) -> Dict:
         """
         Analyze table characteristics for performance optimization.
         
@@ -911,7 +843,7 @@ class OpenDentalSchemaAnalyzer:
         
         return int(total_memory_mb)
     
-    def determine_extraction_strategy(self, table_name: str, schema_info: Dict, 
+    def enhanced_determine_extraction_strategy(self, table_name: str, schema_info: Dict, 
                                              size_info: Dict, performance_chars: Dict) -> str:
         """
         Enhanced extraction strategy determination with performance considerations.
@@ -941,13 +873,106 @@ class OpenDentalSchemaAnalyzer:
             else:
                 return 'full_table'
     
-    # =========================================================================
-    # SECTION 6: SCD DETECTION (Schema Change Detection)
-    # =========================================================================
-    # Methods that detect schema changes over time (slowly changing dimensions):
-    # - _generate_schema_hash(): Create hash fingerprint of schema
-    # - compare_with_previous_schema(): Detect added/removed tables and columns
-    # =========================================================================
+    def get_batch_schema_info(self, table_names: List[str]) -> Dict[str, Dict]:
+        """Get schema information for multiple tables in a single connection."""
+        def _get_batch_schema():
+            with create_connection_manager(self.source_engine) as conn_manager:
+                batch_results = {}
+                
+                for table_name in table_names:
+                    try:
+                        # Get all schema information for this table
+                        columns = self.inspector.get_columns(table_name)
+                        primary_keys = self.inspector.get_pk_constraint(table_name)
+                        foreign_keys = self.inspector.get_foreign_keys(table_name)
+                        indexes = self.inspector.get_indexes(table_name)
+                        
+                        batch_results[table_name] = {
+                            'table_name': table_name,
+                            'columns': {col['name']: {
+                                'type': str(col['type']),
+                                'nullable': col['nullable'],
+                                'default': col['default'],
+                                'primary_key': col['name'] in primary_keys.get('constrained_columns', [])
+                            } for col in columns},
+                            'primary_keys': primary_keys.get('constrained_columns', []),
+                            'foreign_keys': foreign_keys,
+                            'indexes': indexes
+                        }
+                    except Exception as e:
+                        logger.warning(f"Failed to get schema for table {table_name}: {e}")
+                        batch_results[table_name] = {
+                            'table_name': table_name,
+                            'error': str(e)
+                        }
+                
+                return batch_results
+        
+        try:
+            return run_with_timeout(_get_batch_schema, DB_TIMEOUT * 2)  # Longer timeout for batch operations
+        except TimeoutError:
+            logger.warning(f"Timeout getting batch schema for {len(table_names)} tables")
+            return {table_name: {'table_name': table_name, 'error': 'timeout'} for table_name in table_names}
+        except Exception as e:
+            logger.error(f"Failed to get batch schema: {e}")
+            return {table_name: {'table_name': table_name, 'error': str(e)} for table_name in table_names}
+    
+    def get_batch_size_info(self, table_names: List[str]) -> Dict[str, Dict]:
+        """Get size information for multiple tables in a single connection using estimated row counts."""
+        def _get_batch_size():
+            with create_connection_manager(self.source_engine) as conn_manager:
+                batch_results = {}
+                
+                for table_name in table_names:
+                    try:
+                        # Get estimated row count (much faster than COUNT(*))
+                        estimated_row_count = self.get_estimated_row_count(table_name)
+                        
+                        # Get table size (approximate)
+                        size_result = conn_manager.execute_with_retry(f"""
+                            SELECT 
+                                ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
+                            FROM information_schema.tables 
+                            WHERE table_schema = '{self.source_db}' 
+                            AND table_name = '{table_name}'
+                        """)
+                        size_mb = size_result.scalar() if size_result else 0
+                        
+                        batch_results[table_name] = {
+                            'table_name': table_name,
+                            'estimated_row_count': estimated_row_count,
+                            'size_mb': size_mb,
+                            'source': 'information_schema_estimate'
+                        }
+                    except Exception as e:
+                        logger.warning(f"Failed to get size info for table {table_name}: {e}")
+                        batch_results[table_name] = {
+                            'table_name': table_name,
+                            'estimated_row_count': 0,
+                            'size_mb': 0,
+                            'error': str(e)
+                        }
+                
+                return batch_results
+        
+        try:
+            return run_with_timeout(_get_batch_size, DB_TIMEOUT * 2)  # Longer timeout for batch operations
+        except TimeoutError:
+            logger.warning(f"Timeout getting batch size info for {len(table_names)} tables")
+            return {table_name: {
+                'table_name': table_name,
+                'estimated_row_count': 0,
+                'size_mb': 0,
+                'error': 'timeout'
+            } for table_name in table_names}
+        except Exception as e:
+            logger.error(f"Failed to get batch size info: {e}")
+            return {table_name: {
+                'table_name': table_name,
+                'estimated_row_count': 0,
+                'size_mb': 0,
+                'error': str(e)
+            } for table_name in table_names}
     
     def _generate_schema_hash(self, tables: List[str]) -> str:
         """Generate a hash of the schema structure for change detection."""
@@ -1081,123 +1106,9 @@ class OpenDentalSchemaAnalyzer:
             logger.error(f"Failed to compare schemas: {e}")
             return changes
     
-    # =========================================================================
-    # SECTION 7: BATCH PROCESSING UTILITIES
-    # =========================================================================
-    # Methods that process multiple tables efficiently:
-    # - get_batch_schema_info(): Batch schema queries
-    # - get_batch_size_info(): Batch size queries
-    # =========================================================================
-    
-    def get_batch_schema_info(self, table_names: List[str]) -> Dict[str, Dict]:
-        """Get schema information for multiple tables in a single connection."""
-        def _get_batch_schema():
-            with create_connection_manager(self.source_engine) as conn_manager:
-                batch_results = {}
-                
-                for table_name in table_names:
-                    try:
-                        # Get all schema information for this table
-                        columns = self.inspector.get_columns(table_name)
-                        primary_keys = self.inspector.get_pk_constraint(table_name)
-                        foreign_keys = self.inspector.get_foreign_keys(table_name)
-                        indexes = self.inspector.get_indexes(table_name)
-                        
-                        batch_results[table_name] = {
-                            'table_name': table_name,
-                            'columns': {col['name']: {
-                                'type': str(col['type']),
-                                'nullable': col['nullable'],
-                                'default': col['default'],
-                                'primary_key': col['name'] in primary_keys.get('constrained_columns', [])
-                            } for col in columns},
-                            'primary_keys': primary_keys.get('constrained_columns', []),
-                            'foreign_keys': foreign_keys,
-                            'indexes': indexes
-                        }
-                    except Exception as e:
-                        logger.warning(f"Failed to get schema for table {table_name}: {e}")
-                        batch_results[table_name] = {
-                            'table_name': table_name,
-                            'error': str(e)
-                        }
-                
-                return batch_results
-        
-        try:
-            return run_with_timeout(_get_batch_schema, DB_TIMEOUT * 2)  # Longer timeout for batch operations
-        except TimeoutError:
-            logger.warning(f"Timeout getting batch schema for {len(table_names)} tables")
-            return {table_name: {'table_name': table_name, 'error': 'timeout'} for table_name in table_names}
-        except Exception as e:
-            logger.error(f"Failed to get batch schema: {e}")
-            return {table_name: {'table_name': table_name, 'error': str(e)} for table_name in table_names}
-    
-    def get_batch_size_info(self, table_names: List[str]) -> Dict[str, Dict]:
-        """Get size information for multiple tables in a single connection using estimated row counts."""
-        def _get_batch_size():
-            with create_connection_manager(self.source_engine) as conn_manager:
-                batch_results = {}
-                
-                for table_name in table_names:
-                    try:
-                        # Get estimated row count (much faster than COUNT(*))
-                        estimated_row_count = self.get_estimated_row_count(table_name)
-                        
-                        # Get table size (approximate)
-                        size_result = conn_manager.execute_with_retry(f"""
-                            SELECT 
-                                ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
-                            FROM information_schema.tables 
-                            WHERE table_schema = '{self.source_db}' 
-                            AND table_name = '{table_name}'
-                        """)
-                        size_mb = size_result.scalar() if size_result else 0
-                        
-                        batch_results[table_name] = {
-                            'table_name': table_name,
-                            'estimated_row_count': estimated_row_count,
-                            'size_mb': size_mb,
-                            'source': 'information_schema_estimate'
-                        }
-                    except Exception as e:
-                        logger.warning(f"Failed to get size info for table {table_name}: {e}")
-                        batch_results[table_name] = {
-                            'table_name': table_name,
-                            'estimated_row_count': 0,
-                            'size_mb': 0,
-                            'error': str(e)
-                        }
-                
-                return batch_results
-        
-        try:
-            return run_with_timeout(_get_batch_size, DB_TIMEOUT * 2)  # Longer timeout for batch operations
-        except TimeoutError:
-            logger.warning(f"Timeout getting batch size info for {len(table_names)} tables")
-            return {table_name: {
-                'table_name': table_name,
-                'estimated_row_count': 0,
-                'size_mb': 0,
-                'error': 'timeout'
-            } for table_name in table_names}
-        except Exception as e:
-            logger.error(f"Failed to get batch size info: {e}")
-            return {table_name: {
-                'table_name': table_name,
-                'estimated_row_count': 0,
-                'size_mb': 0,
-                'error': str(e)
-            } for table_name in table_names}
-    
-    # =========================================================================
-    # SECTION 8: CONFIGURATION GENERATION
-    # =========================================================================
-    # Methods that orchestrate the complete analysis and generate tables.yml:
-    # - generate_complete_configuration(): Main orchestrator
-    # - analyze_complete_schema(): Top-level coordinator with SCD detection
-    # - _validate_extraction_strategy(): Validate strategy values
-    # =========================================================================
+    def generate_schema_hash(self, table_name: str) -> str:
+        """Generate a hash for a single table's schema (public interface)."""
+        return self._generate_schema_hash([table_name])
     
     def generate_complete_configuration(self, output_dir: str) -> Dict:
         """Generate complete configuration for all tables with batch processing."""
@@ -1298,10 +1209,10 @@ class OpenDentalSchemaAnalyzer:
                             continue
                         
                         # Enhanced performance-based analysis
-                        performance_chars = self.get_table_performance_profile(table_name, schema_info, size_info)
+                        performance_chars = self.analyze_table_performance_characteristics(table_name, schema_info, size_info)
                         
                         # Determine extraction strategy using enhanced method
-                        extraction_strategy = self.determine_extraction_strategy(table_name, schema_info, size_info, performance_chars)
+                        extraction_strategy = self.enhanced_determine_extraction_strategy(table_name, schema_info, size_info, performance_chars)
                         
                         # Validate extraction strategy
                         if not self._validate_extraction_strategy(extraction_strategy):
@@ -1544,17 +1455,6 @@ class OpenDentalSchemaAnalyzer:
         except Exception as e:
             logger.error(f"Schema analysis failed: {str(e)}")
             raise
-    
-    # =========================================================================
-    # SECTION 9: REPORTING & OUTPUT
-    # =========================================================================
-    # Methods that generate human-readable reports and summaries:
-    # - _generate_detailed_analysis_report(): Comprehensive JSON report
-    # - _generate_performance_summary(): Performance metrics report  
-    # - _generate_schema_changelog(): SCD changelog in markdown
-    # - _generate_summary_report(): Console summary
-    # - _get_batch_size_range(): Helper for statistics
-    # =========================================================================
     
     def _generate_detailed_analysis_report(self, config: Dict) -> Dict:
         """Generate detailed analysis report with all metadata."""
