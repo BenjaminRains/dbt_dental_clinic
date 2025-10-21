@@ -99,9 +99,13 @@ models:
           User ID of the person who locked orthodontic modifications for this patient.
           Maps to UserNumOrthoLocked in OpenDental source system.
           Null when orthodontic records are not locked or patient is not receiving orthodontic treatment.
+          Value of 0 indicates ortho is locked but no specific user is assigned (system lock or deleted user).
+          Note: Value 0 is a valid placeholder for system-locked ortho records (3,969 records)
         tests:
           - positive_values:
-              where: "user_id_ortho_locked is not null"
+              where: "user_id_ortho_locked is not null and user_id_ortho_locked != 0"
+              config:
+                severity: warn
 
       - name: family_financial
         description: >

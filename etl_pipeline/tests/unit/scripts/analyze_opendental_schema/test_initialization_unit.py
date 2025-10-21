@@ -90,29 +90,35 @@ class TestOpenDentalSchemaAnalyzerInitialization:
 
     def test_fail_fast_on_missing_environment(self):
         """
-        Test that system fails fast when OPENDENTAL_SOURCE_DB not set.
+        Test that system fails fast when source database config is not available in Settings.
         
         AAA Pattern:
-            Arrange: Remove OPENDENTAL_SOURCE_DB from environment variables
-            Act: Attempt to create OpenDentalSchemaAnalyzer without required env var
+            Arrange: Mock Settings to return None for database configuration
+            Act: Attempt to create OpenDentalSchemaAnalyzer with invalid settings
             Assert: Verify system fails fast with clear error message
             
         Validates:
-            - FAIL FAST behavior when OPENDENTAL_SOURCE_DB not set
-            - Clear error message for missing environment variables
-            - No default fallback to production environment
-            - Settings injection validation with environment requirements
+            - FAIL FAST behavior when source database not configured in Settings
+            - Clear error message for missing database configuration
+            - Settings injection validation
         """
-        # Arrange: Remove OPENDENTAL_SOURCE_DB from environment variables
-        original_source_db = os.environ.get('OPENDENTAL_SOURCE_DB')
-        if 'OPENDENTAL_SOURCE_DB' in os.environ:
-            del os.environ['OPENDENTAL_SOURCE_DB']
-        
-        try:
-            # Act: Attempt to create OpenDentalSchemaAnalyzer without required env var
-            with pytest.raises(ValueError, match="OPENDENTAL_SOURCE_DB environment variable is required"):
-                analyzer = OpenDentalSchemaAnalyzer()
-        finally:
-            # Cleanup: Restore original environment
-            if original_source_db:
-                os.environ['OPENDENTAL_SOURCE_DB'] = original_source_db 
+        with patch('scripts.analyze_opendental_schema.ConnectionFactory') as mock_factory, \
+             patch('scripts.analyze_opendental_schema.inspect') as mock_inspect, \
+             patch('scripts.analyze_opendental_schema.get_settings') as mock_get_settings:
+            
+            # Create mock engine
+            mock_engine = Mock()
+            mock_factory.get_source_connection.return_value = mock_engine
+            
+            # Create mock inspector
+            mock_inspector = Mock()
+            mock_inspect.return_value = mock_inspector
+            
+            # Mock Settings to return None for database (simulate missing config)
+            mock_settings = Mock()
+            mock_settings.get_source_connection_config.return_value = {'database': None}  # Missing database!
+            mock_get_settings.return_value = mock_settings
+            
+            # Act & Assert: Verify system fails fast
+            with pytest.raises(ValueError, match="Source database is not configured"):
+                analyzer = OpenDentalSchemaAnalyzer() 

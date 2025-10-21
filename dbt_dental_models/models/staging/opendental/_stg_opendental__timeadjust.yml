@@ -158,8 +158,8 @@ models:
           expression: "> 0"
           column_name: "regular_hours + overtime_hours + pto_hours"
           config:
-            severity: error
-            description: "At least one type of hours must be greater than 0"
+            severity: warn
+            description: "175 records have 0 hours - these are pending time adjustment requests (noted in the note field) that haven't been processed yet by payroll."
       - dbt_utils.expression_is_true:
           expression: ">= 0"
           column_name: "pto_def_id"

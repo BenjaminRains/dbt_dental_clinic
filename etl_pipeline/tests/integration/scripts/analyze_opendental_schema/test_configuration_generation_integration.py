@@ -195,7 +195,7 @@ class TestConfigurationGenerationIntegration:
                     assert isinstance(table_config['schema_hash'], int)  # Should be integer from hash() function
                     assert isinstance(table_config['last_analyzed'], str)
                     
-                    # Verify that incremental columns are timestamp or datetime data types (new data-driven approach)
+                    # Verify incremental columns are timestamp/datetime OR auto-incrementing primary keys
                     if table_config['incremental_columns']:
                         # Get the actual schema info for this table to verify data types
                         table_schema = analyzer.get_table_schema(table_name)
@@ -203,8 +203,12 @@ class TestConfigurationGenerationIntegration:
                             assert col_name in table_schema['columns'], f"Column {col_name} not found in schema for {table_name}"
                             col_info = table_schema['columns'][col_name]
                             col_type = str(col_info['type']).lower()
-                            assert any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime']), \
-                                f"Column {col_name} with type {col_type} should be a timestamp or datetime type for table {table_name}"
+                            is_primary_key = col_info.get('primary_key', False)
+                            is_timestamp = any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime'])
+                            is_auto_increment_pk = any(int_type in col_type for int_type in ['int', 'bigint']) and is_primary_key
+                            
+                            assert is_timestamp or is_auto_increment_pk, \
+                                f"Column {col_name} with type {col_type} should be timestamp/datetime or auto-incrementing PK for table {table_name}"
                     
         finally:
             # Restore original method

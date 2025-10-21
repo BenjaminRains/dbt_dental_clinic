@@ -1,11 +1,11 @@
 metadata:
-  generated_at: '2025-10-11T20:42:19.079731'
+  generated_at: '2025-10-19T19:21:15.521320'
   analyzer_version: 4.0_performance_enhanced
   configuration_version: '4.0'
   source_database: opendental
   total_tables: 436
   schema_hash: a07eb24347005056bc67224c40de7037
-  analysis_timestamp: '20251011_204219'
+  analysis_timestamp: '20251019_192115'
   environment: production
   performance_optimizations_enabled: true
   optimization_features:
@@ -37,8 +37,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6638523762927643839
-    last_analyzed: '2025-10-11T20:42:20.553565'
+    schema_hash: 7071511390257913187
+    last_analyzed: '2025-10-19T19:21:16.939002'
     primary_key: AccountNum
   accountingautopay:
     table_name: accountingautopay
@@ -62,8 +62,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4542498663658828957
-    last_analyzed: '2025-10-11T20:42:20.558699'
+    schema_hash: 1885566277644165701
+    last_analyzed: '2025-10-19T19:21:16.939816'
     primary_key: AccountingAutoPayNum
   activeinstance:
     table_name: activeinstance
@@ -87,14 +87,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5967426136587040424
-    last_analyzed: '2025-10-11T20:42:20.800742'
+    schema_hash: 5544895309754611887
+    last_analyzed: '2025-10-19T19:21:17.180174'
     primary_key: ActiveInstanceNum
   adjustment:
     table_name: adjustment
     extraction_strategy: incremental
-    estimated_rows: 260182
-    estimated_size_mb: 65.84
+    estimated_rows: 260225
+    estimated_size_mb: 65.86
     batch_size: 50000
     incremental_columns:
     - AdjNum
@@ -113,8 +113,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 9052007288060570570
-    last_analyzed: '2025-10-11T20:42:21.564181'
+    schema_hash: -5593082628002162089
+    last_analyzed: '2025-10-19T19:21:17.945165'
     primary_key: AdjNum
   alertcategory:
     table_name: alertcategory
@@ -138,8 +138,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8819707382760860477
-    last_analyzed: '2025-10-11T20:42:21.564181'
+    schema_hash: 1726467686670919517
+    last_analyzed: '2025-10-19T19:21:17.948701'
     primary_key: AlertCategoryNum
   alertcategorylink:
     table_name: alertcategorylink
@@ -163,8 +163,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6373725083379355884
-    last_analyzed: '2025-10-11T20:42:23.915973'
+    schema_hash: 5341782442831899557
+    last_analyzed: '2025-10-19T19:21:20.329941'
     primary_key: AlertCategoryLinkNum
   alertitem:
     table_name: alertitem
@@ -188,8 +188,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 738855891312521774
-    last_analyzed: '2025-10-11T20:42:24.032557'
+    schema_hash: -6517580721244768671
+    last_analyzed: '2025-10-19T19:21:20.505193'
     primary_key: AlertItemNum
   alertread:
     table_name: alertread
@@ -213,8 +213,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1415296398926833888
-    last_analyzed: '2025-10-11T20:42:24.032557'
+    schema_hash: 8254031560212991673
+    last_analyzed: '2025-10-19T19:21:20.506189'
     primary_key: AlertReadNum
   alertsub:
     table_name: alertsub
@@ -238,14 +238,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3437630604211256254
-    last_analyzed: '2025-10-11T20:42:24.032557'
+    schema_hash: 4128242810216019130
+    last_analyzed: '2025-10-19T19:21:20.507190'
     primary_key: AlertSubNum
   allergy:
     table_name: allergy
     extraction_strategy: full_table
-    estimated_rows: 4915
-    estimated_size_mb: 0.46
+    estimated_rows: 5022
+    estimated_size_mb: 0.47
     batch_size: 10000
     incremental_columns:
     - AllergyNum
@@ -264,8 +264,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 9053638640838113716
-    last_analyzed: '2025-10-11T20:42:24.180079'
+    schema_hash: -2470667468550911404
+    last_analyzed: '2025-10-19T19:21:20.647306'
     primary_key: AllergyNum
   allergydef:
     table_name: allergydef
@@ -289,8 +289,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2600851948657565962
-    last_analyzed: '2025-10-11T20:42:26.866317'
+    schema_hash: -8818923398565084491
+    last_analyzed: '2025-10-19T19:21:23.133896'
     primary_key: AllergyDefNum
   anestheticdata:
     table_name: anestheticdata
@@ -314,8 +314,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 30
-    schema_hash: -1550852183852244084
-    last_analyzed: '2025-10-11T20:42:26.866317'
+    schema_hash: 2668094155624551896
+    last_analyzed: '2025-10-19T19:21:23.133896'
     primary_key: AnestheticDataNum
   anestheticrecord:
     table_name: anestheticrecord
@@ -339,8 +339,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2711581754775155788
-    last_analyzed: '2025-10-11T20:42:26.984325'
+    schema_hash: -729323370040564717
+    last_analyzed: '2025-10-19T19:21:23.252311'
     primary_key: AnestheticRecordNum
   anesthmedsgiven:
     table_name: anesthmedsgiven
@@ -364,8 +364,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3547395365487545446
-    last_analyzed: '2025-10-11T20:42:26.984325'
+    schema_hash: 7650027746315012192
+    last_analyzed: '2025-10-19T19:21:23.253342'
     primary_key: AnestheticMedNum
   anesthmedsintake:
     table_name: anesthmedsintake
@@ -389,8 +389,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7110034226141526703
-    last_analyzed: '2025-10-11T20:42:26.984325'
+    schema_hash: 1173536381289726855
+    last_analyzed: '2025-10-19T19:21:23.254339'
     primary_key: AnestheticMedNum
   anesthmedsinventory:
     table_name: anesthmedsinventory
@@ -414,8 +414,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2449626982548834430
-    last_analyzed: '2025-10-11T20:42:29.671882'
+    schema_hash: 6242329900971522386
+    last_analyzed: '2025-10-19T19:21:25.593728'
     primary_key: AnestheticMedNum
   anesthmedsinventoryadj:
     table_name: anesthmedsinventoryadj
@@ -439,8 +439,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1597801147101638704
-    last_analyzed: '2025-10-11T20:42:29.801420'
+    schema_hash: 5175685705799432893
+    last_analyzed: '2025-10-19T19:21:25.715139'
     primary_key: AdjustNum
   anesthmedsuppliers:
     table_name: anesthmedsuppliers
@@ -464,8 +464,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8420815222026914798
-    last_analyzed: '2025-10-11T20:42:29.801420'
+    schema_hash: -1942140243330585703
+    last_analyzed: '2025-10-19T19:21:25.715139'
     primary_key: SupplierIDNum
   anesthscore:
     table_name: anesthscore
@@ -489,8 +489,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1128361433895238100
-    last_analyzed: '2025-10-11T20:42:29.801420'
+    schema_hash: -905061066035512535
+    last_analyzed: '2025-10-19T19:21:25.716320'
     primary_key: AnesthScoreNum
   anesthvsdata:
     table_name: anesthvsdata
@@ -514,8 +514,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7725722080748502589
-    last_analyzed: '2025-10-11T20:42:29.801420'
+    schema_hash: -4466702790792384065
+    last_analyzed: '2025-10-19T19:21:25.716320'
     primary_key: AnesthVSDataNum
   apikey:
     table_name: apikey
@@ -539,8 +539,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1683700695002169358
-    last_analyzed: '2025-10-11T20:42:32.332950'
+    schema_hash: -5491152788863209822
+    last_analyzed: '2025-10-19T19:21:28.074387'
     primary_key: APIKeyNum
   apisubscription:
     table_name: apisubscription
@@ -564,20 +564,19 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5307622878796891787
-    last_analyzed: '2025-10-11T20:42:32.585930'
+    schema_hash: -1969917140001380034
+    last_analyzed: '2025-10-19T19:21:28.300434'
     primary_key: ApiSubscriptionNum
   appointment:
     table_name: appointment
     extraction_strategy: incremental
-    estimated_rows: 78009
-    estimated_size_mb: 39.97
+    estimated_rows: 78662
+    estimated_size_mb: 40.46
     batch_size: 25000
     incremental_columns:
     - AptNum
     - DateTStamp
     - SecDateTEntry
-    - AptDateTime
     incremental_strategy: or_logic
     primary_incremental_column: AptNum
     is_modeled: false
@@ -592,8 +591,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 372251257289843955
-    last_analyzed: '2025-10-11T20:42:33.567224'
+    schema_hash: 6216612673976329114
+    last_analyzed: '2025-10-19T19:21:29.277518'
     primary_key: AptNum
   appointmentrule:
     table_name: appointmentrule
@@ -617,8 +616,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1174721385183442649
-    last_analyzed: '2025-10-11T20:42:33.570507'
+    schema_hash: -2464865991525466862
+    last_analyzed: '2025-10-19T19:21:29.283807'
     primary_key: AppointmentRuleNum
   appointmenttype:
     table_name: appointmenttype
@@ -642,14 +641,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6572866023898793236
-    last_analyzed: '2025-10-11T20:42:33.570507'
+    schema_hash: 3786571621824438356
+    last_analyzed: '2025-10-19T19:21:29.288271'
     primary_key: AppointmentTypeNum
   apptfield:
     table_name: apptfield
     extraction_strategy: incremental
-    estimated_rows: 11501
-    estimated_size_mb: 0.92
+    estimated_rows: 11617
+    estimated_size_mb: 0.93
     batch_size: 25000
     incremental_columns:
     - ApptFieldNum
@@ -667,8 +666,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -943125818904594346
-    last_analyzed: '2025-10-11T20:42:35.969585'
+    schema_hash: -8656356616433945266
+    last_analyzed: '2025-10-19T19:21:31.668139'
     primary_key: ApptFieldNum
   apptfielddef:
     table_name: apptfielddef
@@ -692,8 +691,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6348121331085712182
-    last_analyzed: '2025-10-11T20:42:35.969585'
+    schema_hash: -1053208871998643441
+    last_analyzed: '2025-10-19T19:21:31.668139'
     primary_key: ApptFieldDefNum
   apptgeneralmessagesent:
     table_name: apptgeneralmessagesent
@@ -717,8 +716,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6119717974473210906
-    last_analyzed: '2025-10-11T20:42:36.096478'
+    schema_hash: -6986119994045028370
+    last_analyzed: '2025-10-19T19:21:31.797043'
     primary_key: ApptGeneralMessageSentNum
   apptnewpatthankyousent:
     table_name: apptnewpatthankyousent
@@ -742,8 +741,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 9003907810144393703
-    last_analyzed: '2025-10-11T20:42:36.332641'
+    schema_hash: -5070437508688404197
+    last_analyzed: '2025-10-19T19:21:32.032765'
     primary_key: ApptNewPatThankYouSentNum
   apptreminderrule:
     table_name: apptreminderrule
@@ -767,8 +766,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7171909519989164032
-    last_analyzed: '2025-10-11T20:42:36.332641'
+    schema_hash: 5750575597103929323
+    last_analyzed: '2025-10-19T19:21:32.032765'
     primary_key: ApptReminderRuleNum
   apptremindersent:
     table_name: apptremindersent
@@ -792,8 +791,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4810910502415521965
-    last_analyzed: '2025-10-11T20:42:38.852558'
+    schema_hash: 8687925297888642471
+    last_analyzed: '2025-10-19T19:21:34.503583'
     primary_key: ApptReminderSentNum
   apptthankyousent:
     table_name: apptthankyousent
@@ -817,8 +816,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2288012571228103390
-    last_analyzed: '2025-10-11T20:42:39.086946'
+    schema_hash: 4285850492382099766
+    last_analyzed: '2025-10-19T19:21:34.757103'
     primary_key: ApptThankYouSentNum
   apptview:
     table_name: apptview
@@ -842,8 +841,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5727650971265707674
-    last_analyzed: '2025-10-11T20:42:39.086946'
+    schema_hash: 7579267009214335268
+    last_analyzed: '2025-10-19T19:21:34.759102'
     primary_key: ApptViewNum
   apptviewitem:
     table_name: apptviewitem
@@ -867,8 +866,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6906245659089185086
-    last_analyzed: '2025-10-11T20:42:39.086946'
+    schema_hash: 5964609096554436584
+    last_analyzed: '2025-10-19T19:21:34.761102'
     primary_key: ApptViewItemNum
   asapcomm:
     table_name: asapcomm
@@ -892,8 +891,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8551302533289923761
-    last_analyzed: '2025-10-11T20:42:39.086946'
+    schema_hash: 6185307238823927725
+    last_analyzed: '2025-10-19T19:21:34.761102'
     primary_key: AsapCommNum
   autocode:
     table_name: autocode
@@ -917,8 +916,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4735048040211681492
-    last_analyzed: '2025-10-11T20:42:41.506268'
+    schema_hash: 6724602616722981939
+    last_analyzed: '2025-10-19T19:21:37.104130'
     primary_key: AutoCodeNum
   autocodecond:
     table_name: autocodecond
@@ -942,8 +941,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6757742682792127158
-    last_analyzed: '2025-10-11T20:42:41.506268'
+    schema_hash: 8519969012773870295
+    last_analyzed: '2025-10-19T19:21:37.107417'
     primary_key: AutoCodeCondNum
   autocodeitem:
     table_name: autocodeitem
@@ -967,8 +966,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5588679581898916725
-    last_analyzed: '2025-10-11T20:42:41.506268'
+    schema_hash: 4732469232002717752
+    last_analyzed: '2025-10-19T19:21:37.108449'
     primary_key: AutoCodeItemNum
   autocommexcludedate:
     table_name: autocommexcludedate
@@ -992,8 +991,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5235048401536642654
-    last_analyzed: '2025-10-11T20:42:41.506268'
+    schema_hash: -8790330790691319123
+    last_analyzed: '2025-10-19T19:21:37.109431'
     primary_key: AutoCommExcludeDateNum
   automation:
     table_name: automation
@@ -1017,8 +1016,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1969696094953347260
-    last_analyzed: '2025-10-11T20:42:41.506268'
+    schema_hash: 9026076894346196691
+    last_analyzed: '2025-10-19T19:21:37.110436'
     primary_key: AutomationNum
   automationcondition:
     table_name: automationcondition
@@ -1042,8 +1041,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3612805786624116777
-    last_analyzed: '2025-10-11T20:42:43.974070'
+    schema_hash: 7377357188930077674
+    last_analyzed: '2025-10-19T19:21:39.438470'
     primary_key: AutomationConditionNum
   autonote:
     table_name: autonote
@@ -1067,8 +1066,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4901687974255540318
-    last_analyzed: '2025-10-11T20:42:43.974070'
+    schema_hash: -1886108483600520673
+    last_analyzed: '2025-10-19T19:21:39.438470'
     primary_key: AutoNoteNum
   autonotecontrol:
     table_name: autonotecontrol
@@ -1092,14 +1091,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7866135175990211251
-    last_analyzed: '2025-10-11T20:42:43.974070'
+    schema_hash: -5257249070288897034
+    last_analyzed: '2025-10-19T19:21:39.438470'
     primary_key: AutoNoteControlNum
   benefit:
     table_name: benefit
     extraction_strategy: incremental
-    estimated_rows: 103710
-    estimated_size_mb: 25.21
+    estimated_rows: 103848
+    estimated_size_mb: 25.3
     batch_size: 50000
     incremental_columns:
     - BenefitNum
@@ -1119,8 +1118,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: -6152991252350779853
-    last_analyzed: '2025-10-11T20:42:44.646297'
+    schema_hash: 8854929888428146540
+    last_analyzed: '2025-10-19T19:21:40.154188'
     primary_key: BenefitNum
   branding:
     table_name: branding
@@ -1144,8 +1143,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3087962190167591928
-    last_analyzed: '2025-10-11T20:42:44.782726'
+    schema_hash: 3691721633075212420
+    last_analyzed: '2025-10-19T19:21:40.276284'
     primary_key: BrandingNum
   canadiannetwork:
     table_name: canadiannetwork
@@ -1169,14 +1168,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2412745466968065576
-    last_analyzed: '2025-10-11T20:42:47.268621'
+    schema_hash: -5647520171472648381
+    last_analyzed: '2025-10-19T19:21:42.621156'
     primary_key: CanadianNetworkNum
   carecreditwebresponse:
     table_name: carecreditwebresponse
     extraction_strategy: incremental
-    estimated_rows: 21527
-    estimated_size_mb: 12.47
+    estimated_rows: 21676
+    estimated_size_mb: 12.6
     batch_size: 25000
     incremental_columns:
     - CareCreditWebResponseNum
@@ -1194,13 +1193,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -4703319182763460404
-    last_analyzed: '2025-10-11T20:42:47.268621'
+    schema_hash: -4806628222685100617
+    last_analyzed: '2025-10-19T19:21:42.621156'
     primary_key: CareCreditWebResponseNum
   carrier:
     table_name: carrier
     extraction_strategy: full_table
-    estimated_rows: 2340
+    estimated_rows: 2341
     estimated_size_mb: 0.46
     batch_size: 10000
     incremental_columns:
@@ -1220,8 +1219,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5053632781164468135
-    last_analyzed: '2025-10-11T20:42:47.408906'
+    schema_hash: 7049844164036286954
+    last_analyzed: '2025-10-19T19:21:42.761690'
     primary_key: CarrierNum
   cdcrec:
     table_name: cdcrec
@@ -1245,8 +1244,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6945284691294460748
-    last_analyzed: '2025-10-11T20:42:47.408906'
+    schema_hash: -8231715005506865446
+    last_analyzed: '2025-10-19T19:21:42.763726'
     primary_key: CdcrecNum
   cdspermission:
     table_name: cdspermission
@@ -1270,8 +1269,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3036968896323012001
-    last_analyzed: '2025-10-11T20:42:47.408906'
+    schema_hash: -965212068721440277
+    last_analyzed: '2025-10-19T19:21:42.764721'
     primary_key: CDSPermissionNum
   centralconnection:
     table_name: centralconnection
@@ -1295,8 +1294,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5948994563336193830
-    last_analyzed: '2025-10-11T20:42:50.026574'
+    schema_hash: 5805445190092633081
+    last_analyzed: '2025-10-19T19:21:45.246658'
     primary_key: CentralConnectionNum
   cert:
     table_name: cert
@@ -1320,8 +1319,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7552249807116243631
-    last_analyzed: '2025-10-11T20:42:50.026574'
+    schema_hash: -2239114534068601086
+    last_analyzed: '2025-10-19T19:21:45.246658'
     primary_key: CertNum
   certemployee:
     table_name: certemployee
@@ -1345,8 +1344,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1518811695899667668
-    last_analyzed: '2025-10-11T20:42:50.026574'
+    schema_hash: -2796854959485941287
+    last_analyzed: '2025-10-19T19:21:45.246658'
     primary_key: CertEmployeeNum
   chartview:
     table_name: chartview
@@ -1370,14 +1369,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8448640815447856520
-    last_analyzed: '2025-10-11T20:42:50.026574'
+    schema_hash: 1355586783493435218
+    last_analyzed: '2025-10-19T19:21:45.246658'
     primary_key: ChartViewNum
   claim:
     table_name: claim
     extraction_strategy: incremental
-    estimated_rows: 26639
-    estimated_size_mb: 12.19
+    estimated_rows: 26753
+    estimated_size_mb: 12.48
     batch_size: 17500
     incremental_columns:
     - ClaimNum
@@ -1396,8 +1395,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 76
-    schema_hash: -2298514603651699838
-    last_analyzed: '2025-10-11T20:42:50.288610'
+    schema_hash: 7242528691502663445
+    last_analyzed: '2025-10-19T19:21:45.492985'
     primary_key: ClaimNum
   claimattach:
     table_name: claimattach
@@ -1421,8 +1420,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6876909188008815909
-    last_analyzed: '2025-10-11T20:42:52.776348'
+    schema_hash: -3850542236975768103
+    last_analyzed: '2025-10-19T19:21:47.948676'
     primary_key: ClaimAttachNum
   claimcondcodelog:
     table_name: claimcondcodelog
@@ -1446,8 +1445,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3944658666874208709
-    last_analyzed: '2025-10-11T20:42:52.778712'
+    schema_hash: -7719778855758646839
+    last_analyzed: '2025-10-19T19:21:47.948676'
     primary_key: ClaimCondCodeLogNum
   claimform:
     table_name: claimform
@@ -1471,8 +1470,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6119276254511284739
-    last_analyzed: '2025-10-11T20:42:52.778712'
+    schema_hash: -3445414631847745502
+    last_analyzed: '2025-10-19T19:21:47.964796'
     primary_key: ClaimFormNum
   claimformitem:
     table_name: claimformitem
@@ -1496,14 +1495,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4455058212988686402
-    last_analyzed: '2025-10-11T20:42:52.778712'
+    schema_hash: 8344751439753075100
+    last_analyzed: '2025-10-19T19:21:47.964796'
     primary_key: ClaimFormItemNum
   claimpayment:
     table_name: claimpayment
     extraction_strategy: incremental
-    estimated_rows: 20132
-    estimated_size_mb: 3.68
+    estimated_rows: 20177
+    estimated_size_mb: 3.69
     batch_size: 25000
     incremental_columns:
     - ClaimPaymentNum
@@ -1522,14 +1521,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -7303864195319440569
-    last_analyzed: '2025-10-11T20:42:52.979206'
+    schema_hash: 4140646164932148781
+    last_analyzed: '2025-10-19T19:21:48.142221'
     primary_key: ClaimPaymentNum
   claimproc:
     table_name: claimproc
     extraction_strategy: incremental
-    estimated_rows: 204031
-    estimated_size_mb: 139.92
+    estimated_rows: 205256
+    estimated_size_mb: 140.89
     batch_size: 50000
     incremental_columns:
     - ClaimProcNum
@@ -1548,14 +1547,14 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 8697928499003732548
-    last_analyzed: '2025-10-11T20:42:56.115992'
+    schema_hash: 3678964065852288135
+    last_analyzed: '2025-10-19T19:21:51.316090'
     primary_key: ClaimProcNum
   claimsnapshot:
     table_name: claimsnapshot
     extraction_strategy: incremental
-    estimated_rows: 76621
-    estimated_size_mb: 7.56
+    estimated_rows: 76934
+    estimated_size_mb: 7.59
     batch_size: 25000
     incremental_columns:
     - ClaimSnapshotNum
@@ -1574,14 +1573,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 8371416308705478374
-    last_analyzed: '2025-10-11T20:42:56.330120'
+    schema_hash: -6688597174355397005
+    last_analyzed: '2025-10-19T19:21:51.546711'
     primary_key: ClaimSnapshotNum
   claimtracking:
     table_name: claimtracking
     extraction_strategy: incremental
-    estimated_rows: 33145
-    estimated_size_mb: 4.23
+    estimated_rows: 33225
+    estimated_size_mb: 4.24
     batch_size: 25000
     incremental_columns:
     - ClaimTrackingNum
@@ -1599,8 +1598,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -8900020300274547550
-    last_analyzed: '2025-10-11T20:42:56.345250'
+    schema_hash: -1211809734452795702
+    last_analyzed: '2025-10-19T19:21:51.549065'
     primary_key: ClaimTrackingNum
   claimvalcodelog:
     table_name: claimvalcodelog
@@ -1624,8 +1623,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6775265396689216176
-    last_analyzed: '2025-10-11T20:42:56.346264'
+    schema_hash: -8390904006077300758
+    last_analyzed: '2025-10-19T19:21:51.551062'
     primary_key: ClaimValCodeLogNum
   clearinghouse:
     table_name: clearinghouse
@@ -1649,8 +1648,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8162189891587740711
-    last_analyzed: '2025-10-11T20:42:56.347262'
+    schema_hash: 3988887150712446409
+    last_analyzed: '2025-10-19T19:21:51.553061'
     primary_key: ClearinghouseNum
   clinic:
     table_name: clinic
@@ -1674,8 +1673,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2461075837248414389
-    last_analyzed: '2025-10-11T20:42:59.019011'
+    schema_hash: -546618942465923710
+    last_analyzed: '2025-10-19T19:21:54.043047'
     primary_key: ClinicNum
   clinicerx:
     table_name: clinicerx
@@ -1699,8 +1698,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5180938298706556693
-    last_analyzed: '2025-10-11T20:42:59.019011'
+    schema_hash: -4595805470798347657
+    last_analyzed: '2025-10-19T19:21:54.047195'
     primary_key: ClinicErxNum
   clinicpref:
     table_name: clinicpref
@@ -1724,14 +1723,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8302574118296864181
-    last_analyzed: '2025-10-11T20:42:59.020012'
+    schema_hash: 9032332400498659046
+    last_analyzed: '2025-10-19T19:21:54.047195'
     primary_key: ClinicPrefNum
   clockevent:
     table_name: clockevent
     extraction_strategy: incremental
-    estimated_rows: 22847
-    estimated_size_mb: 2.87
+    estimated_rows: 22959
+    estimated_size_mb: 2.89
     batch_size: 25000
     incremental_columns:
     - ClockEventNum
@@ -1749,8 +1748,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 3335024677117289737
-    last_analyzed: '2025-10-11T20:42:59.020012'
+    schema_hash: -5991729665241032434
+    last_analyzed: '2025-10-19T19:21:54.047195'
     primary_key: ClockEventNum
   cloudaddress:
     table_name: cloudaddress
@@ -1774,8 +1773,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5335430781518289440
-    last_analyzed: '2025-10-11T20:42:59.020012'
+    schema_hash: 872871115573798793
+    last_analyzed: '2025-10-19T19:21:54.047195'
     primary_key: CloudAddressNum
   codegroup:
     table_name: codegroup
@@ -1799,8 +1798,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6065508933893328736
-    last_analyzed: '2025-10-11T20:43:01.416457'
+    schema_hash: 7961053022512279321
+    last_analyzed: '2025-10-19T19:21:56.495928'
     primary_key: CodeGroupNum
   codesystem:
     table_name: codesystem
@@ -1824,20 +1823,19 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1893681268550421116
-    last_analyzed: '2025-10-11T20:43:01.416457'
+    schema_hash: -8629616250192435977
+    last_analyzed: '2025-10-19T19:21:56.495928'
     primary_key: CodeSystemNum
   commlog:
     table_name: commlog
     extraction_strategy: incremental
-    estimated_rows: 820244
-    estimated_size_mb: 257.75
+    estimated_rows: 822709
+    estimated_size_mb: 258.77
     batch_size: 50000
     incremental_columns:
     - CommlogNum
     - DateTStamp
     - DateTEntry
-    - CommDateTime
     incremental_strategy: or_logic
     primary_incremental_column: CommlogNum
     is_modeled: false
@@ -1852,14 +1850,14 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: -4609634483694302620
-    last_analyzed: '2025-10-11T20:43:07.293777'
+    schema_hash: -4021190310805928693
+    last_analyzed: '2025-10-19T19:22:02.481511'
     primary_key: CommlogNum
   commoptout:
     table_name: commoptout
     extraction_strategy: full_table
-    estimated_rows: 9148
-    estimated_size_mb: 0.5
+    estimated_rows: 9602
+    estimated_size_mb: 0.52
     batch_size: 10000
     incremental_columns:
     - CommOptOutNum
@@ -1877,8 +1875,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4967142857771353041
-    last_analyzed: '2025-10-11T20:43:07.293777'
+    schema_hash: -2527654090959559913
+    last_analyzed: '2025-10-19T19:22:02.497227'
     primary_key: CommOptOutNum
   computer:
     table_name: computer
@@ -1902,8 +1900,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3385932763080736000
-    last_analyzed: '2025-10-11T20:43:07.293777'
+    schema_hash: -5637883950445140401
+    last_analyzed: '2025-10-19T19:22:02.497227'
     primary_key: ComputerNum
   computerpref:
     table_name: computerpref
@@ -1927,8 +1925,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5008317847133769958
-    last_analyzed: '2025-10-11T20:43:09.926456'
+    schema_hash: 2585332362775530910
+    last_analyzed: '2025-10-19T19:22:04.966672'
     primary_key: ComputerPrefNum
   confirmationrequest:
     table_name: confirmationrequest
@@ -1953,8 +1951,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2891486606711675468
-    last_analyzed: '2025-10-11T20:43:10.064028'
+    schema_hash: -4417676565577894726
+    last_analyzed: '2025-10-19T19:22:05.092617'
     primary_key: ConfirmationRequestNum
   connectiongroup:
     table_name: connectiongroup
@@ -1978,8 +1976,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7470223611480123694
-    last_analyzed: '2025-10-11T20:43:10.064028'
+    schema_hash: 6051270227124894267
+    last_analyzed: '2025-10-19T19:22:05.092617'
     primary_key: ConnectionGroupNum
   conngroupattach:
     table_name: conngroupattach
@@ -2003,8 +2001,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 186573006006937827
-    last_analyzed: '2025-10-11T20:43:10.064028'
+    schema_hash: 8407695444981576188
+    last_analyzed: '2025-10-19T19:22:05.094052'
     primary_key: ConnGroupAttachNum
   contact:
     table_name: contact
@@ -2028,8 +2026,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 657756585590937791
-    last_analyzed: '2025-10-11T20:43:10.064028'
+    schema_hash: 6184430501112001192
+    last_analyzed: '2025-10-19T19:22:05.094052'
     primary_key: ContactNum
   county:
     table_name: county
@@ -2053,8 +2051,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7448975964614202361
-    last_analyzed: '2025-10-11T20:43:12.703932'
+    schema_hash: -3578474780785747881
+    last_analyzed: '2025-10-19T19:22:07.595016'
     primary_key: CountyNum
   covcat:
     table_name: covcat
@@ -2078,8 +2076,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3095799304491754039
-    last_analyzed: '2025-10-11T20:43:12.703932'
+    schema_hash: 3537406763143814121
+    last_analyzed: '2025-10-19T19:22:07.596013'
     primary_key: CovCatNum
   covspan:
     table_name: covspan
@@ -2103,8 +2101,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -818350780525129574
-    last_analyzed: '2025-10-11T20:43:12.703932'
+    schema_hash: -4089795684837368250
+    last_analyzed: '2025-10-19T19:22:07.597012'
     primary_key: CovSpanNum
   cpt:
     table_name: cpt
@@ -2128,8 +2126,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7129404014105636655
-    last_analyzed: '2025-10-11T20:43:12.703932'
+    schema_hash: -4285841293983524441
+    last_analyzed: '2025-10-19T19:22:07.598012'
     primary_key: CptNum
   creditcard:
     table_name: creditcard
@@ -2153,8 +2151,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7164675084848088497
-    last_analyzed: '2025-10-11T20:43:12.703932'
+    schema_hash: -2338612173646809014
+    last_analyzed: '2025-10-19T19:22:07.598012'
     primary_key: CreditCardNum
   custrefentry:
     table_name: custrefentry
@@ -2178,14 +2176,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6447147286945049431
-    last_analyzed: '2025-10-11T20:43:15.388159'
+    schema_hash: -178791030475577531
+    last_analyzed: '2025-10-19T19:22:10.063286'
     primary_key: CustRefEntryNum
   custreference:
     table_name: custreference
     extraction_strategy: full_table
-    estimated_rows: 5548
-    estimated_size_mb: 0.28
+    estimated_rows: 5996
+    estimated_size_mb: 0.31
     batch_size: 10000
     incremental_columns:
     - CustReferenceNum
@@ -2203,8 +2201,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7830671145557632173
-    last_analyzed: '2025-10-11T20:43:15.388159'
+    schema_hash: -929612101122342577
+    last_analyzed: '2025-10-19T19:22:10.064287'
     primary_key: CustReferenceNum
   cvx:
     table_name: cvx
@@ -2228,8 +2226,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7787931528049274022
-    last_analyzed: '2025-10-11T20:43:15.388159'
+    schema_hash: 5822316625682310972
+    last_analyzed: '2025-10-19T19:22:10.065287'
     primary_key: CvxNum
   dashboardar:
     table_name: dashboardar
@@ -2253,8 +2251,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 101417221866032727
-    last_analyzed: '2025-10-11T20:43:15.394330'
+    schema_hash: -4261627194296572446
+    last_analyzed: '2025-10-19T19:22:10.066287'
     primary_key: DashboardARNum
   dashboardcell:
     table_name: dashboardcell
@@ -2278,8 +2276,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 989745282346085217
-    last_analyzed: '2025-10-11T20:43:15.395869'
+    schema_hash: -7333195745832768839
+    last_analyzed: '2025-10-19T19:22:10.067286'
     primary_key: DashboardCellNum
   dashboardlayout:
     table_name: dashboardlayout
@@ -2303,8 +2301,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6430347178815348793
-    last_analyzed: '2025-10-11T20:43:17.973485'
+    schema_hash: 3158770201453343658
+    last_analyzed: '2025-10-19T19:22:12.522015'
     primary_key: DashboardLayoutNum
   databasemaintenance:
     table_name: databasemaintenance
@@ -2328,8 +2326,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7882016006261440567
-    last_analyzed: '2025-10-11T20:43:17.973485'
+    schema_hash: -1679576666715000374
+    last_analyzed: '2025-10-19T19:22:12.522015'
     primary_key: DatabaseMaintenanceNum
   dbmlog:
     table_name: dbmlog
@@ -2353,13 +2351,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1876623646169390531
-    last_analyzed: '2025-10-11T20:43:17.973485'
+    schema_hash: -414301210050456157
+    last_analyzed: '2025-10-19T19:22:12.522015'
     primary_key: DbmLogNum
   definition:
     table_name: definition
     extraction_strategy: full_table
-    estimated_rows: 648
+    estimated_rows: 650
     estimated_size_mb: 0.04
     batch_size: 10000
     incremental_columns:
@@ -2378,8 +2376,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5415195491521980051
-    last_analyzed: '2025-10-11T20:43:17.973485'
+    schema_hash: -1560633582225375119
+    last_analyzed: '2025-10-19T19:22:12.522015'
     primary_key: DefNum
   deflink:
     table_name: deflink
@@ -2403,8 +2401,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3142711354198089749
-    last_analyzed: '2025-10-11T20:43:17.973485'
+    schema_hash: -6367257238597155201
+    last_analyzed: '2025-10-19T19:22:12.522015'
     primary_key: DefLinkNum
   deletedobject:
     table_name: deletedobject
@@ -2429,8 +2427,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5264848598633284713
-    last_analyzed: '2025-10-11T20:43:20.568498'
+    schema_hash: -229336287703076779
+    last_analyzed: '2025-10-19T19:22:15.125318'
     primary_key: DeletedObjectNum
   deposit:
     table_name: deposit
@@ -2454,8 +2452,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7784209387085231267
-    last_analyzed: '2025-10-11T20:43:20.569506'
+    schema_hash: 957931117293339452
+    last_analyzed: '2025-10-19T19:22:15.126357'
     primary_key: DepositNum
   dictcustom:
     table_name: dictcustom
@@ -2479,8 +2477,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1626452703356607394
-    last_analyzed: '2025-10-11T20:43:20.570505'
+    schema_hash: 8946556451648578351
+    last_analyzed: '2025-10-19T19:22:15.127349'
     primary_key: DictCustomNum
   discountplan:
     table_name: discountplan
@@ -2504,8 +2502,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5105328143446922931
-    last_analyzed: '2025-10-11T20:43:20.570505'
+    schema_hash: -6274942086935834345
+    last_analyzed: '2025-10-19T19:22:15.127349'
     primary_key: DiscountPlanNum
   discountplansub:
     table_name: discountplansub
@@ -2529,14 +2527,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2680461047244408226
-    last_analyzed: '2025-10-11T20:43:20.571506'
+    schema_hash: -1217596502963073372
+    last_analyzed: '2025-10-19T19:22:15.128351'
     primary_key: DiscountSubNum
   disease:
     table_name: disease
     extraction_strategy: incremental
-    estimated_rows: 18744
-    estimated_size_mb: 1.8
+    estimated_rows: 18938
+    estimated_size_mb: 1.82
     batch_size: 25000
     incremental_columns:
     - DiseaseNum
@@ -2555,13 +2553,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 8660576323819638011
-    last_analyzed: '2025-10-11T20:43:23.223637'
+    schema_hash: 5184900546273029079
+    last_analyzed: '2025-10-19T19:22:17.786497'
     primary_key: DiseaseNum
   diseasedef:
     table_name: diseasedef
     extraction_strategy: full_table
-    estimated_rows: 166
+    estimated_rows: 175
     estimated_size_mb: 0.03
     batch_size: 10000
     incremental_columns:
@@ -2581,8 +2579,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8937571947385103134
-    last_analyzed: '2025-10-11T20:43:23.353764'
+    schema_hash: 495916921413102490
+    last_analyzed: '2025-10-19T19:22:17.912421'
     primary_key: DiseaseDefNum
   displayfield:
     table_name: displayfield
@@ -2606,8 +2604,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8318593657955679458
-    last_analyzed: '2025-10-11T20:43:23.353764'
+    schema_hash: 2890772364776276148
+    last_analyzed: '2025-10-19T19:22:17.913406'
     primary_key: DisplayFieldNum
   displayreport:
     table_name: displayreport
@@ -2631,8 +2629,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1538156420899889078
-    last_analyzed: '2025-10-11T20:43:23.353764'
+    schema_hash: 8152976165941040072
+    last_analyzed: '2025-10-19T19:22:17.913406'
     primary_key: DisplayReportNum
   dispsupply:
     table_name: dispsupply
@@ -2656,14 +2654,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7779297919065393443
-    last_analyzed: '2025-10-11T20:43:23.355265'
+    schema_hash: -3286547318001180357
+    last_analyzed: '2025-10-19T19:22:17.913406'
     primary_key: DispSupplyNum
   document:
     table_name: document
     extraction_strategy: incremental
-    estimated_rows: 254481
-    estimated_size_mb: 40.01
+    estimated_rows: 255681
+    estimated_size_mb: 40.3
     batch_size: 50000
     incremental_columns:
     - DocNum
@@ -2683,8 +2681,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 1645845098378932443
-    last_analyzed: '2025-10-11T20:43:27.327599'
+    schema_hash: -3311318182599583277
+    last_analyzed: '2025-10-19T19:22:21.840584'
     primary_key: DocNum
   documentmisc:
     table_name: documentmisc
@@ -2708,8 +2706,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4543693115567573375
-    last_analyzed: '2025-10-11T20:43:27.338785'
+    schema_hash: 4487910106938906765
+    last_analyzed: '2025-10-19T19:22:21.840584'
     primary_key: DocMiscNum
   drugmanufacturer:
     table_name: drugmanufacturer
@@ -2733,8 +2731,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1629510415744326703
-    last_analyzed: '2025-10-11T20:43:27.338785'
+    schema_hash: 8598294322842369032
+    last_analyzed: '2025-10-19T19:22:21.840584'
     primary_key: DrugManufacturerNum
   drugunit:
     table_name: drugunit
@@ -2758,8 +2756,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5330793539725273868
-    last_analyzed: '2025-10-11T20:43:27.338785'
+    schema_hash: -3417456172682665220
+    last_analyzed: '2025-10-19T19:22:21.840584'
     primary_key: DrugUnitNum
   dunning:
     table_name: dunning
@@ -2783,8 +2781,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -820439009638088870
-    last_analyzed: '2025-10-11T20:43:27.342346'
+    schema_hash: -8497583245797481132
+    last_analyzed: '2025-10-19T19:22:21.840584'
     primary_key: DunningNum
   ebill:
     table_name: ebill
@@ -2808,8 +2806,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4807606254848862170
-    last_analyzed: '2025-10-11T20:43:30.005283'
+    schema_hash: -8838103138015775208
+    last_analyzed: '2025-10-19T19:22:24.356133'
     primary_key: EbillNum
   eclipboardimagecapture:
     table_name: eclipboardimagecapture
@@ -2833,8 +2831,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7554516046590371919
-    last_analyzed: '2025-10-11T20:43:30.137791'
+    schema_hash: 8960636669300193268
+    last_analyzed: '2025-10-19T19:22:24.495181'
     primary_key: EClipboardImageCaptureNum
   eclipboardimagecapturedef:
     table_name: eclipboardimagecapturedef
@@ -2858,8 +2856,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3744397965464897374
-    last_analyzed: '2025-10-11T20:43:30.138792'
+    schema_hash: 2924785998958299134
+    last_analyzed: '2025-10-19T19:22:24.496174'
     primary_key: EClipboardImageCaptureDefNum
   eclipboardsheetdef:
     table_name: eclipboardsheetdef
@@ -2883,8 +2881,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7866118441023853306
-    last_analyzed: '2025-10-11T20:43:30.138792'
+    schema_hash: -1990808799983858823
+    last_analyzed: '2025-10-19T19:22:24.496174'
     primary_key: EClipboardSheetDefNum
   eduresource:
     table_name: eduresource
@@ -2908,8 +2906,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1307489615405255532
-    last_analyzed: '2025-10-11T20:43:30.138792'
+    schema_hash: 5053521903461647882
+    last_analyzed: '2025-10-19T19:22:24.496174'
     primary_key: EduResourceNum
   eform:
     table_name: eform
@@ -2933,8 +2931,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7450928267790055837
-    last_analyzed: '2025-10-11T20:43:33.029473'
+    schema_hash: -7376790711514779324
+    last_analyzed: '2025-10-19T19:22:27.076466'
     primary_key: EFormNum
   eformdef:
     table_name: eformdef
@@ -2958,8 +2956,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -946822274525607860
-    last_analyzed: '2025-10-11T20:43:33.154045'
+    schema_hash: 6555281136815819041
+    last_analyzed: '2025-10-19T19:22:27.201590'
     primary_key: EFormDefNum
   eformfield:
     table_name: eformfield
@@ -2983,8 +2981,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8978612098608278571
-    last_analyzed: '2025-10-11T20:43:33.155047'
+    schema_hash: -8012226771539967088
+    last_analyzed: '2025-10-19T19:22:27.202646'
     primary_key: EFormFieldNum
   eformfielddef:
     table_name: eformfielddef
@@ -3008,8 +3006,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8929537155497009990
-    last_analyzed: '2025-10-11T20:43:33.157056'
+    schema_hash: 1781576180397650217
+    last_analyzed: '2025-10-19T19:22:27.203645'
     primary_key: EFormFieldDefNum
   eformimportrule:
     table_name: eformimportrule
@@ -3033,8 +3031,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5616347403740155255
-    last_analyzed: '2025-10-11T20:43:33.157056'
+    schema_hash: -2134013276317989779
+    last_analyzed: '2025-10-19T19:22:27.203645'
     primary_key: EFormImportRuleNum
   ehramendment:
     table_name: ehramendment
@@ -3058,8 +3056,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3549101520425884627
-    last_analyzed: '2025-10-11T20:43:35.951474'
+    schema_hash: -6234949497818612362
+    last_analyzed: '2025-10-19T19:22:29.667947'
     primary_key: EhrAmendmentNum
   ehraptobs:
     table_name: ehraptobs
@@ -3083,8 +3081,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4176850736174496042
-    last_analyzed: '2025-10-11T20:43:35.951474'
+    schema_hash: 5104652521355717160
+    last_analyzed: '2025-10-19T19:22:29.667947'
     primary_key: EhrAptObsNum
   ehrcareplan:
     table_name: ehrcareplan
@@ -3108,8 +3106,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5225973208311366245
-    last_analyzed: '2025-10-11T20:43:35.951474'
+    schema_hash: 1617957167037069724
+    last_analyzed: '2025-10-19T19:22:29.667947'
     primary_key: EhrCarePlanNum
   ehrlab:
     table_name: ehrlab
@@ -3133,8 +3131,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 30
-    schema_hash: 7920293420662438426
-    last_analyzed: '2025-10-11T20:43:35.951474'
+    schema_hash: -8327301550194418859
+    last_analyzed: '2025-10-19T19:22:29.667947'
     primary_key: EhrLabNum
   ehrlabclinicalinfo:
     table_name: ehrlabclinicalinfo
@@ -3158,8 +3156,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4976175234546956417
-    last_analyzed: '2025-10-11T20:43:35.951474'
+    schema_hash: -5990014529957646648
+    last_analyzed: '2025-10-19T19:22:29.667947'
     primary_key: EhrLabClinicalInfoNum
   ehrlabimage:
     table_name: ehrlabimage
@@ -3183,8 +3181,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5791318454549828350
-    last_analyzed: '2025-10-11T20:43:38.764179'
+    schema_hash: 4049347109738349157
+    last_analyzed: '2025-10-19T19:22:32.146915'
     primary_key: EhrLabImageNum
   ehrlabnote:
     table_name: ehrlabnote
@@ -3208,8 +3206,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 9041552182158667837
-    last_analyzed: '2025-10-11T20:43:38.779975'
+    schema_hash: -8275384771943844158
+    last_analyzed: '2025-10-19T19:22:32.162646'
     primary_key: EhrLabNoteNum
   ehrlabresult:
     table_name: ehrlabresult
@@ -3233,8 +3231,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 30
-    schema_hash: -6021056459913732722
-    last_analyzed: '2025-10-11T20:43:38.779975'
+    schema_hash: -7274385539315047425
+    last_analyzed: '2025-10-19T19:22:32.162646'
     primary_key: EhrLabResultNum
   ehrlabresultscopyto:
     table_name: ehrlabresultscopyto
@@ -3258,8 +3256,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5877002892304730085
-    last_analyzed: '2025-10-11T20:43:38.792404'
+    schema_hash: -498103971945827154
+    last_analyzed: '2025-10-19T19:22:32.162646'
     primary_key: EhrLabResultsCopyToNum
   ehrlabspecimen:
     table_name: ehrlabspecimen
@@ -3283,8 +3281,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6444583507293993097
-    last_analyzed: '2025-10-11T20:43:38.792839'
+    schema_hash: 819451506051780196
+    last_analyzed: '2025-10-19T19:22:32.165916'
     primary_key: EhrLabSpecimenNum
   ehrlabspecimencondition:
     table_name: ehrlabspecimencondition
@@ -3308,8 +3306,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5718979579833368776
-    last_analyzed: '2025-10-11T20:43:41.490570'
+    schema_hash: 5527413697692178110
+    last_analyzed: '2025-10-19T19:22:34.638061'
     primary_key: EhrLabSpecimenConditionNum
   ehrlabspecimenrejectreason:
     table_name: ehrlabspecimenrejectreason
@@ -3333,8 +3331,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4661521868879026836
-    last_analyzed: '2025-10-11T20:43:41.491245'
+    schema_hash: 7982298056282452396
+    last_analyzed: '2025-10-19T19:22:34.639302'
     primary_key: EhrLabSpecimenRejectReasonNum
   ehrmeasure:
     table_name: ehrmeasure
@@ -3358,14 +3356,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 9108961909607294489
-    last_analyzed: '2025-10-11T20:43:41.491245'
+    schema_hash: 8389355876959336141
+    last_analyzed: '2025-10-19T19:22:34.639302'
     primary_key: EhrMeasureNum
   ehrmeasureevent:
     table_name: ehrmeasureevent
     extraction_strategy: full_table
-    estimated_rows: 6575
-    estimated_size_mb: 0.71
+    estimated_rows: 6712
+    estimated_size_mb: 0.72
     batch_size: 10000
     incremental_columns:
     - EhrMeasureEventNum
@@ -3384,8 +3382,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6556075065331856012
-    last_analyzed: '2025-10-11T20:43:41.634559'
+    schema_hash: -5656847275606540802
+    last_analyzed: '2025-10-19T19:22:34.793768'
     primary_key: EhrMeasureEventNum
   ehrnotperformed:
     table_name: ehrnotperformed
@@ -3409,14 +3407,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4657103614972492741
-    last_analyzed: '2025-10-11T20:43:41.634559'
+    schema_hash: -7792968177295723847
+    last_analyzed: '2025-10-19T19:22:34.794769'
     primary_key: EhrNotPerformedNum
   ehrpatient:
     table_name: ehrpatient
     extraction_strategy: incremental
-    estimated_rows: 10848
-    estimated_size_mb: 0.47
+    estimated_rows: 11314
+    estimated_size_mb: 0.49
     batch_size: 25000
     incremental_columns:
     - PatNum
@@ -3434,8 +3432,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -2290887221425914826
-    last_analyzed: '2025-10-11T20:43:44.408019'
+    schema_hash: -5152224516334239850
+    last_analyzed: '2025-10-19T19:22:37.259083'
     primary_key: PatNum
   ehrprovkey:
     table_name: ehrprovkey
@@ -3459,8 +3457,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8551460220417935870
-    last_analyzed: '2025-10-11T20:43:44.408019'
+    schema_hash: 1028922700764680218
+    last_analyzed: '2025-10-19T19:22:37.260081'
     primary_key: EhrProvKeyNum
   ehrquarterlykey:
     table_name: ehrquarterlykey
@@ -3484,8 +3482,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8706709047557446976
-    last_analyzed: '2025-10-11T20:43:44.408019'
+    schema_hash: -2928444064974162044
+    last_analyzed: '2025-10-19T19:22:37.261080'
     primary_key: EhrQuarterlyKeyNum
   ehrsummaryccd:
     table_name: ehrsummaryccd
@@ -3509,8 +3507,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2347167805824791008
-    last_analyzed: '2025-10-11T20:43:44.409522'
+    schema_hash: 6937645381569234714
+    last_analyzed: '2025-10-19T19:22:37.262080'
     primary_key: EhrSummaryCcdNum
   ehrtrigger:
     table_name: ehrtrigger
@@ -3534,8 +3532,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1670308264264147392
-    last_analyzed: '2025-10-11T20:43:44.409522'
+    schema_hash: -3775466895520365118
+    last_analyzed: '2025-10-19T19:22:37.263115'
     primary_key: EhrTriggerNum
   electid:
     table_name: electid
@@ -3559,8 +3557,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7752978844405024608
-    last_analyzed: '2025-10-11T20:43:46.869552'
+    schema_hash: 4105861895627075063
+    last_analyzed: '2025-10-19T19:22:39.746880'
     primary_key: ElectIDNum
   emailaddress:
     table_name: emailaddress
@@ -3584,13 +3582,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3622841731713881
-    last_analyzed: '2025-10-11T20:43:46.869552'
+    schema_hash: -1894266195889843598
+    last_analyzed: '2025-10-19T19:22:39.746880'
     primary_key: EmailAddressNum
   emailattach:
     table_name: emailattach
     extraction_strategy: full_table
-    estimated_rows: 2245
+    estimated_rows: 2250
     estimated_size_mb: 0.31
     batch_size: 10000
     incremental_columns:
@@ -3602,15 +3600,15 @@ tables:
     performance_category: tiny
     processing_priority: medium
     time_gap_threshold_days: 7
-    estimated_processing_time_minutes: 0.0
+    estimated_processing_time_minutes: 0.1
     memory_requirements_mb: 14
     monitoring:
       alert_on_failure: false
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8510868265561766755
-    last_analyzed: '2025-10-11T20:43:46.869552'
+    schema_hash: -4365372317693884523
+    last_analyzed: '2025-10-19T19:22:39.746880'
     primary_key: EmailAttachNum
   emailautograph:
     table_name: emailautograph
@@ -3634,8 +3632,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3497336538429237383
-    last_analyzed: '2025-10-11T20:43:46.869552'
+    schema_hash: -2892390293569637332
+    last_analyzed: '2025-10-19T19:22:39.746880'
     primary_key: EmailAutographNum
   emailhostingtemplate:
     table_name: emailhostingtemplate
@@ -3659,20 +3657,19 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1133012815105153845
-    last_analyzed: '2025-10-11T20:43:46.877056'
+    schema_hash: 5060226225713450244
+    last_analyzed: '2025-10-19T19:22:39.746880'
     primary_key: EmailHostingTemplateNum
   emailmessage:
     table_name: emailmessage
     extraction_strategy: full_table
-    estimated_rows: 2947
-    estimated_size_mb: 2.11
+    estimated_rows: 2952
+    estimated_size_mb: 2.12
     batch_size: 10000
     incremental_columns:
     - EmailMessageNum
     - SecDateTEdit
     - SecDateTEntry
-    - MsgDateTime
     incremental_strategy: or_logic
     primary_incremental_column: EmailMessageNum
     is_modeled: false
@@ -3687,8 +3684,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5743068320915827643
-    last_analyzed: '2025-10-11T20:43:49.934070'
+    schema_hash: -2172730770227461606
+    last_analyzed: '2025-10-19T19:22:42.699662'
     primary_key: EmailMessageNum
   emailmessageuid:
     table_name: emailmessageuid
@@ -3712,8 +3709,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3409287122950884215
-    last_analyzed: '2025-10-11T20:43:49.934070'
+    schema_hash: 385865313897909034
+    last_analyzed: '2025-10-19T19:22:42.699662'
     primary_key: EmailMessageUidNum
   emailsecure:
     table_name: emailsecure
@@ -3737,8 +3734,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1915516139392736444
-    last_analyzed: '2025-10-11T20:43:50.171207'
+    schema_hash: 4833810052504546882
+    last_analyzed: '2025-10-19T19:22:42.951076'
     primary_key: EmailSecureNum
   emailsecureattach:
     table_name: emailsecureattach
@@ -3762,8 +3759,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 297817863871984870
-    last_analyzed: '2025-10-11T20:43:50.435979'
+    schema_hash: -8342083630136740648
+    last_analyzed: '2025-10-19T19:22:43.203443'
     primary_key: EmailSecureAttachNum
   emailtemplate:
     table_name: emailtemplate
@@ -3787,8 +3784,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3716215568206593562
-    last_analyzed: '2025-10-11T20:43:50.435979'
+    schema_hash: -5896607321203292820
+    last_analyzed: '2025-10-19T19:22:43.203443'
     primary_key: EmailTemplateNum
   employee:
     table_name: employee
@@ -3812,13 +3809,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6464792935104856694
-    last_analyzed: '2025-10-11T20:43:52.927570'
+    schema_hash: 4782084127263144408
+    last_analyzed: '2025-10-19T19:22:45.605529'
     primary_key: EmployeeNum
   employer:
     table_name: employer
     extraction_strategy: full_table
-    estimated_rows: 7774
+    estimated_rows: 7789
     estimated_size_mb: 0.42
     batch_size: 10000
     incremental_columns:
@@ -3837,8 +3834,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7233204709701549246
-    last_analyzed: '2025-10-11T20:43:52.927570'
+    schema_hash: 201804816514747826
+    last_analyzed: '2025-10-19T19:22:45.605529'
     primary_key: EmployerNum
   encounter:
     table_name: encounter
@@ -3862,14 +3859,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1185199552643112940
-    last_analyzed: '2025-10-11T20:43:52.927570'
+    schema_hash: 7879047704369394402
+    last_analyzed: '2025-10-19T19:22:45.605529'
     primary_key: EncounterNum
   entrylog:
     table_name: entrylog
     extraction_strategy: incremental
-    estimated_rows: 50313
-    estimated_size_mb: 4.58
+    estimated_rows: 50991
+    estimated_size_mb: 4.65
     batch_size: 25000
     incremental_columns:
     - EntryLogNum
@@ -3888,14 +3885,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 2303165783354740784
-    last_analyzed: '2025-10-11T20:43:53.189964'
+    schema_hash: -5365056464054284715
+    last_analyzed: '2025-10-19T19:22:45.937250'
     primary_key: EntryLogNum
   eobattach:
     table_name: eobattach
     extraction_strategy: incremental
-    estimated_rows: 19001
-    estimated_size_mb: 1.85
+    estimated_rows: 19045
+    estimated_size_mb: 1.86
     batch_size: 25000
     incremental_columns:
     - EobAttachNum
@@ -3914,8 +3911,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 6729043623121553682
-    last_analyzed: '2025-10-11T20:43:53.340202'
+    schema_hash: -5193458134690834643
+    last_analyzed: '2025-10-19T19:22:46.100577'
     primary_key: EobAttachNum
   equipment:
     table_name: equipment
@@ -3939,8 +3936,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1028650659581264424
-    last_analyzed: '2025-10-11T20:43:56.190896'
+    schema_hash: -2437919024561357020
+    last_analyzed: '2025-10-19T19:22:48.568731'
     primary_key: EquipmentNum
   erouting:
     table_name: erouting
@@ -3964,8 +3961,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5090253678813111451
-    last_analyzed: '2025-10-11T20:43:56.335551'
+    schema_hash: 142740579014991999
+    last_analyzed: '2025-10-19T19:22:48.703377'
     primary_key: ERoutingNum
   eroutingaction:
     table_name: eroutingaction
@@ -3989,8 +3986,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5732743524515339958
-    last_analyzed: '2025-10-11T20:43:56.467153'
+    schema_hash: -1064257184901761020
+    last_analyzed: '2025-10-19T19:22:48.827394'
     primary_key: ERoutingActionNum
   eroutingactiondef:
     table_name: eroutingactiondef
@@ -4014,8 +4011,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1579675363523729390
-    last_analyzed: '2025-10-11T20:43:56.705193'
+    schema_hash: -3052684582401382899
+    last_analyzed: '2025-10-19T19:22:49.070785'
     primary_key: ERoutingActionDefNum
   eroutingdef:
     table_name: eroutingdef
@@ -4039,8 +4036,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6906627784545610756
-    last_analyzed: '2025-10-11T20:43:56.958172'
+    schema_hash: -777881264481905912
+    last_analyzed: '2025-10-19T19:22:49.308149'
     primary_key: ERoutingDefNum
   eroutingdeflink:
     table_name: eroutingdeflink
@@ -4064,14 +4061,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2591409599142942430
-    last_analyzed: '2025-10-11T20:43:59.495264'
+    schema_hash: -513465127079742928
+    last_analyzed: '2025-10-19T19:22:51.753656'
     primary_key: ERoutingDefLinkNum
   erxlog:
     table_name: erxlog
     extraction_strategy: full_table
-    estimated_rows: 4015
-    estimated_size_mb: 11.64
+    estimated_rows: 4022
+    estimated_size_mb: 11.66
     batch_size: 10000
     incremental_columns:
     - ErxLogNum
@@ -4090,13 +4087,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3320908114041255145
-    last_analyzed: '2025-10-11T20:43:59.658902'
+    schema_hash: -316318745567289705
+    last_analyzed: '2025-10-19T19:22:51.921744'
     primary_key: ErxLogNum
   eservicelog:
     table_name: eservicelog
     extraction_strategy: full_table
-    estimated_rows: 5554
+    estimated_rows: 5230
     estimated_size_mb: 1.09
     batch_size: 10000
     incremental_columns:
@@ -4117,8 +4114,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -966059075523652683
-    last_analyzed: '2025-10-11T20:43:59.954153'
+    schema_hash: 1284037917051226025
+    last_analyzed: '2025-10-19T19:22:52.205499'
     primary_key: EServiceLogNum
   eserviceshortguid:
     table_name: eserviceshortguid
@@ -4142,14 +4139,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7960654628533458221
-    last_analyzed: '2025-10-11T20:44:00.206051'
+    schema_hash: -9187925521904914833
+    last_analyzed: '2025-10-19T19:22:52.472427'
     primary_key: EServiceShortGuidNum
   eservicesignal:
     table_name: eservicesignal
     extraction_strategy: full_table
-    estimated_rows: 1761
-    estimated_size_mb: 1.07
+    estimated_rows: 1772
+    estimated_size_mb: 1.08
     batch_size: 10000
     incremental_columns:
     - EServiceSignalNum
@@ -4168,14 +4165,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3732077658970356001
-    last_analyzed: '2025-10-11T20:44:00.330724'
+    schema_hash: 4715787593197956877
+    last_analyzed: '2025-10-19T19:22:52.605454'
     primary_key: EServiceSignalNum
   etrans:
     table_name: etrans
     extraction_strategy: incremental
-    estimated_rows: 29710
-    estimated_size_mb: 7.61
+    estimated_rows: 29764
+    estimated_size_mb: 7.62
     batch_size: 25000
     incremental_columns:
     - EtransNum
@@ -4194,8 +4191,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 7931485385349731767
-    last_analyzed: '2025-10-11T20:44:03.196599'
+    schema_hash: -1169373206108368356
+    last_analyzed: '2025-10-19T19:22:55.290565'
     primary_key: EtransNum
   etrans835:
     table_name: etrans835
@@ -4219,8 +4216,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4312370344988169149
-    last_analyzed: '2025-10-11T20:44:03.196599'
+    schema_hash: 6533741811966044116
+    last_analyzed: '2025-10-19T19:22:55.290565'
     primary_key: Etrans835Num
   etrans835attach:
     table_name: etrans835attach
@@ -4244,13 +4241,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3544591714240371367
-    last_analyzed: '2025-10-11T20:44:03.196599'
+    schema_hash: 1629393008085778601
+    last_analyzed: '2025-10-19T19:22:55.290565'
     primary_key: Etrans835AttachNum
   etransmessagetext:
     table_name: etransmessagetext
     extraction_strategy: full_table
-    estimated_rows: 4857
+    estimated_rows: 4862
     estimated_size_mb: 0.16
     batch_size: 10000
     incremental_columns:
@@ -4269,8 +4266,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7054758787287860442
-    last_analyzed: '2025-10-11T20:44:03.196599'
+    schema_hash: 3938582704605960848
+    last_analyzed: '2025-10-19T19:22:55.290565'
     primary_key: EtransMessageTextNum
   evaluation:
     table_name: evaluation
@@ -4294,8 +4291,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1572561315236322639
-    last_analyzed: '2025-10-11T20:44:03.196599'
+    schema_hash: 8053194081318187700
+    last_analyzed: '2025-10-19T19:22:55.290565'
     primary_key: EvaluationNum
   evaluationcriterion:
     table_name: evaluationcriterion
@@ -4319,8 +4316,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6544544325502741613
-    last_analyzed: '2025-10-11T20:44:06.072293'
+    schema_hash: -222389656296932813
+    last_analyzed: '2025-10-19T19:22:57.761137'
     primary_key: EvaluationCriterionNum
   evaluationcriteriondef:
     table_name: evaluationcriteriondef
@@ -4344,8 +4341,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7399743175802295154
-    last_analyzed: '2025-10-11T20:44:06.072293'
+    schema_hash: -4600609549587583006
+    last_analyzed: '2025-10-19T19:22:57.761137'
     primary_key: EvaluationCriterionDefNum
   evaluationdef:
     table_name: evaluationdef
@@ -4369,8 +4366,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -807672603773774675
-    last_analyzed: '2025-10-11T20:44:06.072293'
+    schema_hash: 8281545260947460105
+    last_analyzed: '2025-10-19T19:22:57.761137'
     primary_key: EvaluationDefNum
   famaging:
     table_name: famaging
@@ -4394,8 +4391,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 216048742286153274
-    last_analyzed: '2025-10-11T20:44:06.072293'
+    schema_hash: -8105515130777680221
+    last_analyzed: '2025-10-19T19:22:57.761137'
     primary_key: PatNum
   familyhealth:
     table_name: familyhealth
@@ -4419,8 +4416,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3610673849615850886
-    last_analyzed: '2025-10-11T20:44:06.072293'
+    schema_hash: -7067935932103567802
+    last_analyzed: '2025-10-19T19:22:57.769068'
     primary_key: FamilyHealthNum
   fee:
     table_name: fee
@@ -4445,8 +4442,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -4199471650783070629
-    last_analyzed: '2025-10-11T20:44:09.080426'
+    schema_hash: 3826785238250447622
+    last_analyzed: '2025-10-19T19:23:00.570592'
     primary_key: FeeNum
   feesched:
     table_name: feesched
@@ -4471,8 +4468,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1753360171515811864
-    last_analyzed: '2025-10-11T20:44:09.240315'
+    schema_hash: -2126135780399143633
+    last_analyzed: '2025-10-19T19:23:00.745349'
     primary_key: FeeSchedNum
   feeschedgroup:
     table_name: feeschedgroup
@@ -4496,8 +4493,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4418419030475078275
-    last_analyzed: '2025-10-11T20:44:09.241337'
+    schema_hash: 7981306059839229744
+    last_analyzed: '2025-10-19T19:23:00.745349'
     primary_key: FeeSchedGroupNum
   feeschednote:
     table_name: feeschednote
@@ -4521,8 +4518,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8422550830805824293
-    last_analyzed: '2025-10-11T20:44:09.370975'
+    schema_hash: 6279193426889623036
+    last_analyzed: '2025-10-19T19:23:00.868695'
     primary_key: FeeSchedNoteNum
   fhircontactpoint:
     table_name: fhircontactpoint
@@ -4546,8 +4543,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5698745931494331172
-    last_analyzed: '2025-10-11T20:44:09.371983'
+    schema_hash: 4225922496890350745
+    last_analyzed: '2025-10-19T19:23:00.869697'
     primary_key: FHIRContactPointNum
   fhirsubscription:
     table_name: fhirsubscription
@@ -4571,8 +4568,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2501955510797054911
-    last_analyzed: '2025-10-11T20:44:12.265331'
+    schema_hash: -2676303944600767450
+    last_analyzed: '2025-10-19T19:23:03.452856'
     primary_key: FHIRSubscriptionNum
   fielddeflink:
     table_name: fielddeflink
@@ -4596,8 +4593,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2245493289830411581
-    last_analyzed: '2025-10-11T20:44:12.266357'
+    schema_hash: -7844931392045104347
+    last_analyzed: '2025-10-19T19:23:03.455048'
     primary_key: FieldDefLinkNum
   files:
     table_name: files
@@ -4621,8 +4618,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8071608653259940492
-    last_analyzed: '2025-10-11T20:44:12.267355'
+    schema_hash: 3308684018439913065
+    last_analyzed: '2025-10-19T19:23:03.456051'
     primary_key: DocNum
   formpat:
     table_name: formpat
@@ -4646,8 +4643,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6810142231790129517
-    last_analyzed: '2025-10-11T20:44:12.390020'
+    schema_hash: -7000543518726917849
+    last_analyzed: '2025-10-19T19:23:03.580869'
     primary_key: FormPatNum
   gradingscale:
     table_name: gradingscale
@@ -4671,8 +4668,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1717257463498863270
-    last_analyzed: '2025-10-11T20:44:12.391021'
+    schema_hash: -1507025006613559841
+    last_analyzed: '2025-10-19T19:23:03.581888'
     primary_key: GradingScaleNum
   gradingscaleitem:
     table_name: gradingscaleitem
@@ -4696,8 +4693,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1383979466755235505
-    last_analyzed: '2025-10-11T20:44:15.121102'
+    schema_hash: -4358865131710085424
+    last_analyzed: '2025-10-19T19:23:06.031006'
     primary_key: GradingScaleItemNum
   grouppermission:
     table_name: grouppermission
@@ -4721,8 +4718,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1441117643699565363
-    last_analyzed: '2025-10-11T20:44:15.121102'
+    schema_hash: 467843178893550644
+    last_analyzed: '2025-10-19T19:23:06.032006'
     primary_key: GroupPermNum
   guardian:
     table_name: guardian
@@ -4746,8 +4743,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1708896632312437838
-    last_analyzed: '2025-10-11T20:44:15.121102'
+    schema_hash: -5739426904766230676
+    last_analyzed: '2025-10-19T19:23:06.032006'
     primary_key: GuardianNum
   hcpcs:
     table_name: hcpcs
@@ -4771,8 +4768,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6541018024564377813
-    last_analyzed: '2025-10-11T20:44:15.121102'
+    schema_hash: -2974011253144418560
+    last_analyzed: '2025-10-19T19:23:06.032006'
     primary_key: HcpcsNum
   hieclinic:
     table_name: hieclinic
@@ -4796,8 +4793,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4741982266797852645
-    last_analyzed: '2025-10-11T20:44:15.121102'
+    schema_hash: -8686240247933567349
+    last_analyzed: '2025-10-19T19:23:06.032006'
     primary_key: HieClinicNum
   hiequeue:
     table_name: hiequeue
@@ -4821,20 +4818,19 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2200029874304542342
-    last_analyzed: '2025-10-11T20:44:17.875279'
+    schema_hash: -3087091440694561056
+    last_analyzed: '2025-10-19T19:23:08.495738'
     primary_key: HieQueueNum
   histappointment:
     table_name: histappointment
     extraction_strategy: incremental
-    estimated_rows: 622126
-    estimated_size_mb: 371.96
+    estimated_rows: 626423
+    estimated_size_mb: 374.87
     batch_size: 50000
     incremental_columns:
     - HistApptNum
     - DateTStamp
     - SecDateTEntry
-    - HistDateTStamp
     incremental_strategy: or_logic
     primary_incremental_column: HistApptNum
     is_modeled: false
@@ -4842,15 +4838,15 @@ tables:
     performance_category: medium
     processing_priority: medium
     time_gap_threshold_days: 30
-    estimated_processing_time_minutes: 4.1
+    estimated_processing_time_minutes: 4.2
     memory_requirements_mb: 73
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 8202750428902392710
-    last_analyzed: '2025-10-11T20:44:24.631803'
+    schema_hash: 3589116939051415293
+    last_analyzed: '2025-10-19T19:23:15.283161'
     primary_key: HistApptNum
   hl7def:
     table_name: hl7def
@@ -4874,8 +4870,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7102630294474997257
-    last_analyzed: '2025-10-11T20:44:24.631803'
+    schema_hash: -4532886989922329470
+    last_analyzed: '2025-10-19T19:23:15.283161'
     primary_key: HL7DefNum
   hl7deffield:
     table_name: hl7deffield
@@ -4899,8 +4895,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3319012339370608316
-    last_analyzed: '2025-10-11T20:44:24.631803'
+    schema_hash: 2712723191476011566
+    last_analyzed: '2025-10-19T19:23:15.283161'
     primary_key: HL7DefFieldNum
   hl7defmessage:
     table_name: hl7defmessage
@@ -4924,8 +4920,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6888632670108505924
-    last_analyzed: '2025-10-11T20:44:24.631803'
+    schema_hash: -2066307535203877837
+    last_analyzed: '2025-10-19T19:23:15.283161'
     primary_key: HL7DefMessageNum
   hl7defsegment:
     table_name: hl7defsegment
@@ -4949,8 +4945,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2473490747172162198
-    last_analyzed: '2025-10-11T20:44:27.435897'
+    schema_hash: -3774857261717256448
+    last_analyzed: '2025-10-19T19:23:17.759146'
     primary_key: HL7DefSegmentNum
   hl7msg:
     table_name: hl7msg
@@ -4974,8 +4970,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5097826330330735678
-    last_analyzed: '2025-10-11T20:44:27.563708'
+    schema_hash: -1771419134589315131
+    last_analyzed: '2025-10-19T19:23:17.878222'
     primary_key: HL7MsgNum
   hl7procattach:
     table_name: hl7procattach
@@ -4999,8 +4995,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6082952065696107943
-    last_analyzed: '2025-10-11T20:44:27.564708'
+    schema_hash: -1127735420196123613
+    last_analyzed: '2025-10-19T19:23:17.879252'
     primary_key: HL7ProcAttachNum
   icd10:
     table_name: icd10
@@ -5024,8 +5020,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8386348213568231646
-    last_analyzed: '2025-10-11T20:44:27.565709'
+    schema_hash: -6066938484301956771
+    last_analyzed: '2025-10-19T19:23:17.880253'
     primary_key: Icd10Num
   icd9:
     table_name: icd9
@@ -5049,8 +5045,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7089550641912261891
-    last_analyzed: '2025-10-11T20:44:27.685964'
+    schema_hash: 277475094364191229
+    last_analyzed: '2025-10-19T19:23:18.001555'
     primary_key: ICD9Num
   imagedraw:
     table_name: imagedraw
@@ -5074,8 +5070,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1458528099869697386
-    last_analyzed: '2025-10-11T20:44:30.108506'
+    schema_hash: -1671238059963353893
+    last_analyzed: '2025-10-19T19:23:20.479743'
     primary_key: ImageDrawNum
   imagingdevice:
     table_name: imagingdevice
@@ -5099,14 +5095,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2565539240545689590
-    last_analyzed: '2025-10-11T20:44:30.108506'
+    schema_hash: 3192428003288511484
+    last_analyzed: '2025-10-19T19:23:20.479743'
     primary_key: ImagingDeviceNum
   insbluebook:
     table_name: insbluebook
     extraction_strategy: incremental
-    estimated_rows: 58743
-    estimated_size_mb: 10.94
+    estimated_rows: 58996
+    estimated_size_mb: 10.99
     batch_size: 25000
     incremental_columns:
     - InsBlueBookNum
@@ -5125,14 +5121,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 6029779467587534256
-    last_analyzed: '2025-10-11T20:44:30.321873'
+    schema_hash: -3243320979196191818
+    last_analyzed: '2025-10-19T19:23:20.718540'
     primary_key: InsBlueBookNum
   insbluebooklog:
     table_name: insbluebooklog
     extraction_strategy: incremental
-    estimated_rows: 224621
-    estimated_size_mb: 36.37
+    estimated_rows: 226023
+    estimated_size_mb: 36.6
     batch_size: 50000
     incremental_columns:
     - InsBlueBookLogNum
@@ -5151,8 +5147,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 1247141507473300268
-    last_analyzed: '2025-10-11T20:44:30.840863'
+    schema_hash: -2291577985352939974
+    last_analyzed: '2025-10-19T19:23:21.260046'
     primary_key: InsBlueBookLogNum
   insbluebookrule:
     table_name: insbluebookrule
@@ -5176,14 +5172,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4454865557760926289
-    last_analyzed: '2025-10-11T20:44:30.840863'
+    schema_hash: 1072271643545553490
+    last_analyzed: '2025-10-19T19:23:21.260046'
     primary_key: InsBlueBookRuleNum
   inseditlog:
     table_name: inseditlog
     extraction_strategy: incremental
-    estimated_rows: 383025
-    estimated_size_mb: 53.02
+    estimated_rows: 389707
+    estimated_size_mb: 53.93
     batch_size: 50000
     incremental_columns:
     - InsEditLogNum
@@ -5202,14 +5198,14 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 4122022530093014990
-    last_analyzed: '2025-10-11T20:44:34.424511'
+    schema_hash: -6499414277267083602
+    last_analyzed: '2025-10-19T19:23:24.705464'
     primary_key: InsEditLogNum
   inseditpatlog:
     table_name: inseditpatlog
     extraction_strategy: incremental
-    estimated_rows: 37709
-    estimated_size_mb: 4.77
+    estimated_rows: 38015
+    estimated_size_mb: 4.81
     batch_size: 25000
     incremental_columns:
     - InsEditPatLogNum
@@ -5228,8 +5224,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 5274178864356425313
-    last_analyzed: '2025-10-11T20:44:34.692213'
+    schema_hash: -3851573018118085208
+    last_analyzed: '2025-10-19T19:23:24.959992'
     primary_key: InsEditPatLogNum
   insfilingcode:
     table_name: insfilingcode
@@ -5253,8 +5249,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7026548757864827646
-    last_analyzed: '2025-10-11T20:44:34.692213'
+    schema_hash: 1436307826134255382
+    last_analyzed: '2025-10-19T19:23:24.961992'
     primary_key: InsFilingCodeNum
   insfilingcodesubtype:
     table_name: insfilingcodesubtype
@@ -5278,8 +5274,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7560566992842985750
-    last_analyzed: '2025-10-11T20:44:34.692213'
+    schema_hash: 5160015899783955776
+    last_analyzed: '2025-10-19T19:23:24.962996'
     primary_key: InsFilingCodeSubtypeNum
   inspending:
     table_name: inspending
@@ -5303,13 +5299,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5446278525543446830
-    last_analyzed: '2025-10-11T20:44:34.692213'
+    schema_hash: 3616621887918402933
+    last_analyzed: '2025-10-19T19:23:24.965125'
     primary_key: InsPendingNum
   insplan:
     table_name: insplan
     extraction_strategy: full_table
-    estimated_rows: 5905
+    estimated_rows: 5912
     estimated_size_mb: 1.67
     batch_size: 10000
     incremental_columns:
@@ -5329,8 +5325,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5288840218085682690
-    last_analyzed: '2025-10-11T20:44:37.491520'
+    schema_hash: -1208740808776610809
+    last_analyzed: '2025-10-19T19:23:27.586316'
     primary_key: PlanNum
   insplanpreference:
     table_name: insplanpreference
@@ -5354,14 +5350,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6197760107002199754
-    last_analyzed: '2025-10-11T20:44:37.491520'
+    schema_hash: -432421277009856271
+    last_analyzed: '2025-10-19T19:23:27.586316'
     primary_key: InsPlanPrefNum
   inssub:
     table_name: inssub
     extraction_strategy: incremental
-    estimated_rows: 13949
-    estimated_size_mb: 1.69
+    estimated_rows: 13997
+    estimated_size_mb: 1.72
     batch_size: 25000
     incremental_columns:
     - InsSubNum
@@ -5380,8 +5376,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -1100961463514658905
-    last_analyzed: '2025-10-11T20:44:37.668635'
+    schema_hash: 6999441108962964171
+    last_analyzed: '2025-10-19T19:23:27.772106'
     primary_key: InsSubNum
   installmentplan:
     table_name: installmentplan
@@ -5405,8 +5401,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3236862493398901924
-    last_analyzed: '2025-10-11T20:44:37.669628'
+    schema_hash: 2915314027343233344
+    last_analyzed: '2025-10-19T19:23:27.772106'
     primary_key: InstallmentPlanNum
   instructor:
     table_name: instructor
@@ -5430,14 +5426,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1618145292369638796
-    last_analyzed: '2025-10-11T20:44:37.671624'
+    schema_hash: -3864275677447795347
+    last_analyzed: '2025-10-19T19:23:27.772106'
     primary_key: InstructorNum
   insverify:
     table_name: insverify
     extraction_strategy: incremental
-    estimated_rows: 26617
-    estimated_size_mb: 3.74
+    estimated_rows: 26688
+    estimated_size_mb: 3.77
     batch_size: 25000
     incremental_columns:
     - InsVerifyNum
@@ -5456,14 +5452,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -3531382260983669258
-    last_analyzed: '2025-10-11T20:44:40.393091'
+    schema_hash: -1413969960037763903
+    last_analyzed: '2025-10-19T19:23:30.464183'
     primary_key: InsVerifyNum
   insverifyhist:
     table_name: insverifyhist
     extraction_strategy: incremental
-    estimated_rows: 42524
-    estimated_size_mb: 6.44
+    estimated_rows: 42811
+    estimated_size_mb: 6.54
     batch_size: 25000
     incremental_columns:
     - InsVerifyHistNum
@@ -5482,8 +5478,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 5965552440339311729
-    last_analyzed: '2025-10-11T20:44:40.674282'
+    schema_hash: -7060968280155383596
+    last_analyzed: '2025-10-19T19:23:30.723819'
     primary_key: InsVerifyHistNum
   intervention:
     table_name: intervention
@@ -5507,8 +5503,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2842846819648134413
-    last_analyzed: '2025-10-11T20:44:40.674282'
+    schema_hash: -4358484760467299107
+    last_analyzed: '2025-10-19T19:23:30.723819'
     primary_key: InterventionNum
   journalentry:
     table_name: journalentry
@@ -5532,20 +5528,19 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6784892586906672496
-    last_analyzed: '2025-10-11T20:44:40.924681'
+    schema_hash: 3517836558583772137
+    last_analyzed: '2025-10-19T19:23:30.974544'
     primary_key: JournalEntryNum
   labcase:
     table_name: labcase
     extraction_strategy: full_table
-    estimated_rows: 4754
-    estimated_size_mb: 0.73
+    estimated_rows: 4780
+    estimated_size_mb: 0.74
     batch_size: 10000
     incremental_columns:
     - LabCaseNum
     - DateTStamp
     - DateTimeCreated
-    - DateTimeDue
     incremental_strategy: or_logic
     primary_incremental_column: LabCaseNum
     is_modeled: false
@@ -5560,8 +5555,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6515321644641568593
-    last_analyzed: '2025-10-11T20:44:41.657255'
+    schema_hash: 8717641839769494980
+    last_analyzed: '2025-10-19T19:23:31.699286'
     primary_key: LabCaseNum
   laboratory:
     table_name: laboratory
@@ -5585,8 +5580,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7346280006091527395
-    last_analyzed: '2025-10-11T20:44:44.283804'
+    schema_hash: 1739780201156720432
+    last_analyzed: '2025-10-19T19:23:34.127007'
     primary_key: LaboratoryNum
   labpanel:
     table_name: labpanel
@@ -5610,8 +5605,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3696172528608905642
-    last_analyzed: '2025-10-11T20:44:44.404175'
+    schema_hash: 5409397110092360957
+    last_analyzed: '2025-10-19T19:23:34.266896'
     primary_key: LabPanelNum
   labresult:
     table_name: labresult
@@ -5635,8 +5630,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6048405908451703903
-    last_analyzed: '2025-10-11T20:44:44.643070'
+    schema_hash: -715146536959036710
+    last_analyzed: '2025-10-19T19:23:34.508121'
     primary_key: LabResultNum
   labturnaround:
     table_name: labturnaround
@@ -5660,8 +5655,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4530707730440170007
-    last_analyzed: '2025-10-11T20:44:44.643070'
+    schema_hash: 8465954670293109101
+    last_analyzed: '2025-10-19T19:23:34.510227'
     primary_key: LabTurnaroundNum
   language:
     table_name: language
@@ -5685,8 +5680,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4983287237816229762
-    last_analyzed: '2025-10-11T20:44:44.643070'
+    schema_hash: -5757420051548372455
+    last_analyzed: '2025-10-19T19:23:34.510227'
     primary_key: LanguageNum
   languageforeign:
     table_name: languageforeign
@@ -5710,8 +5705,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3588254123909297175
-    last_analyzed: '2025-10-11T20:44:47.342985'
+    schema_hash: -5282735529044605733
+    last_analyzed: '2025-10-19T19:23:37.005781'
     primary_key: LanguageForeignNum
   languagepat:
     table_name: languagepat
@@ -5735,8 +5730,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5906547291377517929
-    last_analyzed: '2025-10-11T20:44:47.353778'
+    schema_hash: -3934575471988588267
+    last_analyzed: '2025-10-19T19:23:37.009773'
     primary_key: LanguagePatNum
   letter:
     table_name: letter
@@ -5760,8 +5755,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6440144653832314652
-    last_analyzed: '2025-10-11T20:44:47.353778'
+    schema_hash: -7978052624290179178
+    last_analyzed: '2025-10-19T19:23:37.010773'
     primary_key: LetterNum
   lettermerge:
     table_name: lettermerge
@@ -5785,8 +5780,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7017848859251430131
-    last_analyzed: '2025-10-11T20:44:47.356148'
+    schema_hash: 6703007305600169001
+    last_analyzed: '2025-10-19T19:23:37.011770'
     primary_key: LetterMergeNum
   lettermergefield:
     table_name: lettermergefield
@@ -5810,8 +5805,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2778814476021010045
-    last_analyzed: '2025-10-11T20:44:47.357161'
+    schema_hash: -1783781125912533505
+    last_analyzed: '2025-10-19T19:23:37.012770'
     primary_key: FieldNum
   limitedbetafeature:
     table_name: limitedbetafeature
@@ -5835,8 +5830,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2289558083538616099
-    last_analyzed: '2025-10-11T20:44:50.168614'
+    schema_hash: -9109929087919422646
+    last_analyzed: '2025-10-19T19:23:39.463017'
     primary_key: LimitedBetaFeatureNum
   loginattempt:
     table_name: loginattempt
@@ -5860,8 +5855,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5849579415207850943
-    last_analyzed: '2025-10-11T20:44:50.297980'
+    schema_hash: -7699223564245731480
+    last_analyzed: '2025-10-19T19:23:39.580601'
     primary_key: LoginAttemptNum
   loinc:
     table_name: loinc
@@ -5885,8 +5880,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3992321893174173186
-    last_analyzed: '2025-10-11T20:44:50.300222'
+    schema_hash: 8405620562492426471
+    last_analyzed: '2025-10-19T19:23:39.580601'
     primary_key: LoincNum
   maparea:
     table_name: maparea
@@ -5910,8 +5905,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4736392487745612510
-    last_analyzed: '2025-10-11T20:44:50.301268'
+    schema_hash: -927818507310071148
+    last_analyzed: '2025-10-19T19:23:39.581602'
     primary_key: MapAreaNum
   medicalorder:
     table_name: medicalorder
@@ -5935,8 +5930,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 468271550995061434
-    last_analyzed: '2025-10-11T20:44:50.421689'
+    schema_hash: -2876263760228700973
+    last_analyzed: '2025-10-19T19:23:39.700278'
     primary_key: MedicalOrderNum
   medication:
     table_name: medication
@@ -5961,14 +5956,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2132323458920714272
-    last_analyzed: '2025-10-11T20:44:53.159928'
+    schema_hash: 1233692238268383654
+    last_analyzed: '2025-10-19T19:23:42.287565'
     primary_key: MedicationNum
   medicationpat:
     table_name: medicationpat
     extraction_strategy: incremental
-    estimated_rows: 17682
-    estimated_size_mb: 2.66
+    estimated_rows: 17800
+    estimated_size_mb: 2.67
     batch_size: 25000
     incremental_columns:
     - MedicationPatNum
@@ -5987,8 +5982,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -1486214455784690494
-    last_analyzed: '2025-10-11T20:44:53.381642'
+    schema_hash: 4175942007747868846
+    last_analyzed: '2025-10-19T19:23:42.510334'
     primary_key: MedicationPatNum
   medlab:
     table_name: medlab
@@ -6012,8 +6007,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5960788866551866399
-    last_analyzed: '2025-10-11T20:44:53.761006'
+    schema_hash: 6962054762999505048
+    last_analyzed: '2025-10-19T19:23:42.872415'
     primary_key: MedLabNum
   medlabfacattach:
     table_name: medlabfacattach
@@ -6037,8 +6032,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6902775359904291223
-    last_analyzed: '2025-10-11T20:44:53.761006'
+    schema_hash: -7374749710538974207
+    last_analyzed: '2025-10-19T19:23:42.872415'
     primary_key: MedLabFacAttachNum
   medlabfacility:
     table_name: medlabfacility
@@ -6062,8 +6057,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4109965503366918053
-    last_analyzed: '2025-10-11T20:44:53.774188'
+    schema_hash: 2637042856795822446
+    last_analyzed: '2025-10-19T19:23:42.872415'
     primary_key: MedLabFacilityNum
   medlabresult:
     table_name: medlabresult
@@ -6087,8 +6082,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -9067100294035505991
-    last_analyzed: '2025-10-11T20:44:56.568245'
+    schema_hash: -8402202354204814026
+    last_analyzed: '2025-10-19T19:23:45.471819'
     primary_key: MedLabResultNum
   medlabspecimen:
     table_name: medlabspecimen
@@ -6112,8 +6107,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 798893135295884150
-    last_analyzed: '2025-10-11T20:44:56.831378'
+    schema_hash: -7471682226779959249
+    last_analyzed: '2025-10-19T19:23:45.593444'
     primary_key: MedLabSpecimenNum
   mobileappdevice:
     table_name: mobileappdevice
@@ -6137,8 +6132,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8693499359290951192
-    last_analyzed: '2025-10-11T20:44:57.932511'
+    schema_hash: -8195943434364514036
+    last_analyzed: '2025-10-19T19:23:46.224665'
     primary_key: MobileAppDeviceNum
   mobilebrandingprofile:
     table_name: mobilebrandingprofile
@@ -6162,8 +6157,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -665689366812152660
-    last_analyzed: '2025-10-11T20:44:58.134512'
+    schema_hash: -2277284418661488274
+    last_analyzed: '2025-10-19T19:23:46.346549'
     primary_key: MobileBrandingProfileNum
   mobiledatabyte:
     table_name: mobiledatabyte
@@ -6187,8 +6182,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2200159834505367353
-    last_analyzed: '2025-10-11T20:44:58.324060'
+    schema_hash: -777450339249793184
+    last_analyzed: '2025-10-19T19:23:46.466004'
     primary_key: MobileDataByteNum
   mobilenotification:
     table_name: mobilenotification
@@ -6212,8 +6207,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4484351930569495462
-    last_analyzed: '2025-10-11T20:45:00.970467'
+    schema_hash: -6624218075814208099
+    last_analyzed: '2025-10-19T19:23:49.076019'
     primary_key: MobileNotificationNum
   mount:
     table_name: mount
@@ -6237,8 +6232,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6529865325973316485
-    last_analyzed: '2025-10-11T20:45:01.083442'
+    schema_hash: 1537648896200182911
+    last_analyzed: '2025-10-19T19:23:49.200471'
     primary_key: MountNum
   mountdef:
     table_name: mountdef
@@ -6262,8 +6257,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6562131779927222375
-    last_analyzed: '2025-10-11T20:45:01.084435'
+    schema_hash: -4718411398921809717
+    last_analyzed: '2025-10-19T19:23:49.201495'
     primary_key: MountDefNum
   mountitem:
     table_name: mountitem
@@ -6287,8 +6282,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2406871782978695354
-    last_analyzed: '2025-10-11T20:45:01.084435'
+    schema_hash: 5672496122669840465
+    last_analyzed: '2025-10-19T19:23:49.202496'
     primary_key: MountItemNum
   mountitemdef:
     table_name: mountitemdef
@@ -6312,8 +6307,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4218580705336502925
-    last_analyzed: '2025-10-11T20:45:01.085435'
+    schema_hash: -2530508533879370850
+    last_analyzed: '2025-10-19T19:23:49.203496'
     primary_key: MountItemDefNum
   msgtopaysent:
     table_name: msgtopaysent
@@ -6337,8 +6332,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2879600652118765122
-    last_analyzed: '2025-10-11T20:45:03.985421'
+    schema_hash: -3056433160759989859
+    last_analyzed: '2025-10-19T19:23:51.979862'
     primary_key: MsgToPaySentNum
   oidexternal:
     table_name: oidexternal
@@ -6362,8 +6357,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6632801777246185534
-    last_analyzed: '2025-10-11T20:45:03.985421'
+    schema_hash: -1929577041210886263
+    last_analyzed: '2025-10-19T19:23:51.979862'
     primary_key: OIDExternalNum
   oidinternal:
     table_name: oidinternal
@@ -6387,8 +6382,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4086013399141812136
-    last_analyzed: '2025-10-11T20:45:03.985421'
+    schema_hash: 990311108599106771
+    last_analyzed: '2025-10-19T19:23:51.979862'
     primary_key: OIDInternalNum
   operatory:
     table_name: operatory
@@ -6412,8 +6407,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2128730340135982955
-    last_analyzed: '2025-10-11T20:45:04.120446'
+    schema_hash: -5454572727822633730
+    last_analyzed: '2025-10-19T19:23:52.104473'
     primary_key: OperatoryNum
   orionproc:
     table_name: orionproc
@@ -6437,8 +6432,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3285845130076400236
-    last_analyzed: '2025-10-11T20:45:04.121447'
+    schema_hash: 7119789582071717576
+    last_analyzed: '2025-10-19T19:23:52.105473'
     primary_key: OrionProcNum
   orthocase:
     table_name: orthocase
@@ -6462,8 +6457,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7707487427004561372
-    last_analyzed: '2025-10-11T20:45:07.054658'
+    schema_hash: 1956416834642331467
+    last_analyzed: '2025-10-19T19:23:54.808440'
     primary_key: OrthoCaseNum
   orthochart:
     table_name: orthochart
@@ -6487,8 +6482,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2495590543560469922
-    last_analyzed: '2025-10-11T20:45:07.054658'
+    schema_hash: 3986394829987067441
+    last_analyzed: '2025-10-19T19:23:54.824109'
     primary_key: OrthoChartNum
   orthochartlog:
     table_name: orthochartlog
@@ -6512,8 +6507,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 152505544391884735
-    last_analyzed: '2025-10-11T20:45:07.307292'
+    schema_hash: 6473611831390519207
+    last_analyzed: '2025-10-19T19:23:55.063750'
     primary_key: OrthoChartLogNum
   orthochartrow:
     table_name: orthochartrow
@@ -6537,8 +6532,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1201882922833763807
-    last_analyzed: '2025-10-11T20:45:07.425847'
+    schema_hash: 7116991882081479811
+    last_analyzed: '2025-10-19T19:23:55.193642'
     primary_key: OrthoChartRowNum
   orthocharttab:
     table_name: orthocharttab
@@ -6562,8 +6557,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -9160100805471056563
-    last_analyzed: '2025-10-11T20:45:07.426832'
+    schema_hash: -6957145015441631640
+    last_analyzed: '2025-10-19T19:23:55.195639'
     primary_key: OrthoChartTabNum
   orthocharttablink:
     table_name: orthocharttablink
@@ -6587,8 +6582,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 751989674224116528
-    last_analyzed: '2025-10-11T20:45:10.140447'
+    schema_hash: -5695634525411012697
+    last_analyzed: '2025-10-19T19:23:57.606109'
     primary_key: OrthoChartTabLinkNum
   orthohardware:
     table_name: orthohardware
@@ -6612,8 +6607,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5237739532057596500
-    last_analyzed: '2025-10-11T20:45:10.140447'
+    schema_hash: 202228039746886824
+    last_analyzed: '2025-10-19T19:23:57.606109'
     primary_key: OrthoHardwareNum
   orthohardwarespec:
     table_name: orthohardwarespec
@@ -6637,8 +6632,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7570214988007091898
-    last_analyzed: '2025-10-11T20:45:10.140447'
+    schema_hash: -6274814943128935978
+    last_analyzed: '2025-10-19T19:23:57.606109'
     primary_key: OrthoHardwareSpecNum
   orthoplanlink:
     table_name: orthoplanlink
@@ -6662,8 +6657,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7545591278463285357
-    last_analyzed: '2025-10-11T20:45:10.290079'
+    schema_hash: -1170715889684183463
+    last_analyzed: '2025-10-19T19:23:57.728537'
     primary_key: OrthoPlanLinkNum
   orthoproclink:
     table_name: orthoproclink
@@ -6687,8 +6682,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7543447702680923362
-    last_analyzed: '2025-10-11T20:45:10.418158'
+    schema_hash: -4858440687401406759
+    last_analyzed: '2025-10-19T19:23:57.847080'
     primary_key: OrthoProcLinkNum
   orthorx:
     table_name: orthorx
@@ -6712,8 +6707,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1058341530616561063
-    last_analyzed: '2025-10-11T20:45:12.996245'
+    schema_hash: -7382879368795596255
+    last_analyzed: '2025-10-19T19:24:00.349441'
     primary_key: OrthoRxNum
   orthoschedule:
     table_name: orthoschedule
@@ -6737,14 +6732,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5836003278723470242
-    last_analyzed: '2025-10-11T20:45:13.136033'
+    schema_hash: -7330261196002586958
+    last_analyzed: '2025-10-19T19:24:00.505683'
     primary_key: OrthoScheduleNum
   patfield:
     table_name: patfield
     extraction_strategy: incremental
-    estimated_rows: 47230
-    estimated_size_mb: 4.75
+    estimated_rows: 47390
+    estimated_size_mb: 4.77
     batch_size: 25000
     incremental_columns:
     - PatFieldNum
@@ -6763,8 +6758,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -988879843754782457
-    last_analyzed: '2025-10-11T20:45:13.407205'
+    schema_hash: -4429856497542191291
+    last_analyzed: '2025-10-19T19:24:00.755353'
     primary_key: PatFieldNum
   patfielddef:
     table_name: patfielddef
@@ -6788,8 +6783,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3766471124191416517
-    last_analyzed: '2025-10-11T20:45:13.407205'
+    schema_hash: -3332440173651183210
+    last_analyzed: '2025-10-19T19:24:00.771010'
     primary_key: PatFieldDefNum
   patfieldpickitem:
     table_name: patfieldpickitem
@@ -6813,14 +6808,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5238371943810055781
-    last_analyzed: '2025-10-11T20:45:13.407205'
+    schema_hash: -6724927148633249400
+    last_analyzed: '2025-10-19T19:24:00.771010'
     primary_key: PatFieldPickItemNum
   patient:
     table_name: patient
     extraction_strategy: incremental
-    estimated_rows: 33690
-    estimated_size_mb: 18.91
+    estimated_rows: 34140
+    estimated_size_mb: 19.21
     batch_size: 17500
     incremental_columns:
     - PatNum
@@ -6840,8 +6835,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 76
-    schema_hash: -2637401066049329231
-    last_analyzed: '2025-10-11T20:45:16.628268'
+    schema_hash: -2063943256299681
+    last_analyzed: '2025-10-19T19:24:03.889178'
     primary_key: PatNum
   patientlink:
     table_name: patientlink
@@ -6866,14 +6861,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4210938864187664007
-    last_analyzed: '2025-10-11T20:45:16.757154'
+    schema_hash: -624186583060727802
+    last_analyzed: '2025-10-19T19:24:04.028412'
     primary_key: PatientLinkNum
   patientnote:
     table_name: patientnote
     extraction_strategy: incremental
-    estimated_rows: 33675
-    estimated_size_mb: 2.99
+    estimated_rows: 34125
+    estimated_size_mb: 3.03
     batch_size: 25000
     incremental_columns:
     - PatNum
@@ -6893,8 +6888,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -4751591982836988929
-    last_analyzed: '2025-10-11T20:45:17.204198'
+    schema_hash: 1231876584919797580
+    last_analyzed: '2025-10-19T19:24:04.482093'
     primary_key: PatNum
   patientportalinvite:
     table_name: patientportalinvite
@@ -6918,8 +6913,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4392359155716553377
-    last_analyzed: '2025-10-11T20:45:17.341695'
+    schema_hash: 1508236878109629104
+    last_analyzed: '2025-10-19T19:24:04.609874'
     primary_key: PatientPortalInviteNum
   patientrace:
     table_name: patientrace
@@ -6943,14 +6938,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3866206018778151591
-    last_analyzed: '2025-10-11T20:45:17.343701'
+    schema_hash: 4349540554624098145
+    last_analyzed: '2025-10-19T19:24:04.610876'
     primary_key: PatientRaceNum
   patplan:
     table_name: patplan
     extraction_strategy: incremental
-    estimated_rows: 20712
-    estimated_size_mb: 2.82
+    estimated_rows: 20776
+    estimated_size_mb: 2.83
     batch_size: 25000
     incremental_columns:
     - PatPlanNum
@@ -6970,8 +6965,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 7448182803435719832
-    last_analyzed: '2025-10-11T20:45:20.311559'
+    schema_hash: -5286809882610880624
+    last_analyzed: '2025-10-19T19:24:07.466207'
     primary_key: PatPlanNum
   patrestriction:
     table_name: patrestriction
@@ -6995,8 +6990,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3810050895137306505
-    last_analyzed: '2025-10-11T20:45:20.311559'
+    schema_hash: -287933876971196986
+    last_analyzed: '2025-10-19T19:24:07.466207'
     primary_key: PatRestrictionNum
   payconnectresponseweb:
     table_name: payconnectresponseweb
@@ -7020,14 +7015,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8902708756447007836
-    last_analyzed: '2025-10-11T20:45:20.311559'
+    schema_hash: 6784369134771754668
+    last_analyzed: '2025-10-19T19:24:07.466207'
     primary_key: PayConnectResponseWebNum
   payment:
     table_name: payment
     extraction_strategy: incremental
-    estimated_rows: 302636
-    estimated_size_mb: 51.71
+    estimated_rows: 302796
+    estimated_size_mb: 51.74
     batch_size: 50000
     incremental_columns:
     - PayNum
@@ -7046,8 +7041,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 3686738046103564865
-    last_analyzed: '2025-10-11T20:45:21.246208'
+    schema_hash: 2931231652402111350
+    last_analyzed: '2025-10-19T19:24:08.417422'
     primary_key: PayNum
   payortype:
     table_name: payortype
@@ -7071,8 +7066,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5051100490356183128
-    last_analyzed: '2025-10-11T20:45:21.246208'
+    schema_hash: 7555378737987583519
+    last_analyzed: '2025-10-19T19:24:08.417422'
     primary_key: PayorTypeNum
   payperiod:
     table_name: payperiod
@@ -7096,8 +7091,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7491773775910054888
-    last_analyzed: '2025-10-11T20:45:23.845753'
+    schema_hash: -3031603959095330633
+    last_analyzed: '2025-10-19T19:24:10.951133'
     primary_key: PayPeriodNum
   payplan:
     table_name: payplan
@@ -7121,8 +7116,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6691452113686582794
-    last_analyzed: '2025-10-11T20:45:23.845753'
+    schema_hash: 4116643015164638932
+    last_analyzed: '2025-10-19T19:24:10.953938'
     primary_key: PayPlanNum
   payplancharge:
     table_name: payplancharge
@@ -7146,8 +7141,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6189272290642724976
-    last_analyzed: '2025-10-11T20:45:24.095328'
+    schema_hash: -525604104207090823
+    last_analyzed: '2025-10-19T19:24:11.209124'
     primary_key: PayPlanChargeNum
   payplanlink:
     table_name: payplanlink
@@ -7171,8 +7166,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3923039458632893104
-    last_analyzed: '2025-10-11T20:45:24.226211'
+    schema_hash: 6498881036111463719
+    last_analyzed: '2025-10-19T19:24:11.342224'
     primary_key: PayPlanLinkNum
   payplantemplate:
     table_name: payplantemplate
@@ -7196,14 +7191,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4851211089191057127
-    last_analyzed: '2025-10-11T20:45:24.226211'
+    schema_hash: 3602487231352321386
+    last_analyzed: '2025-10-19T19:24:11.342999'
     primary_key: PayPlanTemplateNum
   paysplit:
     table_name: paysplit
     extraction_strategy: incremental_chunked
-    estimated_rows: 1446532
-    estimated_size_mb: 395.43
+    estimated_rows: 1447239
+    estimated_size_mb: 395.71
     batch_size: 100000
     incremental_columns:
     - SplitNum
@@ -7222,8 +7217,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 3000
       memory_alert_threshold_mb: 292
-    schema_hash: 7250530677137034485
-    last_analyzed: '2025-10-11T20:45:30.567810'
+    schema_hash: 4609785787388653043
+    last_analyzed: '2025-10-19T19:24:17.546014'
     primary_key: SplitNum
   payterminal:
     table_name: payterminal
@@ -7247,8 +7242,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2712711612645364706
-    last_analyzed: '2025-10-11T20:45:30.567810'
+    schema_hash: 459057194312307268
+    last_analyzed: '2025-10-19T19:24:17.548017'
     primary_key: PayTerminalNum
   pearlrequest:
     table_name: pearlrequest
@@ -7272,13 +7267,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4149190573796063109
-    last_analyzed: '2025-10-11T20:45:30.567810'
+    schema_hash: 4988163135444570136
+    last_analyzed: '2025-10-19T19:24:17.548017'
     primary_key: PearlRequestNum
   perioexam:
     table_name: perioexam
     extraction_strategy: incremental
-    estimated_rows: 13157
+    estimated_rows: 13198
     estimated_size_mb: 0.93
     batch_size: 25000
     incremental_columns:
@@ -7298,14 +7293,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 6998090804276275243
-    last_analyzed: '2025-10-11T20:45:30.734061'
+    schema_hash: 356235370826507996
+    last_analyzed: '2025-10-19T19:24:17.703556'
     primary_key: PerioExamNum
   periomeasure:
     table_name: periomeasure
     extraction_strategy: incremental
-    estimated_rows: 601831
-    estimated_size_mb: 58.87
+    estimated_rows: 604197
+    estimated_size_mb: 59.1
     batch_size: 50000
     incremental_columns:
     - PerioMeasureNum
@@ -7325,8 +7320,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 8846964818370895187
-    last_analyzed: '2025-10-11T20:45:33.405885'
+    schema_hash: -6339534771198146306
+    last_analyzed: '2025-10-19T19:24:20.778117'
     primary_key: PerioMeasureNum
   pharmacy:
     table_name: pharmacy
@@ -7350,8 +7345,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2739253922557259889
-    last_analyzed: '2025-10-11T20:45:36.020268'
+    schema_hash: -367413709718866994
+    last_analyzed: '2025-10-19T19:24:23.379975'
     primary_key: PharmacyNum
   pharmclinic:
     table_name: pharmclinic
@@ -7375,8 +7370,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6493785950099984372
-    last_analyzed: '2025-10-11T20:45:36.021272'
+    schema_hash: -3629673380186809306
+    last_analyzed: '2025-10-19T19:24:23.379975'
     primary_key: PharmClinicNum
   phonenumber:
     table_name: phonenumber
@@ -7400,13 +7395,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5737451516622678642
-    last_analyzed: '2025-10-11T20:45:36.021272'
+    schema_hash: 8263378678004635799
+    last_analyzed: '2025-10-19T19:24:23.379975'
     primary_key: PhoneNumberNum
   popup:
     table_name: popup
     extraction_strategy: incremental
-    estimated_rows: 13399
+    estimated_rows: 13406
     estimated_size_mb: 2.04
     batch_size: 25000
     incremental_columns:
@@ -7426,8 +7421,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -7094235982157080808
-    last_analyzed: '2025-10-11T20:45:36.168202'
+    schema_hash: 5974541336578387631
+    last_analyzed: '2025-10-19T19:24:23.531177'
     primary_key: PopupNum
   preference:
     table_name: preference
@@ -7451,8 +7446,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -853358671609019066
-    last_analyzed: '2025-10-11T20:45:36.168202'
+    schema_hash: -8542182334430331312
+    last_analyzed: '2025-10-19T19:24:23.531177'
     primary_key: PrefNum
   printer:
     table_name: printer
@@ -7476,8 +7471,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3096389970377102214
-    last_analyzed: '2025-10-11T20:45:38.756523'
+    schema_hash: -2586260623521558307
+    last_analyzed: '2025-10-19T19:24:26.000793'
     primary_key: PrinterNum
   procapptcolor:
     table_name: procapptcolor
@@ -7501,8 +7496,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6381760444883337536
-    last_analyzed: '2025-10-11T20:45:38.756523'
+    schema_hash: -5427077835091336857
+    last_analyzed: '2025-10-19T19:24:26.003217'
     primary_key: ProcApptColorNum
   procbutton:
     table_name: procbutton
@@ -7526,8 +7521,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7036012905936417234
-    last_analyzed: '2025-10-11T20:45:38.756523'
+    schema_hash: 2881331808272185713
+    last_analyzed: '2025-10-19T19:24:26.003217'
     primary_key: ProcButtonNum
   procbuttonitem:
     table_name: procbuttonitem
@@ -7551,8 +7546,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4767895301768109613
-    last_analyzed: '2025-10-11T20:45:38.756523'
+    schema_hash: -8411761538293709533
+    last_analyzed: '2025-10-19T19:24:26.003217'
     primary_key: ProcButtonItemNum
   procbuttonquick:
     table_name: procbuttonquick
@@ -7576,8 +7571,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4629870316889752122
-    last_analyzed: '2025-10-11T20:45:38.756523'
+    schema_hash: 3748060431174887157
+    last_analyzed: '2025-10-19T19:24:26.003217'
     primary_key: ProcButtonQuickNum
   proccodenote:
     table_name: proccodenote
@@ -7601,8 +7596,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1652447442546205634
-    last_analyzed: '2025-10-11T20:45:41.313381'
+    schema_hash: -885925752292755924
+    last_analyzed: '2025-10-19T19:24:28.466051'
     primary_key: ProcCodeNoteNum
   procedurecode:
     table_name: procedurecode
@@ -7627,14 +7622,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1382790245958946866
-    last_analyzed: '2025-10-11T20:45:41.445785'
+    schema_hash: -8623180540083292040
+    last_analyzed: '2025-10-19T19:24:28.615837'
     primary_key: CodeNum
   procedurelog:
     table_name: procedurelog
     extraction_strategy: incremental
-    estimated_rows: 762806
-    estimated_size_mb: 372.56
+    estimated_rows: 766336
+    estimated_size_mb: 374.56
     batch_size: 35000
     incremental_columns:
     - ProcNum
@@ -7654,14 +7649,14 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 152
-    schema_hash: -6539695807094113979
-    last_analyzed: '2025-10-11T20:45:46.589968'
+    schema_hash: 4499001860411387126
+    last_analyzed: '2025-10-19T19:24:33.828890'
     primary_key: ProcNum
   procgroupitem:
     table_name: procgroupitem
     extraction_strategy: incremental
-    estimated_rows: 28322
-    estimated_size_mb: 2.15
+    estimated_rows: 28517
+    estimated_size_mb: 2.16
     batch_size: 25000
     incremental_columns:
     - ProcGroupItemNum
@@ -7679,8 +7674,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -2188165828555015562
-    last_analyzed: '2025-10-11T20:45:46.591069'
+    schema_hash: 4872941895418515021
+    last_analyzed: '2025-10-19T19:24:33.828890'
     primary_key: ProcGroupItemNum
   procmultivisit:
     table_name: procmultivisit
@@ -7706,14 +7701,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3842186299943195720
-    last_analyzed: '2025-10-11T20:45:46.825656'
+    schema_hash: -7228341910502578937
+    last_analyzed: '2025-10-19T19:24:34.082896'
     primary_key: ProcMultiVisitNum
   procnote:
     table_name: procnote
     extraction_strategy: incremental
-    estimated_rows: 565458
-    estimated_size_mb: 124.37
+    estimated_rows: 566081
+    estimated_size_mb: 124.63
     batch_size: 50000
     incremental_columns:
     - ProcNoteNum
@@ -7731,8 +7726,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 7788586287833666300
-    last_analyzed: '2025-10-11T20:45:50.126619'
+    schema_hash: -8144332605055142026
+    last_analyzed: '2025-10-19T19:24:37.340416'
     primary_key: ProcNoteNum
   proctp:
     table_name: proctp
@@ -7757,8 +7752,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8944176475802479740
-    last_analyzed: '2025-10-11T20:45:50.260898'
+    schema_hash: -7365780281037832190
+    last_analyzed: '2025-10-19T19:24:37.486817'
     primary_key: ProcTPNum
   program:
     table_name: program
@@ -7782,8 +7777,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 9061638937847093104
-    last_analyzed: '2025-10-11T20:45:50.261315'
+    schema_hash: -8545621157792887711
+    last_analyzed: '2025-10-19T19:24:37.486817'
     primary_key: ProgramNum
   programproperty:
     table_name: programproperty
@@ -7807,8 +7802,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8978632385206212637
-    last_analyzed: '2025-10-11T20:45:50.261315'
+    schema_hash: 457596108982015615
+    last_analyzed: '2025-10-19T19:24:37.486817'
     primary_key: ProgramPropertyNum
   promotion:
     table_name: promotion
@@ -7832,8 +7827,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4599679357620460469
-    last_analyzed: '2025-10-11T20:45:50.261315'
+    schema_hash: -5364594976904068443
+    last_analyzed: '2025-10-19T19:24:37.486817'
     primary_key: PromotionNum
   promotionlog:
     table_name: promotionlog
@@ -7857,8 +7852,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6248692359425008478
-    last_analyzed: '2025-10-11T20:45:52.843533'
+    schema_hash: 7082147239808316881
+    last_analyzed: '2025-10-19T19:24:39.980384'
     primary_key: PromotionLogNum
   provider:
     table_name: provider
@@ -7882,8 +7877,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6088580311307884285
-    last_analyzed: '2025-10-11T20:45:52.966921'
+    schema_hash: 4195701516706290754
+    last_analyzed: '2025-10-19T19:24:40.118188'
     primary_key: ProvNum
   providerclinic:
     table_name: providerclinic
@@ -7907,8 +7902,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6156729373292717925
-    last_analyzed: '2025-10-11T20:45:52.968025'
+    schema_hash: -8792152918393217960
+    last_analyzed: '2025-10-19T19:24:40.119188'
     primary_key: ProviderClinicNum
   providercliniclink:
     table_name: providercliniclink
@@ -7932,8 +7927,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1049372550952990554
-    last_analyzed: '2025-10-11T20:45:52.968025'
+    schema_hash: 7419676929300576002
+    last_analyzed: '2025-10-19T19:24:40.119188'
     primary_key: ProviderClinicLinkNum
   providererx:
     table_name: providererx
@@ -7957,8 +7952,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5263317880309827549
-    last_analyzed: '2025-10-11T20:45:52.969033'
+    schema_hash: 1991516984136947356
+    last_analyzed: '2025-10-19T19:24:40.119188'
     primary_key: ProviderErxNum
   providerident:
     table_name: providerident
@@ -7982,8 +7977,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4647090688273224185
-    last_analyzed: '2025-10-11T20:45:55.722935'
+    schema_hash: -2622869356202611390
+    last_analyzed: '2025-10-19T19:24:42.590243'
     primary_key: ProviderIdentNum
   queryfilter:
     table_name: queryfilter
@@ -8007,8 +8002,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 308294021256568082
-    last_analyzed: '2025-10-11T20:45:55.722935'
+    schema_hash: 6816878276130687889
+    last_analyzed: '2025-10-19T19:24:42.606002'
     primary_key: QueryFilterNum
   question:
     table_name: question
@@ -8032,8 +8027,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4385625006314145024
-    last_analyzed: '2025-10-11T20:45:55.722935'
+    schema_hash: 727792958128767417
+    last_analyzed: '2025-10-19T19:24:42.606002'
     primary_key: QuestionNum
   questiondef:
     table_name: questiondef
@@ -8057,8 +8052,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5709439670896918593
-    last_analyzed: '2025-10-11T20:45:55.722935'
+    schema_hash: 1817988316584442661
+    last_analyzed: '2025-10-19T19:24:42.609778'
     primary_key: QuestionDefNum
   quickpastecat:
     table_name: quickpastecat
@@ -8082,8 +8077,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7847591959782444027
-    last_analyzed: '2025-10-11T20:45:55.722935'
+    schema_hash: -75431449467460844
+    last_analyzed: '2025-10-19T19:24:42.610789'
     primary_key: QuickPasteCatNum
   quickpastenote:
     table_name: quickpastenote
@@ -8107,8 +8102,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6881013328617286166
-    last_analyzed: '2025-10-11T20:45:58.231809'
+    schema_hash: -9216137169152439523
+    last_analyzed: '2025-10-19T19:24:45.073970'
     primary_key: QuickPasteNoteNum
   reactivation:
     table_name: reactivation
@@ -8132,14 +8127,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1456844148128258467
-    last_analyzed: '2025-10-11T20:45:58.232122'
+    schema_hash: -5150878672752406206
+    last_analyzed: '2025-10-19T19:24:45.076706'
     primary_key: ReactivationNum
   recall:
     table_name: recall
     extraction_strategy: incremental
-    estimated_rows: 52862
-    estimated_size_mb: 8.51
+    estimated_rows: 53144
+    estimated_size_mb: 8.55
     batch_size: 25000
     incremental_columns:
     - RecallNum
@@ -8157,8 +8152,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 7333260668515077002
-    last_analyzed: '2025-10-11T20:45:58.493976'
+    schema_hash: 1981939314771016994
+    last_analyzed: '2025-10-19T19:24:45.352461'
     primary_key: RecallNum
   recalltrigger:
     table_name: recalltrigger
@@ -8182,8 +8177,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2871490511927855678
-    last_analyzed: '2025-10-11T20:45:58.493976'
+    schema_hash: -1951125627866841906
+    last_analyzed: '2025-10-19T19:24:45.354503'
     primary_key: RecallTriggerNum
   recalltype:
     table_name: recalltype
@@ -8207,8 +8202,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3406461527259949686
-    last_analyzed: '2025-10-11T20:45:58.493976'
+    schema_hash: -2843634052703574209
+    last_analyzed: '2025-10-19T19:24:45.358467'
     primary_key: RecallTypeNum
   reconcile:
     table_name: reconcile
@@ -8232,8 +8227,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2363798396731797381
-    last_analyzed: '2025-10-11T20:46:01.169809'
+    schema_hash: 5997421979383201817
+    last_analyzed: '2025-10-19T19:24:47.808885'
     primary_key: ReconcileNum
   recurringcharge:
     table_name: recurringcharge
@@ -8257,14 +8252,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -666430218215866766
-    last_analyzed: '2025-10-11T20:46:01.293838'
+    schema_hash: -7238412327157313782
+    last_analyzed: '2025-10-19T19:24:47.940047'
     primary_key: RecurringChargeNum
   refattach:
     table_name: refattach
     extraction_strategy: full_table
-    estimated_rows: 7899
-    estimated_size_mb: 0.98
+    estimated_rows: 8244
+    estimated_size_mb: 1.02
     batch_size: 10000
     incremental_columns:
     - RefAttachNum
@@ -8283,13 +8278,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4859212656694414584
-    last_analyzed: '2025-10-11T20:46:01.439749'
+    schema_hash: -6432954931044266634
+    last_analyzed: '2025-10-19T19:24:48.092985'
     primary_key: RefAttachNum
   referral:
     table_name: referral
     extraction_strategy: full_table
-    estimated_rows: 1168
+    estimated_rows: 1170
     estimated_size_mb: 0.16
     batch_size: 10000
     incremental_columns:
@@ -8309,8 +8304,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -591269446007347940
-    last_analyzed: '2025-10-11T20:46:01.564277'
+    schema_hash: -1425375975572816192
+    last_analyzed: '2025-10-19T19:24:48.227495'
     primary_key: ReferralNum
   referralcliniclink:
     table_name: referralcliniclink
@@ -8334,8 +8329,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5874010761804192700
-    last_analyzed: '2025-10-11T20:46:01.564277'
+    schema_hash: 6737293106804491144
+    last_analyzed: '2025-10-19T19:24:48.228534'
     primary_key: ReferralClinicLinkNum
   registrationkey:
     table_name: registrationkey
@@ -8359,8 +8354,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3078654075287599338
-    last_analyzed: '2025-10-11T20:46:04.464471'
+    schema_hash: 214634103071035833
+    last_analyzed: '2025-10-19T19:24:50.827984'
     primary_key: RegistrationKeyNum
   reminderrule:
     table_name: reminderrule
@@ -8384,8 +8379,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6598576094745192709
-    last_analyzed: '2025-10-11T20:46:04.465607'
+    schema_hash: -3882100466528933593
+    last_analyzed: '2025-10-19T19:24:50.829024'
     primary_key: ReminderRuleNum
   repeatcharge:
     table_name: repeatcharge
@@ -8409,8 +8404,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2808989435352576583
-    last_analyzed: '2025-10-11T20:46:04.467226'
+    schema_hash: -6658934366871788834
+    last_analyzed: '2025-10-19T19:24:50.830030'
     primary_key: RepeatChargeNum
   replicationserver:
     table_name: replicationserver
@@ -8434,8 +8429,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 489274674270857758
-    last_analyzed: '2025-10-11T20:46:04.467226'
+    schema_hash: -8829651950234863809
+    last_analyzed: '2025-10-19T19:24:50.831030'
     primary_key: ReplicationServerNum
   reqneeded:
     table_name: reqneeded
@@ -8459,8 +8454,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4626300319070679368
-    last_analyzed: '2025-10-11T20:46:04.467226'
+    schema_hash: -8941017080136023877
+    last_analyzed: '2025-10-19T19:24:50.831030'
     primary_key: ReqNeededNum
   reqstudent:
     table_name: reqstudent
@@ -8484,8 +8479,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7306943071500663536
-    last_analyzed: '2025-10-11T20:46:07.247371'
+    schema_hash: -6870042574111692598
+    last_analyzed: '2025-10-19T19:24:53.278867'
     primary_key: ReqStudentNum
   requiredfield:
     table_name: requiredfield
@@ -8509,8 +8504,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2430111596161523836
-    last_analyzed: '2025-10-11T20:46:07.248370'
+    schema_hash: -105190876311928349
+    last_analyzed: '2025-10-19T19:24:53.278867'
     primary_key: RequiredFieldNum
   requiredfieldcondition:
     table_name: requiredfieldcondition
@@ -8534,8 +8529,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3843994373999906556
-    last_analyzed: '2025-10-11T20:46:07.248370'
+    schema_hash: -4390073441959474019
+    last_analyzed: '2025-10-19T19:24:53.278867'
     primary_key: RequiredFieldConditionNum
   reseller:
     table_name: reseller
@@ -8559,8 +8554,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6738963677386562041
-    last_analyzed: '2025-10-11T20:46:07.249370'
+    schema_hash: 5633544120050048960
+    last_analyzed: '2025-10-19T19:24:53.278867'
     primary_key: ResellerNum
   resellerservice:
     table_name: resellerservice
@@ -8584,8 +8579,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8240792063912776596
-    last_analyzed: '2025-10-11T20:46:07.250370'
+    schema_hash: -2098564506314045307
+    last_analyzed: '2025-10-19T19:24:53.278867'
     primary_key: ResellerServiceNum
   rxalert:
     table_name: rxalert
@@ -8609,8 +8604,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3898965199825996200
-    last_analyzed: '2025-10-11T20:46:09.802811'
+    schema_hash: 2062720028716813551
+    last_analyzed: '2025-10-19T19:24:55.769870'
     primary_key: RxAlertNum
   rxdef:
     table_name: rxdef
@@ -8634,8 +8629,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1049055657139635083
-    last_analyzed: '2025-10-11T20:46:09.802811'
+    schema_hash: 1465627575909534115
+    last_analyzed: '2025-10-19T19:24:55.769870'
     primary_key: RxDefNum
   rxnorm:
     table_name: rxnorm
@@ -8659,13 +8654,13 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 3125782486362023312
-    last_analyzed: '2025-10-11T20:46:09.802811'
+    schema_hash: -4639099779533619939
+    last_analyzed: '2025-10-19T19:24:55.769870'
     primary_key: RxNormNum
   rxpat:
     table_name: rxpat
     extraction_strategy: full_table
-    estimated_rows: 5060
+    estimated_rows: 5064
     estimated_size_mb: 1.48
     batch_size: 10000
     incremental_columns:
@@ -8685,14 +8680,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4337754180733656325
-    last_analyzed: '2025-10-11T20:46:09.967440'
+    schema_hash: 4958089992380304699
+    last_analyzed: '2025-10-19T19:24:55.922055'
     primary_key: RxNum
   schedule:
     table_name: schedule
     extraction_strategy: incremental
-    estimated_rows: 35913
-    estimated_size_mb: 5.5
+    estimated_rows: 36099
+    estimated_size_mb: 5.53
     batch_size: 25000
     incremental_columns:
     - ScheduleNum
@@ -8711,8 +8706,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 2454795148391431622
-    last_analyzed: '2025-10-11T20:46:10.202992'
+    schema_hash: 1125520176365962065
+    last_analyzed: '2025-10-19T19:24:56.154858'
     primary_key: ScheduleNum
   scheduledprocess:
     table_name: scheduledprocess
@@ -8736,14 +8731,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4428922894624747034
-    last_analyzed: '2025-10-11T20:46:13.186581'
+    schema_hash: 1597964543746403665
+    last_analyzed: '2025-10-19T19:24:58.846968'
     primary_key: ScheduledProcessNum
   scheduleop:
     table_name: scheduleop
     extraction_strategy: incremental
-    estimated_rows: 34555
-    estimated_size_mb: 3.04
+    estimated_rows: 34747
+    estimated_size_mb: 3.05
     batch_size: 25000
     incremental_columns:
     - ScheduleOpNum
@@ -8761,8 +8756,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 661845016202827441
-    last_analyzed: '2025-10-11T20:46:13.186581'
+    schema_hash: 5658659981873518727
+    last_analyzed: '2025-10-19T19:24:58.847294'
     primary_key: ScheduleOpNum
   schoolclass:
     table_name: schoolclass
@@ -8786,8 +8781,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5236408844243700706
-    last_analyzed: '2025-10-11T20:46:13.186581'
+    schema_hash: 8351709101382852983
+    last_analyzed: '2025-10-19T19:24:58.847294'
     primary_key: SchoolClassNum
   schoolcourse:
     table_name: schoolcourse
@@ -8811,8 +8806,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6095219699816269218
-    last_analyzed: '2025-10-11T20:46:13.186581'
+    schema_hash: 5947359029664532207
+    last_analyzed: '2025-10-19T19:24:58.847294'
     primary_key: SchoolCourseNum
   screen:
     table_name: screen
@@ -8836,8 +8831,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5611379622255943152
-    last_analyzed: '2025-10-11T20:46:13.186581'
+    schema_hash: -3140869779139983200
+    last_analyzed: '2025-10-19T19:24:58.847294'
     primary_key: ScreenNum
   screengroup:
     table_name: screengroup
@@ -8861,8 +8856,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3526152703240273468
-    last_analyzed: '2025-10-11T20:46:15.865096'
+    schema_hash: 1296158403093029146
+    last_analyzed: '2025-10-19T19:25:01.301908'
     primary_key: ScreenGroupNum
   screenpat:
     table_name: screenpat
@@ -8886,14 +8881,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 9039548794035119827
-    last_analyzed: '2025-10-11T20:46:15.865096'
+    schema_hash: -2687602015213434996
+    last_analyzed: '2025-10-19T19:25:01.301908'
     primary_key: ScreenPatNum
   securitylog:
     table_name: securitylog
     extraction_strategy: incremental_chunked
-    estimated_rows: 3983766
-    estimated_size_mb: 765.74
+    estimated_rows: 4007366
+    estimated_size_mb: 770.57
     batch_size: 100000
     incremental_columns:
     - SecurityLogNum
@@ -8906,21 +8901,21 @@ tables:
     performance_category: large
     processing_priority: high
     time_gap_threshold_days: 60
-    estimated_processing_time_minutes: 16.6
+    estimated_processing_time_minutes: 16.7
     memory_requirements_mb: 146
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 3000
       memory_alert_threshold_mb: 292
-    schema_hash: 5578650013522080003
-    last_analyzed: '2025-10-11T20:46:34.047745'
+    schema_hash: 2737878340207658174
+    last_analyzed: '2025-10-19T19:25:20.672057'
     primary_key: SecurityLogNum
   securityloghash:
     table_name: securityloghash
     extraction_strategy: incremental_chunked
-    estimated_rows: 3983549
-    estimated_size_mb: 366.48
+    estimated_rows: 4007147
+    estimated_size_mb: 368.66
     batch_size: 100000
     incremental_columns:
     - SecurityLogHashNum
@@ -8931,15 +8926,15 @@ tables:
     performance_category: large
     processing_priority: high
     time_gap_threshold_days: 60
-    estimated_processing_time_minutes: 16.6
+    estimated_processing_time_minutes: 16.7
     memory_requirements_mb: 146
     monitoring:
       alert_on_failure: true
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 3000
       memory_alert_threshold_mb: 292
-    schema_hash: -3506042690040572266
-    last_analyzed: '2025-10-11T20:46:34.047745'
+    schema_hash: 3948221431901520598
+    last_analyzed: '2025-10-19T19:25:20.673067'
     primary_key: SecurityLogHashNum
   sessiontoken:
     table_name: sessiontoken
@@ -8963,14 +8958,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3425263082066287342
-    last_analyzed: '2025-10-11T20:46:34.196865'
+    schema_hash: 7894890577924524478
+    last_analyzed: '2025-10-19T19:25:20.789837'
     primary_key: SessionTokenNum
   sheet:
     table_name: sheet
     extraction_strategy: incremental
-    estimated_rows: 10456
-    estimated_size_mb: 2.06
+    estimated_rows: 10461
+    estimated_size_mb: 2.07
     batch_size: 25000
     incremental_columns:
     - SheetNum
@@ -8990,8 +8985,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -5917338699952066992
-    last_analyzed: '2025-10-11T20:46:36.951152'
+    schema_hash: 211497815998292090
+    last_analyzed: '2025-10-19T19:25:23.551135'
     primary_key: SheetNum
   sheetdef:
     table_name: sheetdef
@@ -9015,14 +9010,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6462860969092537730
-    last_analyzed: '2025-10-11T20:46:37.081059'
+    schema_hash: 8472227194775377598
+    last_analyzed: '2025-10-19T19:25:23.664388'
     primary_key: SheetDefNum
   sheetfield:
     table_name: sheetfield
     extraction_strategy: incremental_chunked
-    estimated_rows: 1655033
-    estimated_size_mb: 313.64
+    estimated_rows: 1655095
+    estimated_size_mb: 313.67
     batch_size: 100000
     incremental_columns:
     - SheetFieldNum
@@ -9041,8 +9036,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 3000
       memory_alert_threshold_mb: 292
-    schema_hash: -7823950179451859459
-    last_analyzed: '2025-10-11T20:46:42.037321'
+    schema_hash: 6530846654276796605
+    last_analyzed: '2025-10-19T19:25:28.522909'
     primary_key: SheetFieldNum
   sheetfielddef:
     table_name: sheetfielddef
@@ -9066,8 +9061,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6858290703566759995
-    last_analyzed: '2025-10-11T20:46:42.053447'
+    schema_hash: 7710400414079868649
+    last_analyzed: '2025-10-19T19:25:28.524907'
     primary_key: SheetFieldDefNum
   sigbutdef:
     table_name: sigbutdef
@@ -9091,8 +9086,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6878575519431969652
-    last_analyzed: '2025-10-11T20:46:42.055818'
+    schema_hash: 2541972188728911899
+    last_analyzed: '2025-10-19T19:25:28.527562'
     primary_key: SigButDefNum
   sigelementdef:
     table_name: sigelementdef
@@ -9116,8 +9111,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5093289788306257372
-    last_analyzed: '2025-10-11T20:46:44.737988'
+    schema_hash: 5892658053286349568
+    last_analyzed: '2025-10-19T19:25:30.984545'
     primary_key: SigElementDefNum
   sigmessage:
     table_name: sigmessage
@@ -9141,14 +9136,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8364799842887161509
-    last_analyzed: '2025-10-11T20:46:44.983192'
+    schema_hash: -4922639685549568657
+    last_analyzed: '2025-10-19T19:25:31.223902'
     primary_key: SigMessageNum
   signalod:
     table_name: signalod
     extraction_strategy: incremental
-    estimated_rows: 18260
-    estimated_size_mb: 3.04
+    estimated_rows: 20097
+    estimated_size_mb: 3.05
     batch_size: 25000
     incremental_columns:
     - SignalNum
@@ -9167,8 +9162,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -8373815902196469256
-    last_analyzed: '2025-10-11T20:46:45.152575'
+    schema_hash: -6871192398178748427
+    last_analyzed: '2025-10-19T19:25:31.390649'
     primary_key: SignalNum
   site:
     table_name: site
@@ -9192,8 +9187,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2492187549997973228
-    last_analyzed: '2025-10-11T20:46:45.152575'
+    schema_hash: 5523133298744567326
+    last_analyzed: '2025-10-19T19:25:31.391645'
     primary_key: SiteNum
   smsblockphone:
     table_name: smsblockphone
@@ -9217,8 +9212,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2829200016783174791
-    last_analyzed: '2025-10-11T20:46:45.152575'
+    schema_hash: 78167514180977478
+    last_analyzed: '2025-10-19T19:25:31.391645'
     primary_key: SmsBlockPhoneNum
   smsfrommobile:
     table_name: smsfrommobile
@@ -9244,8 +9239,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4149035311518883515
-    last_analyzed: '2025-10-11T20:46:47.953935'
+    schema_hash: 8868052132470104371
+    last_analyzed: '2025-10-19T19:25:34.061390'
     primary_key: SmsFromMobileNum
   smsphone:
     table_name: smsphone
@@ -9269,8 +9264,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 262833644916037331
-    last_analyzed: '2025-10-11T20:46:48.203860'
+    schema_hash: -8551436723681083697
+    last_analyzed: '2025-10-19T19:25:34.302916'
     primary_key: SmsPhoneNum
   smstomobile:
     table_name: smstomobile
@@ -9296,8 +9291,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1625103650035138988
-    last_analyzed: '2025-10-11T20:46:48.466844'
+    schema_hash: 337001265933454892
+    last_analyzed: '2025-10-19T19:25:34.548530'
     primary_key: SmsToMobileNum
   snomed:
     table_name: snomed
@@ -9321,8 +9316,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 519005519921644756
-    last_analyzed: '2025-10-11T20:46:48.466844'
+    schema_hash: 8845880116942783168
+    last_analyzed: '2025-10-19T19:25:34.550692'
     primary_key: SnomedNum
   sop:
     table_name: sop
@@ -9346,8 +9341,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5566393276765099163
-    last_analyzed: '2025-10-11T20:46:48.466844'
+    schema_hash: 9013555211404172367
+    last_analyzed: '2025-10-19T19:25:34.552688'
     primary_key: SopNum
   stateabbr:
     table_name: stateabbr
@@ -9371,14 +9366,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4166341815205093005
-    last_analyzed: '2025-10-11T20:46:50.929602'
+    schema_hash: 4009011759354947407
+    last_analyzed: '2025-10-19T19:25:36.988020'
     primary_key: StateAbbrNum
   statement:
     table_name: statement
     extraction_strategy: incremental
-    estimated_rows: 27495
-    estimated_size_mb: 4.59
+    estimated_rows: 27565
+    estimated_size_mb: 4.6
     batch_size: 25000
     incremental_columns:
     - StatementNum
@@ -9397,14 +9392,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 1455401716396549882
-    last_analyzed: '2025-10-11T20:46:51.152646'
+    schema_hash: 3712850281892802887
+    last_analyzed: '2025-10-19T19:25:37.203632'
     primary_key: StatementNum
   statementprod:
     table_name: statementprod
     extraction_strategy: incremental
-    estimated_rows: 198492
-    estimated_size_mb: 24.1
+    estimated_rows: 198802
+    estimated_size_mb: 24.14
     batch_size: 50000
     incremental_columns:
     - StatementProdNum
@@ -9422,14 +9417,14 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 6591074622622887569
-    last_analyzed: '2025-10-11T20:46:51.152646'
+    schema_hash: -1641977033683092724
+    last_analyzed: '2025-10-19T19:25:37.204631'
     primary_key: StatementProdNum
   stmtlink:
     table_name: stmtlink
     extraction_strategy: incremental
-    estimated_rows: 24343
-    estimated_size_mb: 1.89
+    estimated_rows: 24402
+    estimated_size_mb: 1.9
     batch_size: 25000
     incremental_columns:
     - StmtLinkNum
@@ -9447,8 +9442,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 5128211908087666467
-    last_analyzed: '2025-10-11T20:46:51.152646'
+    schema_hash: -6839489222888419890
+    last_analyzed: '2025-10-19T19:25:37.205631'
     primary_key: StmtLinkNum
   substitutionlink:
     table_name: substitutionlink
@@ -9472,8 +9467,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2737121195310804112
-    last_analyzed: '2025-10-11T20:46:51.167435'
+    schema_hash: -4812936578566772301
+    last_analyzed: '2025-10-19T19:25:37.205631'
     primary_key: SubstitutionLinkNum
   supplier:
     table_name: supplier
@@ -9497,8 +9492,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1058260006954943964
-    last_analyzed: '2025-10-11T20:46:53.969773'
+    schema_hash: -5085369745606353655
+    last_analyzed: '2025-10-19T19:25:39.642544'
     primary_key: SupplierNum
   supply:
     table_name: supply
@@ -9522,8 +9517,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1671440000299683204
-    last_analyzed: '2025-10-11T20:46:53.969773'
+    schema_hash: 5018980109516854867
+    last_analyzed: '2025-10-19T19:25:39.642544'
     primary_key: SupplyNum
   supplyneeded:
     table_name: supplyneeded
@@ -9547,8 +9542,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5493550357498146710
-    last_analyzed: '2025-10-11T20:46:53.969773'
+    schema_hash: 2951521960607659760
+    last_analyzed: '2025-10-19T19:25:39.642544'
     primary_key: SupplyNeededNum
   supplyorder:
     table_name: supplyorder
@@ -9572,8 +9567,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -2106694697551075014
-    last_analyzed: '2025-10-11T20:46:53.969773'
+    schema_hash: 3658413545197974536
+    last_analyzed: '2025-10-19T19:25:39.642544'
     primary_key: SupplyOrderNum
   supplyorderitem:
     table_name: supplyorderitem
@@ -9597,8 +9592,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6792822692057959452
-    last_analyzed: '2025-10-11T20:46:53.969773'
+    schema_hash: -1913873340138035247
+    last_analyzed: '2025-10-19T19:25:39.643544'
     primary_key: SupplyOrderItemNum
   task:
     table_name: task
@@ -9624,8 +9619,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7665376294796107788
-    last_analyzed: '2025-10-11T20:46:56.720011'
+    schema_hash: 3706168845287203619
+    last_analyzed: '2025-10-19T19:25:42.327848'
     primary_key: TaskNum
   taskancestor:
     table_name: taskancestor
@@ -9649,8 +9644,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3265300047832696955
-    last_analyzed: '2025-10-11T20:46:56.720011'
+    schema_hash: -2847747719990610005
+    last_analyzed: '2025-10-19T19:25:42.329850'
     primary_key: TaskAncestorNum
   taskattachment:
     table_name: taskattachment
@@ -9674,8 +9669,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7734772237185562651
-    last_analyzed: '2025-10-11T20:46:56.720011'
+    schema_hash: 8679497300866590661
+    last_analyzed: '2025-10-19T19:25:42.329850'
     primary_key: TaskAttachmentNum
   taskhist:
     table_name: taskhist
@@ -9687,7 +9682,6 @@ tables:
     - TaskHistNum
     - DateTStamp
     - SecDateTEdit
-    - DateTimeOriginal
     incremental_strategy: or_logic
     primary_incremental_column: TaskHistNum
     is_modeled: false
@@ -9702,8 +9696,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6542418126438401797
-    last_analyzed: '2025-10-11T20:46:57.108563'
+    schema_hash: -2263682697051470780
+    last_analyzed: '2025-10-19T19:25:42.734072'
     primary_key: TaskHistNum
   tasklist:
     table_name: tasklist
@@ -9727,8 +9721,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 1568094800163431460
-    last_analyzed: '2025-10-11T20:46:57.108563'
+    schema_hash: -4378730340240156790
+    last_analyzed: '2025-10-19T19:25:42.735973'
     primary_key: TaskListNum
   tasknote:
     table_name: tasknote
@@ -9753,8 +9747,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 540583783541704643
-    last_analyzed: '2025-10-11T20:46:59.692653'
+    schema_hash: -3294096419386257284
+    last_analyzed: '2025-10-19T19:25:45.336890'
     primary_key: TaskNoteNum
   tasksubscription:
     table_name: tasksubscription
@@ -9778,8 +9772,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -8575742000427021262
-    last_analyzed: '2025-10-11T20:46:59.692653'
+    schema_hash: -6358520896107799108
+    last_analyzed: '2025-10-19T19:25:45.336890'
     primary_key: TaskSubscriptionNum
   taskunread:
     table_name: taskunread
@@ -9803,8 +9797,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5979647787272850608
-    last_analyzed: '2025-10-11T20:46:59.692653'
+    schema_hash: -1382391736705384688
+    last_analyzed: '2025-10-19T19:25:45.336890'
     primary_key: TaskUnreadNum
   tempimageconv:
     table_name: tempimageconv
@@ -9827,8 +9821,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 5932142092613295222
-    last_analyzed: '2025-10-11T20:46:59.692653'
+    schema_hash: -8929429186928863927
+    last_analyzed: '2025-10-19T19:25:45.338171'
   tempimageconv2:
     table_name: tempimageconv2
     extraction_strategy: full_table
@@ -9850,8 +9844,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 1372320797458889852
-    last_analyzed: '2025-10-11T20:46:59.692653'
+    schema_hash: 1346581149580631953
+    last_analyzed: '2025-10-19T19:25:45.338171'
   tempinsplan_bak_20200424:
     table_name: tempinsplan_bak_20200424
     extraction_strategy: incremental
@@ -9874,8 +9868,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3343418268689543796
-    last_analyzed: '2025-10-11T20:47:02.274548'
+    schema_hash: 4765421262170199303
+    last_analyzed: '2025-10-19T19:25:47.966801'
   temppopup_bak_20200424:
     table_name: temppopup_bak_20200424
     extraction_strategy: full_table
@@ -9897,8 +9891,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 5078345264365415686
-    last_analyzed: '2025-10-11T20:47:02.274548'
+    schema_hash: -5567246468660119208
+    last_analyzed: '2025-10-19T19:25:47.967194'
   tempprocedurecode_bak_20240617:
     table_name: tempprocedurecode_bak_20240617
     extraction_strategy: incremental
@@ -9921,8 +9915,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5247419888763317007
-    last_analyzed: '2025-10-11T20:47:02.424313'
+    schema_hash: 5414275208032604418
+    last_analyzed: '2025-10-19T19:25:48.097259'
   tempschedule_bak_20200424:
     table_name: tempschedule_bak_20200424
     extraction_strategy: incremental
@@ -9945,8 +9939,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 6880737478289387397
-    last_analyzed: '2025-10-11T20:47:02.589297'
+    schema_hash: 1661352545558234872
+    last_analyzed: '2025-10-19T19:25:48.264759'
   tempscheduleop_bak_20200424:
     table_name: tempscheduleop_bak_20200424
     extraction_strategy: full_table
@@ -9968,8 +9962,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 2537775793417999116
-    last_analyzed: '2025-10-11T20:47:02.589297'
+    schema_hash: 2396729070071629797
+    last_analyzed: '2025-10-19T19:25:48.265760'
   terminalactive:
     table_name: terminalactive
     extraction_strategy: full_table
@@ -9992,13 +9986,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8249778585066296201
-    last_analyzed: '2025-10-11T20:47:05.076902'
+    schema_hash: -3383949993766346426
+    last_analyzed: '2025-10-19T19:25:50.681842'
     primary_key: TerminalActiveNum
   timeadjust:
     table_name: timeadjust
     extraction_strategy: full_table
-    estimated_rows: 574
+    estimated_rows: 577
     estimated_size_mb: 0.1
     batch_size: 10000
     incremental_columns:
@@ -10018,8 +10012,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5695748486129156118
-    last_analyzed: '2025-10-11T20:47:05.207585'
+    schema_hash: -7738953794702330794
+    last_analyzed: '2025-10-19T19:25:50.805374'
     primary_key: TimeAdjustNum
   timecardrule:
     table_name: timecardrule
@@ -10043,8 +10037,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2648396364581057662
-    last_analyzed: '2025-10-11T20:47:05.208584'
+    schema_hash: 6299771961292130485
+    last_analyzed: '2025-10-19T19:25:50.806372'
     primary_key: TimeCardRuleNum
   tmpdocument:
     table_name: tmpdocument
@@ -10067,8 +10061,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 4765870408083901160
-    last_analyzed: '2025-10-11T20:47:05.209583'
+    schema_hash: 6683228989165068229
+    last_analyzed: '2025-10-19T19:25:50.806372'
   tmpimages:
     table_name: tmpimages
     extraction_strategy: full_table
@@ -10090,8 +10084,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: 7471048020498287192
-    last_analyzed: '2025-10-11T20:47:05.209583'
+    schema_hash: -7696034063418719249
+    last_analyzed: '2025-10-19T19:25:50.807373'
   tmppatient:
     table_name: tmppatient
     extraction_strategy: full_table
@@ -10113,8 +10107,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: 5970462792744292936
-    last_analyzed: '2025-10-11T20:47:07.838828'
+    schema_hash: 5134811015534249652
+    last_analyzed: '2025-10-19T19:25:53.256743'
   toolbutitem:
     table_name: toolbutitem
     extraction_strategy: full_table
@@ -10137,8 +10131,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -7768302668998499202
-    last_analyzed: '2025-10-11T20:47:07.838828'
+    schema_hash: -5954060594953113291
+    last_analyzed: '2025-10-19T19:25:53.257771'
     primary_key: ToolButItemNum
   toothgridcell:
     table_name: toothgridcell
@@ -10162,8 +10156,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4059895629421085622
-    last_analyzed: '2025-10-11T20:47:07.846157'
+    schema_hash: 6890631034577348924
+    last_analyzed: '2025-10-19T19:25:53.257771'
     primary_key: ToothGridCellNum
   toothgridcol:
     table_name: toothgridcol
@@ -10187,8 +10181,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -3787588484593571189
-    last_analyzed: '2025-10-11T20:47:07.846157'
+    schema_hash: -9126788378181614550
+    last_analyzed: '2025-10-19T19:25:53.258775'
     primary_key: ToothGridColNum
   toothgriddef:
     table_name: toothgriddef
@@ -10212,14 +10206,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -5564658756876911677
-    last_analyzed: '2025-10-11T20:47:07.848541'
+    schema_hash: 418770446651254526
+    last_analyzed: '2025-10-19T19:25:53.258775'
     primary_key: ToothGridDefNum
   toothinitial:
     table_name: toothinitial
     extraction_strategy: incremental
-    estimated_rows: 194690
-    estimated_size_mb: 18.75
+    estimated_rows: 195247
+    estimated_size_mb: 18.81
     batch_size: 50000
     incremental_columns:
     - ToothInitialNum
@@ -10239,8 +10233,8 @@ tables:
       alert_on_slow_extraction: true
       performance_threshold_records_per_second: 2000
       memory_alert_threshold_mb: 146
-    schema_hash: -7608120038511104599
-    last_analyzed: '2025-10-11T20:47:11.608384'
+    schema_hash: -6952562509453392963
+    last_analyzed: '2025-10-19T19:25:56.865196'
     primary_key: ToothInitialNum
   transaction:
     table_name: transaction
@@ -10264,8 +10258,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8347474272119621528
-    last_analyzed: '2025-10-11T20:47:11.727151'
+    schema_hash: 2928533069335417368
+    last_analyzed: '2025-10-19T19:25:56.984652'
     primary_key: TransactionNum
   transactioninvoice:
     table_name: transactioninvoice
@@ -10289,14 +10283,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5121271980184479437
-    last_analyzed: '2025-10-11T20:47:11.728150'
+    schema_hash: -7047742141570555298
+    last_analyzed: '2025-10-19T19:25:56.985658'
     primary_key: TransactionInvoiceNum
   treatplan:
     table_name: treatplan
     extraction_strategy: incremental
-    estimated_rows: 11957
-    estimated_size_mb: 5.47
+    estimated_rows: 12025
+    estimated_size_mb: 5.5
     batch_size: 25000
     incremental_columns:
     - TreatPlanNum
@@ -10316,14 +10310,14 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -2840599120330821009
-    last_analyzed: '2025-10-11T20:47:12.114760'
+    schema_hash: 1159105487770726996
+    last_analyzed: '2025-10-19T19:25:57.373222'
     primary_key: TreatPlanNum
   treatplanattach:
     table_name: treatplanattach
     extraction_strategy: incremental
-    estimated_rows: 58662
-    estimated_size_mb: 7.03
+    estimated_rows: 59022
+    estimated_size_mb: 7.07
     batch_size: 25000
     incremental_columns:
     - TreatPlanAttachNum
@@ -10341,8 +10335,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 1000
       memory_alert_threshold_mb: 72
-    schema_hash: -7852177830363059176
-    last_analyzed: '2025-10-11T20:47:12.114760'
+    schema_hash: 1964148502810308570
+    last_analyzed: '2025-10-19T19:25:57.373222'
     primary_key: TreatPlanAttachNum
   treatplanparam:
     table_name: treatplanparam
@@ -10366,8 +10360,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -972181904179817275
-    last_analyzed: '2025-10-11T20:47:14.771014'
+    schema_hash: -4475275086403307947
+    last_analyzed: '2025-10-19T19:25:59.833536'
     primary_key: TreatPlanParamNum
   tsitranslog:
     table_name: tsitranslog
@@ -10391,8 +10385,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 9065435555667592305
-    last_analyzed: '2025-10-11T20:47:14.897628'
+    schema_hash: -5249938784414811720
+    last_analyzed: '2025-10-19T19:25:59.951690'
     primary_key: TsiTransLogNum
   ucum:
     table_name: ucum
@@ -10416,8 +10410,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6361721397645363514
-    last_analyzed: '2025-10-11T20:47:14.898623'
+    schema_hash: 3166221280731790240
+    last_analyzed: '2025-10-19T19:25:59.951690'
     primary_key: UcumNum
   updatehistory:
     table_name: updatehistory
@@ -10441,8 +10435,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3120206185432805912
-    last_analyzed: '2025-10-11T20:47:15.026686'
+    schema_hash: 1142954688641922580
+    last_analyzed: '2025-10-19T19:26:00.072513'
     primary_key: UpdateHistoryNum
   userclinic:
     table_name: userclinic
@@ -10466,8 +10460,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1516412052157735840
-    last_analyzed: '2025-10-11T20:47:15.027687'
+    schema_hash: 5428689961410272737
+    last_analyzed: '2025-10-19T19:26:00.073507'
     primary_key: UserClinicNum
   usergroup:
     table_name: usergroup
@@ -10491,8 +10485,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 6945270100812089562
-    last_analyzed: '2025-10-11T20:47:17.422737'
+    schema_hash: -7635698944012437788
+    last_analyzed: '2025-10-19T19:26:02.514082'
     primary_key: UserGroupNum
   usergroupattach:
     table_name: usergroupattach
@@ -10516,8 +10510,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 7714554877707124816
-    last_analyzed: '2025-10-11T20:47:17.422737'
+    schema_hash: 2120990752417108611
+    last_analyzed: '2025-10-19T19:26:02.514082'
     primary_key: UserGroupAttachNum
   userod:
     table_name: userod
@@ -10541,8 +10535,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1677787604519368733
-    last_analyzed: '2025-10-11T20:47:17.648154'
+    schema_hash: 598584975219521909
+    last_analyzed: '2025-10-19T19:26:02.763869'
     primary_key: UserNum
   userodapptview:
     table_name: userodapptview
@@ -10566,13 +10560,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1117639615967250549
-    last_analyzed: '2025-10-11T20:47:17.648154'
+    schema_hash: -4967300128634970779
+    last_analyzed: '2025-10-19T19:26:02.764859'
     primary_key: UserodApptViewNum
   userodpref:
     table_name: userodpref
     extraction_strategy: full_table
-    estimated_rows: 845
+    estimated_rows: 860
     estimated_size_mb: 0.1
     batch_size: 10000
     incremental_columns:
@@ -10591,13 +10585,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2642599018916985963
-    last_analyzed: '2025-10-11T20:47:17.648154'
+    schema_hash: 8939201086185882497
+    last_analyzed: '2025-10-19T19:26:02.765899'
     primary_key: UserOdPrefNum
   userquery:
     table_name: userquery
     extraction_strategy: full_table
-    estimated_rows: 14
+    estimated_rows: 15
     estimated_size_mb: 0.05
     batch_size: 10000
     incremental_columns:
@@ -10616,8 +10610,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2330456765808719471
-    last_analyzed: '2025-10-11T20:47:20.234817'
+    schema_hash: -142364130969545680
+    last_analyzed: '2025-10-19T19:26:05.133774'
     primary_key: QueryNum
   userweb:
     table_name: userweb
@@ -10641,8 +10635,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8481712314515964198
-    last_analyzed: '2025-10-11T20:47:20.364709'
+    schema_hash: 5629538787288323078
+    last_analyzed: '2025-10-19T19:26:05.260039'
     primary_key: UserWebNum
   utm:
     table_name: utm
@@ -10666,8 +10660,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4212991551693230334
-    last_analyzed: '2025-10-11T20:47:20.366325'
+    schema_hash: -3308983134961599798
+    last_analyzed: '2025-10-19T19:26:05.260039'
     primary_key: UtmNum
   vaccinedef:
     table_name: vaccinedef
@@ -10691,8 +10685,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 3767378067586124895
-    last_analyzed: '2025-10-11T20:47:20.366325'
+    schema_hash: 6091747538722954179
+    last_analyzed: '2025-10-19T19:26:05.261039'
     primary_key: VaccineDefNum
   vaccineobs:
     table_name: vaccineobs
@@ -10716,8 +10710,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4221747340831355394
-    last_analyzed: '2025-10-11T20:47:20.367110'
+    schema_hash: 8501763085868610275
+    last_analyzed: '2025-10-19T19:26:05.261039'
     primary_key: VaccineObsNum
   vaccinepat:
     table_name: vaccinepat
@@ -10741,8 +10735,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8945369710456077118
-    last_analyzed: '2025-10-11T20:47:23.217726'
+    schema_hash: 58860896174654720
+    last_analyzed: '2025-10-19T19:26:07.819910'
     primary_key: VaccinePatNum
   vitalsign:
     table_name: vitalsign
@@ -10766,8 +10760,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -1873004922183118615
-    last_analyzed: '2025-10-11T20:47:23.220262'
+    schema_hash: 35767923065993448
+    last_analyzed: '2025-10-19T19:26:07.820911'
     primary_key: VitalsignNum
   webschedcarrierrule:
     table_name: webschedcarrierrule
@@ -10791,8 +10785,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8867790970297797251
-    last_analyzed: '2025-10-11T20:47:23.220262'
+    schema_hash: -4175140919805748799
+    last_analyzed: '2025-10-19T19:26:07.821912'
     primary_key: WebSchedCarrierRuleNum
   webschedrecall:
     table_name: webschedrecall
@@ -10816,8 +10810,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -6118826922412362486
-    last_analyzed: '2025-10-11T20:47:23.451082'
+    schema_hash: -3576759169431867143
+    last_analyzed: '2025-10-19T19:26:08.076772'
     primary_key: WebSchedRecallNum
   wikilistheaderwidth:
     table_name: wikilistheaderwidth
@@ -10841,8 +10835,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 5632171021778271929
-    last_analyzed: '2025-10-11T20:47:23.451082'
+    schema_hash: 6834776843605741875
+    last_analyzed: '2025-10-19T19:26:08.078288'
     primary_key: WikiListHeaderWidthNum
   wikilisthist:
     table_name: wikilisthist
@@ -10866,8 +10860,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2348567507745484968
-    last_analyzed: '2025-10-11T20:47:26.263065'
+    schema_hash: -7502153529297998314
+    last_analyzed: '2025-10-19T19:26:10.617898'
     primary_key: WikiListHistNum
   wikipage:
     table_name: wikipage
@@ -10891,8 +10885,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 4030112320571870631
-    last_analyzed: '2025-10-11T20:47:26.380727'
+    schema_hash: -5729533183228900175
+    last_analyzed: '2025-10-19T19:26:10.735932'
     primary_key: WikiPageNum
   wikipagehist:
     table_name: wikipagehist
@@ -10916,8 +10910,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 8376541560475497318
-    last_analyzed: '2025-10-11T20:47:26.495717'
+    schema_hash: -3973382101601089459
+    last_analyzed: '2025-10-19T19:26:10.851967'
     primary_key: WikiPageNum
   xchargetransaction:
     table_name: xchargetransaction
@@ -10941,8 +10935,8 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2620152391944678108
-    last_analyzed: '2025-10-11T20:47:26.616388'
+    schema_hash: 6518013597362296158
+    last_analyzed: '2025-10-19T19:26:10.997496'
     primary_key: XChargeTransactionNum
   xwebresponse:
     table_name: xwebresponse
@@ -10966,13 +10960,13 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: 2932642917415968167
-    last_analyzed: '2025-10-11T20:47:26.967667'
+    schema_hash: -2380507057562084893
+    last_analyzed: '2025-10-19T19:26:11.396029'
     primary_key: XWebResponseNum
   zipcode:
     table_name: zipcode
     extraction_strategy: full_table
-    estimated_rows: 1302
+    estimated_rows: 1304
     estimated_size_mb: 0.06
     batch_size: 10000
     incremental_columns:
@@ -10991,6 +10985,6 @@ tables:
       alert_on_slow_extraction: false
       performance_threshold_records_per_second: 500
       memory_alert_threshold_mb: 28
-    schema_hash: -4305573190082910989
-    last_analyzed: '2025-10-11T20:47:28.286506'
+    schema_hash: 3111699249636016587
+    last_analyzed: '2025-10-19T19:26:12.704113'
     primary_key: ZipCodeNum

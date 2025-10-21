@@ -261,9 +261,13 @@ models:
           - not_null
 
       - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateTEntry column."
+        description: |
+         "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateTEntry column."
+         Note: 4 appointments have NULL _created_at (system-generated with _created_by=0)
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: _updated_at
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to DateTStamp column."

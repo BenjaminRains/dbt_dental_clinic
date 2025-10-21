@@ -33,7 +33,10 @@ validation_failures as (
         or (procedure_id < 0)
         or provider_id is null
         or provider_id = 0
-        or provider_id not in (28, 47, 52, 48, 20, 19, 29, 53, 7, 30, 50, 43, 3, 12)
+        -- Validate provider exists in provider table instead of hardcoded list
+        or (provider_id > 0 and provider_id not in (
+            select provider_id from {{ ref('stg_opendental__provider') }}
+        ))
 
     UNION ALL
 

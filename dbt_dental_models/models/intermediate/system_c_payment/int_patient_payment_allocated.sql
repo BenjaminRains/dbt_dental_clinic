@@ -25,7 +25,7 @@
 */
 
 -- First, identify problematic transfers to exclude them
-WITH ProblematicTransfers AS (
+WITH problematic_transfers AS (
     SELECT DISTINCT
         p.payment_id
     FROM {{ ref('stg_opendental__payment') }} p
@@ -48,7 +48,7 @@ WITH ProblematicTransfers AS (
 ),
 
 -- Identify unbalanced transfers
-UnbalancedTransfers AS (
+unbalanced_transfers AS (
     SELECT DISTINCT
         p.payment_id
     FROM {{ ref('stg_opendental__payment') }} p
@@ -68,7 +68,7 @@ UnbalancedTransfers AS (
 ),
 
 -- Get all valid transfer pairs in a more efficient way
-TransferPairs AS (
+transfer_pairs AS (
     SELECT DISTINCT
         p1.payment_id,
         p1.patient_id,
@@ -89,20 +89,20 @@ TransferPairs AS (
     AND ps1.unearned_type IN (0, 288)
     AND p1.payment_date >= '2023-01-01'
     -- Exclude problematic transfers
-    AND p1.payment_id NOT IN (SELECT payment_id FROM ProblematicTransfers)
-    AND p1.payment_id NOT IN (SELECT payment_id FROM UnbalancedTransfers)
+    AND p1.payment_id NOT IN (SELECT payment_id FROM problematic_transfers)
+    AND p1.payment_id NOT IN (SELECT payment_id FROM unbalanced_transfers)
 ),
 
 -- Then get matching pairs with improved validation
-ValidTransfers AS (
+valid_transfers AS (
     SELECT 
         tp1.payment_id,
         tp1.procedure_id,
         tp1.split_amount,
         tp1.unearned_type,
         TRUE as has_matching_pair
-    FROM TransferPairs tp1
-    JOIN TransferPairs tp2
+    FROM transfer_pairs tp1
+    JOIN transfer_pairs tp2
         ON tp2.patient_id = tp1.patient_id
         AND tp2.payment_date = tp1.payment_date
         AND tp2.split_amount = -tp1.split_amount
@@ -114,7 +114,7 @@ ValidTransfers AS (
 ),
 
 -- Get payment definitions with materialization
-PaymentDefinitions AS MATERIALIZED (
+payment_definitions AS MATERIALIZED (
     SELECT 
         definition_id,
         item_name,
@@ -147,7 +147,7 @@ PaymentDefinitions AS MATERIALIZED (
 ),
 
 -- Get patient payments with materialization and additional filtering
-PatientPayments AS MATERIALIZED (
+patient_payments AS MATERIALIZED (
     SELECT 
         p.payment_id,
         p.patient_id,
@@ -202,8 +202,8 @@ PatientPayments AS MATERIALIZED (
         p.payment_type_id != 0 
         OR p.payment_notes NOT LIKE '%INCOME TRANSFER%'
         OR (
-            p.payment_id NOT IN (SELECT payment_id FROM ProblematicTransfers)
-            AND p.payment_id NOT IN (SELECT payment_id FROM UnbalancedTransfers)
+            p.payment_id NOT IN (SELECT payment_id FROM problematic_transfers)
+            AND p.payment_id NOT IN (SELECT payment_id FROM unbalanced_transfers)
         )
     )
     -- Exclude future-dated payments
@@ -258,10 +258,10 @@ SELECT
     -- Standardized metadata from primary source (patient payments)
     {{ standardize_intermediate_metadata(primary_source_alias='pp') }}
     
-FROM PatientPayments pp
-LEFT JOIN PaymentDefinitions pd
+FROM patient_payments pp
+LEFT JOIN payment_definitions pd
     ON pp.payment_type_id = pd.definition_id
-LEFT JOIN ValidTransfers vt
+LEFT JOIN valid_transfers vt
     ON pp.payment_id = vt.payment_id
     AND pp.procedure_id = vt.procedure_id
     AND pp.payment_amount = vt.split_amount

@@ -13,14 +13,14 @@
         "python.linting.flake8Enabled": true,
         "sqlfluff.lint.run": "onSave",
         "[sql]": {
-            "editor.defaultFormatter": "dbtLabsInc.dbt"
+            "editor.defaultFormatter": null
         },
         "files.associations": {
             "*.sql": "sql"
         },
         "[jinja-sql]": {
             "editor.formatOnSave": true,
-            "editor.defaultFormatter": "dbtLabsInc.dbt"
+            "editor.defaultFormatter": null
         },
         // DBT Power User specific settings can be added here as well
         "dbt.enableModelHover": true,
@@ -29,6 +29,8 @@
         "dbt.projectDir": "./dbt_dental_models",
         "terminal.integrated.env.windows": {
             "DBT_PROFILES_DIR": "${workspaceFolder}/dbt_dental_models"
-        }
+        },
+        // Disable automatic Python venv activation - we handle this with environment_manager.ps1
+        "python.terminal.activateEnvironment": false
     }
 }

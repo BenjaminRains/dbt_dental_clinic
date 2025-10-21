@@ -26,7 +26,7 @@
     4. Enables follow-up tracking
 */
 
-WITH CollectionTasks AS (
+WITH collection_tasks AS (
     -- Join tasks with campaign and patient information
     SELECT
         -- Create a stable numeric ID based on the source task_id
@@ -272,4 +272,4 @@ WITH CollectionTasks AS (
     {% endif %}
 )
 
-SELECT * FROM CollectionTasks
+SELECT * FROM collection_tasks

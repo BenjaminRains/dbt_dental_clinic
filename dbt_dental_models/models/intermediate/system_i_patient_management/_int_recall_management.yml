@@ -1,0 +1,205 @@
+version: 2
+
+models:
+  - name: int_recall_management
+    description: |
+      Intermediate model for recall management data that integrates recall, recalltype, and recalltrigger tables with business logic.
+      
+      **Purpose**: Provides clean, business-ready recall data for mart models, replacing direct staging references.
+      
+      **Key Features**:
+      - Handles corrupted default_interval values from OpenDental UI bug
+      - Calculates compliance status and priority scores
+      - Provides data quality flags and validation
+      - Supports incremental materialization for performance
+      
+      **Data Quality Issues Handled**:
+      - 100% of default_interval values are corrupted due to OpenDental UI bug
+      - Maps corrupted values to expected intervals (6, 12, 18, 24 months)
+      - Uses time_pattern as backup when available
+      
+      **Business Logic**:
+      - Recall status mapping: 0=Active, 95=Scheduled, 298=Completed
+      - Compliance tracking: Compliant, Overdue, Due Soon, No Due Date
+      - Priority scoring: 0-100 based on days overdue
+      
+    columns:
+      - name: recall_id
+        description: Primary key - unique identifier for each recall record
+        tests:
+          - unique
+          - not_null
+          
+      - name: patient_id
+        description: Foreign key to patient - identifies which patient the recall is for
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+              
+      - name: recall_type_id
+        description: Foreign key to recall type - identifies the type of recall (cleaning, exam, etc.)
+        tests:
+          - not_null
+          
+      - name: recall_type_description
+        description: Human-readable description of the recall type (e.g., "6 Month Cleaning")
+        tests:
+          - not_null
+          
+      - name: recall_interval_months
+        description: |
+          Recall interval in months, with corrupted values mapped to expected intervals.
+          Handles OpenDental UI bug that corrupts default_interval values.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [6, 12, 18, 24]
+              
+      - name: recall_procedures
+        description: Comma-separated list of procedure codes associated with this recall type
+          
+      - name: has_corrupted_interval
+        description: Flag indicating if the original default_interval was corrupted
+        tests:
+          - not_null
+          
+      - name: trigger_procedure_codes
+        description: Array of procedure codes that trigger this recall type
+        tests:
+          - not_null
+          
+      - name: trigger_count
+        description: Number of procedure codes that trigger this recall type
+        tests:
+          - not_null
+          
+      - name: recall_status_code
+        description: Original recall status code from OpenDental (0, 95, 298)
+        tests:
+          - not_null
+          - accepted_values:
+              values: [0, 95, 298]
+              
+      - name: recall_status_description
+        description: Business-friendly recall status (Active, Scheduled, Completed)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Active', 'Scheduled', 'Completed']
+              
+      - name: date_due
+        description: Date when the recall is due
+        tests:
+          - not_null
+          
+      - name: date_previous
+        description: Date of the previous visit that triggered this recall
+          
+      - name: date_scheduled
+        description: Date when the recall appointment is scheduled
+          
+      - name: disable_until_date
+        description: Date until which the recall is disabled
+          
+      - name: days_overdue
+        description: Number of days the recall is overdue (negative if future)
+        tests:
+          - not_null
+          
+      - name: days_since_previous
+        description: Number of days since the previous visit
+          
+      - name: is_overdue
+        description: Boolean flag indicating if the recall is overdue
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              
+      - name: is_scheduled
+        description: Boolean flag indicating if the recall is scheduled
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              
+      - name: is_disabled
+        description: Boolean flag indicating if the recall is disabled
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              
+      - name: compliance_status
+        description: Compliance status (Compliant, Overdue, Due Soon, No Due Date)
+        tests:
+          - not_null
+          - accepted_values:
+              values: ['Compliant', 'Overdue', 'Due Soon', 'No Due Date', 'Unknown']
+              
+      - name: priority_score
+        description: Priority score from 0-100 based on days overdue
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              
+      - name: is_valid_recall
+        description: Data quality flag indicating if the recall record is valid
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              
+      - name: is_future_dated
+        description: Data quality flag indicating if the recall is future dated
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              
+      - name: has_scheduled_appointment
+        description: Boolean flag indicating if the recall has a scheduled appointment
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+              
+      - name: _loaded_at
+        description: Timestamp when the record was loaded from source
+        tests:
+          - not_null
+          
+      - name: _created_at
+        description: Timestamp when the record was created
+        tests:
+          - not_null
+          
+      - name: _updated_at
+        description: Timestamp when the record was last updated
+        tests:
+          - not_null
+          
+      - name: _transformed_at
+        description: Timestamp when the record was transformed in this model
+        tests:
+          - not_null
+
+tests:
+  - dbt_utils.expression_is_true:
+      expression: "days_overdue = current_date - date_due"
+      config:
+        severity: warn
+        
+  - dbt_utils.expression_is_true:
+      expression: "priority_score >= 0 and priority_score <= 100"
+      config:
+        severity: warn
+        
+  - dbt_utils.expression_is_true:
+      expression: "recall_status_description != 'Unknown'"
+      config:
+        severity: warn

@@ -117,17 +117,16 @@ models:
           
           Source Transformation:
           - OpenDental source: Numeric codes (0=M, 1=F, 2=O)
-          - Transformed to: Standardized text values (M, F, O, U)
-          - Business rule: Unknown (U) for invalid or missing values
+          - Transformed to: Standardized text values (M, F, O)
           
           Business Context:
           - Used for demographic analysis and reporting
           - Important for clinical care and treatment planning
         tests:
           - accepted_values:
-              values: ['M', 'F', 'O', 'U']
+              values: ['M', 'F', 'O']
               config:
-                description: "Gender must be one of: M (Male), F (Female), O (Other), U (Unknown)"
+                description: "Gender must be one of: M (Male), F (Female), O (Other)"
 
       - name: language
         description: >

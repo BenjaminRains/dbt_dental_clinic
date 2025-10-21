@@ -46,9 +46,8 @@ Performance Considerations:
 Dependencies:
 - fact_appointment: Core appointment and scheduling data
 - fact_claim: Insurance and billing transaction data
-- stg_opendental__schedule: Provider availability and capacity data
-- stg_opendental__treatplan: Treatment plan and acceptance data
-- stg_opendental__adjustment: Write-off and adjustment data
+- int_treatment_plan: Treatment plan with procedure aggregations and business logic
+- int_adjustments: Write-off and adjustment data with categorization
 - dim_date: Date dimension for temporal analysis
 - dim_provider: Provider information and attributes
 - dim_patient: Patient information for demographic analysis
@@ -74,14 +73,14 @@ claim_base as (
 -- which required columns not available in the actual schedule table
 
 treatment_base as (
-    select * from {{ ref('stg_opendental__treatplan') }}
-    where treatment_plan_status = 0  -- All treatment plans are currently Active (status = 0)
+    select * from {{ ref('int_treatment_plan') }}
+    where treatment_plan_status = 0  -- Active treatment plans only
         and treatment_plan_date >= current_date - interval '2 years'
-        and current_date - treatment_plan_date > 90  -- Only include delayed treatment plans
+        and days_since_last_activity > 90  -- Only include delayed treatment plans
 ),
 
 adjustment_base as (
-    select * from {{ ref('stg_opendental__adjustment') }}
+    select * from {{ ref('int_adjustments') }}
     where adjustment_date >= current_date - interval '1 year'
         and adjustment_amount > 0
         and adjustment_direction in ('positive', 'negative')  -- Exclude zero adjustments
@@ -113,7 +112,7 @@ date_dimension as (
 ),
 
 -- 3. Opportunity identification and calculations
-MissedAppointments as (
+missed_appointments as (
     select 
         fa.appointment_date,
         fa.provider_id,
@@ -146,8 +145,8 @@ MissedAppointments as (
         
         -- Metadata fields
         fa._loaded_at,
-        fa._created_at,
-        fa._updated_at
+        fa._updated_at,
+        fa._created_by
         
     from appointment_base fa
 ),
@@ -156,7 +155,7 @@ MissedAppointments as (
 -- the slot_time, slot_minutes, or production_goal columns needed for this analysis
 -- This functionality would need to be implemented differently based on actual data availability
 
-ClaimRejections as (
+claim_rejections as (
     select 
         fc.claim_date as appointment_date,
         null::integer as provider_id,  -- No provider_id available in claim data
@@ -182,45 +181,37 @@ ClaimRejections as (
         
         -- Metadata fields
         fc._loaded_at,
-        fc._created_at,
-        fc._updated_at
+        fc._updated_at,
+        null::bigint as _created_by
         
     from claim_base fc
 ),
 
-TreatmentPlanDelays as (
+treatment_plan_delays as (
     select 
         tp.treatment_plan_date as appointment_date,
-        null::integer as provider_id,  -- No provider_id available in treatplan table
-        0::integer as clinic_id,
+        tp.primary_provider_id as provider_id,  -- From int_treatment_plan aggregation
+        coalesce(tp.primary_clinic_id, 0) as clinic_id,  -- From int_treatment_plan aggregation
         tp.patient_id,
-        tp.treatment_plan_id as appointment_id,  -- Already integer from transform_id_columns
+        tp.treatment_plan_id as appointment_id,
         'Treatment Plan Delay' as opportunity_type,
-        case 
-            when current_date - tp.treatment_plan_date > 180 then 'Very Delayed'
-            when current_date - tp.treatment_plan_date > 90 then 'Delayed Start'
-            else 'In Progress'
-        end as opportunity_subtype,
-        null::numeric as lost_revenue,  -- No total amount column available in treatplan
+        tp.timeline_status as opportunity_subtype,  -- From int_treatment_plan (Current, Recent, Delayed, Very Delayed)
+        tp.remaining_amount as lost_revenue,  -- Calculated in int_treatment_plan
         null::integer as lost_time_minutes,
-        null::text[] as missed_procedures,  -- No planned procedures column available
+        tp.procedure_codes as missed_procedures,  -- From int_treatment_plan aggregation
         tp.treatment_plan_date as opportunity_datetime,
         null::numeric as cancellation_notice_hours,  -- Not applicable for treatment plan delays
-        case 
-            when current_date - tp.treatment_plan_date > 180 then 'Low'
-            when current_date - tp.treatment_plan_date > 90 then 'Medium'
-            else 'High'
-        end as recovery_potential,
+        tp.recovery_potential,  -- From int_treatment_plan business logic
         
         -- Metadata fields
         tp._loaded_at,
-        tp._created_at,
-        tp._updated_at
+        tp._updated_at,
+        null::bigint as _created_by  -- int_treatment_plan has _created_at not _created_by
         
     from treatment_base tp
 ),
 
-WriteOffs as (
+write_offs as (
     select 
         adj.adjustment_date as appointment_date,
         adj.provider_id,
@@ -246,8 +237,8 @@ WriteOffs as (
         
         -- Metadata fields
         adj._loaded_at,
-        adj._created_at,
-        adj._updated_at
+        adj._updated_at,
+        adj._created_by
         
     from adjustment_base adj
 ),
@@ -350,13 +341,13 @@ opportunities_enhanced as (
         
     from (
         -- Union all opportunity sources
-        select * from MissedAppointments
+        select * from missed_appointments
         union all
-        select * from ClaimRejections
+        select * from claim_rejections
         union all
-        select * from TreatmentPlanDelays
+        select * from treatment_plan_delays
         union all
-        select * from WriteOffs
+        select * from write_offs
     ) all_opportunities
     where lost_revenue > 0 or lost_time_minutes > 0
 ),
@@ -422,7 +413,7 @@ final as (
         -- Metadata
         {{ standardize_mart_metadata(
             primary_source_alias='oe',
-            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+            source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']
         ) }}
         
     from opportunities_enhanced oe

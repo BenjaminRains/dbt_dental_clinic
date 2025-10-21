@@ -440,7 +440,8 @@ function Initialize-APIEnvironment {
     } while ($choice -notin @("production", "test", "cancel"))
 
     # Load the selected API environment file
-    $envPath = "$ProjectPath\$envFile"
+    $apiPath = "$ProjectPath\api"
+    $envPath = "$apiPath\$envFile"
     
     if (Test-Path $envPath) {
         Write-Host "📄 Loading $envName API environment from: $envFile" -ForegroundColor Green
@@ -454,7 +455,7 @@ function Initialize-APIEnvironment {
         }
     } else {
         Write-Host "❌ API environment file not found: $envPath" -ForegroundColor Red
-        Write-Host "Please create $envFile in the project root" -ForegroundColor Yellow
+        Write-Host "Please create $envFile in the api/ directory" -ForegroundColor Yellow
         return
     }
 
@@ -978,16 +979,9 @@ if (Test-Path "$cwd\api\main.py") {
 
 Write-Host ""
 
-# Load enhanced ETL functions for dental clinic operations
-$etlFunctionsPath = Join-Path $PSScriptRoot "etl_functions.ps1"
-if (Test-Path $etlFunctionsPath) {
-    . $etlFunctionsPath
-    Write-Host "🦷 Enhanced dental clinic ETL functions loaded" -ForegroundColor Green
-}
-
 # Export functions to global scope
 Write-Host "🔧 Loading functions into global scope..." -ForegroundColor Yellow
-Get-Command -Type Function | Where-Object {$_.Name -like "*ETL*" -or $_.Name -like "*DBT*"} | ForEach-Object {
+Get-Command -Type Function | Where-Object {$_.Name -like "*ETL*" -or $_.Name -like "*DBT*" -or $_.Name -like "*API*"} | ForEach-Object {
     Set-Item -Path "function:global:$($_.Name)" -Value $_.Definition
 }
 Write-Host "✅ Functions loaded successfully!" -ForegroundColor Green 

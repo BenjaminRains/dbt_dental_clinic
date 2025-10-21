@@ -24,17 +24,26 @@
     - Billing Configuration: Billing addresses and provider assignments
     
     Data Sources:
-    - stg_opendental__clinic: Staged clinic data from OpenDental
+    - int_clinic_profile: Intermediate model with clinic data and business logic
     
     Performance Considerations:
     - Table materialization for optimal query performance
     - Indexed on key lookup columns
-    - Includes only essential attributes for analysis
+    - Business logic centralized in intermediate layer
+    - Includes comprehensive clinic attributes and derived fields
 */
 
 with clinic_data as (
+    select * from {{ ref('int_clinic_profile') }}
+),
+
+-- Final mart selection (business logic already in intermediate)
+final as (
     select
+        -- Primary key
         clinic_id,
+        
+        -- Basic Information
         clinic_name,
         clinic_abbreviation,
         display_order,
@@ -48,6 +57,7 @@ with clinic_data as (
         phone_number,
         fax_number,
         email_alias,
+        full_address,
         
         -- Billing Information
         bank_number,
@@ -56,11 +66,13 @@ with clinic_data as (
         billing_city,
         billing_state,
         billing_zip,
+        full_billing_address,
         pay_to_address_line_1,
         pay_to_address_line_2,
         pay_to_city,
         pay_to_state,
         pay_to_zip,
+        full_payto_address,
         
         -- Configuration Flags
         default_place_of_service,
@@ -87,91 +99,30 @@ with clinic_data as (
         region_id,
         external_id,
         
-        -- Metadata (from staging table)
-        _loaded_at
+        -- Business Logic Flags (from intermediate)
+        is_active_clinic,
+        has_separate_billing_address,
+        has_separate_payto_address,
+        uses_appointment_confirmations,
+        has_sms_enabled,
         
-    from {{ ref('stg_opendental__clinic') }}
-    where clinic_id is not null
-),
-
--- Add business logic and derived fields
-final as (
-    select
-        -- Primary key
-        clinic_id,
+        -- Categorization (from intermediate)
+        clinic_status,
+        clinic_type,
         
-        -- Basic Information
-        clinic_name,
-        coalesce(clinic_abbreviation, left(clinic_name, 10)) as clinic_abbreviation,
-        display_order,
-        
-        -- Contact Information
-        address_line_1,
-        address_line_2,
-        city,
-        state,
-        zip_code,
-        phone_number,
-        fax_number,
-        email_alias,
-        
-        -- Billing Information
-        bank_number,
-        billing_address_line_1,
-        billing_address_line_2,
-        billing_city,
-        billing_state,
-        billing_zip,
-        pay_to_address_line_1,
-        pay_to_address_line_2,
-        pay_to_city,
-        pay_to_state,
-        pay_to_zip,
-        
-        -- Configuration Flags
-        default_place_of_service,
-        is_medical_only,
-        use_billing_address_on_claims,
-        is_insurance_verification_excluded,
-        is_confirmation_enabled,
-        is_confirmation_default,
-        is_new_patient_appointment_excluded,
-        is_hidden,
-        has_procedure_on_prescription,
-        
-        -- Additional Settings
-        timezone,
-        scheduling_note,
-        medical_lab_account_number,
-        sms_contract_date,
-        sms_monthly_limit,
-        
-        -- Foreign Keys
-        email_address_id,
-        default_provider_id,
-        insurance_billing_provider_id,
-        region_id,
-        external_id,
-        
-        -- Derived Fields
+        -- Legacy field for compatibility
         case 
-            when is_hidden = true then 'Hidden'
-            when is_medical_only = true then 'Medical Only'
-            else 'Active'
-        end as clinic_status,
-        
-        case 
-            when billing_address_line_1 is not null then 'Separate Billing'
+            when has_separate_billing_address then 'Separate Billing'
             else 'Same as Clinic'
         end as billing_address_type,
         
-        -- Standardized mart metadata (using source alias, only _loaded_at available)
+        -- Standardized mart metadata
         {{ standardize_mart_metadata(
-            primary_source_alias='clinic_data',
-            source_metadata_fields=['_loaded_at']
+            primary_source_alias='cd',
+            source_metadata_fields=['_loaded_at', '_transformed_at']
         ) }}
         
-    from clinic_data
+    from clinic_data cd
 )
 
 select * from final

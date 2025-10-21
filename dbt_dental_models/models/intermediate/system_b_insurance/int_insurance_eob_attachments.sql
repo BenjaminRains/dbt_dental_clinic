@@ -30,7 +30,7 @@ Note: EOB attachment table does not have user creation tracking (_created_by)
       Only business timestamps (_created_at, _updated_at) and pipeline metadata are available
 */
 
-with EobAttach as (
+with eob_attach as (
     select
         -- Primary Key
         eob_attach_id,
@@ -51,7 +51,7 @@ with EobAttach as (
     where _created_at >= '2023-01-01' -- Filter to match claim payment date range
 ),
 
-ClaimPayment as (
+claim_payment as (
     select
         claim_payment_id,
         check_amount,
@@ -61,7 +61,7 @@ ClaimPayment as (
     from {{ ref('stg_opendental__claimpayment') }}
 ),
 
-Final as (
+final as (
     select
         -- Primary Key
         eob.eob_attach_id,
@@ -85,9 +85,9 @@ Final as (
             source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
         ) }}
         
-    from EobAttach eob
-    left join ClaimPayment cp
+    from eob_attach eob
+    left join claim_payment cp
         on eob.claim_payment_id = cp.claim_payment_id
 )
 
-select * from Final
+select * from final

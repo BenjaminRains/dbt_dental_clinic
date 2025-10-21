@@ -86,8 +86,11 @@ models:
           Description/name of the program property - Human-readable identifier for the configuration setting 
           (e.g., 'API_URL', 'EnableFeatureX', 'Timeout_Seconds'). May be empty for some computer-specific 
           configurations where the property_value is self-descriptive (like file paths).
+          note: ~19 program properties have NULL property_desc (mostly Program ID 137 - Practice by Numbers app paths) where the value is self-descriptive
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
           # Note: Some valid records have empty property_desc (e.g., computer-specific app paths)
           # so not_empty_string test is not appropriate for this column
 

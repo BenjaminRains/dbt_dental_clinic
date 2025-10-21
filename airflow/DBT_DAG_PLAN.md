@@ -20,10 +20,70 @@ This document outlines options and a recommended starting approach for orchestra
 
 ### Iteration ideas (future)
 - Add a `freshness` task before `build`.
-- Split into two `BashOperator` tasks with selectors (e.g., `+tag:intermediate` then `+tag:marts`, or use folder-based selectors).
+- Split into staged `BashOperator` tasks using selectors from `selectors.yml`:
+  - **Option 1 - Layer-based**: `staging_only` → `intermediate_only` → `marts_only`
+  - **Option 2 - Domain-based**: `insurance_workflow`, `clinical_workflow`, `financial_workflow` (parallel)
+  - **Option 3 - System-based**: Run your documented system workflows independently
+  - **Option 4 - Hybrid**: `daily_refresh` (morning) + `reference_data` (weekly)
 - Adopt Astronomer Cosmos for model-level tasks and dependency visualization.
 - Persist artifacts/logs to a durable volume or cloud storage (S3/GCS) and wire into observability.
 - Use state selection (e.g., `--select state:modified+`) to speed runs.
+
+### Selector Examples (see selectors.yml)
+
+#### Daily Operations
+```bash
+# Daily critical models (insurance, AR, appointments)
+dbt run --selector daily_critical
+
+# Only incremental models for fast refresh
+dbt run --selector incremental_only
+```
+
+#### Domain-Specific Workflows
+```bash
+# Run insurance workflow independently
+dbt run --selector insurance_workflow
+
+# Run clinical workflow
+dbt run --selector clinical_workflow
+
+# Financial reporting models
+dbt run --selector financial_workflow
+```
+
+#### Layer-Based Orchestration (Sequential)
+```bash
+# Step 1: Staging layer
+dbt run --selector staging_only
+
+# Step 2: Intermediate layer
+dbt run --selector intermediate_only
+
+# Step 3: Marts layer
+dbt run --selector marts_only
+```
+
+#### System-Based Workflows
+```bash
+# System A: Fee Processing
+dbt run --selector system_a_fee_processing
+
+# System B: Insurance Management
+dbt run --selector system_b_insurance
+
+# System C: Appointments
+dbt run --selector system_c_appointments
+```
+
+#### CI/CD & Testing
+```bash
+# Smoke test for deployments
+dbt run --selector smoke_test
+
+# Production-critical only
+dbt run --selector production_critical
+```
 
 ### Environment and paths
 - Mount `dbt_dental_models` under `/opt/airflow/dbt_dental_models` in the Airflow runtime.

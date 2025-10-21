@@ -52,8 +52,7 @@ Performance Considerations:
 Dependencies:
 - dim_patient: Primary patient demographic and status data
 - fact_appointment: Appointment scheduling and completion data
-- stg_opendental__procedurelog: Actual procedure fees and production data
-- stg_opendental__procedurecode: Procedure codes and descriptions
+- int_procedure_complete: Actual procedure fees and production data with codes
 - fact_payment: Early payment and financial activity data
 - dim_date: Date dimension for temporal analysis
 - dim_provider: Provider information and categorization
@@ -85,7 +84,7 @@ with new_patient_base as (
         and dp.patient_status = 'Patient'
 ),
 
--- 2. First appointment analysis with procedure data
+-- 2. First appointment analysis with procedure data from intermediate
 first_appointments as (
     select 
         fa.patient_id,
@@ -95,37 +94,35 @@ first_appointments as (
         sum(case when fa.is_completed then 1 else 0 end) as completed_first_appointments,
         sum(case when fa.is_no_show then 1 else 0 end) as no_show_first_appointments,
         -- Get actual production from procedures performed on first visit
-        coalesce(sum(pl.procedure_fee), 0.00) as first_visit_scheduled_production,
+        coalesce(sum(pc.procedure_fee), 0.00) as first_visit_scheduled_production,
         -- Get actual procedure codes from procedures performed
         array_agg(distinct pc.procedure_code) filter (where pc.procedure_code is not null) as first_visit_procedures
     from {{ ref('fact_appointment') }} fa
     inner join new_patient_base np
         on fa.patient_id = np.patient_id
         and fa.appointment_date = np.first_visit_date
-    left join {{ ref('stg_opendental__procedurelog') }} pl
-        on fa.appointment_id = pl.appointment_id
-        and pl.procedure_date = fa.appointment_date
-    left join {{ ref('stg_opendental__procedurecode') }} pc
-        on pl.procedure_code_id = pc.procedure_code_id
+    left join {{ ref('int_procedure_complete') }} pc
+        on fa.appointment_id = pc.appointment_id
+        and pc.procedure_date = fa.appointment_date
     group by fa.patient_id
 ),
 
--- 3. Early engagement analysis (90 days) with procedure data
+-- 3. Early engagement analysis (90 days) with procedure data from intermediate
 early_visits as (
     select 
         fa.patient_id,
         count(*) as appointments_first_90_days,
         sum(case when fa.is_completed then 1 else 0 end) as completed_appointments_90_days,
         -- Get actual production from procedures performed in first 90 days
-        coalesce(sum(pl.procedure_fee), 0.00) as production_first_90_days,
+        coalesce(sum(pc.procedure_fee), 0.00) as production_first_90_days,
         max(fa.appointment_date) as last_appointment_90_days,
         count(distinct fa.provider_id) as providers_seen_90_days
     from {{ ref('fact_appointment') }} fa
     inner join new_patient_base np
         on fa.patient_id = np.patient_id
-    left join {{ ref('stg_opendental__procedurelog') }} pl
-        on fa.appointment_id = pl.appointment_id
-        and pl.procedure_date = fa.appointment_date
+    left join {{ ref('int_procedure_complete') }} pc
+        on fa.appointment_id = pc.appointment_id
+        and pc.procedure_date = fa.appointment_date
     where fa.appointment_date between np.first_visit_date 
         and np.first_visit_date + interval '90 days'
     group by fa.patient_id

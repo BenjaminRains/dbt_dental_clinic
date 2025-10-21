@@ -26,7 +26,7 @@
     4. Supports template variables for personalization
 */
 
-WITH PbNTemplates AS (
+WITH pbn_templates AS (
     -- Extract templates from PbN campaign messages
     SELECT DISTINCT
         {{ dbt_utils.generate_surrogate_key(['campaign_name', 'subject']) }} AS template_id,
@@ -56,7 +56,7 @@ WITH PbNTemplates AS (
     ) campaign_data
 ),
 
-TextTemplates AS (
+text_templates AS (
     -- Define standard text message templates
     SELECT DISTINCT
         {{ dbt_utils.generate_surrogate_key(['template_type', 'content_pattern']) }} AS template_id,
@@ -90,7 +90,7 @@ TextTemplates AS (
 ),
 
 -- Additional templates derived from communication logs
-CommunicationTemplates AS (
+communication_templates AS (
     SELECT
         {{ dbt_utils.generate_surrogate_key(['communication_type', 'communication_category', 'content_pattern']) }} AS template_id,
         'Auto-detected ' || 
@@ -170,7 +170,7 @@ SELECT
     updated_at::timestamp,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM PbNTemplates
+FROM pbn_templates
 
 UNION ALL
 
@@ -188,7 +188,7 @@ SELECT
     updated_at::timestamp,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM TextTemplates
+FROM text_templates
 
 UNION ALL
 
@@ -206,4 +206,4 @@ SELECT
     updated_at::timestamp,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
-FROM CommunicationTemplates
+FROM communication_templates

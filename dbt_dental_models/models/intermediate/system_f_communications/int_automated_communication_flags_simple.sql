@@ -30,7 +30,7 @@
     - Indexed columns for fast querying
 */
 
-WITH BaseCommunications AS (
+WITH base_communications AS (
     -- Get base communications with basic filtering
     SELECT
         base.communication_id,
@@ -52,19 +52,19 @@ WITH BaseCommunications AS (
     -- No limit - process all outbound communications
 ),
 
-BatchDetection AS (
+batch_detection AS (
     -- Basic batch detection - find content sent to multiple patients
     SELECT 
         content,
         communication_datetime,
         COUNT(DISTINCT patient_id) as patient_count
-    FROM BaseCommunications
+    FROM base_communications
     GROUP BY content, communication_datetime
     HAVING COUNT(DISTINCT patient_id) > 3  -- Content sent to 4+ patients is likely automated
     -- No limit - detect all batch communications
 ),
 
-ReplyTracking AS (
+reply_tracking AS (
     -- Basic reply tracking - find patient responses to outbound communications
     SELECT 
         comm.communication_id,
@@ -73,7 +73,7 @@ ReplyTracking AS (
             WHEN reply.commlog_id IS NOT NULL THEN 1 
             ELSE 0 
         END) as has_reply
-    FROM BaseCommunications comm
+    FROM base_communications comm
     LEFT JOIN (
         SELECT 
             commlog_id,
@@ -93,7 +93,7 @@ ReplyTracking AS (
     -- No limit - track all replies
 ),
 
-SimpleFlags AS (
+simple_flags AS (
     -- Enhanced version with batch detection
     SELECT
         comm.communication_id,
@@ -123,7 +123,7 @@ SimpleFlags AS (
             WHEN comm.program_id IS NOT NULL THEN TRUE
             WHEN EXISTS (
                 SELECT 1
-                FROM BatchDetection batch
+                FROM batch_detection batch
                 WHERE batch.content = comm.content
                 AND batch.communication_datetime BETWEEN comm.communication_datetime - INTERVAL '5 minutes'
                     AND comm.communication_datetime + INTERVAL '5 minutes'
@@ -218,8 +218,8 @@ SimpleFlags AS (
         
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
-    FROM BaseCommunications comm
-    LEFT JOIN ReplyTracking reply
+    FROM base_communications comm
+    LEFT JOIN reply_tracking reply
         ON reply.communication_id = comm.communication_id
 )
 
@@ -241,5 +241,5 @@ SELECT
     communication_mode,
     model_created_at,
     model_updated_at
-FROM SimpleFlags
+FROM simple_flags
 WHERE is_automated = TRUE

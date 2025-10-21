@@ -14,11 +14,15 @@ models:
       - Medical notes and treatment information: Clinical care coordination
       - Patient preferences (pronouns, consent): Patient experience and compliance
       - Insurance status and financial information: Payment processing and coverage management
+      - Active disease tracking: Clinical risk assessment and treatment planning
+      - Document management: Patient record tracking and compliance
       
       Data Sources:
       - stg_opendental__patient: Core patient information and demographics
       - stg_opendental__patientlink: Family relationships and financial responsibility
       - stg_opendental__patientnote: Additional patient information and preferences
+      - stg_opendental__disease: Active disease conditions and health status
+      - stg_opendental__document: Patient document tracking and categorization
       
       Business Logic Features:
       - Patient status determination: Active/Inactive/Deceased/Archived categorization
@@ -26,6 +30,8 @@ models:
       - Emergency contact management: Required for active patients
       - Medical and treatment note consolidation: Clinical information aggregation
       - Insurance status tracking: Coverage and financial responsibility
+      - Active disease tracking: Clinical risk assessment and care planning
+      - Document management: Record completeness and compliance monitoring
       
       Financial Calculations:
       - Insurance coverage determination: Active coverage status
@@ -38,6 +44,9 @@ models:
       - Family relationships may be incomplete for historical data
       - Insurance status requires regular validation
       - Emergency contact information needs periodic verification
+      - Disease tracking only includes active diseases (date_stop is null)
+      - Document counts may not reflect complete paper records
+      - Disease and document aggregations use LEFT JOIN (NULL when no records)
       
       Business Rules:
       - Each patient must have a unique patient_id
@@ -167,10 +176,12 @@ models:
           - Output: Standardized status description for reporting and UI
           
           Business Rules:
-          - 0: 'Active' - Currently receiving care, eligible for services
-          - 1: 'Archived' - Former patient, not currently active
-          - 2: 'Deceased' - Patient has passed away, no further services
-          - 3: 'Prospective' - Potential patient, not yet treated
+          - 0: 'Patient' - Active patient, currently receiving care
+          - 1: 'NonPatient' - Potential patient, not yet treated
+          - 2: 'Inactive' - Former patient, not currently active
+          - 3: 'Archived' - Historical record, typically not accessed
+          - 4: 'Deceased' - Patient has passed away, no further services
+          - 5: 'Deleted' - Soft delete, record maintained for audit
           - else: 'Unknown' - Invalid or unexpected status requiring investigation
           
           Business Impact:
@@ -185,7 +196,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['Active', 'Archived', 'Deceased', 'Prospective', 'Unknown']
+              values: ['Patient', 'NonPatient', 'Inactive', 'Archived', 'Deceased', 'Deleted', 'Unknown']
               config:
                 severity: error
                 description: >
@@ -200,10 +211,10 @@ models:
           Human-readable description of patient position code
           
           Business Logic:
-          - 0: 'Regular Patient' - Standard patient category
-          - 1: 'House Account' - Internal or special account
-          - 2: 'Staff Member' - Employee or staff
-          - 3: 'VIP Patient' - High-priority patient
+          - 0: 'Default' - Standard patient category
+          - 1: 'House' - Internal or house account
+          - 2: 'Staff' - Employee or staff member
+          - 3: 'VIP' - High-priority patient
           - 4: 'Other' - Special category
           - else: 'Unknown' - Invalid or unexpected code
           
@@ -214,7 +225,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['Regular Patient', 'House Account', 'Staff Member', 'VIP Patient', 'Other', 'Unknown']
+              values: ['Default', 'House', 'Staff', 'VIP', 'Other', 'Unknown']
               config:
                 severity: error
                 description: "Patient category must be valid"
@@ -291,6 +302,135 @@ models:
               config:
                 severity: warn
                 description: "Active patients should have emergency contact phone for safety"
+
+      - name: disease_count
+        description: >
+          Count of active disease conditions for the patient (aggregated from stg_opendental__disease)
+          
+          Source Transformation:
+          - Source: stg_opendental__disease table
+          - Filter: date_stop is null (only active diseases)
+          - Aggregation: count(*) per patient_id
+          
+          Business Context:
+          - Used for clinical risk assessment
+          - Supports treatment planning decisions
+          - Indicates patient complexity and care requirements
+          - NULL when patient has no active diseases
+          
+          Clinical Usage:
+          - Higher counts may indicate more complex care needs
+          - Used for patient stratification and resource allocation
+          - Important for care coordination and clinical protocols
+          
+          Data Quality:
+          - Zero or NULL indicates no active documented diseases
+          - Does not mean patient is disease-free, only that none are documented
+          - Consider data collection improvement for comprehensive health tracking
+
+      - name: disease_ids
+        description: >
+          Array of disease definition IDs for active diseases (aggregated from stg_opendental__disease)
+          
+          Source Transformation:
+          - Source: disease_def_id from stg_opendental__disease
+          - Filter: date_stop is null (only active diseases)
+          - Aggregation: array_agg(disease_def_id::text) per patient_id
+          - Format: PostgreSQL text array
+          
+          Business Context:
+          - Links to disease definition catalog for descriptions
+          - Enables disease-specific reporting and analysis
+          - Supports clinical decision support systems
+          - NULL when patient has no active diseases
+          
+          Clinical Usage:
+          - Used to identify specific conditions for treatment planning
+          - Enables disease prevalence analysis
+          - Supports population health management initiatives
+          
+          Data Structure:
+          - Array of text representations of disease definition IDs
+          - Multiple IDs indicate multiple active conditions
+          - Order not guaranteed (use disease_statuses for parallel data)
+
+      - name: disease_statuses
+        description: >
+          Array of problem statuses for active diseases (aggregated from stg_opendental__disease)
+          
+          Source Transformation:
+          - Source: problem_status from stg_opendental__disease
+          - Filter: date_stop is null (only active diseases)
+          - Aggregation: array_agg(problem_status::text) per patient_id
+          - Format: PostgreSQL text array
+          
+          Business Context:
+          - Tracks current status of each documented disease
+          - Indicates disease progression and management effectiveness
+          - Supports quality reporting and outcomes tracking
+          - NULL when patient has no active diseases
+          
+          Clinical Usage:
+          - Used to monitor disease management over time
+          - Enables outcomes analysis and quality improvement
+          - Supports care gap identification
+          
+          Data Structure:
+          - Array parallels disease_ids array (same order)
+          - Each status corresponds to the disease at the same index
+          - Status values are OpenDental problem_status codes
+
+      - name: document_count
+        description: >
+          Count of documents associated with the patient (aggregated from stg_opendental__document)
+          
+          Source Transformation:
+          - Source: stg_opendental__document table
+          - Aggregation: count(*) per patient_id
+          - No filters applied (includes all document types and statuses)
+          
+          Business Context:
+          - Indicates completeness of patient record
+          - Supports compliance and regulatory requirements
+          - Used for record management and audit purposes
+          - NULL when patient has no documents
+          
+          Operational Usage:
+          - Higher counts may indicate more complete records
+          - Used for document compliance monitoring
+          - Important for legal and regulatory compliance
+          
+          Data Quality:
+          - Zero or NULL indicates no documented records
+          - Does not mean documents don't exist, only that none are tracked in system
+          - Consider document scanning initiatives for comprehensive records
+
+      - name: document_categories
+        description: >
+          Array of document category IDs for patient documents (aggregated from stg_opendental__document)
+          
+          Source Transformation:
+          - Source: document_category_id from stg_opendental__document
+          - Aggregation: array_agg(document_category_id::text) per patient_id
+          - Format: PostgreSQL text array
+          - No filters applied (includes all categories)
+          
+          Business Context:
+          - Links to document category definitions for descriptions
+          - Enables document type analysis and compliance tracking
+          - Supports record completeness assessment
+          - NULL when patient has no documents
+          
+          Operational Usage:
+          - Used to identify missing required document types
+          - Enables compliance reporting by document category
+          - Supports document workflow and management
+          
+          Data Structure:
+          - Array of text representations of document category IDs
+          - Multiple IDs indicate multiple document types
+          - May contain duplicates if patient has multiple documents of same type
+          - Order not guaranteed
 
       - name: _loaded_at
         description: >

@@ -136,7 +136,7 @@ class TestOpenDentalSchemaAnalyzerConfigurationGeneration:
                 # Verify each table has required configuration
                 for table_name, table_config in config['tables'].items():
                     assert 'table_name' in table_config
-                    assert 'table_importance' in table_config
+                    assert 'processing_priority' in table_config  # Changed from table_importance
                     assert 'extraction_strategy' in table_config
                     assert 'estimated_rows' in table_config
                     assert 'estimated_size_mb' in table_config
@@ -193,8 +193,8 @@ class TestOpenDentalSchemaAnalyzerConfigurationGeneration:
             
             analyzer = OpenDentalSchemaAnalyzer()
             
-            # Act: Call generate_schema_hash() method
-            schema_hash = analyzer.generate_schema_hash(test_table)
+            # Act: Call _generate_schema_hash() method (private, takes list of tables)
+            schema_hash = analyzer._generate_schema_hash([test_table])
             
             # Assert: Verify schema hash generation works correctly
             assert isinstance(schema_hash, str)
@@ -236,8 +236,8 @@ class TestOpenDentalSchemaAnalyzerConfigurationGeneration:
             analyzer = OpenDentalSchemaAnalyzer()
             analyzer.get_table_schema = mock_get_table_schema
             
-            # Act: Call generate_schema_hash() method
-            schema_hash = analyzer.generate_schema_hash(test_table)
+            # Act: Call _generate_schema_hash() method (private, takes list of tables)
+            schema_hash = analyzer._generate_schema_hash([test_table])
             
             # Assert: Verify error handling works correctly by checking for "unknown" hash
             assert isinstance(schema_hash, str)

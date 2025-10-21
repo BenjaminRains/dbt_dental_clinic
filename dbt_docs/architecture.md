@@ -46,11 +46,10 @@ The Dental Clinic Analytics Platform is built using modern data engineering prac
 ### 3. Data Warehouse (PostgreSQL)
 - **Database**: PostgreSQL optimized for analytics
 - **Schemas**:
-  - `public_raw`: Raw ingested data
-  - `public_staging`: Standardized source data
-  - `public_intermediate`: Business logic models
-  - `public_marts`: Analytics-ready models
-  - `public`: Shared views and outputs
+  - `raw`: Raw ingested data
+  - `raw_staging`: Standardized source data
+  - `raw_intermediate`: Business logic layer with complex       transformations and system-specific models
+  - `raw_marts`: Analytics-ready models
 - **Performance**: Optimized indexes and partitioning
 
 ### 4. Transformation Layer (DBT)

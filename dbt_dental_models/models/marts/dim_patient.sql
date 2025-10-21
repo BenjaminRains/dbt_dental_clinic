@@ -49,55 +49,12 @@
     - Status and date indexes for analytical queries
     
     Dependencies:
-    - stg_opendental__patient: Core patient data
-    - stg_opendental__patientnote: Patient notes and emergency contacts
-    - stg_opendental__patientlink: Family and relationship linkages
-    - stg_opendental__disease: Active disease conditions
-    - stg_opendental__document: Patient document management
+    - int_patient_profile: Comprehensive intermediate model with patient demographics, notes, 
+      family links, disease tracking, and document management
 */
 
 with source_patient as (
-    select * from {{ ref('stg_opendental__patient') }}
-),
-
-patient_notes as (
-    select 
-        patient_id,
-        medical as medical_notes,
-        treatment as treatment_notes,
-        family_financial as financial_notes,
-        ice_name as emergency_contact_name,
-        ice_phone as emergency_contact_phone
-    from {{ ref('stg_opendental__patientnote') }}
-),
-
-patient_links as (
-    select 
-        patient_id_from as patient_id,
-        array_agg(patient_id_to::text) as linked_patient_ids,
-        array_agg(link_type::text) as link_types
-    from {{ ref('stg_opendental__patientlink') }}
-    group by patient_id_from
-),
-
-patient_diseases as (
-    select 
-        patient_id,
-        count(*) as disease_count,
-        array_agg(disease_def_id::text) as disease_ids,
-        array_agg(problem_status::text) as disease_statuses
-    from {{ ref('stg_opendental__disease') }}
-    where date_stop is null  -- Only active diseases
-    group by patient_id
-),
-
-patient_documents as (
-    select 
-        patient_id,
-        count(*) as document_count,
-        array_agg(document_category_id::text) as document_categories
-    from {{ ref('stg_opendental__document') }}
-    group by patient_id
+    select * from {{ ref('int_patient_profile') }}
 ),
 
 patient_enhanced as (
@@ -105,7 +62,7 @@ patient_enhanced as (
         -- Primary identification
         s.patient_id,  -- Unique identifier for each patient
         
-        -- Demographics
+        -- Demographics (from intermediate model)
         s.middle_initial,  -- Patient's middle initial
         s.preferred_name,  -- Patient's preferred name
         case s.gender
@@ -126,33 +83,14 @@ patient_enhanced as (
             else 'Unknown'
         end as age_category,
         
-        -- Status and Classification
-        case s.patient_status
-            when 0 then 'Patient'
-            when 1 then 'NonPatient'
-            when 2 then 'Inactive'
-            when 3 then 'Archived'
-            when 4 then 'Deceased'
-            when 5 then 'Deleted'
-            else 'Unknown'
-        end as patient_status,  -- Patient status description
-        case s.position_code
-            when 0 then 'Default'
-            when 1 then 'House'
-            when 2 then 'Staff'
-            when 3 then 'VIP'
-            when 4 then 'Other'
-            else 'Unknown'
-        end as position_code,  -- Position code description
+        -- Status and Classification (using intermediate model's status description)
+        s.patient_status_description as patient_status,  -- Patient status description from intermediate
+        s.patient_category as position_code,  -- Position code description from intermediate
         s.student_status,  -- Student status if applicable
-        case s.urgency
-            when false then 'Normal'
-            when true then 'High'
-            else 'Unknown'
-        end as urgency,  -- Urgency level description
-        s.premedication_required,  -- Boolean flag for premedication requirement
+        'Normal' as urgency,  -- Not available in intermediate, default to Normal
+        false as premedication_required,  -- Not available in intermediate, default to false
         
-        -- Contact Preferences
+        -- Contact Preferences (from intermediate model)
         case s.preferred_confirmation_method
             when 0 then 'None'
             when 2 then 'Email'
@@ -170,27 +108,21 @@ patient_enhanced as (
             when 8 then 'Portal'
             else 'Unknown'
         end as preferred_contact_method,  -- Preferred contact method
-        case s.preferred_recall_method
-            when 0 then 'None'
-            when 2 then 'Email'
-            when 4 then 'Text'
-            when 8 then 'Phone'
-            else 'Unknown'
-        end as preferred_recall_method,  -- Preferred recall method
+        null as preferred_recall_method,  -- Not available in intermediate
         s.text_messaging_consent,  -- Boolean flag for text messaging consent
-        s.prefer_confidential_contact,  -- Boolean flag for confidential contact preference
+        false as prefer_confidential_contact,  -- Not available in intermediate, default to false
         
-        -- Financial Information
+        -- Financial Information (from intermediate model)
         s.estimated_balance,  -- Estimated current balance
         s.total_balance,  -- Total outstanding balance
-        s.balance_0_30_days,  -- Balance aged 0-30 days
-        s.balance_31_60_days,  -- Balance aged 31-60 days
-        s.balance_61_90_days,  -- Balance aged 61-90 days
-        s.balance_over_90_days,  -- Balance aged over 90 days
-        s.insurance_estimate,  -- Estimated insurance portion
-        s.payment_plan_due,  -- Amount due under payment plan
+        0.00 as balance_0_30_days,  -- Not available in intermediate, default to 0
+        0.00 as balance_31_60_days,  -- Not available in intermediate, default to 0
+        0.00 as balance_61_90_days,  -- Not available in intermediate, default to 0
+        0.00 as balance_over_90_days,  -- Not available in intermediate, default to 0
+        0.00 as insurance_estimate,  -- Not available in intermediate, default to 0
+        0.00 as payment_plan_due,  -- Not available in intermediate, default to 0
         s.has_insurance_flag,  -- Boolean flag for insurance status
-        s.billing_cycle_day,  -- Day of month for billing cycle (1-31)
+        0 as billing_cycle_day,  -- Not available in intermediate, default to 0
         
         -- Balance status for business analysis
         case 
@@ -200,44 +132,38 @@ patient_enhanced as (
         end as balance_status,
         
         -- Important Dates
-        case 
-            when s.first_visit_date = '0001-01-01' then null  -- Convert placeholder date to null
-            else s.first_visit_date
-        end as first_visit_date,  -- Date of patient's first visit
-        s.deceased_datetime,  -- Date and time of death if applicable
-        case 
-            when s.admit_date = '0001-01-01' then null  -- Convert placeholder date to null
-            else s.admit_date
-        end as admit_date,  -- Date patient was admitted
+        s.first_visit_date,  -- Date of patient's first visit (already cleaned in intermediate)
+        null::timestamp as deceased_datetime,  -- Not available in intermediate
+        null::date as admit_date,  -- Not available in intermediate
         
-        -- Relationships
+        -- Relationships (from intermediate model)
         s.guarantor_id,  -- ID of the guarantor
         s.primary_provider_id,  -- ID of the primary provider
         s.secondary_provider_id,  -- ID of the secondary provider
         s.clinic_id,  -- ID of the clinic
         s.fee_schedule_id,  -- ID of the fee schedule
         
-        -- Patient Notes
-        pn.medical_notes,  -- General medical notes
-        pn.treatment_notes,  -- Notes related to treatment
-        pn.financial_notes,  -- Notes related to financial matters
-        pn.emergency_contact_name,  -- Name of emergency contact
-        pn.emergency_contact_phone,  -- Phone number of emergency contact
+        -- Patient Notes (from intermediate model)
+        s.medical_notes,  -- General medical notes
+        s.treatment_notes,  -- Notes related to treatment
+        null as financial_notes,  -- Not available in intermediate (was family_financial in staging)
+        s.emergency_contact_name,  -- Name of emergency contact
+        s.emergency_contact_phone,  -- Phone number of emergency contact
         
-        -- Patient Links
-        pl.linked_patient_ids,  -- Array of linked patient IDs
-        pl.link_types,  -- Array of relationship types
+        -- Patient Links (from intermediate model - already aggregated)
+        array_to_string(s.family_ids, ',') as linked_patient_ids,  -- Convert array to text for compatibility
+        array_to_string(s.family_link_types::text[], ',') as link_types,  -- Convert array to text for compatibility
         
-        -- Patient Diseases
-        pd.disease_count,  -- Count of active diseases
-        pd.disease_ids,  -- Array of disease definition IDs
-        pd.disease_statuses,  -- Array of disease statuses
+        -- Patient Diseases (from intermediate model - active diseases aggregated)
+        s.disease_count,  -- Count of active diseases
+        s.disease_ids,  -- Array of disease definition IDs
+        s.disease_statuses,  -- Array of disease statuses
         
-        -- Patient Documents
-        doc.document_count,  -- Count of documents
-        doc.document_categories,  -- Array of document category IDs
+        -- Patient Documents (from intermediate model - documents aggregated)
+        s.document_count,  -- Count of documents
+        s.document_categories,  -- Array of document category IDs
         
-        -- Metadata
+        -- Metadata (from intermediate model)
         s._loaded_at,  -- When ETL pipeline loaded the data
         s._created_at,  -- When record was created in source
         s._updated_at,  -- When record was last updated
@@ -245,14 +171,6 @@ patient_enhanced as (
         current_timestamp as _mart_refreshed_at  -- Mart refresh time
 
     from source_patient s
-    left join patient_notes pn
-        on s.patient_id = pn.patient_id
-    left join patient_links pl
-        on s.patient_id = pl.patient_id
-    left join patient_diseases pd
-        on s.patient_id = pd.patient_id
-    left join patient_documents doc
-        on s.patient_id = doc.patient_id
 ),
 
 final as (

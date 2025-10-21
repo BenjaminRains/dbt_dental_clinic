@@ -47,54 +47,90 @@ Performance Considerations:
 - Date extractions performed at mart level for analytical queries
 
 Dependencies:
-- stg_opendental__payment: Primary source for payment transaction data
-- stg_opendental__paysplit: Payment allocation and split information
+- int_payment_split: Intermediate model with payment split categorization, validation, and payment header fields
 */
 
--- 1. Source data retrieval
-with source_payment as (
-    select * from {{ ref('stg_opendental__payment') }}
+-- 1. Source data retrieval from intermediate layer
+with source_payment_splits as (
+    select * from {{ ref('int_payment_split') }}
 ),
 
--- 2. Payment splits aggregation
+-- 2. Payment splits aggregation from intermediate
 payment_splits as (
     select 
         payment_id,
+        
+        -- Payment header fields (use MAX to handle any inconsistencies)
+        max(patient_id) as patient_id,
+        max(clinic_id) as clinic_id,
+        max(deposit_id) as deposit_id,
+        max(payment_date) as payment_date,
+        max(payment_entry_date) as payment_entry_date,
+        max(payment_amount) as payment_amount,
+        max(payment_type_id) as payment_type_id,
+        max(check_number) as check_number,
+        max(bank_branch) as bank_branch,
+        max(payment_external_id) as payment_external_id,
+        bool_or(payment_source) as payment_source,  -- Boolean field
+        max(payment_notes) as payment_notes,
+        bool_or(payment_status) as payment_status,  -- Boolean field
+        bool_or(process_status) as process_status,  -- Boolean field
+        bool_or(is_split) as is_split,  -- Boolean field
+        bool_or(is_recurring_cc) as is_recurring_cc,  -- Boolean field
+        max(merchant_fee) as merchant_fee,
+        bool_or(is_cc_completed) as is_cc_completed,  -- Boolean field
+        max(recurring_charge_date) as recurring_charge_date,
+        
+        -- Aggregated split information
         count(*) as split_count,
         sum(split_amount) as total_split_amount,
-        array_agg(distinct provider_id::text) as split_provider_ids,
-        array_agg(distinct procedure_id::text) as split_procedure_ids,
-        array_agg(distinct patient_id::text) as split_patient_ids
-    from {{ ref('stg_opendental__paysplit') }}
+        array_agg(distinct provider_id::text order by provider_id::text) filter (where provider_id is not null) as split_provider_ids,
+        array_agg(distinct procedure_id::text order by procedure_id::text) filter (where procedure_id is not null) as split_procedure_ids,
+        array_agg(distinct patient_id::text order by patient_id::text) as split_patient_ids,
+        
+        -- Split type aggregations
+        count(*) filter (where split_type = 'DISCOUNT') as discount_split_count,
+        count(*) filter (where split_type = 'UNEARNED_REVENUE') as unearned_split_count,
+        count(*) filter (where split_type = 'TREATMENT_PLAN_PREPAYMENT') as treatment_plan_split_count,
+        count(*) filter (where split_type = 'INCOME_TRANSFER') as transfer_split_count,
+        
+        -- Metadata
+        max(_loaded_at) as _loaded_at,
+        max(_created_at) as _created_at,
+        max(_updated_at) as _updated_at,
+        max(_created_by) as _created_by
+        
+    from source_payment_splits
     group by payment_id
 ),
 
--- 3. Business logic and calculations
+
+-- 4. Business logic and calculations
 payment_calculated as (
 
     select
         -- Primary key
-        sp.payment_id,
+        ps.payment_id,
 
         -- Foreign keys
-        sp.patient_id,
-        null as provider_id,  -- Provider not directly associated with payment
-        sp.clinic_id,
-        sp.payment_type_id,
-        sp.deposit_id,
+        ps.patient_id,
+        null as provider_id,  -- Provider not directly associated with payment header
+        ps.clinic_id,
+        ps.payment_type_id,
+        ps.deposit_id,
         null as payment_plan_id,  -- Not used by clinic
 
         -- Date and time
-        sp.payment_date,
-        sp.entry_date,
+        ps.payment_date,
+        ps.payment_entry_date as entry_date,
         null as receipt_date,  -- Not available in source
-        extract(year from sp.payment_date) as payment_year,
-        extract(month from sp.payment_date) as payment_month,
-        extract(quarter from sp.payment_date) as payment_quarter,
-        extract(dow from sp.payment_date) as payment_day_of_week,
+        extract(year from ps.payment_date) as payment_year,
+        extract(month from ps.payment_date) as payment_month,
+        extract(quarter from ps.payment_date) as payment_quarter,
+        extract(dow from ps.payment_date) as payment_day_of_week,
 
         -- Payment details
-        case sp.payment_type_id
+        case ps.payment_type_id
             when 0 then 'Patient'
             when 1 then 'Insurance'
             when 2 then 'Partial'
@@ -106,23 +142,23 @@ payment_calculated as (
 
         'Unknown' as payment_method,  -- Payment method not available in source
 
-        sp.payment_amount,
-        sp.payment_notes as payment_note,
-        sp.check_number,
-        sp.bank_branch,
-        sp.is_recurring_cc as is_recurring,
-        sp.external_id,
+        ps.payment_amount,
+        ps.payment_notes as payment_note,
+        ps.check_number,
+        ps.bank_branch,
+        ps.is_recurring_cc as is_recurring,
+        ps.payment_external_id as external_id,
 
         -- Payment source information
-        case when sp.payment_source then 'Practice' else 'External' end as payment_source,
+        case when ps.payment_source then 'Practice' else 'External' end as payment_source,
 
         -- Processing information
-        sp.process_status as processing_status,
+        ps.process_status as processing_status,
         null as receipt_number,  -- Not available in source
         null as external_reference,  -- Not available in source
         null as payment_software,  -- Not available in source
 
-        -- Split information
+        -- Split information from intermediate aggregation
         ps.split_count,
         ps.total_split_amount,
         ps.split_provider_ids,
@@ -130,48 +166,46 @@ payment_calculated as (
         ps.split_patient_ids,
         
         -- Validation flags
-        case when sp.payment_amount = ps.total_split_amount then true else false end as splits_match_payment,
+        case when ps.payment_amount = ps.total_split_amount then true else false end as splits_match_payment,
         case when ps.split_count > 1 then true else false end as has_multiple_splits,
 
         -- Financial categorization
         case 
-            when sp.payment_amount > 0 then 'Income'
-            when sp.payment_amount < 0 then 'Refund'
+            when ps.payment_amount > 0 then 'Income'
+            when ps.payment_amount < 0 then 'Refund'
             else 'Zero'
         end as payment_direction,
 
         case 
-            when sp.payment_amount between 0 and 50 then 'Small'
-            when sp.payment_amount between 50 and 200 then 'Medium'
-            when sp.payment_amount between 200 and 1000 then 'Large'
-            when sp.payment_amount > 1000 then 'Very Large'
+            when ps.payment_amount between 0 and 50 then 'Small'
+            when ps.payment_amount between 50 and 200 then 'Medium'
+            when ps.payment_amount between 200 and 1000 then 'Large'
+            when ps.payment_amount > 1000 then 'Very Large'
             else 'Negative'
         end as payment_size_category,
 
         -- Timing analysis
         case 
-            when sp.payment_date = sp.entry_date then 'Same Day'
-            when sp.payment_date < sp.entry_date then 'Backdated'
-            when sp.payment_date > sp.entry_date then 'Future Dated'
+            when ps.payment_date = ps.payment_entry_date then 'Same Day'
+            when ps.payment_date < ps.payment_entry_date then 'Backdated'
+            when ps.payment_date > ps.payment_entry_date then 'Future Dated'
         end as payment_timing,
 
         -- Boolean flags
-        case when sp.payment_type_id = 1 then true else false end as is_insurance_payment,
-        case when sp.payment_type_id = 0 then true else false end as is_patient_payment,
-        case when sp.payment_type_id = 4 then true else false end as is_adjustment,
-        case when sp.payment_type_id = 5 then true else false end as is_refund,
-        case when sp.payment_amount = 0 then true else false end as is_zero_payment,
-        case when sp.is_recurring_cc then true else false end as is_recurring_payment,
+        case when ps.payment_type_id = 1 then true else false end as is_insurance_payment,
+        case when ps.payment_type_id = 0 then true else false end as is_patient_payment,
+        case when ps.payment_type_id = 4 then true else false end as is_adjustment,
+        case when ps.payment_type_id = 5 then true else false end as is_refund,
+        case when ps.payment_amount = 0 then true else false end as is_zero_payment,
+        case when ps.is_recurring_cc then true else false end as is_recurring_payment,
 
-        -- Metadata
+        -- Metadata (using intermediate metadata)
         {{ standardize_mart_metadata(
-            primary_source_alias='sp',
+            primary_source_alias='ps',
             source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_created_by']
         ) }}
 
-    from source_payment sp
-    left join payment_splits ps
-        on sp.payment_id = ps.payment_id
+    from payment_splits ps
 ),
 
 -- 4. Final validation

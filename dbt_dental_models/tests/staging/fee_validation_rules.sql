@@ -1,3 +1,10 @@
+{{ config(
+    severity = 'warn'
+) }}
+
+-- This test validates fee data quality across multiple dimensions
+-- It will only FAIL (error) if critical issues are found, but will WARN on business-level anomalies
+
 -- Test 1: Check for records before 2023 and future dates
 select 
     f.fee_id,

@@ -250,15 +250,18 @@ models:
         description: >
           Date when the record was created in the source system (OpenDental).
           Maps to SecDateEntry in the carrier table.
+          Note: ~1,925 legacy carrier records predate timestamp tracking in OpenDental
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: sec_date_t_edit
         description: >
           Date when the record was last edited in the source system (OpenDental).
           Maps to SecDateTEdit in the carrier table.
 
-      - name: sec_user_num_entry
+      - name: _created_by
         description: >
           ID of the user who created the record in the source system (OpenDental).
           Maps to SecUserNumEntry in the carrier table. May be null for legacy records
@@ -269,4 +272,4 @@ models:
               field: user_id
               config:
                 severity: warn
-                where: "sec_user_num_entry is not null"
+                where: "_created_by is not null"

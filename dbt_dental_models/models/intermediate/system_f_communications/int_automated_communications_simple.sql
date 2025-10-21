@@ -30,7 +30,7 @@
     - Streamlined query structure for fast execution
 */
 
-WITH TemplateMatches AS (
+WITH template_matches AS (
     -- Pre-select the best template match per communication to avoid Cartesian product
     SELECT 
         flags.communication_id,
@@ -67,7 +67,7 @@ WITH TemplateMatches AS (
     {% endif %}
 ),
 
-AutomatedComms AS (
+automated_comms AS (
     SELECT
         -- Use the automated_communication_id from flags
         flags.automated_communication_id,
@@ -121,7 +121,7 @@ AutomatedComms AS (
     FROM {{ ref('int_automated_communication_flags_simple') }} flags
     INNER JOIN {{ ref('int_patient_communications_base') }} base
         ON flags.communication_id = base.communication_id
-    LEFT JOIN TemplateMatches tmpl
+    LEFT JOIN template_matches tmpl
         ON flags.communication_id = tmpl.communication_id
         AND tmpl.template_rank = 1  -- Only get the best template match
     
@@ -167,4 +167,4 @@ SELECT
     _created_at,
     updated_at,
     _transformed_at
-FROM AutomatedComms
+FROM automated_comms

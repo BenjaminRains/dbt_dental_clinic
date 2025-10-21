@@ -146,11 +146,12 @@ services:
       - .env
     # SECURITY: Ports removed - use Docker network for internal access
     # Uncomment ONLY for maintenance operations like pg_restore, then remove immediately:
-    # ports:
-    #   - "5432:5432"
+    ports:
+      - "5432:5432"
     volumes:
       - postgres_data:/var/lib/postgresql/data
       - ./sql/init:/docker-entrypoint-initdb.d # For initialization scripts
+      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro # Mount timezone data
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}

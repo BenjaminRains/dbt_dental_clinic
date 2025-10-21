@@ -71,8 +71,24 @@ class TestOpenDentalSchemaAnalyzerExtractionStrategy:
             # Mock find_incremental_columns to return empty list for small table
             analyzer.find_incremental_columns = lambda table_name, schema_info: []
             
-            # Act: Call determine_extraction_strategy() method
-            strategy = analyzer.determine_extraction_strategy(test_table, schema_info, {'estimated_row_count': 100})
+            # Mock performance characteristics for tiny table
+            mock_performance_chars = {
+                'performance_category': 'tiny',
+                'recommended_batch_size': 10000,
+                'needs_performance_monitoring': False,
+                'time_gap_threshold_days': 7,
+                'processing_priority': 'low',
+                'estimated_processing_time_minutes': 0.1,
+                'memory_requirements_mb': 16
+            }
+            
+            # Act: Call determine_extraction_strategy() method with performance_chars parameter
+            strategy = analyzer.determine_extraction_strategy(
+                test_table, 
+                schema_info, 
+                {'estimated_row_count': 100},
+                mock_performance_chars
+            )
             
             # Assert: Verify full table strategy is correctly determined when no incremental columns
             assert strategy == 'full_table'
@@ -112,8 +128,24 @@ class TestOpenDentalSchemaAnalyzerExtractionStrategy:
             # Mock find_incremental_columns to return timestamp columns for incremental table
             analyzer.find_incremental_columns = lambda table_name, schema_info: ['DateTStamp', 'SecDateTEdit']
             
-            # Act: Call determine_extraction_strategy() method
-            strategy = analyzer.determine_extraction_strategy(test_table, schema_info, size_info)
+            # Mock performance characteristics for medium table
+            mock_performance_chars = {
+                'performance_category': 'medium',
+                'recommended_batch_size': 50000,
+                'needs_performance_monitoring': True,
+                'time_gap_threshold_days': 30,
+                'processing_priority': 'high',
+                'estimated_processing_time_minutes': 2.5,
+                'memory_requirements_mb': 256
+            }
+            
+            # Act: Call determine_extraction_strategy() method with performance_chars parameter
+            strategy = analyzer.determine_extraction_strategy(
+                test_table, 
+                schema_info, 
+                size_info,
+                mock_performance_chars
+            )
             
             # Assert: Verify incremental strategy is correctly determined
             assert strategy == 'incremental' 

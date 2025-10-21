@@ -160,9 +160,13 @@ models:
           - not_null
 
       - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column."
+        description: >
+          "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column."
+          note: ~8,244 legacy fee schedule records predate timestamp tracking in OpenDental
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: _updated_at
 

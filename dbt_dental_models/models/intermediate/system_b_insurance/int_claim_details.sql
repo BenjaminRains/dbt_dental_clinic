@@ -1,5 +1,5 @@
-{{ config(        materialized='table',
-        
+{{ config(        
+        materialized='table',
         unique_key='claim_detail_id',
         on_schema_change='fail',
         indexes=[

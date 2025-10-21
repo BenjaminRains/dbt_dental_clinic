@@ -32,10 +32,10 @@ models:
           severity: "warn"
           identified_date: "2025-01-02"
           test: "different_providers"
-        - description: "28,467 patient records (87.1%) missing created_by_user_id due to historical data predating audit tracking implementation (~2020)"
+        - description: "28,467 patient records (87.1%) missing _created_by due to historical data predating audit tracking implementation (~2020)"
           severity: "warn"
           identified_date: "2025-01-02"
-          test: "not_null_stg_opendental__patient__created_by_user_id"
+          test: "not_null_stg_opendental__patient___created_by"
         - description: "29 patients have estimated_balance below -$1,000, indicating significant credit balances or data entry errors"
           severity: "warn"
           identified_date: "2025-01-02"
@@ -140,7 +140,8 @@ models:
           name: first_visit_date_not_future
           expression: "first_visit_date <= current_date OR first_visit_date IS NULL"
           config:
-            severity: error
+            severity: warn
+            description: "Future dates are expected for new patients with scheduled first appointments that haven't occurred yet"
       - dbt_utils.expression_is_true:
           name: deceased_datetime_not_future
           expression: "deceased_datetime <= current_timestamp OR deceased_datetime IS NULL"
@@ -282,12 +283,16 @@ models:
           Patient's preferred method for appointment confirmations:
           0 = None (no confirmations)
           2 = Email
+          3 = Phone call (rare - 1 patient, may overlap with value 8)
           4 = Text message
           6 = Other
-          8 = Phone call
+          8 = Phone call (standard)
+          Note: Value 3 appears to represent phone calls based on commlog Mode_=3,
+          but is rarely used. It may represent manual/outbound calls vs automated calls (8),
+          or could be a legacy/deprecated value. More common in PreferContactMethod (7 patients).
         tests:
           - accepted_values:
-              values: [0, 2, 4, 6, 8]
+              values: [0, 2, 3, 4, 6, 8]
       
       - name: preferred_contact_method
         description: >
@@ -430,7 +435,7 @@ models:
         tests:
           - not_null
       
-      - name: created_by_user_id
+      - name: _created_by
         description: "User who created the record in the source system (OpenDental), sourced from SecUserNumEntry. NULL for historical records created before audit tracking was implemented (~2020)."
         tests:
           - not_null:

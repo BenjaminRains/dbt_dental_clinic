@@ -246,7 +246,9 @@ models:
               where: "is_partial = true"
 
       - name: insurance_subscriber_id
-        description: Foreign key to the insurance subscriber. May reference subscribers that are no longer in the current inssub table.
+        description: |
+          Foreign key to the insurance subscriber. May reference subscribers that are no longer in the current inssub table.
+          Note: Some insurance payments reference subscribers that no longer exist in the inssub table.
         tests:
           - relationships:
               to: ref('stg_opendental__inssub')
@@ -254,15 +256,18 @@ models:
               where: "payment_date >= '2023-01-01'::date"
               config:
                 severity: warn
-                description: "Some insurance payments reference subscribers that no longer exist in the inssub table"
           - not_null
 
       - name: claim_id
-        description: Foreign key to the insurance claim
+        description: |
+          Foreign key to the insurance claim.
+          Note: 41,448 payment allocations reference deleted claims - retained for financial audit and reconciliation purposes.
         tests:
           - relationships:
               to: ref('stg_opendental__claim')
               field: claim_id
+              config:
+                severity: warn
           - not_null
 
       - name: plan_id
@@ -488,20 +493,20 @@ models:
                 description: "Found allowed_override_amount values outside expected range (0-10000). Extreme values like 252,252.0 indicate data entry errors similar to those documented in fee_model_quality_report.md."
 
       - name: group_id
-        description: Insurance group identifier from bluebook. May be null when no matching bluebook record exists.
+        description: |
+          Insurance group identifier from bluebook. May be null when no matching bluebook record exists.
+          Note: group_id should be non-null when bluebook data exists.
         tests:
           - not_null:
               where: "bluebook_payment_amount IS NOT NULL"
-              config:
-                description: "group_id should be non-null when bluebook data exists"
 
       - name: claim_type
-        description: Type of insurance claim from bluebook. May be null when no matching bluebook record exists.
+        description: |
+          Type of insurance claim from bluebook. May be null when no matching bluebook record exists.
+          Note: claim_type should be non-null when bluebook data exists.
         tests:
           - not_null:
               where: "bluebook_payment_amount IS NOT NULL"
-              config:
-                description: "claim_type should be non-null when bluebook data exists"
 
       - name: allowed_fee
         description: Current allowed fee amount from bluebook
@@ -511,20 +516,20 @@ models:
               max_value: 10000
 
       - name: allowed_fee_description
-        description: Description of allowed fee changes or adjustments
+        description: |
+          Description of allowed fee changes or adjustments.
+          Note: allowed_fee_description should be non-null when allowed_fee exists.
         tests:
           - not_null:
               where: "allowed_fee IS NOT NULL"
-              config:
-                description: "allowed_fee_description should be non-null when allowed_fee exists"
 
       - name: allowed_fee_updated_at
-        description: Timestamp when the allowed fee was last updated
+        description: |
+          Timestamp when the allowed fee was last updated.
+          Note: allowed_fee_updated_at should be non-null when allowed_fee exists.
         tests:
           - not_null:
               where: "allowed_fee IS NOT NULL"
-              config:
-                description: "allowed_fee_updated_at should be non-null when allowed_fee exists"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::timestamp"
               max_value: "current_timestamp"

@@ -24,12 +24,12 @@ WITH date_spine AS (
     ) }}
 ),
 
-DateSpine AS (
+date_spine_formatted AS (
     SELECT date_day::date as schedule_date
     FROM date_spine
 ),
 
-ProviderSchedule AS (
+provider_schedule AS (
     SELECT
         p.provider_id,
         p.provider_abbreviation as provider_name,
@@ -39,7 +39,7 @@ ProviderSchedule AS (
     WHERE p.is_hidden = false  -- false = not hidden, true = hidden
 ),
 
-AppointmentMetrics AS (
+appointment_metrics AS (
     SELECT
         DATE(apt.appointment_datetime) as schedule_date,
         apt.provider_id,
@@ -54,7 +54,7 @@ AppointmentMetrics AS (
     GROUP BY DATE(apt.appointment_datetime), apt.provider_id
 ),
 
-ProviderAvailability AS (
+provider_availability AS (
     SELECT
         pa.provider_id,
         pa.schedule_date,
@@ -68,7 +68,7 @@ ProviderAvailability AS (
     FROM {{ ref('int_provider_availability') }} pa
 ),
 
-DailySchedule AS (
+daily_schedule AS (
     SELECT
         md5(COALESCE(ps.provider_id::text, '') || COALESCE(ds.schedule_date::text, '')) as schedule_id,
         ds.schedule_date,
@@ -90,12 +90,12 @@ DailySchedule AS (
         COALESCE(pa.is_day_off, true) as is_day_off,
         COUNT(*) OVER (PARTITION BY ps.provider_id) as days_scheduled,
         COUNT(*) FILTER (WHERE NOT COALESCE(pa.is_day_off, true)) OVER (PARTITION BY ps.provider_id) as days_worked
-    FROM ProviderSchedule ps
-    CROSS JOIN DateSpine ds
-    LEFT JOIN AppointmentMetrics am
+    FROM provider_schedule ps
+    CROSS JOIN date_spine_formatted ds
+    LEFT JOIN appointment_metrics am
         ON ps.provider_id = am.provider_id
         AND ds.schedule_date = am.schedule_date
-    LEFT JOIN ProviderAvailability pa
+    LEFT JOIN provider_availability pa
         ON ps.provider_id = pa.provider_id
         AND ds.schedule_date = pa.schedule_date
     GROUP BY 
@@ -133,7 +133,7 @@ SELECT
     days_scheduled,
     days_worked,
     {{ standardize_intermediate_metadata(preserve_source_metadata=false) }}
-FROM DailySchedule
+FROM daily_schedule
 
 {% if is_incremental() %}
 WHERE schedule_date >= (SELECT MAX(schedule_date) FROM {{ this }})

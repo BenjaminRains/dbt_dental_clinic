@@ -43,13 +43,11 @@ Data Quality Notes:
 - Handles missing recall data with appropriate null handling
 - Accounts for appointment status variations (completed, no-show, broken)
 - Manages edge cases in interval calculations for new patients
-- Decodes OpenDental's encoded interval values to actual months:
-  * 393217/393216 (Prophy): 6 months
-  * 196609/196608 (Perio): 3 months
-  * 16777217 (4BW, 2BW): 6 months
-  * 83886081 (Pano, FMX): 12 months
-  * Other encoded values mapped to appropriate month intervals
-- Falls back to 6-month default for unknown or missing interval values
+- Uses int_recall_management intermediate model which handles:
+  * Corrupted default_interval values from OpenDental UI bug
+  * Maps corrupted values to expected intervals (6, 12, 18, 24 months)
+  * Provides data quality flags and validation
+  * Includes business logic for compliance tracking and priority scoring
 
 Performance Considerations:
 - Uses window functions for efficient interval calculations
@@ -61,8 +59,7 @@ Dependencies:
 - dim_date: Date dimension for temporal analysis
 - dim_patient: Patient demographics and characteristics
 - dim_provider: Provider and hygienist information
-- stg_opendental__recall: Recall scheduling and compliance data
-- stg_opendental__recalltype: Recall type definitions with proper interval values
+- int_recall_management: Recall scheduling and compliance data with business logic
 */
 
 -- 1. Base fact data
@@ -207,48 +204,38 @@ hygiene_categorized as (
     from hygiene_enhanced he
 ),
 
--- 7. Recall compliance data
+-- 7. Recall compliance data from intermediate model
 recall_scheduling as (
     select 
-        recall_stg.patient_id,
-        recall_stg.date_due as recall_date,
-        recall_stg.recall_type_id,
-        -- Decode encoded interval values to actual months
-        case 
-            when coalesce(rt.default_interval, 0) in (393217, 393216) then 6  -- Prophy: 6 months
-            when coalesce(rt.default_interval, 0) in (196609, 196608) then 3  -- Perio: 3 months
-            when coalesce(rt.default_interval, 0) in (16777217) then 6        -- 4BW, 2BW: 6 months
-            when coalesce(rt.default_interval, 0) in (83886081) then 12       -- Pano, FMX: 12 months
-            when coalesce(rt.default_interval, 0) in (262144) then 4          -- 4 months
-            when coalesce(rt.default_interval, 0) in (327680) then 5          -- 5 months
-            when coalesce(rt.default_interval, 0) in (786432) then 8          -- 8 months
-            when coalesce(rt.default_interval, 0) in (2359296) then 18        -- 18 months
-            when coalesce(rt.default_interval, 0) = 0 then 6                  -- Default for missing values
-            else 6                                                             -- Fallback to 6 months
-        end as interval_months,
-        recall_stg.date_scheduled,
-        recall_stg.is_disabled,
+        irm.patient_id,
+        irm.date_due as recall_date,
+        irm.recall_type_id,
+        irm.recall_interval_months as interval_months,  -- Already decoded in intermediate
+        irm.date_scheduled,
+        irm.is_disabled,
+        irm.recall_status_description,
+        irm.compliance_status,
+        irm.priority_score,
         -- Find closest hygiene appointment to recall date
         hd.appointment_date as closest_hygiene_date,
         hd.is_completed as recall_completed,
-        abs(hd.appointment_date::date - recall_stg.date_due::date) as days_from_recall_target,
-        case when hd.appointment_date::date between recall_stg.date_due::date - interval '30 days' 
-                and recall_stg.date_due::date + interval '60 days' then true else false end as recall_compliance
-    from {{ ref('stg_opendental__recall') }} recall_stg
-    left join {{ ref('stg_opendental__recalltype') }} rt
-        on recall_stg.recall_type_id = rt.recall_type_id
+        abs(hd.appointment_date::date - irm.date_due::date) as days_from_recall_target,
+        case when hd.appointment_date::date between irm.date_due::date - interval '30 days' 
+                and irm.date_due::date + interval '60 days' then true else false end as recall_compliance
+    from {{ ref('int_recall_management') }} irm
     left join hygiene_dimensions hd
-        on recall_stg.patient_id = hd.patient_id
+        on irm.patient_id = hd.patient_id
         and hd.appointment_date = (
             select hd2.appointment_date
             from hygiene_dimensions hd2
-            where hd2.patient_id = recall_stg.patient_id
-                and hd2.appointment_date::date >= recall_stg.date_due::date
+            where hd2.patient_id = irm.patient_id
+                and hd2.appointment_date::date >= irm.date_due::date
             order by hd2.appointment_date
             limit 1
         )
-    where recall_stg.is_disabled = false
-        and recall_stg.date_due::date >= current_date - interval '2 years'
+    where irm.is_disabled = false
+        and irm.date_due::date >= current_date - interval '2 years'
+        and irm.is_valid_recall = true
 ),
 
 -- 8. Final integration
@@ -311,6 +298,9 @@ final as (
         rs.recall_compliance as last_recall_compliance,
         rs.days_from_recall_target as days_from_last_recall_target,
         rs.interval_months as recommended_recall_interval,
+        rs.recall_status_description as last_recall_status,
+        rs.compliance_status as recall_compliance_status,
+        rs.priority_score as recall_priority_score,
         
         -- Business Categorization (from categorized CTE)
         hc.hygiene_status,

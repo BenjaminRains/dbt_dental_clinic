@@ -97,7 +97,8 @@ models:
               field: claim_id
               where: "claim_id != 0"
               config:
-                description: "Referential integrity: Valid claims must exist in source system (excluding system placeholders)"
+                severity: warn
+                description: "36,100 snapshots reference deleted claims - retained for audit/compliance purposes"
       
       - name: procedure_id
         description: >

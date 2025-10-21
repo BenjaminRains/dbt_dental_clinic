@@ -199,7 +199,7 @@ models:
             description: "System-generated and provider schedules must have employee_id = 0"
       
       - dbt_utils.expression_is_true:
-          expression: "EXISTS (SELECT 1 FROM staging.stg_opendental__scheduleop so WHERE so.schedule_id = schedule_id)"
+          expression: "EXISTS (SELECT 1 FROM {{ ref('stg_opendental__scheduleop') }} so WHERE so.schedule_id = schedule_id)"
           where: "schedule_type IN (1, 2)"
           name: operatory_required_for_schedules
           severity: warn

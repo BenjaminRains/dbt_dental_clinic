@@ -1,7 +1,7 @@
 -- Basic Data Quality Tests
 with patient_validation as (
     select * from {{ ref('stg_opendental__patient') }}
-    where patient_status != 2  -- Exclude inactive patients
+    where patient_status not in (2, 3, 4)  -- Exclude inactive, archived, and deceased patients
 ),
 
 validation_errors as (
@@ -17,9 +17,9 @@ validation_errors as (
                 
                 -- Basic demographic validations
                 when birth_date > current_date then 'Birth date cannot be in the future'
-                when birth_date < '1900-01-01' then 'Birth date seems too old'
+                when birth_date < '1900-01-01' and birth_date != '0001-01-01' then 'Birth date seems too old'
                 when age < 0 then 'Age cannot be negative'
-                when age > 120 and birth_date != '1900-01-01' then 'Age seems unusually high'
+                when age > 120 and birth_date not in ('1900-01-01', '0001-01-01') then 'Age seems unusually high'
                 when birth_date = '1900-01-01' and date_updated > current_timestamp 
                     then 'Default birth date with future update date'
                 
@@ -41,7 +41,7 @@ validation_errors as (
                      balance_61_90_days < 0 or balance_over_90_days < 0 then 'Negative aging balance'
                 
                 -- Contact preference validations
-                when preferred_confirmation_method not in (0, 2, 4, 8) then 'Invalid confirmation method'
+                when preferred_confirmation_method not in (0, 2, 3, 4, 8) then 'Invalid confirmation method'
                 when preferred_contact_method not in (0, 2, 3, 4, 5, 6, 8) then 'Invalid contact method'
                 when preferred_recall_method not in (0, 2, 4, 8) then 'Invalid recall method'
                 

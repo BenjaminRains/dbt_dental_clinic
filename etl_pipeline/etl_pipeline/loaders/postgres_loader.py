@@ -580,6 +580,7 @@ class PostgresLoader:
             logger.error(f"Error updating load status for {table_name}: {str(e)}")
             return False
 
+    @track_method
     def bulk_insert_optimized(self, table_name: str, rows_data: List[Dict], chunk_size: int = 25000, use_upsert: bool = True) -> bool:  # Further reduced from 50000 to 25000 to prevent timeouts
         """
         Optimized bulk INSERT using executemany with strategy-based chunk sizes.
@@ -784,10 +785,12 @@ class PostgresLoader:
             # Stream data from MySQL to PostgreSQL
             rows_loaded = 0
             batch_size = 10000
+            first_batch_processed = False  # Track if any batches were processed
             
             try:
                 for batch_data in self.stream_mysql_data(table_name, query, batch_size):
                     if batch_data:
+                        first_batch_processed = True  # Mark that we processed at least one batch
                         # Convert data types for the batch
                         converted_batch = []
                         for row in batch_data:
@@ -816,6 +819,49 @@ class PostgresLoader:
                                 'memory_used_mb': 0,
                                 'error': 'Failed to insert batch'
                             }
+                
+                # HYBRID FIX: If no batches were processed but analytics needs updating,
+                # fall back to full load from replication
+                if not first_batch_processed and not force_full:
+                    # Check if analytics needs updating
+                    needs_updating, _, _, _ = self._check_analytics_needs_updating(table_name)
+                    if needs_updating:
+                        logger.warning(f"Incremental query returned 0 rows for {table_name}, but analytics needs updating. Falling back to full load from replication.")
+                        # Build full load query
+                        replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+                        replication_db = replication_config.get('database', 'opendental_replication')
+                        full_query = f"SELECT * FROM `{replication_db}`.`{table_name}`"
+                        
+                        # Process full load via streaming
+                        for batch_data in self.stream_mysql_data(table_name, full_query, batch_size):
+                            if batch_data:
+                                first_batch_processed = True
+                                # Convert data types for the batch
+                                converted_batch = []
+                                for row in batch_data:
+                                    if self.schema_adapter is not None:
+                                        converted_row = self.schema_adapter.convert_row_data_types(table_name, row)
+                                    else:
+                                        converted_row = self._convert_data_types_for_test_environment(table_name, row)
+                                    converted_batch.append(converted_row)
+                                
+                                # Insert full load batch with upsert
+                                if self.bulk_insert_optimized(table_name, converted_batch, use_upsert=True):
+                                    rows_loaded += len(converted_batch)
+                                else:
+                                    logger.error(f"Failed to insert full load batch for {table_name}")
+                                    return False, {
+                                        'rows_loaded': rows_loaded,
+                                        'strategy_used': 'streaming',
+                                        'duration': time.time() - start_time,
+                                        'force_full_applied': force_full,
+                                        'primary_column': primary_column,
+                                        'last_primary_value': None,
+                                        'memory_used_mb': 0,
+                                        'error': 'Failed to insert full load batch'
+                                    }
+                        
+                        logger.info(f"HYBRID FIX: Successfully loaded {rows_loaded} rows for {table_name} via full load fallback")
                 
                 # Update load status with hybrid approach for tables with primary keys
                 table_config = self.get_table_config(table_name)
@@ -1235,6 +1281,7 @@ class PostgresLoader:
         
         return query
     
+    @track_method
     def _filter_valid_incremental_columns(self, table_name: str, columns: List[str]) -> List[str]:
         """
         Filter out columns with data quality issues.
@@ -1591,6 +1638,8 @@ class PostgresLoader:
             
             # Execute the load
             rows_loaded = 0
+            rows_processed = False  # Track if any rows were processed
+            
             with self.replication_engine.connect() as source_conn:
                 with self.analytics_engine.connect() as target_conn:
                     # Execute query and fetch results
@@ -1604,6 +1653,7 @@ class PostgresLoader:
                     batch = []
                     
                     for row in result:
+                        rows_processed = True  # Mark that we processed at least one row
                         # Convert row to dict and apply data type conversion
                         row_dict = self._convert_sqlalchemy_row_to_dict(row, column_names)
                         if self.schema_adapter is not None:
@@ -1647,6 +1697,68 @@ class PostgresLoader:
                                 'memory_used_mb': 0,
                                 'error': 'Failed to insert final batch'
                             }
+                    
+                    # HYBRID FIX: If no rows were processed but analytics needs updating,
+                    # fall back to full load from replication
+                    if not rows_processed and not force_full:
+                        # Check if analytics needs updating
+                        needs_updating, _, _, _ = self._check_analytics_needs_updating(table_name)
+                        if needs_updating:
+                            logger.warning(f"Incremental query returned 0 rows for {table_name}, but analytics needs updating. Falling back to full load from replication.")
+                            # Build full load query
+                            replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+                            replication_db = replication_config.get('database', 'opendental_replication')
+                            full_query = f"SELECT * FROM `{replication_db}`.`{table_name}`"
+                            
+                            # Re-execute with full load
+                            result = source_conn.execute(text(full_query))
+                            column_names = list(result.keys())
+                            
+                            # Process full load
+                            for row in result:
+                                rows_processed = True
+                                row_dict = self._convert_sqlalchemy_row_to_dict(row, column_names)
+                                if self.schema_adapter is not None:
+                                    converted_row = self.schema_adapter.convert_row_data_types(table_name, row_dict)
+                                else:
+                                    converted_row = self._convert_data_types_for_test_environment(table_name, row_dict)
+                                batch.append(converted_row)
+                                
+                                if len(batch) >= batch_size:
+                                    if self.bulk_insert_optimized(table_name, batch, use_upsert=True):
+                                        rows_loaded += len(batch)
+                                    else:
+                                        logger.error(f"Failed to insert full load batch for {table_name}")
+                                        return False, {
+                                            'rows_loaded': rows_loaded,
+                                            'strategy_used': 'standard',
+                                            'duration': time.time() - start_time,
+                                            'force_full_applied': force_full,
+                                            'primary_column': primary_column,
+                                            'last_primary_value': None,
+                                            'memory_used_mb': 0,
+                                            'error': 'Failed to insert full load batch'
+                                        }
+                                    batch = []
+                            
+                            # Insert remaining rows from full load
+                            if batch:
+                                if self.bulk_insert_optimized(table_name, batch, use_upsert=True):
+                                    rows_loaded += len(batch)
+                                else:
+                                    logger.error(f"Failed to insert final full load batch for {table_name}")
+                                    return False, {
+                                        'rows_loaded': rows_loaded,
+                                        'strategy_used': 'standard',
+                                        'duration': time.time() - start_time,
+                                        'force_full_applied': force_full,
+                                        'primary_column': primary_column,
+                                        'last_primary_value': None,
+                                        'memory_used_mb': 0,
+                                        'error': 'Failed to insert final full load batch'
+                                    }
+                            
+                            logger.info(f"HYBRID FIX: Successfully loaded {rows_loaded} rows for {table_name} via full load fallback")
             
             # Update load status with hybrid approach for tables with primary keys
             table_config = self.get_table_config(table_name)
@@ -2150,6 +2262,7 @@ class PostgresLoader:
     
 
     
+    @track_method
     def _build_enhanced_load_query(self, table_name: str, incremental_columns: List[str], 
                                   primary_column: Optional[str] = None,
                                   force_full: bool = False, incremental_strategy: str = 'or_logic') -> str:
@@ -3193,6 +3306,7 @@ class PostgresLoader:
         
         return converted_row
 
+    @track_method
     def stream_mysql_data_paginated(self, table_name: str, base_query: str, chunk_size: int = 25000):
         """
         Stream data from MySQL using proper LIMIT/OFFSET pagination to prevent duplication.
@@ -3272,6 +3386,7 @@ class PostgresLoader:
                     logger.error(f"All {max_retries} connection attempts failed for {table_name}: {e}")
                     raise
 
+    @track_method
     def _validate_incremental_load(self, table_name: str, incremental_columns: List[str], force_full: bool = False) -> Tuple[bool, Union[str, int]]:
         """
         Validate incremental load by checking if new data exists before processing.
@@ -3389,6 +3504,7 @@ class PostgresLoader:
             logger.error(f"Error getting last primary_value from replication for {table_name}: {str(e)}")
             return None, None
     
+    @track_method
     def _check_analytics_needs_updating(self, table_name: str) -> Tuple[bool, Optional[str], Optional[str], bool]:
         """
         Check if analytics database needs updating from replication database.
@@ -3562,6 +3678,7 @@ class PostgresLoader:
             logger.error(f"Error checking if analytics needs updating for {table_name}: {str(e)}")
             return False, None, None, False
 
+    @track_method
     def _update_load_status_hybrid(self, table_name: str, rows_loaded: int, 
                                   load_status: str = 'success', 
                                   last_timestamp: Optional[datetime] = None,

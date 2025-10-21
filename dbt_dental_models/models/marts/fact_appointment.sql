@@ -49,13 +49,15 @@
     - Complex CASE statements for status categorization may impact query performance
     
     Dependencies:
-    - stg_opendental__appointment: Primary source data for appointment details
+    - int_appointment_details: Intermediate model with all appointment data including clinic, hygienist, priority, 
+      confirmation status, seated datetime, pattern secondary, and color override fields
 */
 
--- 1. Source data retrieval
+-- 1. Source data retrieval from intermediate layer
 with source_appointment as (
-    select * from {{ ref('stg_opendental__appointment') }}
+    select * from {{ ref('int_appointment_details') }}
 ),
+
 
 -- 2. Business logic and calculations
 appointment_calculated as (
@@ -66,7 +68,7 @@ appointment_calculated as (
         -- Foreign Keys
         ab.patient_id,
         ab.provider_id,
-        ab.operatory_id,
+        ab.operatory as operatory_id,
         ab.appointment_type_id,
         ab.clinic_id,
         ab.hygienist_id,
@@ -74,12 +76,12 @@ appointment_calculated as (
         -- Date and Time Details
         date(ab.appointment_datetime) as appointment_date,
         ab.appointment_datetime,
-        ab.pattern as time_pattern,
+        '' as time_pattern,  -- pattern not available in intermediate
         case 
-            when ab.dismissed_datetime is not null and ab.appointment_datetime is not null
-            and ab.dismissed_datetime >= ab.appointment_datetime  -- Ensure logical sequence
-            then extract(epoch from (ab.dismissed_datetime - ab.appointment_datetime))/60
-            else null
+            when ab.check_out_time is not null and ab.appointment_datetime is not null
+            and ab.check_out_time >= ab.appointment_datetime  -- Ensure logical sequence
+            then extract(epoch from (ab.check_out_time - ab.appointment_datetime))/60
+            else ab.actual_length  -- Use pre-calculated length from intermediate
         end as appointment_length_minutes,
         extract(hour from ab.appointment_datetime) as appointment_hour,
         extract(dow from date(ab.appointment_datetime)) as day_of_week,
@@ -93,66 +95,42 @@ appointment_calculated as (
             when 6 then 'Saturday'
         end as day_of_week_name,
 
-        -- Appointment Status and Type
-        case ab.appointment_status
-            when 1 then 'Scheduled'
-            when 2 then 'Complete'
-            when 3 then 'ASAP'
-            when 4 then 'UnschedList'
-            when 5 then 'Planned'
-            when 6 then 'PtNote'
-            when 7 then 'PtNoteCompleted'
-            when 8 then 'Broken'
-            when 9 then 'None'
-            else 'Unknown'
-        end as appointment_status,
-        
-        case ab.appointment_type_id
-            when 0 then 'Patient'
-            when 1 then 'NewPatient'
-            when 2 then 'Hygiene'
-            when 3 then 'Prophy'
-            when 4 then 'Perio'
-            when 5 then 'Restorative'
-            when 6 then 'Crown'
-            when 7 then 'SRP'
-            when 8 then 'Denture'
-            when 9 then 'Other'
-            else 'Unknown'
-        end as appointment_type,
+        -- Appointment Status and Type (using intermediate model fields)
+        ab.appointment_status_desc as appointment_status,
+        coalesce(ab.appointment_type_name, 'Unknown') as appointment_type,
 
         ab.priority,
-        ab.confirmation_status,
+        ab.is_confirmed as confirmation_status,
         ab.is_hygiene as is_hygiene_appointment,
         ab.is_new_patient,
 
-        -- Scheduling Details (using actual staging column names)
-        ab.sec_date_t_entry as date_scheduled,
-        ab.arrival_datetime as date_time_arrived,
+        -- Scheduling Details
+        ab.created_at as date_scheduled,
+        ab.check_in_time as date_time_arrived,
         ab.seated_datetime as date_time_seated,
-        ab.dismissed_datetime as date_time_dismissed,
+        ab.check_out_time as date_time_dismissed,
         ab.seated_datetime as date_time_in_operatory,
         
         -- Calculate timing metrics with data quality validation
         case 
-            when ab.arrival_datetime is not null and ab.appointment_datetime is not null
-            and ab.arrival_datetime >= ab.appointment_datetime - interval '1 day'  -- Arrival can't be more than 1 day before appointment
-            and ab.arrival_datetime <= ab.appointment_datetime + interval '2 days'  -- Arrival can't be more than 2 days after appointment
-            then extract(epoch from (ab.arrival_datetime - ab.appointment_datetime))/60
+            when ab.check_in_time is not null and ab.appointment_datetime is not null
+            and ab.check_in_time >= ab.appointment_datetime - interval '1 day'  -- Arrival can't be more than 1 day before appointment
+            and ab.check_in_time <= ab.appointment_datetime + interval '2 days'  -- Arrival can't be more than 2 days after appointment
+            then extract(epoch from (ab.check_in_time - ab.appointment_datetime))/60
             else null
         end as arrival_delay_minutes,
         
         case 
-            when ab.seated_datetime is not null and ab.arrival_datetime is not null
-            and ab.seated_datetime >= ab.arrival_datetime  -- Ensure logical sequence
-            then extract(epoch from (ab.seated_datetime - ab.arrival_datetime))/60
+            when ab.seated_datetime is not null and ab.check_in_time is not null
+            and ab.seated_datetime >= ab.check_in_time  -- Ensure logical sequence
+            then extract(epoch from (ab.seated_datetime - ab.check_in_time))/60
             else null
         end as wait_time_minutes,
         
         case 
-            when ab.dismissed_datetime is not null and ab.seated_datetime is not null
-            and ab.dismissed_datetime >= ab.seated_datetime  -- Ensure logical sequence
-            then extract(epoch from (ab.dismissed_datetime - ab.seated_datetime))/60
+            when ab.check_out_time is not null and ab.seated_datetime is not null
+            and ab.check_out_time >= ab.seated_datetime  -- Ensure logical sequence
+            then extract(epoch from (ab.check_out_time - ab.seated_datetime))/60
             else null
         end as treatment_time_minutes,
 
@@ -172,29 +150,29 @@ appointment_calculated as (
         null::text[] as confirmation_statuses,
         false as has_confirmations,
 
-        -- Appointment Outcome Flags
-        case when ab.appointment_status in (2, 7) then true else false end as is_completed,
-        case when ab.appointment_status = 8 then true else false end as is_broken,
-        case when ab.appointment_status = 3 then true else false end as is_asap,
-        case when ab.arrival_datetime is null and date(ab.appointment_datetime) < current_date then true else false end as is_no_show,
+        -- Appointment Outcome Flags (using intermediate model logic)
+        ab.is_complete as is_completed,
+        case when ab.appointment_status = 5 then true else false end as is_broken,  -- 5 = Broken in intermediate
+        case when ab.appointment_status = 4 then true else false end as is_asap,     -- 4 = ASAP in intermediate
+        case when ab.check_in_time is null and date(ab.appointment_datetime) < current_date and not ab.is_complete then true else false end as is_no_show,
         case when date(ab.appointment_datetime) > current_date then true else false end as is_future_appointment,
 
         -- Business Logic Enhancement - Appointment Categorization
         case 
-            when ab.appointment_status in (2, 7) then 'Completed'
-            when ab.appointment_status = 8 then 'Cancelled'
-            when ab.appointment_status = 3 then 'ASAP'
-            when ab.arrival_datetime is null and date(ab.appointment_datetime) < current_date then 'No Show'
+            when ab.is_complete then 'Completed'
+            when ab.appointment_status = 5 then 'Cancelled'  -- 5 = Broken
+            when ab.appointment_status = 4 then 'ASAP'       -- 4 = ASAP
+            when ab.check_in_time is null and date(ab.appointment_datetime) < current_date and not ab.is_complete then 'No Show'
             else 'Scheduled'
         end as appointment_outcome_status,
         
         case 
-            when ab.dismissed_datetime is not null and ab.appointment_datetime is not null
-            and ab.dismissed_datetime >= ab.appointment_datetime then
+            when ab.check_out_time is not null and ab.appointment_datetime is not null
+            and ab.check_out_time >= ab.appointment_datetime then
                 case 
-                    when extract(epoch from (ab.dismissed_datetime - ab.appointment_datetime))/60 <= 30 then 'Short'
-                    when extract(epoch from (ab.dismissed_datetime - ab.appointment_datetime))/60 <= 60 then 'Standard'
-                    when extract(epoch from (ab.dismissed_datetime - ab.appointment_datetime))/60 <= 120 then 'Long'
+                    when extract(epoch from (ab.check_out_time - ab.appointment_datetime))/60 <= 30 then 'Short'
+                    when extract(epoch from (ab.check_out_time - ab.appointment_datetime))/60 <= 60 then 'Standard'
+                    when extract(epoch from (ab.check_out_time - ab.appointment_datetime))/60 <= 120 then 'Long'
                     else 'Extended'
                 end
             else 'Unknown'
@@ -205,10 +183,10 @@ appointment_calculated as (
         ab.pattern_secondary,
         ab.color_override,
 
-        -- Metadata
+        -- Metadata (using intermediate model metadata)
         {{ standardize_mart_metadata(
             primary_source_alias='ab',
-            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at', '_created_by']
+            source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']
         ) }}
 
     from source_appointment ab

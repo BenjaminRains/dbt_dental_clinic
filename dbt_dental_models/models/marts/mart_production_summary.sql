@@ -48,12 +48,14 @@ Dependencies:
 - fact_appointment: Core scheduling and appointment data
 - fact_claim: Billing and production amounts
 - fact_payment: Payment and collection data
+- int_procedure_complete: Procedure data with fees
+- int_payment_split: Payment split data with provider associations
 - dim_date: Date dimension for temporal analysis
 - dim_provider: Provider information and categorization
 - dim_procedure: Procedure categorization and analysis
 */
 
--- 1. Base fact data
+-- 1. Base fact data using intermediate models
 with production_base as (
     select 
         fa.appointment_date,
@@ -66,29 +68,29 @@ with production_base as (
         fa.is_hygiene_appointment,
         fa.appointment_length_minutes,
         
-        -- Get actual production from procedures
-        coalesce(pl.procedure_fee, 0) as actual_production,
+        -- Get actual production from procedures using intermediate
+        coalesce(pc.procedure_fee, 0) as actual_production,
         coalesce(fc.paid_amount, 0) as collected_amount,
         
         -- Procedure information
-        pl.procedure_code_id,
+        pc.procedure_code_id,
         dp.procedure_category_id,
         dp.is_hygiene,
         dp.base_units,
         
         -- Metadata from fact_appointment
         fa._loaded_at,
-        fa._created_at,
-        fa._updated_at
+        fa._updated_at,
+        fa._created_by
         
     from {{ ref('fact_appointment') }} fa
-    left join {{ ref('stg_opendental__procedurelog') }} pl
-        on fa.appointment_id = pl.appointment_id
-        and pl.procedure_date = fa.appointment_date
+    left join {{ ref('int_procedure_complete') }} pc
+        on fa.appointment_id = pc.appointment_id
+        and pc.procedure_date = fa.appointment_date
     left join {{ ref('fact_claim') }} fc
-        on pl.procedure_id = fc.procedure_id
+        on pc.procedure_id = fc.procedure_id
     left join {{ ref('dim_procedure') }} dp
-        on pl.procedure_code_id = dp.procedure_code_id
+        on pc.procedure_code_id = dp.procedure_code_id
     where fa.appointment_date is not null
 ),
 
@@ -119,24 +121,20 @@ date_dimension as (
     from {{ ref('dim_date') }}
 ),
 
--- 4. Payment metrics aggregation (through paysplit to get provider associations)
+-- 4. Payment metrics aggregation using intermediate payment splits
 payment_metrics_raw as (
     select 
-        p.payment_date,
-        coalesce(pl.provider_id, ps.provider_id) as provider_id,  -- Get provider from procedurelog or paysplit
-        coalesce(p.clinic_id, 0) as clinic_id,  -- Handle NULL clinic_id
-        sum(case when p.payment_type_id = 69 then ps.split_amount else 0 end) as patient_payments,
-        sum(case when p.payment_type_id = 71 then ps.split_amount else 0 end) as insurance_payments,
+        ps.payment_date,
+        ps.provider_id,
+        coalesce(ps.clinic_id, 0) as clinic_id,  -- Handle NULL clinic_id
+        sum(case when ps.payment_type_id = 69 then ps.split_amount else 0 end) as patient_payments,
+        sum(case when ps.payment_type_id = 71 then ps.split_amount else 0 end) as insurance_payments,
         0.0 as adjustments,  -- Adjustments handled separately below
-        count(distinct p.payment_id) as payment_transaction_count
-    from {{ ref('stg_opendental__payment') }} p
-    inner join {{ ref('stg_opendental__paysplit') }} ps
-        on p.payment_id = ps.payment_id
-    left join {{ ref('stg_opendental__procedurelog') }} pl
-        on ps.procedure_id = pl.procedure_id
-    where p.payment_date is not null
-        and coalesce(pl.provider_id, ps.provider_id) is not null  -- Only include records with valid provider
-    group by p.payment_date, coalesce(pl.provider_id, ps.provider_id), coalesce(p.clinic_id, 0)
+        count(distinct ps.payment_id) as payment_transaction_count
+    from {{ ref('int_payment_split') }} ps
+    where ps.payment_date is not null
+        and ps.provider_id is not null  -- Only include records with valid provider
+    group by ps.payment_date, ps.provider_id, coalesce(ps.clinic_id, 0)
     
     UNION ALL
     
@@ -201,8 +199,8 @@ production_aggregated as (
         
         -- Metadata (use most recent values for aggregated data)
         max(pb._loaded_at) as _loaded_at,
-        max(pb._created_at) as _created_at,
-        max(pb._updated_at) as _updated_at
+        max(pb._updated_at) as _updated_at,
+        max(pb._created_by) as _created_by
         
     from production_base pb
     group by pb.appointment_date, pb.provider_id, pb.clinic_id
@@ -298,7 +296,7 @@ final as (
         -- Metadata
         {{ standardize_mart_metadata(
             primary_source_alias='pe',
-            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+            source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']
         ) }}
         
     from production_enhanced pe

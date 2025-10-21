@@ -13,13 +13,26 @@
     2. Enriches with provider information
     3. Calculates appointment metrics
     4. Standardizes status descriptions
+    5. Includes all appointment attributes needed by downstream marts
+    
+    Fields added for mart layer consumption:
+    - clinic_id: Clinic/location identifier
+    - hygienist_id: Hygienist assigned to appointment
+    - priority: Appointment priority level
+    - confirmation_status: Appointment confirmation code
+    - seated_datetime: When patient was seated in operatory
+    - pattern_secondary: Secondary time pattern for appointments
+    - color_override: Custom color override for appointment display
 */
 
-WITH AppointmentBase AS (
+WITH appointment_base AS (
     SELECT
         apt.appointment_id,
         apt.patient_id,
         apt.provider_id,
+        apt.clinic_id,
+        apt.hygienist_id,
+        apt.priority,
         apt.appointment_datetime,
         apt.appointment_datetime + 
             INTERVAL '1 minute' * (
@@ -30,12 +43,15 @@ WITH AppointmentBase AS (
         apt.confirmation_status as confirmed,
         apt.operatory_id as operatory,
         apt.pattern,
+        apt.pattern_secondary,
         {{ calculate_pattern_length('apt.pattern') }} as pattern_length,
         apt.note,
         apt.is_hygiene,
         apt.is_new_patient,
         apt.arrival_datetime as check_in_time,
+        apt.seated_datetime,
         apt.dismissed_datetime as check_out_time,
+        apt.color_override,
         CASE
             WHEN apt.arrival_datetime IS NOT NULL 
             AND apt.dismissed_datetime IS NOT NULL
@@ -109,7 +125,7 @@ WITH AppointmentBase AS (
     {% endif %}
 ),
 
-AppointmentTypes AS (
+appointment_types AS (
     SELECT
         at.appointment_type_id,
         at.appointment_type_name,
@@ -118,7 +134,7 @@ AppointmentTypes AS (
     FROM {{ ref('stg_opendental__appointmenttype') }} at
 ),
 
-ProviderInfo AS (
+provider_info AS (
     SELECT
         p.provider_id,
         p.provider_abbreviation as provider_abbr,
@@ -128,7 +144,7 @@ ProviderInfo AS (
     FROM {{ ref('stg_opendental__provider') }} p
 ),
 
-PatientInfo AS (
+patient_info AS (
     SELECT
         pt.patient_id,
         pt.preferred_name,
@@ -137,7 +153,7 @@ PatientInfo AS (
     FROM {{ ref('stg_opendental__patient') }} pt
 ),
 
-HistoricalAppointments AS (
+historical_appointments AS (
     SELECT
         patient_id,
         appointment_id,
@@ -178,6 +194,9 @@ SELECT
     ab.appointment_id,
     ab.patient_id,
     ab.provider_id,
+    ab.clinic_id,
+    ab.hygienist_id,
+    ab.priority,
     ab.appointment_datetime,
     ab.appointment_end_datetime,
     ab.appointment_type_id,
@@ -201,7 +220,10 @@ SELECT
     ab.is_new_patient,
     ab.note,
     ab.operatory,
+    ab.pattern_secondary,
+    ab.color_override,
     ab.check_in_time,
+    ab.seated_datetime,
     ab.check_out_time,
     ab.actual_length,
     CASE
@@ -233,14 +255,14 @@ SELECT
         primary_source_alias='ab',
         source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']
     ) }}
-FROM AppointmentBase ab
-LEFT JOIN AppointmentTypes at
+FROM appointment_base ab
+LEFT JOIN appointment_types at
     ON ab.appointment_type_id = at.appointment_type_id
-LEFT JOIN ProviderInfo pi
+LEFT JOIN provider_info pi
     ON ab.provider_id = pi.provider_id
-LEFT JOIN PatientInfo pat
+LEFT JOIN patient_info pat
     ON ab.patient_id = pat.patient_id
-LEFT JOIN HistoricalAppointments ha
+LEFT JOIN historical_appointments ha
     ON ab.appointment_id = ha.appointment_id
     AND ha.history_rank = 1  -- Only get the latest history record
     AND ha.action_type IN (1, 4) -- Rescheduled or Cancelled
