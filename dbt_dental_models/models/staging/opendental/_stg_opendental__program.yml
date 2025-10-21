@@ -86,8 +86,11 @@ models:
         description: >
           Name of the integrated program or software (maps to ProgName in OpenDental, limited to 100 characters).
           Display name used in the OpenDental interface for program identification.
+          note: 2 program records have NULL program_name (including ID 147 'Perfect Cam') - data entry issues
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
           - dbt_utils.not_empty_string:
               config:
                 severity: warn

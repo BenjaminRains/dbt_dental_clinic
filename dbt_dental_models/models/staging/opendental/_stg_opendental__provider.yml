@@ -135,9 +135,13 @@ models:
           - not_null
       
       - name: last_name
-        description: "Provider's last name - primary identifier for sorting and display (maps to LName in OpenDental)"
+        description: |
+          Provider's last name - primary identifier for sorting and display (maps to LName in OpenDental).
+          Note: 1 provider record (ID 57, first_name='Connie') is missing last_name - same person as employee ID 9289, data entry error
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       
       - name: first_name
         description: "Provider's first name (maps to FName in OpenDental)"

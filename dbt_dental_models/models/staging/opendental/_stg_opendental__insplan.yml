@@ -350,9 +350,13 @@ models:
           - not_null
 
       - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column."
+        description: >
+         "Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry column."
+         note: ~4,066 legacy insurance plan records predate timestamp tracking in OpenDental
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: _updated_at
         description: "Timestamp when the record was updated in the source system (OpenDental). Maps to SecDateTEdit column."

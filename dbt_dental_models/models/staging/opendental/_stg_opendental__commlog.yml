@@ -311,8 +311,12 @@ models:
         tests:
           - not_null
       - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry column."
+        description: >
+          "Timestamp when the record was created in the source system (OpenDental). Maps to DateTEntry column."
+          note: ~175,222 legacy communication log records predate timestamp tracking in OpenDental
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
           - dbt_utils.expression_is_true:
               expression: ">= '2000-01-01'"

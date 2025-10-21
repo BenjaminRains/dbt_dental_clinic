@@ -216,13 +216,14 @@ models:
           412 = Newer payment type (187 payments), avg $199 - recent payment method
           72 = Refunds (50 payments), always negative - patient refunds
           634 = New type since Sept 2024 (16 payments), avg $6,009 - latest payment category
+          676 = New type since Sept 2025 (1 payment: ID 923656, $0.11) - latest payment category
           574 = Very high value (6 payments), avg $26,071 - exceptional transactions
           417 = Special cases (6 payments), avg $2,967 - unique payment situations
         tests:
           - accepted_values:
-              values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634]
+              values: [0, 69, 70, 71, 72, 391, 412, 417, 574, 634, 676]
               config:
-                severity: warn
+                severity: error
                 where: "payment_type_id IS NOT NULL"
       
       - name: deposit_id

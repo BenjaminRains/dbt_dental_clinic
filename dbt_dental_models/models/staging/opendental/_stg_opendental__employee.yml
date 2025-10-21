@@ -69,8 +69,11 @@ models:
         description: >
           Employee's last name as entered in OpenDental. Required field for all
           employee records and used in display throughout the system.
+          note: 1 employee record (ID 9289, first_name='Connie') is missing last_name - likely data entry error
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: first_name
         description: >

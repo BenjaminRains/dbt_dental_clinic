@@ -150,7 +150,9 @@ models:
           - not_null
 
       - name: procedure_category_id
-        description: "Foreign key to the procedure category - determines the clinical classification of the procedure"
+        description: |
+          Foreign key to the procedure category - determines the clinical classification of the procedure.
+          Note: New categories added Oct 2025: 665 (custom 'Clo' code), 667 (13 preventive/sealant D1500 series), 668 (2 oral surgery/ortho codes)
         tests:
           - not_null
           - relationships:
@@ -158,9 +160,10 @@ models:
               field: definition_id
               severity: warn
           - accepted_values:
-              values: [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 85, 250, 251, 260, 300, 301, 540, 548, 622]
+              values: [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 85, 250, 251, 260, 300, 301, 540, 548, 622, 665, 667, 668]
               quote: false
-              severity: warn
+              config:
+                severity: error
 
       - name: graphic_type_id
         description: "Foreign key to graphic type - determines visual representation in dental software (maps to GTypeNum in OpenDental)"

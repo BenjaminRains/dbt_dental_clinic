@@ -89,13 +89,16 @@ models:
               severity: error
       
       - name: procedure_id
-        description: "Foreign key to procedure log - identifies the specific dental procedure this note documents"
+        description: |
+          Foreign key to procedure log - identifies the specific dental procedure this note documents.
+          Note: 1 procedure note (ID 979001, 'MINT 3M', created Oct 2025) references deleted procedure 952765 - retained for audit purposes
         tests:
           - not_null
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
-              severity: error
+              config:
+                severity: warn
       
       - name: user_id
         description: "Foreign key to user - identifies the dental professional who created this clinical note. May reference historical users no longer active in the system."

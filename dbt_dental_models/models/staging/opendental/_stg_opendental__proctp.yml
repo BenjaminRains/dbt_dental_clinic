@@ -419,7 +419,7 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_of_type:
-              column_type: timestamp without time zone
+              column_type: timestamp with time zone
 
       - name: _updated_at
         description: >
