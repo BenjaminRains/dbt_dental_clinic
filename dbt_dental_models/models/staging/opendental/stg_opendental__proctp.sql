@@ -20,8 +20,7 @@ renamed_columns as (
             {'source': '"PatNum"', 'target': 'patient_id'},
             {'source': '"ProcNumOrig"', 'target': 'procedure_id_orig'},
             {'source': '"ProvNum"', 'target': 'provider_id'},
-            {'source': '"ClinicNum"', 'target': 'clinic_id'},
-            {'source': '"SecUserNumEntry"', 'target': 'user_num_entry'}
+            {'source': '"ClinicNum"', 'target': 'clinic_id'}
         ]) }},
         
         -- Treatment Plan Attributes
