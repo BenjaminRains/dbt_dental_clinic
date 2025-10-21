@@ -1,7 +1,18 @@
 # ToothInitial Data Quality Issues: Empty Tooth Number
 
+## ⚠️ CRITICAL UPDATE (October 20, 2025)
+**This is an ONGOING DATA QUALITY ISSUE requiring immediate action!**
+
+- **Current Count:** 360 records (up from 271)
+- **Recent Activity:** 279 records (77.5%) were created or updated in 2024-2025
+- **Latest Record:** October 13, 2025 (LAST WEEK!)
+- **Status:** Staff are actively entering incomplete records RIGHT NOW
+- **Severity:** ERROR - Blocking dbt builds until resolved
+
 ## Issue Summary
-During data quality checks, we identified **271 records** in the `toothinitial` table where the `tooth_num` field is empty. According to business rules, every `toothinitial` record should be associated with a specific tooth number. These records violate that rule and represent a data quality concern.
+During data quality checks, we identified **360 records** in the `toothinitial` table where the `tooth_num` field is empty or NULL. According to business rules, every `toothinitial` record should be associated with a specific tooth number. These records violate that rule and represent a data quality concern.
+
+**This is NOT legacy data** - the majority of these records are recent, indicating an active workflow problem or lack of form validation in OpenDental.
 
 ## Business Rules for Interpreting `toothinitial`
 - **Every record must reference a specific tooth**: Each `toothinitial` record must have a valid `tooth_num` (e.g., 1–32 for adult teeth, A–T for primary teeth, or other accepted codes).
@@ -30,13 +41,52 @@ During data quality checks, we identified **271 records** in the `toothinitial` 
 - **Step 2:** Check the Ortho Chart or Tooth Initials module for entries with no associated tooth number, or look for blank/orphan lines.
 - **Step 3:** These records may also be visible in the audit log or raw data viewer, but will not be linked to a specific tooth in the odontogram.
 
-## Root Cause Hypothesis
-- These records are likely the result of a specific workflow, batch process, or legacy data import that did not require or capture a tooth number.
-- They are not systematically linked to extractions, missing teeth, or other clinical events.
+## Root Cause Analysis (Updated Oct 2025)
+**Previous Hypothesis (Incorrect):**
+- ~~These records are likely the result of legacy data import~~ 
 
-## Recommended Actions
+**Current Finding:**
+- **77.5% of records created in 2024-2025** - This is NOT a legacy issue
+- **Active workflow problem:** Staff are entering records without tooth numbers TODAY
+- **Missing form validation:** OpenDental UI allows NULL tooth numbers to be saved
+- **Training gap:** Staff may not understand that tooth number is mandatory
+- **Possible UI confusion:** Form may not clearly indicate tooth number is required
+- Records are not systematically linked to extractions, missing teeth, or other clinical events
+
+## Immediate Action Required
+**Priority: HIGH - Must be resolved within 1 week**
+
+### 1. Data Cleanup (Immediate)
+- Fix all 360 existing records with missing tooth numbers
+- Either assign valid tooth numbers or delete incomplete records
+- Coordinate with clinical staff to identify which teeth these records were intended for
+
+### 2. Staff Training (This Week)
+- Train all staff who enter orthodontic records
+- Emphasize that tooth number is MANDATORY for every toothinitial record
+- Review proper workflow for recording tooth initial conditions
+- Share examples of correct vs. incorrect entries
+
+### 3. System Validation (Within 1 Week)
+- Add form validation in OpenDental to prevent NULL tooth number entries
+- Make tooth_num a required field in the UI
+- Consider dropdown selection instead of free text to prevent errors
+- Test validation with staff before deploying
+
+### 4. Monitoring (Ongoing)
+- dbt tests will continue to ERROR if new records are created without tooth numbers
+- Weekly review of any new violations
+- Track which staff members need additional training
+
+## Recommended Actions (Original)
 - **Short-term:** Exclude these records from analytics and reporting that require a valid tooth number.
-- **Long-term:** Investigate the workflow or process that creates these records and update the system to prevent creation of `toothinitial` records without a valid tooth number.
+- **Long-term:** ~~Investigate the workflow or process that creates these records and update the system to prevent creation of `toothinitial` records without a valid tooth number.~~ **[COMPLETED ABOVE - NOW ACTIONABLE]**
 
 ## Summary Statement for Stakeholders
-> The presence of `toothinitial` records with empty tooth numbers is a data quality issue, not a reflection of actual missing teeth. These records should be excluded from clinical analytics and their creation process should be reviewed and corrected. 
+> **URGENT:** The presence of 360 `toothinitial` records with empty tooth numbers is an **active, ongoing data quality issue** that requires immediate intervention. With 77.5% of these records created in 2024-2025 (latest: October 13, 2025), staff are currently entering incomplete data. This is NOT legacy data. Immediate actions required: 1) Clean up 360 existing records, 2) Train staff on proper data entry, 3) Add form validation in OpenDental to prevent future occurrences. dbt builds will continue to ERROR until this is resolved.
+
+## Test Configuration
+- **dbt Test:** `not_null` on `tooth_num` column
+- **Severity:** ERROR (blocking builds)
+- **Location:** `models/staging/opendental/_stg_opendental__toothinitial.yml`
+- **Last Updated:** October 20, 2025 
