@@ -199,4 +199,21 @@ def mock_dbt_models():
         'staging': ['stg_opendental__patient', 'stg_opendental__appointment', 'stg_opendental__procedurelog'],
         'mart': ['dim_patient', 'dim_appointment', 'fact_procedures'],
         'intermediate': ['int_patient_appointments', 'int_procedure_summary']
-    } 
+    }
+
+
+@pytest.fixture
+def mock_environment_variables():
+    """
+    Placeholder fixture for schema analyzer tests.
+    
+    Environment variables are already set up by the autouse fixture 
+    'setup_test_environment' in env_fixtures.py. This fixture exists 
+    only to satisfy test signatures that expect it as a parameter.
+    
+    Returns:
+        None: Environment is already configured by autouse fixture
+    """
+    # Environment variables are already set by setup_test_environment (autouse=True)
+    # This fixture is just a placeholder for backward compatibility
+    pass 

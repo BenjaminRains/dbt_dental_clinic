@@ -508,13 +508,14 @@ class TestOpenDentalSchemaAnalyzerIncrementalStrategy:
             assert isinstance(incremental_columns, list)
             assert len(incremental_columns) <= 3  # Limited to top 3
             
-            # Verify that DateTStamp is prioritized first (highest priority)
+            # Verify that PatNum (auto-incrementing primary key) is prioritized first (highest priority)
+            # The refactored code correctly adds primary keys first for auto-incrementing tables
             if len(incremental_columns) > 0:
-                assert incremental_columns[0] == 'DateTStamp'
+                assert incremental_columns[0] == 'PatNum'  # Changed: primary key has highest priority
             
-            # Verify that SecDateTEdit is prioritized second
+            # Verify that DateTStamp is prioritized second (timestamp-based priority)
             if len(incremental_columns) > 1:
-                assert incremental_columns[1] == 'SecDateTEdit'
+                assert incremental_columns[1] == 'DateTStamp'
 
     def test_generate_complete_configuration_with_incremental_strategy(self, mock_settings_with_dict_provider, mock_schema_data, mock_size_data, mock_dbt_models, mock_environment_variables):
         """

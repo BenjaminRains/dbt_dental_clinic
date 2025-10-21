@@ -135,11 +135,15 @@ class TestIncrementalStrategyIntegration:
             for col_name in incremental_columns:
                 assert col_name in schema_info['columns']
                 
-                # Verify that identified columns have timestamp or datetime data types only
+                # Verify that identified columns are either timestamp/datetime OR auto-incrementing primary keys
                 col_info = schema_info['columns'][col_name]
                 col_type = str(col_info['type']).lower()
-                assert any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime']), \
-                    f"Column {col_name} with type {col_type} should be a timestamp or datetime type"
+                is_primary_key = col_info.get('primary_key', False)
+                is_timestamp = any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime'])
+                is_auto_increment = any(int_type in col_type for int_type in ['int', 'bigint']) and is_primary_key
+                
+                assert is_timestamp or is_auto_increment, \
+                    f"Column {col_name} with type {col_type} should be timestamp/datetime or auto-incrementing PK"
             
             # Log the results for debugging
             print(f"Table {table_name}: Found {len(incremental_columns)} timestamp columns: {incremental_columns}")
@@ -183,16 +187,20 @@ class TestIncrementalStrategyIntegration:
             # Act: Call find_incremental_columns() method with production schema
             incremental_columns = analyzer.find_incremental_columns(table_name, schema_info)
             
-            # Assert: Verify data-driven approach finds timestamp and datetime columns by data type
+            # Assert: Verify data-driven approach finds timestamp/datetime columns or auto-incrementing PKs
             for col_name in incremental_columns:
                 col_info = schema_info['columns'][col_name]
                 col_type = str(col_info['type']).lower()
+                is_primary_key = col_info.get('primary_key', False)
                 
-                # Verify it's a timestamp or datetime data type
+                # Verify it's either a timestamp/datetime OR an auto-incrementing primary key
                 is_timestamp = any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime'])
-                assert is_timestamp, f"Column {col_name} with type {col_type} should be a timestamp or datetime type"
+                is_auto_increment_pk = any(int_type in col_type for int_type in ['int', 'bigint']) and is_primary_key
                 
-                # Track what timestamp data types we found
+                assert is_timestamp or is_auto_increment_pk, \
+                    f"Column {col_name} with type {col_type} should be timestamp/datetime or auto-incrementing PK"
+                
+                # Track what data types we found
                 if 'timestamp' in col_type:
                     timestamp_data_types_found.add('timestamp')
                 elif 'datetime' in col_type:
@@ -299,19 +307,31 @@ class TestIncrementalStrategyIntegration:
             for col_name in incremental_columns:
                 assert col_name in schema_info['columns']
                 
-                # Verify that identified columns have timestamp or datetime data types
+                # Verify columns are either timestamp/datetime OR auto-incrementing primary keys
                 col_info = schema_info['columns'][col_name]
                 col_type = str(col_info['type']).lower()
-                assert any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime']), \
-                    f"Column {col_name} with type {col_type} should be a timestamp or datetime type"
+                is_primary_key = col_info.get('primary_key', False)
+                is_timestamp = any(timestamp_type in col_type for timestamp_type in ['timestamp', 'datetime'])
+                is_auto_increment_pk = any(int_type in col_type for int_type in ['int', 'bigint']) and is_primary_key
+                
+                assert is_timestamp or is_auto_increment_pk, \
+                    f"Column {col_name} with type {col_type} should be timestamp/datetime or auto-incrementing PK"
             
             # Log the results for debugging
             print(f"Table {table_name}: Found {len(incremental_columns)} incremental columns: {incremental_columns}")
             
-            # Verify prioritization (if we have multiple columns, DateTStamp should be first)
-            if len(incremental_columns) > 0 and 'DateTStamp' in incremental_columns:
-                assert incremental_columns[0] == 'DateTStamp', \
-                    f"DateTStamp should be prioritized first in {table_name}"
+            # Verify prioritization: auto-incrementing PKs should come first, then DateTStamp
+            primary_keys = schema_info.get('primary_keys', [])
+            if len(incremental_columns) > 0 and primary_keys:
+                primary_key = primary_keys[0]
+                # If primary key is in incremental columns, it should be first (auto-incrementing PK)
+                if primary_key in incremental_columns:
+                    assert incremental_columns[0] == primary_key, \
+                        f"Auto-incrementing PK {primary_key} should be prioritized first in {table_name}"
+                # Otherwise, DateTStamp should be first if present
+                elif 'DateTStamp' in incremental_columns:
+                    assert incremental_columns[0] == 'DateTStamp', \
+                        f"DateTStamp should be prioritized first in {table_name} (no PK in incremental columns)"
 
     def setup_method(self, method):
         """Set up each test method with proper isolation."""

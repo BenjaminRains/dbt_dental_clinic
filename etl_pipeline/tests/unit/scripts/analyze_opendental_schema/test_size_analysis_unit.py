@@ -77,17 +77,22 @@ class TestOpenDentalSchemaAnalyzerSizeAnalysis:
             mock_conn_manager.return_value = mock_conn_manager_instance
             
             # Mock execute_with_retry to return our test data
+            # The refactored code uses _query_table_metrics which calls fetchone() to get a row with 4 values
             def mock_execute_with_retry(query):
                 mock_result = Mock()
-                if 'TABLE_ROWS' in query:
-                    # Return estimated row count
-                    mock_result.scalar.return_value = test_size['estimated_row_count']
-                elif 'information_schema.tables' in query:
-                    # Return size in MB
-                    mock_result.scalar.return_value = test_size['size_mb']
+                if 'information_schema.tables' in query and 'TABLE_ROWS' in query:
+                    # Return row with: estimated_rows, data_length, index_length, size_mb
+                    data_length = int(test_size['size_mb'] * 1024 * 1024 * 0.8)  # Estimate data_length
+                    index_length = int(test_size['size_mb'] * 1024 * 1024 * 0.2)  # Estimate index_length
+                    mock_result.fetchone.return_value = (
+                        test_size['estimated_row_count'],  # estimated_rows
+                        data_length,  # data_length
+                        index_length,  # index_length
+                        test_size['size_mb']  # size_mb
+                    )
                 else:
-                    # Return 0 for other queries
-                    mock_result.scalar.return_value = 0
+                    # Return empty result for other queries
+                    mock_result.fetchone.return_value = None
                 return mock_result
             
             mock_conn_manager_instance.execute_with_retry.side_effect = mock_execute_with_retry

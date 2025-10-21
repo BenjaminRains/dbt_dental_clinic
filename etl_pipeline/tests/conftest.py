@@ -296,12 +296,12 @@ from tests.fixtures.test_data_definitions import (
 )
 
 # Import analyze_opendental_schema fixtures for schema analyzer tests
-from tests.fixtures.mock_utils import mock_environment_variables
 from tests.fixtures.config_fixtures import test_settings as mock_settings_with_dict_provider
 
 # Import schema analyzer fixtures from centralized location
 from tests.fixtures.schema_analyzer_fixtures import (
     mock_schema_data,
     mock_size_data,
-    mock_dbt_models
+    mock_dbt_models,
+    mock_environment_variables
 )

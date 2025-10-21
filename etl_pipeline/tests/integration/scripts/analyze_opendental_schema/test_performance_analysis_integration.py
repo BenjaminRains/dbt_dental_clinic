@@ -146,7 +146,7 @@ class TestPerformanceAnalysisIntegration:
         size_info = analyzer.get_table_size_info('patient')
         
         # Act: Call performance analysis method with production data
-        performance_chars = analyzer.analyze_table_performance_characteristics('patient', schema_info, size_info)
+        performance_chars = analyzer.get_table_performance_profile('patient', schema_info, size_info)
         
         # Assert: Validate performance characteristics
         assert 'performance_category' in performance_chars
@@ -209,7 +209,7 @@ class TestPerformanceAnalysisIntegration:
             try:
                 schema_info = analyzer.get_table_schema(table_name)
                 size_info = analyzer.get_table_size_info(table_name)
-                performance_chars = analyzer.analyze_table_performance_characteristics(table_name, schema_info, size_info)
+                performance_chars = analyzer.get_table_performance_profile(table_name, schema_info, size_info)
                 performance_results[table_name] = performance_chars
             except Exception as e:
                 print(f"Skipping table {table_name} due to error: {e}")
@@ -276,7 +276,7 @@ class TestPerformanceAnalysisIntegration:
         
         # Test that performance analysis can handle error information gracefully
         try:
-            performance_chars = analyzer.analyze_table_performance_characteristics('non_existent_table', schema_info, size_info)
+            performance_chars = analyzer.get_table_performance_profile('non_existent_table', schema_info, size_info)
             # Should handle errors gracefully and return default values
             assert 'performance_category' in performance_chars
             assert 'processing_priority' in performance_chars
@@ -323,7 +323,7 @@ class TestPerformanceAnalysisIntegration:
         }
         
         # Act: Call performance analysis with minimal data
-        performance_chars = analyzer.analyze_table_performance_characteristics('test_table', minimal_schema, minimal_size)
+        performance_chars = analyzer.get_table_performance_profile('test_table', minimal_schema, minimal_size)
         
         # Assert: Verify performance analysis handles minimal data gracefully
         assert 'performance_category' in performance_chars
