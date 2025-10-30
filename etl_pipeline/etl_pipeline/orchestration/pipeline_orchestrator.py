@@ -71,7 +71,7 @@ from ..exceptions.configuration import ConfigurationError, EnvironmentError
 logger = get_logger(__name__)
 
 class PipelineOrchestrator:
-    def __init__(self, config_path: Optional[str] = None, environment: str = 'production', 
+    def __init__(self, config_path: Optional[str] = None, environment: Optional[str] = None, 
                  settings: Optional[Settings] = None, config_reader: Optional[ConfigReader] = None):
         """
         Initialize the pipeline orchestrator.
