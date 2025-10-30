@@ -504,10 +504,11 @@ class PerformanceOptimizations:
             escaped_columns = [f"`{col}`" for col in columns]
             placeholders = ', '.join(['%s'] * len(columns))
             
+            target_db = self.replicator.target_engine.url.database
             if operation_type == 'insert':
                 # Simple INSERT
                 sql = f"""
-                    INSERT INTO `{table_name}` ({', '.join(escaped_columns)})
+                    INSERT INTO `{target_db}`.`{table_name}` ({', '.join(escaped_columns)})
                     VALUES ({placeholders})
                 """
             elif operation_type in ['upsert', 'replace']:
@@ -521,7 +522,7 @@ class PerformanceOptimizations:
                 update_clause = ', '.join(update_columns) if update_columns else "`updated_at` = NOW()"
                 
                 sql = f"""
-                    INSERT INTO `{table_name}` ({', '.join(escaped_columns)})
+                    INSERT INTO `{target_db}`.`{table_name}` ({', '.join(escaped_columns)})
                     VALUES ({placeholders})
                     ON DUPLICATE KEY UPDATE {update_clause}
                 """
@@ -559,8 +560,36 @@ class PerformanceOptimizations:
                     else:
                         logger.warning(f"Failed to set sync_binlog: {e}")
                 
+                # Log target connection info
+                try:
+                    logger.info(
+                        f"Replication target: host={self.replicator.target_engine.url.host} "
+                        f"port={self.replicator.target_engine.url.port} db={target_db}"
+                    )
+                except Exception:
+                    pass
+
                 # Execute bulk operation
                 cursor.executemany(sql, values_list)
+                try:
+                    logger.info(f"Bulk executemany affected rowcount={cursor.rowcount} for {table_name}")
+                except Exception:
+                    pass
+
+                # Pre-commit verification inside same transaction
+                try:
+                    cursor.execute(f"SELECT COUNT(*) FROM `{target_db}`.`{table_name}`")
+                    pre_commit_count = cursor.fetchone()[0]
+                    logger.info(f"Pre-commit replication count for {table_name} = {pre_commit_count}")
+                    if (cursor.rowcount == 0 or pre_commit_count == 0) and values_list:
+                        sample = values_list[0]
+                        logger.error(
+                            f"No rows reported inserted for {table_name}. Logging SQL and first bind sample.\n"
+                            f"SQL: {sql.strip()}\n"
+                            f"First values: {sample}"
+                        )
+                except Exception as dbg_err:
+                    logger.warning(f"Pre-commit verification failed for {table_name}: {dbg_err}")
                 
                 # Reset session variables (only if they were set successfully)
                 try:
@@ -573,7 +602,38 @@ class PerformanceOptimizations:
                 except Exception:
                     pass  # Ignore reset errors
                 
-                conn.commit()
+                # Commit using the raw DB-API connection to avoid any wrapper mismatch
+                try:
+                    # Extra diagnostics before commit
+                    try:
+                        cursor.execute("SELECT DATABASE(), @@hostname, @@port")
+                        dbg_db, dbg_host, dbg_port = cursor.fetchone()
+                        logger.info(f"Pre-commit (raw) context: db={dbg_db} host={dbg_host} port={dbg_port}")
+                    except Exception:
+                        pass
+
+                    raw_conn.commit()
+                    logger.info("Raw connection commit succeeded")
+                except Exception as commit_err:
+                    logger.warning(f"Raw connection commit failed, falling back to SQLAlchemy commit: {commit_err}")
+                    conn.commit()
+                
+                # Post-commit verification on a NEW pooled connection
+                try:
+                    with self.replicator.target_engine.connect() as verify_conn:
+                        v_raw = verify_conn.connection.connection
+                        v_cur = v_raw.cursor()
+                        try:
+                            v_cur.execute("SELECT DATABASE(), @@hostname, @@port")
+                            v_db, v_host, v_port = v_cur.fetchone()
+                            logger.info(f"Post-commit (new conn) context: db={v_db} host={v_host} port={v_port}")
+                        except Exception:
+                            pass
+                        v_cur.execute(f"SELECT COUNT(*) FROM `{target_db}`.`{table_name}`")
+                        post_commit_count = v_cur.fetchone()[0]
+                        logger.info(f"Post-commit replication count for {table_name} = {post_commit_count}")
+                except Exception as post_err:
+                    logger.warning(f"Post-commit verification on new connection failed for {table_name}: {post_err}")
                 
                 return len(values_list)
                 
@@ -1015,6 +1075,20 @@ class SimpleMySQLReplicator:
                 
                 # Use enhanced performance tracking
                 self.performance_optimizer._track_performance_optimized(table_name, duration, memory_used, rows_copied)
+
+                # Post-copy validation (test safe): confirm rows exist in replication DB
+                try:
+                    with self.target_engine.connect() as target_conn:
+                        replication_db = self.target_engine.url.database
+                        count = target_conn.execute(text(f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`")).scalar()
+                        logger.info(f"Post-copy validation for {table_name}: replication count={count}")
+                        if rows_copied > 0 and (count is None or int(count) == 0):
+                            logger.error(
+                                f"Post-copy validation failed for {table_name}: reported rows_copied={rows_copied} but replication has 0. "
+                                f"Check replication connection and fully-qualified writes."
+                            )
+                except Exception as v_err:
+                    logger.warning(f"Post-copy validation error for {table_name}: {v_err}")
                 
                 # Return detailed metadata
                 metadata = {
@@ -1117,6 +1191,12 @@ class SimpleMySQLReplicator:
         """
         try:
             performance_category = config.get('performance_category', 'medium')
+            # Log replication target before copy for visibility
+            try:
+                tgt = self.target_engine.url
+                logger.info(f"Replication target connection: host={tgt.host} port={tgt.port} db={tgt.database}")
+            except Exception:
+                pass
             total_count = self._get_table_total_count(table_name)
             
             logger.info(f"Starting unified full table copy for {table_name} ({performance_category}, {total_count:,} records)")
