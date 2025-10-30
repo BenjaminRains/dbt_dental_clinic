@@ -60,8 +60,50 @@ sys.path.insert(0, str(scripts_path))
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
 from etl_pipeline.config.logging import get_logger
-from etl_pipeline.config import get_settings
+from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.orchestration import PipelineOrchestrator
+
+# =============================
+# Environment Resolution Guards
+# =============================
+def _resolve_environment(cli_env: Optional[str]) -> str:
+    """Resolve ETL environment with safe defaults.
+    - If CLI flag provided, use it
+    - Else use ETL_ENVIRONMENT
+    - If still unset, default to 'test' (fail-fast rule: never default to production)
+    """
+    env = cli_env or os.environ.get("ETL_ENVIRONMENT")
+    if not env:
+        env = "test"
+        os.environ["ETL_ENVIRONMENT"] = "test"
+    return env
+
+
+def _assert_env_consistency(cli_env: Optional[str], resolved_env: str) -> None:
+    """Fail-fast if CLI flag conflicts with environment variable."""
+    if cli_env and cli_env != resolved_env:
+        raise click.UsageError(
+            f"Environment mismatch: --environment={cli_env} but ETL_ENVIRONMENT={resolved_env}"
+        )
+
+
+def _validate_test_db_names(settings) -> None:
+    """When running in test, ensure DB names include 'test' to prevent prod accidents."""
+    analytics_cfg = settings.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
+    replication_cfg = settings.get_database_config(DatabaseType.REPLICATION)
+    source_cfg = settings.get_database_config(DatabaseType.SOURCE)
+
+    names = [
+        analytics_cfg.get("database", ""),
+        replication_cfg.get("database", ""),
+        source_cfg.get("database", ""),
+    ]
+    unsafe = [n for n in names if n and "test" not in n.lower()]
+    if unsafe:
+        raise click.UsageError(
+            "SAFETY CHECK FAILED: In test mode, database names must contain 'test'. "
+            f"Unsafe: {unsafe}"
+        )
 
 # Method usage tracking imports
 from method_tracker import save_tracking_report, print_tracking_report
@@ -93,9 +135,26 @@ def clear_test_settings():
 @click.option('--force', is_flag=True, help='Force run even if no new data')
 @click.option('--parallel', '-p', type=int, default=4, help='Number of parallel workers')
 @click.option('--dry-run', is_flag=True, help='Show what would be done without making changes')
-def run(config: Optional[str], tables: List[str], full: bool, force: bool, parallel: int, dry_run: bool):
+@click.option('--environment', type=click.Choice(['test', 'production']), help='Override ETL environment (fail-fast on mismatch)')
+def run(config: Optional[str], tables: List[str], full: bool, force: bool, parallel: int, dry_run: bool, environment: Optional[str]):
     """Run the ETL pipeline."""
     try:
+        # Resolve and validate environment before any settings/DB access
+        resolved_env = _resolve_environment(environment)
+        _assert_env_consistency(environment, resolved_env)
+        if resolved_env not in ('test', 'production'):
+            click.echo(f"❌ Invalid ETL_ENVIRONMENT='{resolved_env}'. Use 'test' or 'production'.")
+            raise click.Abort()
+
+        # In test mode, enforce safety on DB names to avoid prod accidents
+        if resolved_env == 'test':
+            try:
+                settings_for_validation = get_settings()
+                _validate_test_db_names(settings_for_validation)
+            except Exception as e:
+                click.echo(f"❌ Test environment safety check failed: {e}")
+                raise click.Abort()
+
         # Validate parallel workers
         if parallel < 1 or parallel > 20:
             click.echo("❌ Error: Parallel workers must be between 1 and 20")
@@ -108,7 +167,7 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
             orchestrator = PipelineOrchestrator(config_path=config, environment='test', settings=_test_settings)
         else:
             # Use default settings
-            orchestrator = PipelineOrchestrator(config_path=config)
+            orchestrator = PipelineOrchestrator(config_path=config, environment=resolved_env)
         
         if dry_run:
             # DRY RUN MODE: Show what would be done without making changes
