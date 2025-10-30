@@ -301,12 +301,8 @@ class PostgresLoader:
             logger.info("Initialized schema cache for performance optimization")
             
             # Get database connections using unified interface with Settings injection
-            # In test environment, only create analytics connection (replication not needed for tracking tests)
-            if use_test_environment:
-                self.replication_engine = ConnectionFactory.get_source_connection(self.settings)
-                logger.info("Using source database as replication database in test environment")
-            else:
-                self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+            # Always use replication connection so queries referencing replication DB are executed on the correct server
+            self.replication_engine = ConnectionFactory.get_replication_connection(self.settings)
             
             self.analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
             print(f"[ETL DEBUG] PostgresLoader analytics_engine id: {id(self.analytics_engine)}")
@@ -336,15 +332,11 @@ class PostgresLoader:
             elif self.analytics_schema == 'marts':
                 schema_enum = ConfigPostgresSchema.MARTS
             
-            # Skip schema adapter creation in test environment (not needed for unit tests)
-            if use_test_environment:
-                self.schema_adapter = None
-                logger.info("Skipping PostgresSchema adapter creation in test environment")
-            else:
-                self.schema_adapter = PostgresSchema(
-                    postgres_schema=schema_enum,
-                    settings=self.settings
-                )
+            # Always create schema adapter (needed for type conversion in all environments)
+            self.schema_adapter = PostgresSchema(
+                postgres_schema=schema_enum,
+                settings=self.settings
+            )
             
             self.target_schema = analytics_config.get('schema', 'raw')
             self.staging_schema = replication_config.get('schema', 'raw')
@@ -626,8 +618,14 @@ class PostgresLoader:
                     """
                     logger.debug(f"Using simple INSERT for {table_name} chunk {i//optimal_batch_size + 1} with {len(chunk)} rows")
                 
-                # Use executemany for bulk operation
+                # Use executemany for bulk operation with type conversion via schema adapter
                 try:
+                    # Convert types per row if adapter is available
+                    if self.schema_adapter is not None:
+                        try:
+                            chunk = [self.schema_adapter.convert_row_data_types(table_name, row) for row in chunk]
+                        except Exception as conv_err:
+                            logger.warning(f"Type conversion failed for some rows in {table_name}: {conv_err}")
                     with self.analytics_engine.begin() as conn:
                         conn.execute(text(insert_sql), chunk)
                 except Exception as e:
