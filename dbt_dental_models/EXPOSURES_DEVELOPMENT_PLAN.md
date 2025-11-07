@@ -1181,6 +1181,565 @@ Complete the suite
 
 ---
 
+## Practice By Numbers Dashboard Design Analysis
+
+This section documents how Practice By Numbers presents analytics in their dashboards, to inform our own exposure designs. These are reverse-engineered observations from their UI that we can adapt for our 6 critical exposures.
+
+### Design Patterns Observed
+
+#### Common UI Elements Across All Dashboards
+
+**Header Pattern**:
+- Title in top left (bold, dark font)
+- Action icons in top right:
+  - Grid icon (layout/view options)
+  - Group/people icon (team/user views)
+  - Three-dot ellipsis (more options menu)
+
+**Visual Hierarchy**:
+- Large numerical values in dark blue for key metrics
+- Semi-circular progress gauges for percentages (teal/turquoise fill, gray remaining)
+- Horizontal progress bars for dollar amounts
+- Thin gray separator lines between sections
+- Clean white cards on light gray background
+- Rounded corners for modern aesthetic
+
+**Typography**:
+- Sans-serif font, clear and readable
+- Larger fonts for key percentages
+- Smaller fonts for detailed metrics
+- Labels in gray, values in dark blue
+
+---
+
+### Dashboard 1: Treatment Acceptance (Q2)
+
+**Maps to**: Q2 - Are patients accepting treatment?
+
+**Layout Structure**:
+
+**Top Section - Primary KPIs** (2 metrics side-by-side):
+- **Tx Accept %** (Treatment Acceptance Percentage)
+  - Large number display: `42.4%`
+  - Semi-circular gauge showing ~40-45% completion
+  - Teal fill for progress, gray for remaining
+  
+- **Pt Accept %** (Patient Acceptance Percentage)
+  - Large number display: `87.2%`
+  - Semi-circular gauge showing ~85-90% completion
+  - Higher acceptance rate (visual contrast between treatment vs patient acceptance)
+
+**Bottom Section - Detailed Metrics Table**:
+- Tabular format, two-column layout (label | value)
+- **Volume Metrics**:
+  - Patients Seen: `565`
+  - Pts Presented: `313`
+  - Pts Accepted: `273`
+  
+- **Percentage Metrics**:
+  - Diag % (Diagnosis Percentage): `55.4%`
+  
+- **Financial Metrics**:
+  - Tx Presented: `$727,518`
+  - Tx Accepted: `$308,343`
+  - Same Day Treatment: `$9,161`
+
+**Key Insights for Our Implementation**:
+- Split acceptance into TWO metrics: treatment acceptance vs patient acceptance (different calculations)
+- Use visual gauges for quick comprehension of percentage performance
+- Show both count and dollar metrics (volume + financial)
+- Display "diagnosis percentage" as a key metric
+- Include "same day treatment" as a conversion indicator
+- Simple, scannable table format for detailed breakdown
+
+**Our Treatment Plan Dashboard Should Include**:
+- Primary KPIs: Treatment Acceptance %, Patient Acceptance %
+- Secondary: Diagnosis %, Average Plan Value
+- Details: Patients Seen, Plans Presented, Plans Accepted, Dollar amounts
+- Visual: Semi-circular gauges for percentages, simple table for details
+
+---
+
+### Dashboard 2: Revenue Lost (Q3 Related)
+
+**Maps to**: Q3 - Are we collecting what we produce? (AR Management / Collection Efficiency)
+
+**Layout Structure**:
+
+**View Selector** (pill-shaped buttons):
+- "Total" view (selected - white background)
+- "Detailed $$" view (unselected - gray background)
+- **Insight**: Toggle between summary and detail views
+
+**Failed or Cancelled Revenue Section**:
+- Label: "Failed or Cancelled $$s" (gray text)
+- Value: Large bold `$55,676` (dark blue, dollar sign smaller/gray)
+- Horizontal progress bar: Teal fill ~70-75%, gray remaining
+- **Insight**: Visual representation of lost revenue magnitude
+
+**Recovered Revenue Section**:
+- Label: "Recovered" (gray text, left)
+- Options icon: Three-dot ellipsis (right)
+- Value: Large bold `$21,687` (dark blue)
+- Horizontal progress bar: Teal fill ~40-45%
+- **Insight**: Shows recovery efforts vs total lost
+
+**Lost Appointments Percentage**:
+- Label: "Lost Appmts %" (gray, left)
+- Value: `15.8%` (dark blue, right)
+- Simple two-column layout
+
+**Key Insights for Our Implementation**:
+- Revenue lost is a KEY metric (separate from AR aging)
+- Show both total lost AND recovered amounts
+- Include "lost appointments %" as operational metric
+- Progress bars for dollar amounts provide quick visual reference
+- Toggle between summary and detail views
+- Recovery tracking is important (shows collection effort effectiveness)
+
+**Our AR Dashboard Should Include**:
+- Primary: Total AR Outstanding, Lost Revenue, Recovered Revenue
+- Secondary: Lost Appointments %, Collection Rate
+- Visual: Progress bars for dollar amounts, percentage displays
+- View toggle: Summary vs Detailed breakdown
+
+---
+
+### Dashboard 3: Accounts Receivables (Q3)
+
+**Maps to**: Q3 - Are we collecting what we produce? (AR Management)
+
+**Layout Structure**:
+
+**AR Days Section**:
+- Sub-heading: "AR Days"
+- Large number: `37` (average days sales outstanding)
+- Horizontal progress bar: Mostly teal fill, small gray remaining
+- **Insight**: Single key metric with visual indicator
+
+**AR (Current) Section**:
+- Sub-heading: "AR (Current)"
+- Total value: `312,909` (right-aligned next to heading)
+- **Aging Breakdown Bar Chart** (horizontal stacked bars):
+  - **Current** (0-30 days): Long blue bar, `140k` label
+  - **30 day**: Shorter blue bar, `46.5k` label
+  - **60 day**: Shorter teal bar, `16.3k` label
+  - **90 day**: Longer teal bar, `110k` label
+  - **Color coding**: Blue for recent (0-60 days), Teal for older (60+ days)
+
+**Summary Metrics Table**:
+- Two-column format (metric | value)
+- **AR Ratio**: `122.8%`
+- **Total AR**: `$312,909`
+- **Insurance AR**: `$113,427`
+- **Patient AR**: `$199,481`
+- **Patient Credits**: `$45,239`
+- Thin separator lines between entries
+
+**Key Insights for Our Implementation**:
+- Single "AR Days" metric is prominent (DSO)
+- Total current AR shown with aging breakdown
+- Visual bar chart for aging buckets (horizontal, stacked)
+- Color coding by recency (blue = current, teal = aged)
+- Split between Insurance AR and Patient AR
+- Include "Patient Credits" (negative AR)
+- AR Ratio as percentage (over 100% indicates problem)
+- Values right-aligned for easy scanning
+
+**Our AR Aging Dashboard Should Include**:
+- Primary: AR Days (DSO), Total AR
+- Aging Chart: Horizontal stacked bars by bucket (0-30, 31-60, 61-90, 90+)
+- Color coding: Blue for current (0-60), Teal for aged (60+)
+- Summary table: AR Ratio, Insurance AR, Patient AR, Patient Credits
+- Layout: Clean, scannable, visual + tabular
+
+---
+
+### Dashboard 4: Production (Q1/Q3/Q5 Related)
+
+**Maps to**: Multiple questions - Production tracking relates to Q1 (scheduling efficiency), Q3 (collections), and Q5 (hygiene productivity)
+
+**Layout Structure**:
+
+**Gross Production Section**:
+- Subtitle: "Gross" (gray text)
+- Primary metric: Large bold `$353,933` (dark blue)
+- Horizontal progress bar: Mostly teal fill (~95%), small gray remaining
+- **Insight**: Total production as primary KPI with visual indicator
+
+**By Provider Breakdown** (Donut Chart):
+- Subtitle: "By Provider (gross)"
+- **Center**: Total value `354k` (dark blue, large font) - matches gross production
+- **Doctor Segment**: Large dark blue segment, `280k` label (below)
+- **Hygienist Segment**: Smaller light blue segment, `74.3k` label (above)
+- **Visual**: Proportional representation of production split
+- **Calculation**: 280k + 74.3k = 354.3k (matches center)
+
+**Additional Financial Metrics Table**:
+- Two-column format (label | value), thin gray separators
+- **Adj Production**: `$329,964` (adjusted production - after write-offs/adjustments)
+- **Collections**: `$263,801` (actual collections)
+- **Projection**: `$353,933` (matches gross - likely projection vs actual)
+- **$$ / Appmt**: `$472` (dollars per appointment - efficiency metric)
+
+**Key Insights for Our Implementation**:
+- Production is shown in multiple ways: Gross, Adjusted, Collections
+- Provider breakdown (Doctor vs Hygienist) is visually clear via donut chart
+- Center value in donut matches total (redundancy for clarity)
+- Dollars per appointment is a key efficiency metric
+- Progress bar suggests there may be a target/threshold
+- Collections vs Production gap is important (can be calculated: 263k/354k = 74% collection rate on production)
+
+**Our Dashboard Applications**:
+- **Q1 (Scheduling)**: Could show production by provider with $$/appointment efficiency
+- **Q3 (Collections)**: Show production vs collections gap (collection rate)
+- **Q5 (Hygiene)**: Use donut chart pattern for hygiene vs doctor production split
+- Include "dollars per appointment" as key productivity metric across dashboards
+
+---
+
+### Dashboard 5: Hygiene Retention (Q5)
+
+**Maps to**: Q5 - Are hygiene appointments productive? (Hygiene Optimization)
+
+**Layout Structure**:
+
+**Primary Metrics** (Two sections side-by-side):
+
+**Recall Current Section**:
+- Label: "Recall Current" (gray text)
+- Value: Large bold `52.7%` (dark blue)
+- Horizontal progress bar: ~50% teal fill, ~50% gray
+- **Insight**: Shows recall/scheduling performance for hygiene patients
+
+**Hyg Pre-appmt Section**:
+- Label: "Hyg Pre-appmt" (gray text, shortened - "Hygiene Pre-appointment")
+- Value: Large bold `88.2%` (dark blue)
+- Horizontal progress bar: ~88% teal fill, small gray remaining
+- **Insight**: High pre-appointment rate (patients scheduled before due date)
+- **Visual contrast**: Much higher than recall current (88% vs 53%)
+
+**Detailed Metrics Table**:
+- Two-column format (label | value), thin gray separators
+- **Hyg Pts Seen**: `356` (total hygiene patients seen)
+- **Hyg Pts Re-appntd**: `314` (re-appointed = retention)
+- **Recall Overdue**: `25.6%` (patients overdue for recall/scheduling)
+- **Not on Recall**: `20.5%` (patients not enrolled in recall system)
+
+**Key Insights for Our Implementation**:
+- **Two percentage metrics** show different aspects:
+  - Recall Current (52.7%): Current recall system effectiveness
+  - Hyg Pre-appmt (88.2%): Pre-scheduling success rate
+- Volume metrics show absolute numbers (patients seen, re-appointed)
+- Problem indicators: Recall Overdue %, Not on Recall %
+- **Calculation insight**: 314 re-appointed / 356 seen = 88.2% (matches Hyg Pre-appmt)
+- Progress bars show performance relative to 100% target
+
+**Our Hygiene Dashboard Should Include**:
+- Primary: Recall Current %, Pre-appointment % (hygiene retention rate)
+- Volume: Hygiene Patients Seen, Re-appointed Count
+- Problem metrics: Recall Overdue %, Not on Recall %
+- Visual: Progress bars for percentages
+- Efficiency: Could add production per hygiene patient, production per hour
+- Comparison: Show trend over time (are these improving?)
+
+---
+
+### Dashboard 6: Insurance Summary & Performance (Q4)
+
+**Maps to**: Q4 - Are insurance claims getting paid? (Insurance Claims Dashboard)
+
+**Layout Structure**:
+
+**Top Navigation Bar**:
+- Date range selector with left/right arrows: "10/01/2025 to 10/31/2025"
+- "Current Month" dropdown (left)
+- "Compare to" dropdown (right)
+- Action icons: Grid, Toggle switch, Ellipsis
+
+**Summary Card - Key Performance Indicators**:
+Four large KPI metrics displayed horizontally:
+- **UCR Production**: `$369,545` (Usual, Customary, Reasonable production)
+- **Adj Production**: `$329,964` (Adjusted production - after insurance adjustments)
+- **Adj Production % of UCR**: `89.3%` (Efficiency metric - how much of UCR is collected)
+- **Collections % of UCR**: `71.4%` (Collection rate - actual collections vs UCR)
+
+**Insurance Detail Table** (Bottom Card):
+- Search bar: "Search" input field (right side)
+- Table with 8 columns:
+  1. **INSURANCE**: Carrier name (Cigna Dental, Blue Cross Blue Shield FEP-IN, Liberty Dental, Aetna Dental, Anthem, MetLife)
+  2. **UCR PROD**: Dollar amounts (e.g., `54,410.00` for Cigna)
+  3. **PROD % OF UCR**: Percentages (e.g., `99.3%` for Cigna) - **Light blue gradient** (higher = darker blue)
+  4. **COLL % OF UCR**: Percentages (e.g., `71.5%` for Cigna) - **Blue-to-red gradient** (higher = blue, lower = red/pink)
+  5. **PROD / PATIENT**: Dollar per patient (e.g., `1,501.56`)
+  6. **COLL / PATIENT**: Dollar per patient collections
+  7. **ADJ PROD / HOUR**: Production efficiency per hour
+  8. **ADJ PROD / PROCEDURE**: Production per procedure
+
+**Key Insights for Our Implementation**:
+- **Two-level view**: Summary KPIs at top, detailed carrier breakdown below
+- **UCR vs Adjusted Production**: Important distinction (UCR = full fee, Adj = after insurance adjustments)
+- **Color coding strategy**:
+  - **Blue gradient**: Higher percentages/values = better performance
+  - **Blue-to-red gradient**: Performance indicator (blue = good, red = needs attention)
+  - Conditional formatting makes outliers instantly visible
+- **Efficiency metrics**: Multiple per-unit metrics (per patient, per hour, per procedure)
+- **Collection % of UCR**: Critical metric showing actual collections vs potential
+- **Date range navigation**: Essential for trending and comparison
+
+**Our Insurance Claims Dashboard Should Include**:
+- **Summary KPIs**: UCR Production, Adj Production, Adj Production % of UCR, Collections % of UCR
+- **Carrier Performance Table**: Breakdown by insurance carrier with color-coded performance
+- **Metrics**:
+  - UCR Production (total)
+  - Adjusted Production (after adjustments)
+  - Production % of UCR (efficiency)
+  - Collections % of UCR (collection rate)
+  - Production per Patient
+  - Collections per Patient
+  - Production per Hour (if time data available)
+  - Production per Procedure
+- **Visual**: Color-coded gradients (blue = good, red = needs attention)
+- **Interactivity**: Date range selector, carrier filter, search
+
+---
+
+### Dashboard 7: Insurance Detail - New Patient Focus (Q4)
+
+**Maps to**: Q4 - Are insurance claims getting paid? (Insurance Claims Dashboard - New Patient Analysis)
+
+**Layout Structure**:
+
+**Header Navigation**:
+- Same pattern as Dashboard 6: Date range selector, "Current Month" dropdown, "Compare to" dropdown
+- **Filter button**: With dropdown arrow (left side)
+- **Search bar**: Input field (right side)
+
+**Insurance Detail Table**:
+Six columns focused on new patient performance:
+1. **INSURANCE CARRIER**: Provider names (Unknown, MetLife, Delta Dental, Metlife Dental, United Concordia, Cigna Dental, Ameritas Group Dental Claims, Mutual of Omaha)
+2. **INSURANCE TYPE**: All showing "Unknown" (data quality note)
+3. **PATIENT COUNT**: Number of patients per carrier
+4. **FIRST VISIT FEE**: Total fees from initial patient visits
+5. **FIRST 30-DAY PRODUCTION**: Total production value within first 30 days
+6. **FIRST 30-DAY COLLECTIONS**: Total collections within first 30 days
+
+**Visual Cues**:
+- **Top Row Highlight**: "Unknown" carrier row has **purple background** - likely summary row or largest category
+  - Patient Count: 75
+  - First Visit Fee: $18,215.00
+  - First 30-Day Production: $33,602.00
+  - First 30-Day Collections: $25,707.80
+- **Conditional Formatting**: 
+  - "FIRST 30-DAY COLLECTIONS" column shows **reddish tint** for lower values
+  - Examples: Cigna Dental ($1,013.00), Ameritas Group Dental Claims ($432.16), Mutual of Omaha ($805.20)
+- **Sorting**: Table appears sorted by PATIENT COUNT (descending)
+
+**Key Insights for Our Implementation**:
+- **New patient focus**: Separate view tracking first visit and first 30 days
+- **Summary row pattern**: Highlight top/aggregate row with distinct color (purple)
+- **First visit metrics**: Critical for understanding new patient acquisition efficiency
+- **30-day window**: Standard time frame for measuring new patient performance
+- **Red flag indicator**: Conditional formatting highlights underperforming carriers
+- **Filter/Search**: Essential for large carrier lists
+
+**Our Insurance Claims Dashboard Should Include**:
+- **New Patient Analysis View**: Toggle or separate tab for new patient metrics
+- **Metrics**:
+  - Patient Count per carrier
+  - First Visit Fee (total initial production)
+  - First 30-Day Production (early production value)
+  - First 30-Day Collections (collection efficiency)
+- **Summary Row**: Highlight aggregate or top carrier
+- **Alert System**: Color-code low collection amounts (red tint)
+- **Sorting**: Default sort by volume (patient count or production)
+- **Filtering**: By carrier, date range, insurance type
+
+---
+
+### Dashboard Analysis Summary
+
+**Total Dashboards Analyzed**: 7
+
+1. **Treatment Acceptance** → Q2 (Treatment Plan Dashboard)
+2. **Revenue Lost** → Q3 (AR Dashboard - Collection Efficiency)
+3. **Accounts Receivables** → Q3 (AR Dashboard - Aging Analysis)
+4. **Production** → Q1/Q3/Q5 (Multi-purpose - Production Tracking)
+5. **Hygiene Retention** → Q5 (Hygiene Dashboard)
+6. **Insurance Summary & Performance** → Q4 (Insurance Claims Dashboard)
+7. **Insurance Detail - New Patient Focus** → Q4 (Insurance Claims Dashboard - New Patient View)
+
+**Coverage Mapping**:
+- ✅ Q1 (Scheduling): Partially covered by Production dashboard patterns
+- ✅ Q2 (Treatment Acceptance): Fully covered by Treatment Acceptance dashboard
+- ✅ Q3 (Collections): Fully covered by AR + Revenue Lost dashboards
+- ✅ Q4 (Insurance Claims): Fully covered by Insurance Summary + Insurance Detail dashboards
+- ✅ Q5 (Hygiene): Fully covered by Hygiene Retention + Production dashboards
+- ⚠️ Q6 (New Patients): No direct PBN example, but patterns transferable
+
+**Key Visual Components Identified**:
+- Semi-circular gauges (percentages)
+- Horizontal progress bars (dollars, percentages)
+- Donut charts (provider/category breakdowns)
+- Stacked horizontal bars (aging buckets)
+- KPI cards (large numbers + labels)
+- Metrics tables (two-column format)
+- **Color-coded tables** (gradient coloring - blue = good, red = needs attention)
+- **Summary row highlighting** (purple/alternate background for aggregate rows)
+- **Conditional formatting** (red tint for underperforming values)
+
+---
+
+### Cross-Dashboard Design Principles
+
+**1. Visual Hierarchy**:
+- Largest numbers = most important metrics
+- Gauges/bars = visual reinforcement of numbers
+- Tables = detailed breakdowns
+
+**2. Color Psychology**:
+- **Dark Blue**: Primary metric values (trustworthy, professional)
+- **Teal/Turquoise**: Progress indicators, positive metrics
+- **Gray**: Labels, inactive elements, separators
+- **Blue vs Teal**: Distinction between "good" (recent) vs "attention needed" (aged)
+
+**3. Information Density**:
+- Not cluttered - 3-4 primary metrics maximum
+- Progressive disclosure: Summary → Detail
+- Tables show exact values when precision needed
+
+**4. Metric Selection**:
+- Focus on actionable metrics
+- Show percentages AND absolute numbers
+- Include both count metrics (patients, appointments) and dollar metrics
+
+**5. Comparison Patterns**:
+- Current vs thresholds (gauges)
+- Current vs aged (color coding)
+- Lost vs recovered (side-by-side sections)
+
+---
+
+### Application to Our 6 Exposures
+
+#### Q1: Are we fully booked? ✅ (Already Complete)
+- Consider adding visual utilization gauges similar to treatment acceptance
+- Show capacity percentage with semi-circular gauge
+
+#### Q2: Are patients accepting treatment? (Treatment Plan Dashboard)
+**Design Inspired By**: Treatment Acceptance dashboard
+- Two primary metrics: Treatment Acceptance %, Patient Acceptance %
+- Semi-circular gauges for acceptance rates
+- Table showing: Patients Seen, Plans Presented/Accepted, Dollar amounts
+- Diagnosis percentage metric
+- Same-day treatment tracking
+
+#### Q3: Are we collecting what we produce? (AR Aging Dashboard)
+**Design Inspired By**: AR dashboard + Revenue Lost dashboard
+- Primary: AR Days (DSO), Total AR Outstanding
+- Horizontal stacked bar chart for aging buckets (0-30, 31-60, 61-90, 90+)
+- Color coding: Blue (current 0-60), Teal (aged 60+)
+- Summary table: AR Ratio, Insurance AR, Patient AR, Patient Credits
+- Additional: Lost Revenue tracking, Recovery tracking (from Revenue Lost pattern)
+
+#### Q4: Are insurance claims getting paid? (Insurance Claims Dashboard)
+**Design Inspired By**: Insurance Summary & Performance dashboard + Insurance Detail - New Patient Focus dashboard
+
+**Summary View (Top Section)**:
+- **Primary KPIs** (4 metrics horizontally):
+  - UCR Production (total production at full fee)
+  - Adj Production (after insurance adjustments)
+  - Adj Production % of UCR (efficiency - 89.3% typical target)
+  - Collections % of UCR (collection rate - 71.4% shown)
+- **Date Navigation**: Date range selector, "Current Month" dropdown, "Compare to" selector
+
+**Carrier Performance Table** (Detailed Breakdown):
+- **Columns**: INSURANCE, UCR PROD, PROD % OF UCR, COLL % OF UCR, PROD / PATIENT, COLL / PATIENT, ADJ PROD / HOUR, ADJ PROD / PROCEDURE
+- **Color Coding**:
+  - **Blue gradient**: Higher values = darker blue (for PROD % OF UCR, efficiency metrics)
+  - **Blue-to-red gradient**: Performance indicator (blue = good collection rate, red = needs attention)
+  - Conditional formatting makes underperformers instantly visible
+- **Interactivity**: Search bar, carrier filter, sortable columns
+
+**New Patient Analysis View** (Optional Tab/Toggle):
+- **Metrics**: Patient Count, First Visit Fee, First 30-Day Production, First 30-Day Collections
+- **Summary Row**: Highlight top/aggregate carrier (purple background)
+- **Alert System**: Red tint for low collection amounts
+- **Sorting**: Default by volume (patient count or production)
+
+**Additional Metrics to Consider**:
+- Approval Rate % (with gauge visualization)
+- Average Days to Payment
+- Claims status breakdown (Approved/Rejected/Pending)
+- Aging analysis (0-30, 31-60, 60+ days)
+
+**Key Design Patterns**:
+- Two-level view: Summary KPIs + detailed table
+- UCR vs Adjusted Production distinction (critical for insurance)
+- Multiple efficiency metrics (per patient, per hour, per procedure)
+- Gradient color coding for instant performance assessment
+- Date range comparison capability
+
+#### Q5: Are hygiene appointments productive? (Hygiene Dashboard)
+**Design Inspired By**: Hygiene Retention dashboard + Production dashboard
+- **Primary Metrics**: Recall Current %, Pre-appointment % (side-by-side with progress bars)
+- **Volume Metrics**: Hygiene Patients Seen, Re-appointed Count
+- **Problem Indicators**: Recall Overdue %, Not on Recall %
+- **Production Split**: Donut chart showing Doctor vs Hygienist production (from Production dashboard)
+- **Efficiency Metrics**: Dollars per Appointment, Production per Hour
+- **Visual**: Progress bars for percentages, donut chart for production breakdown
+- **Table**: Hygienist performance breakdown (appointments, production, utilization per hygienist)
+
+#### Q6: Are we getting new patients? (New Patient Dashboard)
+**Design Patterns to Apply**:
+- Primary: New Patient Count, Growth Rate %
+- Monthly trending chart
+- Conversion funnel visualization
+- Retention metrics table
+- Source breakdown (if available)
+
+---
+
+### Implementation Notes
+
+**Component Reusability**:
+- Create reusable semi-circular gauge component (for percentages)
+- Create reusable horizontal bar chart component (for aging buckets, status breakdowns)
+- Create reusable donut chart component (for provider breakdowns, category splits)
+- Create reusable KPI card component (large number + label + optional progress bar)
+- Create reusable metrics table component (two-column format with separators)
+- Create reusable data table component with:
+  - Gradient color coding (blue-to-red based on performance thresholds)
+  - Summary row highlighting (alternate background color)
+  - Conditional formatting (red tint for alert values)
+  - Sortable columns
+  - Search and filter capabilities
+
+**Color Palette Standardization**:
+```css
+--primary-metric: #1a237e (dark blue)
+--progress-fill: #26a69a (teal/turquoise)
+--progress-background: #e0e0e0 (light gray)
+--label-text: #757575 (gray)
+--separator: #e0e0e0 (light gray)
+--good-status: #1976d2 (blue)
+--attention-needed: #26a69a (teal)
+--summary-row: #9c27b0 (purple - for aggregate/highlight rows)
+--gradient-good-start: #1976d2 (blue - good performance)
+--gradient-good-end: #0d47a1 (darker blue - excellent performance)
+--gradient-warning-start: #ff9800 (orange - moderate performance)
+--gradient-alert-end: #f44336 (red - needs attention)
+--conditional-alert-tint: rgba(244, 67, 54, 0.15) (light red overlay for alerts)
+```
+
+**Responsive Considerations**:
+- Cards stack vertically on mobile
+- Tables become cards on small screens
+- Gauges scale proportionally
+- Maintain readability at all sizes
+
+---
+
 ## Conclusion
 
 You have a **strong analytical foundation** with 17 marts and 150+ models covering 9 business systems. The gap isn't in **analytical capability** - it's in **exposing that capability** through user-friendly dashboards.
@@ -1196,9 +1755,10 @@ Focus on the 6 questions that matter, build the exposures that answer them, and 
 
 ---
 
-**Document Version**: 1.0  
+**Document Version**: 1.1  
 **Created**: 2025-10-22  
+**Last Updated**: 2025-01-XX (PBN Dashboard Analysis Added)  
 **Next Review**: After Phase 1 completion  
 **Owner**: Data Engineering  
-**Status**: Development roadmap defined, ready to execute
+**Status**: Development roadmap defined, PBN design patterns documented, ready to execute
 
