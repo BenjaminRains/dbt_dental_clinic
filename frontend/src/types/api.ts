@@ -250,6 +250,63 @@ export interface ARSummary {
     patient_ar_balance: number;
 }
 
+// AR Aging Dashboard Types
+export interface ARKPISummary {
+    total_ar_outstanding: number;
+    current_amount: number;
+    current_percentage: number;
+    over_90_amount: number;
+    over_90_percentage: number;
+    patient_ar?: number;  // Patient responsibility portion
+    insurance_ar?: number;  // Insurance estimate portion
+    dso_days: number;  // Legacy DSO calculation
+    pbn_ar_days: number;  // Practice by Numbers AR Days = (Total AR × 360) ÷ billed_last_year
+    collection_rate: number;  // Collection rate (last 365 days): Collections / Production
+    ar_ratio?: number;  // AR Ratio (PBN style, current month): Collections / Production
+    high_risk_count: number;
+    high_risk_amount: number;
+}
+
+export interface ARAgingSummary {
+    aging_bucket: string;
+    amount: number;
+    percentage: number;
+    patient_count: number;
+}
+
+export interface ARPriorityQueueItem {
+    patient_id: number;
+    provider_id: number;
+    patient_name: string;
+    provider_name: string;
+    total_balance: number;
+    balance_0_30_days: number;
+    balance_31_60_days: number;
+    balance_61_90_days: number;
+    balance_over_90_days: number;
+    aging_risk_category: string;
+    collection_priority_score: number;
+    days_since_last_payment: number | null;
+    payment_recency: string;
+    collection_rate: number | null;
+}
+
+export interface ARRiskDistribution {
+    risk_category: string;
+    patient_count: number;
+    total_amount: number;
+    percentage: number;
+}
+
+export interface ARAgingTrend {
+    date: string;
+    current_amount: number;
+    over_30_amount: number;
+    over_60_amount: number;
+    over_90_amount: number;
+    total_amount: number;
+}
+
 export interface RevenueKPIs {
     total_revenue_lost: number;
     total_recovery_potential: number;
