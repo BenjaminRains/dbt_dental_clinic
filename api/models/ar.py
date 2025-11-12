@@ -14,7 +14,8 @@ class ARKPISummary(BaseModel):
     insurance_ar: float  # Insurance estimate portion
     dso_days: float  # Days Sales Outstanding (legacy calculation)
     pbn_ar_days: float  # Practice by Numbers AR Days = (Total AR × 30) ÷ collections_30_days
-    collection_rate: float
+    collection_rate: float  # Collection rate (last 365 days): Collections / Production
+    ar_ratio: float  # AR Ratio (PBN style, current month): Collections / Production
     high_risk_count: int
     high_risk_amount: float
     
