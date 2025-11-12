@@ -145,7 +145,7 @@ ARBalances AS (
             COALESCE(bc.patient_payment_amount, 0) - 
             COALESCE(bc.total_adjustment_amount, 0) AS patient_responsibility,
         
-        -- Aging information
+        -- Aging information (days since procedure)
         COALESCE(
             bc.days_outstanding,
             CURRENT_DATE - pi.procedure_date
@@ -159,6 +159,21 @@ ARBalances AS (
                 ELSE '90+'
             END
         ) AS aging_bucket,
+        
+        -- Practice by Numbers aging logic (based on payment due date)
+        -- Standard payment terms: NET 30 (procedure_date + 30 days)
+        (pi.procedure_date + INTERVAL '30 days')::date AS payment_due_date,
+        CURRENT_DATE - (pi.procedure_date + INTERVAL '30 days')::date AS days_overdue,
+        CASE
+            -- Not overdue yet (payment not due)
+            WHEN CURRENT_DATE < (pi.procedure_date + INTERVAL '30 days')::date THEN 'CURRENT'
+            -- 30-60 days overdue
+            WHEN CURRENT_DATE - (pi.procedure_date + INTERVAL '30 days')::date <= 60 THEN '30-60'
+            -- 60-90 days overdue
+            WHEN CURRENT_DATE - (pi.procedure_date + INTERVAL '30 days')::date <= 90 THEN '60-90'
+            -- Over 90 days overdue
+            ELSE 'OVER_90'
+        END AS pbn_aging_bucket,
         
         -- Claim information
         pi.claim_id,
@@ -230,6 +245,9 @@ SELECT
     patient_responsibility,
     days_outstanding,
     aging_bucket,
+    payment_due_date,
+    days_overdue,
+    pbn_aging_bucket,
     claim_id,
     claim_status,
     claim_status_description,
