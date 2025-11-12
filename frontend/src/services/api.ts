@@ -17,7 +17,12 @@ import {
     AppointmentSummary,
     AppointmentDetail,
     MetricLineageInfo,
-    DBTModelMetadata
+    DBTModelMetadata,
+    ARKPISummary,
+    ARAgingSummary,
+    ARPriorityQueueItem,
+    ARRiskDistribution,
+    ARAgingTrend
 } from '../types/api';
 
 // Configure axios base URL
@@ -156,6 +161,42 @@ export const providerApi = {
 export const arApi = {
     getSummary: async (params: DateRange = {}): Promise<ApiResponse<ARSummary[]>> => {
         return apiCall(() => api.get('/reports/ar/summary', { params }));
+    },
+
+    // AR Aging Dashboard API calls
+    getKPISummary: async (params: DateRange = {}): Promise<ApiResponse<ARKPISummary>> => {
+        return apiCall(() => api.get('/ar/kpi-summary', { params }));
+    },
+
+    getAgingSummary: async (params: DateRange & { snapshot_date?: string } = {}): Promise<ApiResponse<ARAgingSummary[]>> => {
+        return apiCall(() => api.get('/ar/aging-summary', { params }));
+    },
+
+    getPriorityQueue: async (
+        skip: number = 0,
+        limit: number = 100,
+        filters: {
+            min_priority_score?: number;
+            risk_category?: string;
+            min_balance?: number;
+            provider_id?: number;
+        } = {}
+    ): Promise<ApiResponse<ARPriorityQueueItem[]>> => {
+        return apiCall(() => api.get('/ar/priority-queue', {
+            params: { skip, limit, ...filters }
+        }));
+    },
+
+    getRiskDistribution: async (params: DateRange & { snapshot_date?: string } = {}): Promise<ApiResponse<ARRiskDistribution[]>> => {
+        return apiCall(() => api.get('/ar/risk-distribution', { params }));
+    },
+
+    getSnapshotDates: async (): Promise<ApiResponse<Array<{ snapshot_date: string }>>> => {
+        return apiCall(() => api.get('/ar/snapshot-dates'));
+    },
+
+    getAgingTrends: async (params: DateRange = {}): Promise<ApiResponse<ARAgingTrend[]>> => {
+        return apiCall(() => api.get('/ar/aging-trends', { params }));
     },
 };
 
