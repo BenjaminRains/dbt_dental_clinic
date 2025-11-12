@@ -661,13 +661,8 @@ class TableProcessor:
         ENHANCED: Check if analytics needs updating from replication independently.
         """
         try:
-            from ..loaders.postgres_loader import PostgresLoader
-            
-            # ✅ MODERN ARCHITECTURE: Initialize PostgresLoader
-            # PostgresLoader handles its own connections using Settings injection
-            # Detect test environment and pass appropriate parameters
-            use_test_environment = self.settings.environment == 'test'
-            loader = PostgresLoader(use_test_environment=use_test_environment, settings=self.settings)
+            # Loader instantiation with optional refactored implementation
+            loader = self._instantiate_loader()
             
             # ENHANCED: Check if analytics needs updating from replication
             if not force_full:
@@ -696,19 +691,12 @@ class TableProcessor:
             # Use chunked loading for large tables (> 100MB)
             use_chunked = estimated_size_mb > 100
             
-            if use_chunked:
+            if use_chunked and hasattr(loader, 'load_table_chunked'):
                 logger.info(f"Using chunked loading for large table: {table_name} ({estimated_size_mb}MB)")
-                success, metadata = loader.load_table_chunked(
-                    table_name=table_name,
-                    force_full=force_full,
-                    chunk_size=batch_size
-                )
+                success, metadata = loader.load_table_chunked(table_name=table_name, force_full=force_full, chunk_size=batch_size)
             else:
                 logger.info(f"Using standard loading for table: {table_name}")
-                success, metadata = loader.load_table(
-                    table_name=table_name,
-                    force_full=force_full
-                )
+                success, metadata = loader.load_table(table_name=table_name, force_full=force_full)
             
             if not success:
                 logger.error(f"Failed to load table {table_name}")
@@ -740,3 +728,56 @@ class TableProcessor:
         except Exception as e:
             logger.error(f"Unexpected error during loading for {table_name}: {str(e)}")
             return False 
+
+    def _instantiate_loader(self):
+        """Create a loader instance, optionally using the refactored implementation.
+
+        Controlled by env var ETL_USE_REFACTORED_LOADER = 'true'|'1'.
+        Falls back to current PostgresLoader otherwise.
+        """
+        try:
+            use_refactor = os.environ.get('ETL_USE_REFACTORED_LOADER', '').lower() in ['1', 'true', 'yes']
+            if use_refactor:
+                # Build dependencies for refactored loader
+                replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+                analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
+                schema_adapter = PostgresSchema(
+                    postgres_schema=ConfigPostgresSchema.RAW,
+                    settings=self.settings,
+                )
+                from ..loaders.postgres_loader_refactor_load_strategies import PostgresLoaderRefactored
+
+                class _RefactoredAdapter:
+                    def __init__(self, impl):
+                        self._impl = impl
+
+                    def _check_analytics_needs_updating(self, table_name: str):
+                        return self._impl._check_analytics_needs_updating(table_name)
+
+                    def _update_load_status(self, table_name: str, rows_loaded: int, load_status: str, last_primary_value=None, primary_column_name=None):
+                        # Delegate to refactored standard updater (preserves 0-row timestamp behavior)
+                        return self._impl._update_load_status(table_name, rows_loaded, load_status)
+
+                    def load_table(self, table_name: str, force_full: bool = False):
+                        return self._impl.load_table(table_name, force_full)
+
+                    def load_table_chunked(self, table_name: str, force_full: bool = False, chunk_size: int = 5000):
+                        # Refactored loader chooses strategy internally; call unified entrypoint
+                        return self._impl.load_table(table_name, force_full)
+
+                return _RefactoredAdapter(PostgresLoaderRefactored(
+                    replication_engine=replication_engine,
+                    analytics_engine=analytics_engine,
+                    settings=self.settings,
+                    schema_adapter=schema_adapter,
+                ))
+
+            # Default: current loader
+            from ..loaders.postgres_loader import PostgresLoader
+            use_test_environment = self.settings.environment == 'test'
+            return PostgresLoader(use_test_environment=use_test_environment, settings=self.settings)
+        except Exception as e:
+            logger.warning(f"Falling back to current PostgresLoader due to error creating refactored loader: {str(e)}")
+            from ..loaders.postgres_loader import PostgresLoader
+            use_test_environment = self.settings.environment == 'test'
+            return PostgresLoader(use_test_environment=use_test_environment, settings=self.settings)
