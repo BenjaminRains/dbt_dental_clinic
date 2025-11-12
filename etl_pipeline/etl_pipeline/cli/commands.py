@@ -289,6 +289,13 @@ def _execute_dry_run(orchestrator: PipelineOrchestrator, config: Optional[str],
         click.echo("⚠️  Pipeline would fail during execution")
         return
     
+    # Show loader selection hint based on environment flag
+    try:
+        use_refactor = os.environ.get('ETL_USE_REFACTORED_LOADER', '').lower() in ['1', 'true', 'yes']
+        click.echo(f"\n🧩 Loader implementation: {'Refactored (strategy-based)' if use_refactor else 'Current (legacy)'}")
+    except Exception:
+        pass
+
     # Show processing plan
     if tables:
         click.echo(f"\n📊 Would process {len(tables)} specific tables:")
