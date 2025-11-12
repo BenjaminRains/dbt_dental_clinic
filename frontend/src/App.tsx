@@ -6,6 +6,7 @@ import Revenue from './pages/Revenue';
 import Providers from './pages/Providers';
 import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
+import AR from './pages/AR';
 
 function App() {
     return (
@@ -17,6 +18,7 @@ function App() {
                     <Route path="/providers" element={<Providers />} />
                     <Route path="/patients" element={<Patients />} />
                     <Route path="/appointments" element={<Appointments />} />
+                    <Route path="/ar-aging" element={<AR />} />
                 </Routes>
             </Layout>
         </Box>
