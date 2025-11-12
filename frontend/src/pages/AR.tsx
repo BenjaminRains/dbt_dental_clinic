@@ -360,6 +360,21 @@ const AR: React.FC = () => {
                         <Card>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
+                                    AR Ratio (PBN)
+                                </Typography>
+                                <Typography variant="h5" component="div">
+                                    {(kpiSummary.ar_ratio ?? 0).toFixed(1)}%
+                                </Typography>
+                                <Typography variant="body2" color="text.secondary">
+                                    Current Month: Collections / Production
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <Card>
+                            <CardContent>
+                                <Typography color="textSecondary" gutterBottom>
                                     High Risk Count
                                 </Typography>
                                 <Typography variant="h5" component="div" color="error">
@@ -384,12 +399,15 @@ const AR: React.FC = () => {
                                 AR Aging Summary
                             </Typography>
                             <ResponsiveContainer width="100%" height={300}>
-                                <BarChart data={agingSummary.length > 0 ? agingSummary : [
-                                    { aging_bucket: "Current", amount: 0 },
-                                    { aging_bucket: "30 Day", amount: 0 },
-                                    { aging_bucket: "60 Day", amount: 0 },
-                                    { aging_bucket: "90 Day", amount: 0 }
-                                ]}>
+                                <BarChart
+                                    data={agingSummary.length > 0 ? agingSummary : [
+                                        { aging_bucket: "Current", amount: 0 },
+                                        { aging_bucket: "30 Day", amount: 0 },
+                                        { aging_bucket: "60 Day", amount: 0 },
+                                        { aging_bucket: "90 Day", amount: 0 }
+                                    ]}
+                                    margin={{ left: 20, right: 20, top: 20, bottom: 20 }}
+                                >
                                     <CartesianGrid strokeDasharray="3 3" />
                                     <XAxis
                                         dataKey="aging_bucket"
@@ -397,7 +415,15 @@ const AR: React.FC = () => {
                                     />
                                     <YAxis
                                         tickFormatter={(value) => formatCurrency(value)}
-                                        domain={[0, 'dataMax']}
+                                        domain={[
+                                            0,
+                                            (dataMax: number) => {
+                                                // Add 10% padding to the top so bars don't touch the top
+                                                return Math.ceil(dataMax * 1.1);
+                                            }
+                                        ]}
+                                        width={80}
+                                        tick={{ fontSize: 12 }}
                                     />
                                     <Tooltip
                                         formatter={(value: number) => formatCurrency(value)}
@@ -530,8 +556,8 @@ const AR: React.FC = () => {
                                 <Table>
                                     <TableHead>
                                         <TableRow>
-                                            <TableCell>Patient</TableCell>
-                                            <TableCell>Provider</TableCell>
+                                            <TableCell>Patient ID</TableCell>
+                                            <TableCell>Provider ID</TableCell>
                                             <TableCell align="right">Total Balance</TableCell>
                                             <TableCell align="right">Current</TableCell>
                                             <TableCell align="right">30 Day</TableCell>
@@ -552,8 +578,8 @@ const AR: React.FC = () => {
                                         ) : (
                                             priorityQueue.map((item) => (
                                                 <TableRow key={`${item.patient_id}-${item.provider_id}`} hover>
-                                                    <TableCell>{item.patient_name}</TableCell>
-                                                    <TableCell>{item.provider_name}</TableCell>
+                                                    <TableCell>{item.patient_id}</TableCell>
+                                                    <TableCell>{item.provider_id}</TableCell>
                                                     <TableCell align="right">
                                                         <Typography variant="body2" fontWeight="bold">
                                                             {formatCurrency(item.total_balance)}
