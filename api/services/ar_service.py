@@ -21,8 +21,13 @@ def get_ar_kpi_summary(
     - Current (0-30) amount and percentage
     - Over 90 days amount and percentage
     - DSO (Days Sales Outstanding) - simplified calculation
-    - Collection rate
+    - Collection rate (calculated from ALL procedures and ALL payments for direct-pay practice)
     - High risk counts and amounts
+    
+    Collection Rate Calculation:
+    - Production: All procedures from fact_procedure (last 365 days) - includes both insurance and direct-pay
+    - Collections: All payments from fact_payment (last 365 days) - includes both insurance and patient payments, excludes refunds
+    - Rate = (Total Collections / Total Production) × 100
     
     Now queries mart_ar_summary directly - aging buckets and insurance estimates are calculated in the mart model
     """
@@ -74,6 +79,37 @@ def get_ar_kpi_summary(
             SUM(payment_amount) as total_collections_30_days
         FROM raw_marts.fact_payment
         WHERE payment_date >= CURRENT_DATE - INTERVAL '55 days'
+    ),
+    -- Calculate collection rate using ALL procedures and ALL payments (correct for direct-pay practice)
+    -- Production: All procedures from fact_procedure (both insurance and direct-pay)
+    -- Collections: All payments from fact_payment (both insurance and patient, excluding refunds)
+    collection_rate_calc AS (
+        SELECT 
+            -- Production: All procedures in last 365 days
+            (SELECT COALESCE(SUM(fp.actual_fee), 0)
+             FROM raw_marts.fact_procedure fp
+             INNER JOIN raw_marts.dim_date dd ON fp.date_id = dd.date_id
+             WHERE dd.date_day >= CURRENT_DATE - INTERVAL '365 days') as total_production,
+            -- Collections: All payments in last 365 days (excluding refunds)
+            (SELECT COALESCE(SUM(payment_amount), 0)
+             FROM raw_marts.fact_payment
+             WHERE payment_date >= CURRENT_DATE - INTERVAL '365 days'
+               AND payment_direction = 'Income') as total_collections
+    ),
+    -- Calculate AR Ratio (PBN style): Collections (current month) / Production (current month)
+    -- This matches Practice by Numbers AR Ratio calculation
+    ar_ratio_calc AS (
+        SELECT 
+            -- Production: All procedures in current month
+            (SELECT COALESCE(SUM(fp.actual_fee), 0)
+             FROM raw_marts.fact_procedure fp
+             INNER JOIN raw_marts.dim_date dd ON fp.date_id = dd.date_id
+             WHERE dd.date_day >= DATE_TRUNC('month', CURRENT_DATE)) as monthly_production,
+            -- Collections: All payments in current month (excluding refunds)
+            (SELECT COALESCE(SUM(payment_amount), 0)
+             FROM raw_marts.fact_payment
+             WHERE payment_date >= DATE_TRUNC('month', CURRENT_DATE)
+               AND payment_direction = 'Income') as monthly_collections
     )
     SELECT 
         at.total_ar as total_ar_outstanding,
@@ -91,11 +127,19 @@ def get_ar_kpi_summary(
         END as over_90_percentage,
         at.patient_ar_total as patient_ar,
         at.insurance_ar_total as insurance_ar,
+        -- Collection rate: Collections / Production (using all procedures and all payments, last 365 days)
         CASE 
-            WHEN at.total_billed > 0 
-            THEN (at.total_payments / NULLIF(at.total_billed, 0)) * 100
+            WHEN crc.total_production > 0 
+            THEN (crc.total_collections / NULLIF(crc.total_production, 0)) * 100
             ELSE 0
         END as collection_rate,
+        -- AR Ratio (PBN style): Collections (current month) / Production (current month)
+        -- This matches Practice by Numbers AR Ratio metric
+        CASE 
+            WHEN arc.monthly_production > 0 
+            THEN (arc.monthly_collections / NULLIF(arc.monthly_production, 0)) * 100
+            ELSE 0
+        END as ar_ratio,
         rm.high_risk_count as high_risk_count,
         rm.high_risk_amount as high_risk_amount,
         CASE 
@@ -112,6 +156,8 @@ def get_ar_kpi_summary(
     FROM ar_totals at
     CROSS JOIN risk_metrics rm
     CROSS JOIN practice_collections pc
+    CROSS JOIN collection_rate_calc crc
+    CROSS JOIN ar_ratio_calc arc
     """
     
     params = {
@@ -135,6 +181,7 @@ def get_ar_kpi_summary(
             "dso_days": 0.0,
             "pbn_ar_days": 0.0,
             "collection_rate": 0.0,
+            "ar_ratio": 0.0,
             "high_risk_count": 0,
             "high_risk_amount": 0.0
         }
@@ -151,6 +198,7 @@ def get_ar_kpi_summary(
             "dso_days": float(result.dso_days or 0),
             "pbn_ar_days": float(getattr(result, 'pbn_ar_days', 0) or 0),
             "collection_rate": float(result.collection_rate or 0),
+            "ar_ratio": float(getattr(result, 'ar_ratio', 0) or 0),
             "high_risk_count": int(result.high_risk_count or 0),
             "high_risk_amount": float(result.high_risk_amount or 0)
         }
@@ -166,6 +214,7 @@ def get_ar_kpi_summary(
             "dso_days": 0.0,
             "pbn_ar_days": 0.0,
             "collection_rate": 0.0,
+            "ar_ratio": 0.0,
             "high_risk_count": 0,
             "high_risk_amount": 0.0
         }
