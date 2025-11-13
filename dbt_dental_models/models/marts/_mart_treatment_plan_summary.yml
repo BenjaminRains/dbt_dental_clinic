@@ -1,0 +1,285 @@
+version: 2
+
+models:
+  - name: mart_treatment_plan_summary
+    description: >
+      Summary Mart model for Treatment Plan Acceptance Analysis
+      
+      This model provides daily grain treatment acceptance metrics by provider and clinic.
+      Aggregates treatment plan acceptance data from int_treatment_plan_acceptance and includes
+      patients seen and patients with exams for comprehensive analysis.
+      Part of System A: Treatment Planning and Fee Processing workflow.
+      
+      Key Features:
+      - Daily Grain: One row per date + provider + clinic (based on treatment_plan_date)
+      - Provider Assignment: Uses exam_provider_id (provider who performed the exam)
+      - Clinic Assignment: Uses exam_clinic_id (clinic where exam was performed)
+      - Acceptance Metrics: Treatment acceptance rate, patient acceptance rate, diagnosis rate
+      - Financial Metrics: Treatment presented amount, treatment accepted amount, same-day treatment amount
+      - Volume Metrics: Patients seen, patients with exams, patients presented, patients accepted
+      
+      Key Metrics:
+      - tx_acceptance_rate: (Treatment Accepted / Treatment Presented) * 100
+      - patient_acceptance_rate: (Patients Accepted / Patients Presented) * 100
+      - diagnosis_rate: (Patients Presented / Patients with Exams) * 100
+      - tx_presented_amount: Total treatment plan value presented
+      - tx_accepted_amount: Total treatment plan value accepted
+      - same_day_treatment_amount: Same-day treatment value
+      
+      Data Sources:
+      - int_treatment_plan_acceptance: Treatment plan acceptance data with exam linking
+      - fact_appointment: Appointment data for patients_seen metric
+      - int_procedure_complete: Procedure data for patients_with_exams metric
+      - dim_procedure: Procedure categories for exam identification
+      - dim_date: Date dimension for temporal analysis
+      
+      Business Logic:
+      - Only includes Active treatment plans (treatment_plan_status = 0)
+      - Only includes treatment plans with exams within 30 days (exam_provider_id IS NOT NULL)
+      - Patients_seen includes all appointments (scheduled or completed) in date range
+      - Patients_with_exams includes all completed exam procedures in date range
+      - Date filtering based on treatment_plan_date (date when treatment plan was created)
+      
+      Data Quality Notes:
+      - Daily grain allows for weekly/monthly aggregation in dashboard
+      - Aggregations performed at treatment plan level before joining to date dimension
+      - Date dimension join for temporal analysis and filtering
+      - Provider assignment based on exam provider (not procedure provider) aligns with PBN requirements
+      
+    config:
+      materialized: table
+      schema: marts
+      unique_key: ['date_id', 'provider_id', 'clinic_id']
+      on_schema_change: fail
+    
+    columns:
+      - name: date_id
+        description: >
+          Primary key - Date identifier (YYYY-MM-DD format from dim_date)
+          
+          Business Context:
+          - Used for date filtering in dashboard (e.g., October 2025)
+          - Links to dim_date for temporal analysis
+          - Used for daily/weekly/monthly aggregation
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+
+      - name: provider_id
+        description: >
+          Provider identifier (exam_provider_id from int_treatment_plan_acceptance)
+          
+          Business Context:
+          - Provider who performed the exam (not procedure provider)
+          - Used for provider-level treatment acceptance analytics
+          - Used for provider filtering in dashboard
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+
+      - name: clinic_id
+        description: >
+          Clinic identifier (exam_clinic_id from int_treatment_plan_acceptance)
+          
+          Business Context:
+          - Clinic where exam was performed (not procedure clinic)
+          - Used for clinic-level treatment acceptance analytics
+          - Used for clinic filtering in dashboard
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+              config:
+                where: "clinic_id > 0"
+
+      - name: treatment_plan_date
+        description: >
+          Date when treatment plan was created (from int_treatment_plan_acceptance)
+          
+          Business Context:
+          - Used for date filtering in dashboard
+          - Used for temporal analysis and trending
+        tests:
+          - not_null
+
+      - name: patients_seen
+        description: >
+          Unique patients with appointments in date range (from fact_appointment)
+          
+          Business Logic:
+          - Includes all appointments (scheduled or completed) in date range
+          - Used for "Patients Seen" metric in dashboard
+          - Broader definition than patients_with_exams
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: patients_with_exams
+        description: >
+          Unique patients with completed exam procedures in date range (from int_procedure_complete)
+          
+          Business Logic:
+          - Includes completed exam procedures (procedure_category = 'Diagnostic' OR is_radiology = true)
+          - Used for diagnosis_rate calculation: (patients_presented / patients_with_exams) * 100
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: patients_presented
+        description: >
+          Unique patients presented with treatment plans (from int_treatment_plan_acceptance)
+          
+          Business Logic:
+          - Counts distinct patients with treatment plans created on treatment_plan_date
+          - Used for patient_acceptance_rate calculation: (patients_accepted / patients_presented) * 100
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= patients_with_exams"
+              column_name: patients_presented
+              config:
+                severity: warn
+
+      - name: patients_accepted
+        description: >
+          Unique patients who accepted at least one procedure from treatment plan
+          
+          Business Logic:
+          - Patient accepted if at least one procedure was accepted (completed OR scheduled)
+          - Used for patient_acceptance_rate calculation
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= patients_presented"
+              column_name: patients_accepted
+              config:
+                severity: warn
+
+      - name: treatment_plans_presented
+        description: >
+          Count of treatment plans presented (from int_treatment_plan_acceptance)
+          
+          Business Context:
+          - Counts treatment plans created on treatment_plan_date
+          - Used for treatment plan volume metrics
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: treatment_plans_accepted
+        description: >
+          Count of treatment plans with at least one accepted procedure
+          
+          Business Logic:
+          - Treatment plan accepted if at least one procedure was accepted
+          - Used for treatment plan acceptance metrics
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= treatment_plans_presented"
+              column_name: treatment_plans_accepted
+              config:
+                severity: warn
+
+      - name: tx_presented_amount
+        description: >
+          Total treatment plan value presented (sum of all procedure fees in treatment plans)
+          
+          Business Context:
+          - Used for tx_acceptance_rate calculation: (tx_accepted_amount / tx_presented_amount) * 100
+          - Used for financial metrics in dashboard
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+
+      - name: tx_accepted_amount
+        description: >
+          Total treatment plan value accepted (sum of accepted procedure fees)
+          
+          Business Logic:
+          - Accepted procedures = completed (status=2) OR scheduled (appointment_id exists AND appointment_date > treatment_plan_date AND appointment_status=1)
+          - Used for tx_acceptance_rate calculation
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= tx_presented_amount"
+              column_name: tx_accepted_amount
+              config:
+                severity: warn
+
+      - name: same_day_treatment_amount
+        description: >
+          Dollar amount of treatment items completed on the same day the treatment plan was created
+          
+          Business Logic:
+          - Same-day treatment = procedure completed on treatment_plan_date AND procedure_status = 2
+          - Used for same-day treatment metric in dashboard
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= tx_accepted_amount"
+              column_name: same_day_treatment_amount
+              config:
+                severity: warn
+
+      - name: tx_acceptance_rate
+        description: >
+          Treatment acceptance rate: (tx_accepted_amount / tx_presented_amount) * 100
+          
+          Business Context:
+          - Primary metric for treatment acceptance dashboard (Tx Accept %)
+          - Percentage of treatment plan value that was accepted
+          - Used for provider-level performance tracking
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+
+      - name: patient_acceptance_rate
+        description: >
+          Patient acceptance rate: (patients_accepted / patients_presented) * 100
+          
+          Business Context:
+          - Secondary metric for treatment acceptance dashboard (Pt Accept %)
+          - Percentage of patients who accepted at least one procedure
+          - Used for patient-level acceptance tracking
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+
+      - name: diagnosis_rate
+        description: >
+          Diagnosis rate: (patients_presented / patients_with_exams) * 100
+          
+          Business Context:
+          - Diagnosis percentage metric (Diag %) in dashboard
+          - Percentage of patients with exams who received treatment plans
+          - Used for treatment planning effectiveness tracking
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 100
+              inclusive: true
+
