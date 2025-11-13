@@ -144,7 +144,7 @@ export interface ProviderPerformance {
 }
 
 export interface ProviderSummary {
-    provider_name: string;
+    provider_id: number;
     total_appointments: number;
     completed_appointments: number;
     no_show_appointments: number;
@@ -158,18 +158,12 @@ export interface ProviderSummary {
     avg_production_per_appointment: number;
 }
 
-// Comprehensive provider interface matching the backend Provider model
+// Comprehensive provider interface matching the backend Provider model - pseudonymized for public access
 export interface Provider {
     // Primary identification
     provider_id: number;
 
-    // Provider identifiers
-    provider_abbreviation?: string;
-    provider_last_name?: string;
-    provider_first_name?: string;
-    provider_middle_initial?: string;
-    provider_suffix?: string;
-    provider_preferred_name?: string;
+    // Provider identifiers (non-PII only)
     provider_custom_id?: string;
 
     // Provider classifications
@@ -180,16 +174,6 @@ export interface Provider {
     provider_status_description?: string;
     anesthesia_provider_type?: number;
     anesthesia_provider_type_description?: string;
-
-    // Provider credentials
-    state_license?: string;
-    dea_number?: string;
-    blue_cross_id?: string;
-    medicaid_id?: string;
-    national_provider_id?: string;
-    state_rx_id?: string;
-    state_where_licensed?: string;
-    taxonomy_code_override?: string;
 
     // Provider flags
     is_secondary?: boolean;
@@ -324,10 +308,7 @@ export interface RevenueOpportunity {
     patient_id: number;
     appointment_id: number;
 
-    // Provider information
-    provider_last_name?: string;
-    provider_first_name?: string;
-    provider_preferred_name?: string;
+    // Provider information (pseudonymized)
     provider_type_category?: string;
     provider_specialty_category?: string;
 
@@ -395,7 +376,7 @@ export interface RevenueOpportunitySummary {
 
 export interface RevenueRecoveryPlan {
     opportunity_id: number;
-    provider_name?: string;
+    provider_id?: number;
     patient_id: number;
     opportunity_type: string;
     lost_revenue?: number;
@@ -479,6 +460,98 @@ export interface AppointmentUpdate {
     is_broken?: boolean;
     scheduled_production_amount?: number;
     appointment_length_minutes?: number;
+}
+
+// Treatment Acceptance Types
+export interface TreatmentAcceptanceKPISummary {
+    // Primary KPIs (matching PBN)
+    tx_acceptance_rate: number | null;
+    patient_acceptance_rate: number | null;
+    diagnosis_rate: number | null;
+
+    // Volume Metrics
+    patients_seen: number;
+    patients_with_exams: number;
+    patients_with_exams_and_presented: number;
+    patients_presented: number;
+    patients_accepted: number;
+    procedures_presented: number;
+    procedures_accepted: number;
+
+    // Financial Metrics
+    tx_presented_amount: number;
+    tx_accepted_amount: number;
+    same_day_treatment_amount: number;
+
+    // Additional Metrics
+    same_day_treatment_rate: number | null;
+    procedure_acceptance_rate: number | null;
+    patients_with_exams_presented: number;
+    patients_with_exams_accepted: number;
+    patients_with_exams_completed: number;
+
+    // Procedure Status Breakdown
+    procedures_planned: number;
+    procedures_ordered: number;
+    procedures_completed: number;
+    procedures_scheduled: number;
+}
+
+export interface TreatmentAcceptanceSummary {
+    procedure_date: string;
+    provider_id: number;
+    clinic_id: number;
+    patients_seen: number;
+    patients_presented: number;
+    patients_accepted: number;
+    procedures_presented: number;
+    procedures_accepted: number;
+    tx_acceptance_rate: number | null;
+    patient_acceptance_rate: number | null;
+    diagnosis_rate: number | null;
+    tx_presented_amount: number;
+    tx_accepted_amount: number;
+    same_day_treatment_amount: number;
+    same_day_treatment_rate: number | null;
+    procedure_acceptance_rate: number | null;
+    patients_with_exams_presented: number;
+    patients_with_exams_accepted: number;
+    patients_with_exams_completed: number;
+    procedures_planned: number;
+    procedures_ordered: number;
+    procedures_completed: number;
+    procedures_scheduled: number;
+}
+
+export interface TreatmentAcceptanceTrend {
+    date: string;
+    tx_acceptance_rate: number | null;
+    patient_acceptance_rate: number | null;
+    diagnosis_rate: number | null;
+    tx_presented_amount: number;
+    tx_accepted_amount: number;
+    patients_seen: number;
+    patients_presented: number;
+    patients_accepted: number;
+}
+
+export interface TreatmentAcceptanceProviderPerformance {
+    provider_id: number;
+    provider_name: string;
+    tx_acceptance_rate: number | null;
+    patient_acceptance_rate: number | null;
+    diagnosis_rate: number | null;
+    tx_presented_amount: number;
+    tx_accepted_amount: number;
+    patients_seen: number;
+    patients_with_exams: number;
+    patients_with_exams_and_presented: number;
+    patients_presented: number;
+    patients_accepted: number;
+    procedures_presented: number;
+    procedures_accepted: number;
+    same_day_treatment_amount: number;
+    same_day_treatment_rate: number | null;
 }
 
 // API Response wrapper for error handling

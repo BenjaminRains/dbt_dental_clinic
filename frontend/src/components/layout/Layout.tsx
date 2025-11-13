@@ -23,6 +23,7 @@ import {
     Person as PatientsIcon,
     CalendarToday as AppointmentsIcon,
     AccountBalance as ARIcon,
+    CheckCircle as TreatmentAcceptanceIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -36,6 +37,7 @@ const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
     { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
     { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
+    { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
     { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
     { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
     { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },

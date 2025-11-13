@@ -22,7 +22,11 @@ import {
     ARAgingSummary,
     ARPriorityQueueItem,
     ARRiskDistribution,
-    ARAgingTrend
+    ARAgingTrend,
+    TreatmentAcceptanceKPISummary,
+    TreatmentAcceptanceSummary,
+    TreatmentAcceptanceTrend,
+    TreatmentAcceptanceProviderPerformance
 } from '../types/api';
 
 // Configure axios base URL
@@ -200,6 +204,45 @@ export const arApi = {
     },
 };
 
+// Treatment Acceptance API calls
+export const treatmentAcceptanceApi = {
+    getKPISummary: async (params?: {
+        start_date?: string;
+        end_date?: string;
+        provider_id?: number;
+        clinic_id?: number;
+    }): Promise<ApiResponse<TreatmentAcceptanceKPISummary>> => {
+        return apiCall(() => api.get('/treatment-acceptance/kpi-summary', { params }));
+    },
+
+    getSummary: async (params?: {
+        start_date?: string;
+        end_date?: string;
+        provider_id?: number;
+        clinic_id?: number;
+    }): Promise<ApiResponse<TreatmentAcceptanceSummary[]>> => {
+        return apiCall(() => api.get('/treatment-acceptance/summary', { params }));
+    },
+
+    getTrends: async (params?: {
+        start_date?: string;
+        end_date?: string;
+        provider_id?: number;
+        clinic_id?: number;
+        group_by?: string;
+    }): Promise<ApiResponse<TreatmentAcceptanceTrend[]>> => {
+        return apiCall(() => api.get('/treatment-acceptance/trends', { params }));
+    },
+
+    getProviderPerformance: async (params?: {
+        start_date?: string;
+        end_date?: string;
+        clinic_id?: number;
+    }): Promise<ApiResponse<TreatmentAcceptanceProviderPerformance[]>> => {
+        return apiCall(() => api.get('/treatment-acceptance/provider-performance', { params }));
+    },
+};
+
 // Dashboard API calls
 export const dashboardApi = {
     getKPIs: async (params: DateRange = {}): Promise<ApiResponse<DashboardKPIs>> => {
@@ -306,6 +349,7 @@ export const apiService = {
     dashboard: dashboardApi,
     appointment: appointmentApi,
     dbt: dbtMetadataApi,
+    treatmentAcceptance: treatmentAcceptanceApi,
     utils: dateUtils,
 };
 

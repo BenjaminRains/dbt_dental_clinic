@@ -7,6 +7,7 @@ import Providers from './pages/Providers';
 import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
 import AR from './pages/AR';
+import TreatmentAcceptance from './pages/TreatmentAcceptance';
 
 function App() {
     return (
@@ -19,6 +20,7 @@ function App() {
                     <Route path="/patients" element={<Patients />} />
                     <Route path="/appointments" element={<Appointments />} />
                     <Route path="/ar-aging" element={<AR />} />
+                    <Route path="/treatment-acceptance" element={<TreatmentAcceptance />} />
                 </Routes>
             </Layout>
         </Box>
