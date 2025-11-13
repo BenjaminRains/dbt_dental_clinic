@@ -5,7 +5,7 @@ from datetime import datetime
 
 class ProviderSummary(BaseModel):
     """Provider performance summary model matching the frontend ProviderSummary interface"""
-    provider_name: str
+    provider_id: int
     total_appointments: int
     completed_appointments: int
     no_show_appointments: int
@@ -22,17 +22,11 @@ class ProviderSummary(BaseModel):
         from_attributes = True
 
 class Provider(BaseModel):
-    """Comprehensive provider model based on dim_provider mart"""
+    """Comprehensive provider model based on dim_provider mart - pseudonymized for public access"""
     # Primary identification
     provider_id: int
     
-    # Provider identifiers
-    provider_abbreviation: Optional[str] = None
-    provider_last_name: Optional[str] = None
-    provider_first_name: Optional[str] = None
-    provider_middle_initial: Optional[str] = None
-    provider_suffix: Optional[str] = None
-    provider_preferred_name: Optional[str] = None
+    # Provider identifiers (non-PII only)
     provider_custom_id: Optional[str] = None
     
     # Provider classifications
@@ -43,16 +37,6 @@ class Provider(BaseModel):
     provider_status_description: Optional[str] = None
     anesthesia_provider_type: Optional[int] = None
     anesthesia_provider_type_description: Optional[str] = None
-    
-    # Provider credentials
-    state_license: Optional[str] = None
-    dea_number: Optional[str] = None
-    blue_cross_id: Optional[str] = None
-    medicaid_id: Optional[str] = None
-    national_provider_id: Optional[str] = None
-    state_rx_id: Optional[str] = None
-    state_where_licensed: Optional[str] = None
-    taxonomy_code_override: Optional[str] = None
     
     # Provider flags
     is_secondary: Optional[bool] = None

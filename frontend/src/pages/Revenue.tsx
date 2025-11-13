@@ -226,7 +226,7 @@ const Revenue: React.FC = () => {
                                 <TableRow>
                                     <TableCell>Date</TableCell>
                                     <TableCell>Type</TableCell>
-                                    <TableCell>Provider</TableCell>
+                                    <TableCell>Provider ID</TableCell>
                                     <TableCell>Lost Revenue</TableCell>
                                     <TableCell>Recovery Potential</TableCell>
                                     <TableCell>Priority Score</TableCell>
@@ -245,7 +245,7 @@ const Revenue: React.FC = () => {
                                             />
                                         </TableCell>
                                         <TableCell>
-                                            {opportunity.provider_first_name} {opportunity.provider_last_name}
+                                            {opportunity.provider_id || 'N/A'}
                                         </TableCell>
                                         <TableCell>
                                             {opportunity.lost_revenue ? formatCurrency(opportunity.lost_revenue) : 'N/A'}
@@ -283,7 +283,7 @@ const Revenue: React.FC = () => {
                         <Table>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell>Provider</TableCell>
+                                    <TableCell>Provider ID</TableCell>
                                     <TableCell>Patient ID</TableCell>
                                     <TableCell>Type</TableCell>
                                     <TableCell>Lost Revenue</TableCell>
@@ -295,7 +295,7 @@ const Revenue: React.FC = () => {
                             <TableBody>
                                 {recoveryPlan.map((plan) => (
                                     <TableRow key={plan.opportunity_id}>
-                                        <TableCell>{plan.provider_name || 'N/A'}</TableCell>
+                                        <TableCell>{plan.provider_id || 'N/A'}</TableCell>
                                         <TableCell>{plan.patient_id}</TableCell>
                                         <TableCell>
                                             <Chip

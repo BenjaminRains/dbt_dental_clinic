@@ -116,9 +116,6 @@ def get_revenue_opportunities(
         clinic_id,
         patient_id,
         appointment_id,
-        provider_last_name,
-        provider_first_name,
-        provider_preferred_name,
         provider_type_category,
         provider_specialty_category,
         patient_age,
@@ -244,7 +241,7 @@ def get_revenue_recovery_plan(
     query = """
     SELECT 
         opportunity_id,
-        CONCAT(COALESCE(provider_first_name, ''), ' ', COALESCE(provider_last_name, '')) as provider_name,
+        provider_id,
         patient_id,
         opportunity_type,
         lost_revenue,
@@ -284,7 +281,7 @@ def get_revenue_recovery_plan(
     return [
         {
             "opportunity_id": int(row.opportunity_id),
-            "provider_name": str(row.provider_name or "").strip(),
+            "provider_id": int(row.provider_id) if row.provider_id else None,
             "patient_id": int(row.patient_id),
             "opportunity_type": str(row.opportunity_type),
             "lost_revenue": float(row.lost_revenue or 0),
@@ -312,9 +309,6 @@ def get_revenue_opportunity_by_id(
         clinic_id,
         patient_id,
         appointment_id,
-        provider_last_name,
-        provider_first_name,
-        provider_preferred_name,
         provider_type_category,
         provider_specialty_category,
         patient_age,

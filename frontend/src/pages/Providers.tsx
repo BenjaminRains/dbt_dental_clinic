@@ -148,7 +148,7 @@ const Providers: React.FC = () => {
                         <Table>
                             <TableHead>
                                 <TableRow>
-                                    <TableCell>Provider</TableCell>
+                                    <TableCell>Provider ID</TableCell>
                                     <TableCell align="right">Total Appointments</TableCell>
                                     <TableCell align="right">Completed</TableCell>
                                     <TableCell align="right">Completion Rate</TableCell>
@@ -159,10 +159,10 @@ const Providers: React.FC = () => {
                             </TableHead>
                             <TableBody>
                                 {providers.map((provider) => (
-                                    <TableRow key={provider.provider_name}>
+                                    <TableRow key={provider.provider_id}>
                                         <TableCell>
                                             <Typography variant="body2" fontWeight="medium">
-                                                {provider.provider_name}
+                                                {provider.provider_id}
                                             </Typography>
                                         </TableCell>
                                         <TableCell align="right">

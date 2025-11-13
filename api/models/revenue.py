@@ -38,10 +38,7 @@ class RevenueOpportunity(BaseModel):
     patient_id: int
     appointment_id: int
     
-    # Provider information
-    provider_last_name: Optional[str] = None
-    provider_first_name: Optional[str] = None
-    provider_preferred_name: Optional[str] = None
+    # Provider information (pseudonymized)
     provider_type_category: Optional[str] = None
     provider_specialty_category: Optional[str] = None
     
@@ -113,9 +110,9 @@ class RevenueOpportunitySummary(BaseModel):
         from_attributes = True
 
 class RevenueRecoveryPlan(BaseModel):
-    """Revenue recovery plan with actionable items"""
+    """Revenue recovery plan with actionable items - pseudonymized for public access"""
     opportunity_id: int
-    provider_name: Optional[str] = None
+    provider_id: Optional[int] = None
     patient_id: int
     opportunity_type: str
     lost_revenue: Optional[float] = None

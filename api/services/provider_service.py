@@ -15,12 +15,6 @@ def get_providers(
     query = """
     SELECT 
         provider_id,
-        provider_abbreviation,
-        provider_last_name,
-        provider_first_name,
-        provider_middle_initial,
-        provider_suffix,
-        provider_preferred_name,
         provider_custom_id,
         fee_schedule_id,
         specialty_id,
@@ -29,14 +23,6 @@ def get_providers(
         provider_status_description,
         anesthesia_provider_type,
         anesthesia_provider_type_description,
-        state_license,
-        dea_number,
-        blue_cross_id,
-        medicaid_id,
-        national_provider_id,
-        state_rx_id,
-        state_where_licensed,
-        taxonomy_code_override,
         is_secondary,
         is_hidden,
         is_using_tin,
@@ -74,7 +60,7 @@ def get_providers(
     if active_only:
         query += " AND provider_status_category = 'Active'"
     
-    query += " ORDER BY provider_last_name, provider_first_name"
+    query += " ORDER BY provider_id"
     query += f" LIMIT {limit} OFFSET {skip}"
     
     result = db.execute(text(query)).fetchall()
@@ -89,12 +75,6 @@ def get_provider_by_id(
     query = """
     SELECT 
         provider_id,
-        provider_abbreviation,
-        provider_last_name,
-        provider_first_name,
-        provider_middle_initial,
-        provider_suffix,
-        provider_preferred_name,
         provider_custom_id,
         fee_schedule_id,
         specialty_id,
@@ -103,14 +83,6 @@ def get_provider_by_id(
         provider_status_description,
         anesthesia_provider_type,
         anesthesia_provider_type_description,
-        state_license,
-        dea_number,
-        blue_cross_id,
-        medicaid_id,
-        national_provider_id,
-        state_rx_id,
-        state_where_licensed,
-        taxonomy_code_override,
         is_secondary,
         is_hidden,
         is_using_tin,
@@ -157,7 +129,7 @@ def get_provider_summary(
     
     query = """
     SELECT 
-        CONCAT(COALESCE(dp.provider_first_name, ''), ' ', COALESCE(dp.provider_last_name, '')) as provider_name,
+        dp.provider_id,
         COUNT(*) as total_appointments,
         SUM(CASE WHEN fa.is_completed THEN 1 ELSE 0 END) as completed_appointments,
         SUM(CASE WHEN fa.is_no_show THEN 1 ELSE 0 END) as no_show_appointments,
@@ -173,8 +145,6 @@ def get_provider_summary(
     LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
     WHERE fa.appointment_date IS NOT NULL
     AND dp.provider_id IS NOT NULL
-    AND dp.provider_first_name IS NOT NULL
-    AND dp.provider_last_name IS NOT NULL
     """
     
     params = {}
@@ -185,12 +155,12 @@ def get_provider_summary(
         query += " AND fa.appointment_date <= :end_date"
         params['end_date'] = end_date
     
-    query += " GROUP BY dp.provider_id, dp.provider_first_name, dp.provider_last_name ORDER BY total_appointments DESC"
+    query += " GROUP BY dp.provider_id ORDER BY total_appointments DESC"
     
     result = db.execute(text(query), params).fetchall()
     return [
         {
-            "provider_name": str(row.provider_name or ""),
+            "provider_id": int(row.provider_id or 0),
             "total_appointments": int(row.total_appointments or 0),
             "completed_appointments": int(row.completed_appointments or 0),
             "no_show_appointments": int(row.no_show_appointments or 0),
