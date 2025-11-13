@@ -1,0 +1,272 @@
+version: 2
+
+models:
+  - name: int_procedure_acceptance
+    description: >
+      Procedure-based treatment acceptance model with exam identification and acceptance logic.
+      
+      This model tracks procedure-level treatment acceptance metrics, identifying exam procedures,
+      determining if procedures were presented (recommended) vs accepted (completed/scheduled),
+      and identifying same-day treatment. Part of System A: Fee Processing & Verification workflow.
+      
+      Key Features:
+      - Exam Identification: Identifies exam procedures by procedure code (D0120, D0140, D0150, D0220, D0272, D0274, D0330)
+      - Presented Definition: Procedures with status 1 (Treatment Planned) OR status 6 (Ordered/Planned)
+      - Accepted Definition: Procedures with status 2 (Completed) OR status 1/6 with appointment scheduled
+      - Same-Day Treatment: Procedures completed (status 2) on the same day they were presented
+      - Appointment Linking: Links procedures to appointments for scheduled procedure identification
+      
+      Data Sources:
+      - int_procedure_complete: Procedure data with fees and status
+      - int_appointment_details: Appointment data for scheduled procedures
+      - dim_procedure: Procedure code definitions and categories
+      
+      Business Logic:
+      - Exam procedures identified by procedure code pattern (D0xxx codes) or is_radiology flag
+      - Presented procedures: status IN (1, 6) - recommended to patients but not yet performed
+      - Accepted procedures: status = 2 (completed) OR (status IN (1, 6) AND appointment_id exists AND appointment_status = 1)
+      - Same-day treatment: status = 2 AND procedure_date = appointment_date
+      - Appointment linking uses appointment_id to join with int_appointment_details
+      
+      Data Quality Notes:
+      - Only includes procedures with procedure_date >= '2020-01-01' (reasonable date range)
+      - Appointment linking may result in NULL values if appointment doesn't exist in int_appointment_details
+      - Exam identification uses explicit procedure codes for accuracy
+      
+    config:
+      materialized: incremental
+      schema: intermediate
+      unique_key: procedure_id
+      on_schema_change: sync_all_columns
+      tags: ['foundation', 'weekly']
+    
+    columns:
+      - name: procedure_id
+        description: >
+          Primary key - Procedure identifier (maps from "ProcNum" in OpenDental)
+          
+          Business Context:
+          - Uniquely identifies each procedure record
+          - Links to procedure codes, appointments, and patients
+          - Used for procedure-level acceptance tracking
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('int_procedure_complete')
+              field: procedure_id
+      
+      - name: patient_id
+        description: >
+          Foreign key to patient (maps from "PatNum" in OpenDental)
+          
+          Business Relationship:
+          - Links procedure to the patient who received the procedure
+          - Used for patient-level acceptance tracking
+          - Essential for treatment acceptance analytics
+        tests:
+          - not_null
+          - relationships:
+              to: ref('stg_opendental__patient')
+              field: patient_id
+      
+      - name: provider_id
+        description: >
+          Provider who created/recommended the procedure (maps from "ProvNum" in OpenDental)
+          
+          Business Logic:
+          - Provider assignment based on procedure provider (not exam provider)
+          - Used for provider-level treatment acceptance analytics
+          - May differ from appointment provider if procedure is scheduled with different provider
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                where: "provider_id > 0"
+      
+      - name: clinic_id
+        description: >
+          Clinic identifier (maps from "ClinicNum" in OpenDental)
+          
+          Business Context:
+          - Clinic where procedure was created/recommended
+          - Used for clinic-level treatment acceptance analytics
+          - May differ from appointment clinic if procedure is scheduled at different clinic
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+              config:
+                where: "clinic_id > 0"
+      
+      - name: procedure_date
+        description: >
+          Date when procedure was created/recommended (maps from "ProcDate" in OpenDental)
+          
+          Business Context:
+          - Used for date filtering in dashboard (e.g., October 2025)
+          - Used for same-day treatment identification (procedure_date = appointment_date)
+          - Used for temporal analysis and trending
+        tests:
+          - not_null
+      
+      - name: procedure_status
+        description: >
+          Procedure status code (maps from "ProcStatus" in OpenDental)
+          
+          Business Logic:
+          - Status 1: Treatment Planned - recommended but not yet performed
+          - Status 2: Completed - procedure completed
+          - Status 6: Ordered/Planned - ordered but not yet scheduled
+          - Used for presented vs accepted determination
+        tests:
+          - not_null
+          - dbt_utils.accepted_range:
+              min_value: 1
+              max_value: 8
+              inclusive: true
+      
+      - name: is_exam_procedure
+        description: >
+          Flag indicating if procedure is an exam procedure (diagnostic code)
+          
+          Business Logic:
+          - TRUE if procedure code is D0120, D0140, D0150, D0220, D0272, D0274, D0330
+          - TRUE if procedure code starts with D0 and is_radiology = true
+          - Used for exam-specific metrics (patients_with_exams)
+          - Used for diagnosis rate calculations
+        tests:
+          - not_null
+      
+      - name: is_presented
+        description: >
+          Flag indicating if procedure was presented (recommended to patient)
+          
+          Business Logic:
+          - TRUE if procedure_status IN (1, 6) - Treatment Planned or Ordered/Planned
+          - Represents treatments that were recommended to patients
+          - Used for tx_presented_amount and procedures_presented metrics
+        tests:
+          - not_null
+      
+      - name: is_accepted
+        description: >
+          Flag indicating if procedure was accepted (completed or scheduled)
+          
+          Business Logic:
+          - TRUE if procedure_status = 2 (Completed) OR
+          - TRUE if procedure_status IN (1, 6) AND appointment_id exists AND appointment_status = 1 (Scheduled)
+          - Represents treatments that patients accepted (either completed or scheduled)
+          - Used for tx_accepted_amount and procedures_accepted metrics
+        tests:
+          - not_null
+      
+      - name: is_same_day_treatment
+        description: >
+          Flag indicating if procedure was completed on the same day it was presented
+          
+          Business Logic:
+          - TRUE if procedure_status = 2 (Completed) AND procedure_date = appointment_date
+          - Represents treatments completed on the same day they were recommended
+          - Used for same_day_treatment_amount metric
+        tests:
+          - not_null
+      
+      - name: appointment_id
+        description: >
+          Foreign key to appointment (maps from "AptNum" in OpenDental)
+          
+          Business Relationship:
+          - Links procedure to appointment if procedure is scheduled
+          - NULL if procedure is not scheduled (status 1/6 without appointment)
+          - Used for scheduled procedure identification
+          - Note: Some appointment_ids may not exist in int_appointment_details (deleted appointments, historical data, or appointments not yet loaded)
+          - This is an optional relationship, so no relationship test is applied
+        tests: []
+      
+      - name: appointment_date
+        description: >
+          Date when appointment is scheduled (from int_appointment_details)
+          
+          Business Context:
+          - Used for same-day treatment identification (procedure_date = appointment_date)
+          - NULL if procedure is not scheduled
+          - Used for scheduled procedure identification
+      
+      - name: appointment_status
+        description: >
+          Appointment status code (from int_appointment_details)
+          
+          Business Logic:
+          - Status 1: Scheduled - appointment is scheduled
+          - Status 2: Complete - appointment is completed
+          - Used for scheduled procedure identification (status = 1)
+          - NULL if procedure is not scheduled
+      
+      - name: procedure_fee
+        description: >
+          Procedure fee amount (maps from "ProcFee" in OpenDental)
+          
+          Business Context:
+          - Used for financial metrics (tx_presented_amount, tx_accepted_amount, same_day_treatment_amount)
+          - May be NULL for some procedures (administrative, condition, etc.)
+          - Used for revenue analysis and acceptance rate calculations
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: procedure_code
+        description: >
+          Procedure code (maps from procedure_code in dim_procedure)
+          
+          Business Context:
+          - Used for exam identification (D0120, D0140, D0150, etc.)
+          - Used for procedure categorization and analysis
+          - Links to procedure definitions and categories
+        tests:
+          - not_null
+      
+      - name: procedure_category
+        description: >
+          Procedure category (maps from procedure_category in dim_procedure)
+          
+          Business Context:
+          - Clinical specialty classification (Preventive, Restorative, Diagnostic, etc.)
+          - Used for procedure categorization and analysis
+          - May be 'Other' for some procedures (including D0 codes)
+      
+      - name: _loaded_at
+        description: >
+          ETL extraction timestamp (pipeline monitoring)
+          
+          Business Context:
+          - Timestamp when data was extracted from source system
+          - Used for pipeline monitoring and debugging
+          - Part of standardized intermediate metadata
+        tests:
+          - not_null
+      
+      - name: _updated_at
+        description: >
+          ETL update timestamp (pipeline monitoring)
+          
+          Business Context:
+          - Timestamp when data was last updated in source system
+          - Used for pipeline monitoring and debugging
+          - Part of standardized intermediate metadata
+        tests:
+          - not_null
+      
+      - name: _transformed_at
+        description: >
+          dbt intermediate model build timestamp (model-specific tracking)
+          
+          Business Context:
+          - Timestamp when this intermediate model was built
+          - Used for model dependency tracking and debugging
+          - Part of standardized intermediate metadata
+        tests:
+          - not_null
+

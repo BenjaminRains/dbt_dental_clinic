@@ -1,0 +1,499 @@
+version: 2
+
+models:
+  - name: mart_procedure_acceptance_summary
+    description: >
+      Summary Mart model for Procedure-Based Treatment Acceptance Analysis
+      
+      This model provides daily grain procedure acceptance metrics by provider and clinic.
+      Aggregates procedure-level acceptance data from int_procedure_acceptance and includes
+      patients seen and patients with exams for comprehensive analysis.
+      Part of System A: Fee Processing & Verification workflow.
+      
+      Key Features:
+      - Daily Grain: One row per date + provider + clinic (based on procedure_date)
+      - Provider Assignment: Uses procedure provider_id (provider who created/recommended procedure)
+      - Clinic Assignment: Uses procedure clinic_id (clinic where procedure was created/recommended)
+      - Acceptance Metrics: Treatment acceptance rate, patient acceptance rate, diagnosis rate, procedure acceptance rate
+      - Financial Metrics: Treatment presented amount, treatment accepted amount, same-day treatment amount
+      - Volume Metrics: Patients seen, patients with exams, patients presented, patients accepted
+      
+      Key Metrics:
+      - tx_acceptance_rate: (Tx Accepted / Tx Presented) * 100
+      - patient_acceptance_rate: (Patients Accepted / Patients Presented) * 100
+      - diagnosis_rate: (Patients Presented / Patients Seen) * 100
+      - procedure_acceptance_rate: (Procedures Accepted / Procedures Presented) * 100
+      - same_day_treatment_rate: (Same-Day Treatment Amount / Tx Presented) * 100
+      
+      Data Sources:
+      - int_procedure_acceptance: Procedure-level acceptance data with exam identification
+      - int_appointment_details: Appointment data for patients_seen metric
+      - dim_procedure: Procedure code definitions and categories
+      
+      Business Logic:
+      - Presented procedures: status IN (1, 6) - Treatment Planned or Ordered/Planned
+      - Accepted procedures: status = 2 (Completed) OR (status IN (1, 6) AND appointment scheduled)
+      - Same-day treatment: status = 2 AND procedure_date = appointment_date
+      - Patients_seen includes all appointments (scheduled or completed) in date range
+      - Patients_with_exams includes all completed exam procedures in date range
+      - Date filtering based on procedure_date (date when procedure was created/recommended)
+      
+      Data Quality Notes:
+      - Daily grain allows for weekly/monthly aggregation in dashboard
+      - Aggregations performed at procedure level before joining to appointment data
+      - Provider assignment based on procedure provider (not exam provider)
+      - Full outer join with patients_seen to include days with appointments but no procedures
+      
+    config:
+      materialized: table
+      schema: marts
+      unique_key: ['procedure_date', 'provider_id', 'clinic_id']
+      on_schema_change: fail
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - procedure_date
+            - provider_id
+            - clinic_id
+          config:
+            description: "Composite unique key: procedure_date + provider_id + clinic_id must be unique for data integrity"
+    
+    columns:
+      - name: procedure_date
+        description: >
+          Part of composite primary key - Date when procedure was created/recommended (YYYY-MM-DD format)
+          
+          Business Context:
+          - Used for date filtering in dashboard (e.g., October 2025)
+          - Used for daily/weekly/monthly aggregation
+          - Used for temporal analysis and trending
+          - Unique key is composite: ['procedure_date', 'provider_id', 'clinic_id']
+        tests:
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Part of composite primary key - Provider identifier (procedure provider_id from int_procedure_acceptance)
+          
+          Business Context:
+          - Provider who created/recommended the procedure (not exam provider)
+          - Used for provider-level treatment acceptance analytics
+          - Used for provider filtering in dashboard
+          - Unique key is composite: ['procedure_date', 'provider_id', 'clinic_id']
+        tests:
+          - relationships:
+              to: ref('stg_opendental__provider')
+              field: provider_id
+              config:
+                where: "provider_id > 0"
+      
+      - name: clinic_id
+        description: >
+          Part of composite primary key - Clinic identifier (procedure clinic_id from int_procedure_acceptance)
+          
+          Business Context:
+          - Clinic where procedure was created/recommended (not exam clinic)
+          - Used for clinic-level treatment acceptance analytics
+          - Used for clinic filtering in dashboard
+          - Unique key is composite: ['procedure_date', 'provider_id', 'clinic_id']
+        tests:
+          - relationships:
+              to: ref('stg_opendental__clinic')
+              field: clinic_id
+              config:
+                where: "clinic_id > 0"
+      
+      - name: patients_seen
+        description: >
+          Unique patients with appointments in date range (from int_appointment_details)
+          
+          Business Logic:
+          - Includes all appointments (scheduled or completed) in date range
+          - Used for "Patients Seen" metric in dashboard
+          - Broader definition than patients_with_exams
+          - Used for diagnosis_rate calculation: (patients_presented / patients_seen) * 100
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: patients_with_exams
+        description: >
+          Unique patients with completed exam procedures in date range (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Includes completed exam procedures (is_exam_procedure = TRUE AND procedure_status = 2)
+          - Exam procedures identified by procedure code (D0120, D0140, D0150, D0220, D0272, D0274, D0330)
+          - Used for exam-specific metrics and analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: patients_presented
+        description: >
+          Unique patients presented with procedures (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts distinct patients with procedures presented (is_presented = TRUE) on procedure_date
+          - Used for patient_acceptance_rate calculation: (patients_accepted / patients_presented) * 100
+          - Used for diagnosis_rate calculation: (patients_presented / patients_seen) * 100
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: patients_accepted
+        description: >
+          Unique patients who accepted procedures (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts distinct patients with procedures accepted (is_accepted = TRUE) on procedure_date
+          - Used for patient_acceptance_rate calculation: (patients_accepted / patients_presented) * 100
+          - Note: Can exceed patients_presented when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
+          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= patients_presented"
+              column_name: patients_accepted
+              config:
+                severity: warn
+                where: "patients_presented > 0"
+                description: "Expected: patients_accepted can exceed patients_presented when status 2 procedures exist without status 1/6 procedures on the same date"
+      
+      - name: procedures_presented
+        description: >
+          Count of procedures presented (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts procedures with is_presented = TRUE on procedure_date
+          - Used for procedure_acceptance_rate calculation: (procedures_accepted / procedures_presented) * 100
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: procedures_accepted
+        description: >
+          Count of procedures accepted (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts procedures with is_accepted = TRUE on procedure_date
+          - Used for procedure_acceptance_rate calculation: (procedures_accepted / procedures_presented) * 100
+          - Note: Can exceed procedures_presented when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
+          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= procedures_presented"
+              column_name: procedures_accepted
+              config:
+                severity: warn
+                where: "procedures_presented > 0"
+                description: "Expected: procedures_accepted can exceed procedures_presented when status 2 procedures exist without status 1/6 procedures on the same date"
+      
+      - name: patients_with_exams_presented
+        description: >
+          Unique patients with exam procedures presented (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts distinct patients with exam procedures presented (is_exam_procedure = TRUE AND is_presented = TRUE)
+          - Used for exam-specific metrics and analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: patients_with_exams_accepted
+        description: >
+          Unique patients with exam procedures accepted (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts distinct patients with exam procedures accepted (is_exam_procedure = TRUE AND is_accepted = TRUE)
+          - Used for exam-specific metrics and analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: patients_with_exams_completed
+        description: >
+          Unique patients with exam procedures completed (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts distinct patients with exam procedures completed (is_exam_procedure = TRUE AND procedure_status = 2)
+          - Used for exam-specific metrics and analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: tx_presented_amount
+        description: >
+          Total treatment presented amount (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Sum of procedure_fee for procedures with is_presented = TRUE on procedure_date
+          - Used for tx_acceptance_rate calculation: (tx_accepted_amount / tx_presented_amount) * 100
+          - Used for financial analysis and revenue tracking
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: tx_accepted_amount
+        description: >
+          Total treatment accepted amount (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Sum of procedure_fee for procedures with is_accepted = TRUE on procedure_date
+          - Used for tx_acceptance_rate calculation: (tx_accepted_amount / tx_presented_amount) * 100
+          - Used for financial analysis and revenue tracking
+          - Note: Can exceed tx_presented_amount when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
+          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= tx_presented_amount"
+              column_name: tx_accepted_amount
+              config:
+                severity: warn
+                where: "tx_presented_amount > 0"
+                description: "Expected: tx_accepted_amount can exceed tx_presented_amount when status 2 procedures exist without status 1/6 procedures on the same date"
+      
+      - name: same_day_treatment_amount
+        description: >
+          Same-day treatment amount (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Sum of procedure_fee for procedures with is_same_day_treatment = TRUE on procedure_date
+          - Used for same_day_treatment_rate calculation: (same_day_treatment_amount / tx_presented_amount) * 100
+          - Used for same-day treatment analysis
+          - Note: Can exceed tx_presented_amount when same-day treatment exists but no procedures were "presented" (status 1/6) on that date
+          - This can happen when procedures are completed on the same day they're created without going through status 1/6
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+          - dbt_utils.expression_is_true:
+              expression: "<= tx_presented_amount"
+              column_name: same_day_treatment_amount
+              config:
+                severity: warn
+                where: "tx_presented_amount > 0"
+                description: "Expected: same_day_treatment_amount can exceed tx_presented_amount when same-day treatment exists without status 1/6 procedures on the same date"
+      
+      - name: procedures_planned
+        description: >
+          Count of procedures planned (status = 1) (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts procedures with procedure_status = 1 (Treatment Planned) and is_presented = TRUE
+          - Used for procedure status breakdown and analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: procedures_ordered
+        description: >
+          Count of procedures ordered (status = 6) (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts procedures with procedure_status = 6 (Ordered/Planned) and is_presented = TRUE
+          - Used for procedure status breakdown and analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: procedures_completed
+        description: >
+          Count of procedures completed (status = 2) (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts procedures with procedure_status = 2 (Completed)
+          - Used for procedure status breakdown and analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: procedures_scheduled
+        description: >
+          Count of procedures scheduled (status IN (1, 6) with appointment) (from int_procedure_acceptance)
+          
+          Business Logic:
+          - Counts procedures with procedure_status IN (1, 6) and is_accepted = TRUE and appointment_id IS NOT NULL
+          - Used for procedure status breakdown and analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              inclusive: true
+      
+      - name: tx_acceptance_rate
+        description: >
+          Treatment acceptance rate: (Tx Accepted / Tx Presented) * 100
+          
+          Business Logic:
+          - Calculated as: (tx_accepted_amount / tx_presented_amount) * 100
+          - Rounded to 2 decimal places
+          - Returns NULL if tx_presented_amount is 0 but tx_accepted_amount > 0 (cannot calculate meaningful rate)
+          - Returns 0 if both are 0
+          - Tx presented: Sum of procedure fees for status 1/6 procedures (actually presented on this date)
+          - Tx accepted: Sum of procedure fees for status 2 procedures (completed) OR status 1/6 with appointment scheduled
+          - Can exceed 100% when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
+          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - Used for financial acceptance analysis
+          - Note: Values > 1000% may indicate data quality issues and should be investigated
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10000
+              inclusive: true
+              config:
+                where: "tx_acceptance_rate IS NOT NULL AND tx_presented_amount > 0"
+                severity: warn
+                description: "Expected: tx_acceptance_rate can exceed 100% when status 2 procedures exist without status 1/6 procedures. Values > 1000% should be investigated."
+          - not_null:
+              config:
+                where: "tx_presented_amount > 0 OR tx_accepted_amount = 0"
+                severity: warn
+      
+      - name: patient_acceptance_rate
+        description: >
+          Patient acceptance rate: (Patients Accepted / Patients Presented) * 100
+          
+          Business Logic:
+          - Calculated as: (patients_accepted / patients_presented) * 100
+          - Rounded to 2 decimal places
+          - Returns NULL if patients_presented is 0 but patients_accepted > 0 (cannot calculate meaningful rate)
+          - Returns 0 if both are 0
+          - Patients presented: Distinct patients with status 1/6 procedures (actually presented on this date)
+          - Patients accepted: Distinct patients with status 2 procedures (completed) OR status 1/6 with appointment scheduled
+          - Can exceed 100% when patients have status 2 procedures (completed) without corresponding status 1/6 procedures on the same date
+          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - Used for patient-level acceptance analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10000
+              inclusive: true
+              config:
+                where: "patient_acceptance_rate IS NOT NULL AND patients_presented > 0"
+                severity: warn
+          - not_null:
+              config:
+                where: "patients_presented > 0 OR patients_accepted = 0"
+                severity: warn
+      
+      - name: diagnosis_rate
+        description: >
+          Diagnosis rate: (Patients Presented / Patients Seen) * 100
+          
+          Business Logic:
+          - Calculated as: (patients_presented / patients_seen) * 100
+          - Rounded to 2 decimal places
+          - Returns NULL if patients_seen is 0 (cannot calculate meaningful rate)
+          - Can exceed 100% if more patients have procedures than appointments on a given date/provider/clinic
+          - This can happen when procedures are created on different dates than appointments, or when provider/clinic assignments don't match
+          - Used for diagnosis rate analysis
+          - Note: Values > 1000% may indicate data quality issues (e.g., procedures with no matching appointments) and should be investigated
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 1000
+              inclusive: true
+              config:
+                where: "diagnosis_rate IS NOT NULL"
+                severity: warn
+                description: "Expected: diagnosis_rate can exceed 100% when procedures exist without matching appointments. Values > 1000% should be investigated."
+          - not_null:
+              config:
+                where: "patients_seen > 0"
+                severity: warn
+      
+      - name: same_day_treatment_rate
+        description: >
+          Same-day treatment rate: (Same-Day Treatment Amount / Tx Presented) * 100
+          
+          Business Logic:
+          - Calculated as: (same_day_treatment_amount / tx_presented_amount) * 100
+          - Rounded to 2 decimal places
+          - Returns NULL if tx_presented_amount is 0 but same_day_treatment_amount > 0 (cannot calculate meaningful rate)
+          - Returns 0 if both are 0
+          - Same-day treatment: Procedures completed (status 2) on the same day as their appointment_date
+          - Tx presented: Sum of procedure fees for status 1/6 procedures (actually presented on this date)
+          - Can exceed 100% when same-day treatment exists but no procedures were "presented" on that date
+          - This can happen when procedures are completed on the same day they're created without going through status 1/6
+          - Used for same-day treatment analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10000
+              inclusive: true
+              config:
+                where: "same_day_treatment_rate IS NOT NULL AND tx_presented_amount > 0"
+                severity: warn
+          - not_null:
+              config:
+                where: "tx_presented_amount > 0 OR same_day_treatment_amount = 0"
+                severity: warn
+      
+      - name: procedure_acceptance_rate
+        description: >
+          Procedure acceptance rate: (Procedures Accepted / Procedures Presented) * 100
+          
+          Business Logic:
+          - Calculated as: (procedures_accepted / procedures_presented) * 100
+          - Rounded to 2 decimal places
+          - Returns NULL if procedures_presented is 0 but procedures_accepted > 0 (cannot calculate meaningful rate)
+          - Returns 0 if both are 0
+          - Procedures presented: Only status 1/6 (actually presented to patient on this date)
+          - Procedures accepted: Status 2 (completed) OR Status 1/6 with appointment scheduled
+          - Can exceed 100% when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
+          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - Used for procedure-level acceptance analysis
+        tests:
+          - dbt_utils.accepted_range:
+              min_value: 0
+              max_value: 10000
+              inclusive: true
+              config:
+                where: "procedure_acceptance_rate IS NOT NULL AND procedures_presented > 0"
+                severity: warn
+          - not_null:
+              config:
+                where: "procedures_presented > 0 OR procedures_accepted = 0"
+                severity: warn
+      
+      - name: _transformed_at
+        description: >
+          dbt mart model build timestamp (model-specific tracking)
+          
+          Business Context:
+          - Timestamp when this mart model was built
+          - Used for model dependency tracking and debugging
+          - Part of standardized mart metadata
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: >
+          Mart-specific refresh timestamp (when mart was last refreshed)
+          
+          Business Context:
+          - Timestamp when the mart was last refreshed
+          - Used for mart-specific tracking and debugging
+          - Part of standardized mart metadata
+        tests:
+          - not_null
+
