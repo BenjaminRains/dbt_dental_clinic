@@ -38,11 +38,21 @@ models:
       - Patients_with_exams includes all completed exam procedures in date range
       - Date filtering based on procedure_date (date when procedure was created/recommended)
       
+      Critical Business Logic Finding (from validation):
+      - Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+      - Most status 2 procedures are created directly as completed, or they're separate procedures
+      - Only 0-4.76% of status 2 procedures have corresponding status 1/6 procedures within 30 days
+      - Status 1/6 procedures with appointments are counted in BOTH "presented" and "accepted" categories (double-counting is correct)
+      - Status 2 procedures are counted as "accepted" but may not have been "presented" on the same date
+      - This is why acceptance rates can exceed 100% when status 2 procedures exist without corresponding status 1/6 procedures on the same date
+      - This behavior is expected and aligns with PBN definition: "accepted (completed or scheduled)"
+      
       Data Quality Notes:
       - Daily grain allows for weekly/monthly aggregation in dashboard
       - Aggregations performed at procedure level before joining to appointment data
       - Provider assignment based on procedure provider (not exam provider)
       - Full outer join with patients_seen to include days with appointments but no procedures
+      - Acceptance rates > 100% are expected when status 2 procedures exist without status 1/6 procedures on the same date
       
     config:
       materialized: table
@@ -151,8 +161,12 @@ models:
           Business Logic:
           - Counts distinct patients with procedures accepted (is_accepted = TRUE) on procedure_date
           - Used for patient_acceptance_rate calculation: (patients_accepted / patients_presented) * 100
-          - Note: Can exceed patients_presented when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
-          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - Critical Finding: Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+          - Most status 2 procedures are created directly as completed without ever being in status 1/6
+          - Status 1/6 procedures with appointments are counted in BOTH patients_presented AND patients_accepted (double-counting is correct)
+          - Can exceed patients_presented when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
+          - This happens because procedures are not tracked through a lifecycle - status 2 procedures may be created directly as completed
+          - This behavior is expected and aligns with PBN definition: "accepted (completed or scheduled)"
         tests:
           - dbt_utils.accepted_range:
               min_value: 0
@@ -184,8 +198,12 @@ models:
           Business Logic:
           - Counts procedures with is_accepted = TRUE on procedure_date
           - Used for procedure_acceptance_rate calculation: (procedures_accepted / procedures_presented) * 100
-          - Note: Can exceed procedures_presented when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
-          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - Critical Finding: Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+          - Most status 2 procedures are created directly as completed without ever being in status 1/6
+          - Status 1/6 procedures with appointments are counted in BOTH procedures_presented AND procedures_accepted (double-counting is correct)
+          - Can exceed procedures_presented when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
+          - This happens because procedures are not tracked through a lifecycle - status 2 procedures may be created directly as completed
+          - This behavior is expected and aligns with PBN definition: "accepted (completed or scheduled)"
         tests:
           - dbt_utils.accepted_range:
               min_value: 0
@@ -255,8 +273,12 @@ models:
           - Sum of procedure_fee for procedures with is_accepted = TRUE on procedure_date
           - Used for tx_acceptance_rate calculation: (tx_accepted_amount / tx_presented_amount) * 100
           - Used for financial analysis and revenue tracking
-          - Note: Can exceed tx_presented_amount when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
-          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - Critical Finding: Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+          - Most status 2 procedures are created directly as completed without ever being in status 1/6
+          - Status 1/6 procedures with appointments are counted in BOTH tx_presented_amount AND tx_accepted_amount (double-counting is correct)
+          - Can exceed tx_presented_amount when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
+          - This happens because procedures are not tracked through a lifecycle - status 2 procedures may be created directly as completed
+          - This behavior is expected and aligns with PBN definition: "accepted (completed or scheduled)"
         tests:
           - dbt_utils.accepted_range:
               min_value: 0
@@ -350,8 +372,12 @@ models:
           - Returns 0 if both are 0
           - Tx presented: Sum of procedure fees for status 1/6 procedures (actually presented on this date)
           - Tx accepted: Sum of procedure fees for status 2 procedures (completed) OR status 1/6 with appointment scheduled
+          - Critical Finding: Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+          - Most status 2 procedures are created directly as completed without ever being in status 1/6
+          - Status 1/6 procedures with appointments are counted in BOTH tx_presented_amount AND tx_accepted_amount (double-counting is correct)
           - Can exceed 100% when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
-          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - This happens because procedures are not tracked through a lifecycle - status 2 procedures may be created directly as completed
+          - This behavior is expected and aligns with PBN definition: "accepted (completed or scheduled)"
           - Used for financial acceptance analysis
           - Note: Values > 1000% may indicate data quality issues and should be investigated
         tests:
@@ -379,8 +405,12 @@ models:
           - Returns 0 if both are 0
           - Patients presented: Distinct patients with status 1/6 procedures (actually presented on this date)
           - Patients accepted: Distinct patients with status 2 procedures (completed) OR status 1/6 with appointment scheduled
+          - Critical Finding: Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+          - Most status 2 procedures are created directly as completed without ever being in status 1/6
+          - Status 1/6 procedures with appointments are counted in BOTH patients_presented AND patients_accepted (double-counting is correct)
           - Can exceed 100% when patients have status 2 procedures (completed) without corresponding status 1/6 procedures on the same date
-          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - This happens because procedures are not tracked through a lifecycle - status 2 procedures may be created directly as completed
+          - This behavior is expected and aligns with PBN definition: "accepted (completed or scheduled)"
           - Used for patient-level acceptance analysis
         tests:
           - dbt_utils.accepted_range:
@@ -459,8 +489,12 @@ models:
           - Returns 0 if both are 0
           - Procedures presented: Only status 1/6 (actually presented to patient on this date)
           - Procedures accepted: Status 2 (completed) OR Status 1/6 with appointment scheduled
+          - Critical Finding: Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+          - Most status 2 procedures are created directly as completed without ever being in status 1/6
+          - Status 1/6 procedures with appointments are counted in BOTH procedures_presented AND procedures_accepted (double-counting is correct)
           - Can exceed 100% when status 2 procedures (completed) exist without corresponding status 1/6 procedures on the same date
-          - This happens when procedures are completed on the same day they're created, or when procedures were created/presented on a different date
+          - This happens because procedures are not tracked through a lifecycle - status 2 procedures may be created directly as completed
+          - This behavior is expected and aligns with PBN definition: "accepted (completed or scheduled)"
           - Used for procedure-level acceptance analysis
         tests:
           - dbt_utils.accepted_range:

@@ -28,10 +28,19 @@ models:
       - Same-day treatment: status = 2 AND procedure_date = appointment_date
       - Appointment linking uses appointment_id to join with int_appointment_details
       
+      Critical Business Logic Finding (from validation):
+      - Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+      - Most status 2 procedures are created directly as completed, or they're separate procedures
+      - Only 0-4.76% of status 2 procedures have corresponding status 1/6 procedures within 30 days
+      - This means status 1/6 procedures with appointments are counted in BOTH "presented" and "accepted" categories (which is correct)
+      - Status 2 procedures are counted as "accepted" but may not have been "presented" on the same date
+      - This is why acceptance rates can exceed 100% when status 2 procedures exist without corresponding status 1/6 procedures
+      
       Data Quality Notes:
       - Only includes procedures with procedure_date >= '2020-01-01' (reasonable date range)
       - Appointment linking may result in NULL values if appointment doesn't exist in int_appointment_details
       - Exam identification uses explicit procedure codes for accuracy
+      - Acceptance rates > 100% are expected when status 2 procedures exist without status 1/6 procedures on the same date
       
     config:
       materialized: incremental
@@ -147,6 +156,7 @@ models:
           - TRUE if procedure_status IN (1, 6) - Treatment Planned or Ordered/Planned
           - Represents treatments that were recommended to patients
           - Used for tx_presented_amount and procedures_presented metrics
+          - Note: Status 1/6 procedures with appointments are counted in BOTH is_presented AND is_accepted (double-counting is correct behavior)
         tests:
           - not_null
       
@@ -159,6 +169,11 @@ models:
           - TRUE if procedure_status IN (1, 6) AND appointment_id exists AND appointment_status = 1 (Scheduled)
           - Represents treatments that patients accepted (either completed or scheduled)
           - Used for tx_accepted_amount and procedures_accepted metrics
+          - Critical Finding: Procedures are NOT tracked through a lifecycle (status 1/6 → status 2)
+          - Most status 2 procedures are created directly as completed without ever being in status 1/6
+          - Status 1/6 procedures with appointments are counted in BOTH is_presented AND is_accepted (double-counting is correct)
+          - Status 2 procedures are counted as accepted but may not have been presented on the same date
+          - This is why acceptance rates can exceed 100% when status 2 procedures exist without corresponding status 1/6 procedures
         tests:
           - not_null
       
