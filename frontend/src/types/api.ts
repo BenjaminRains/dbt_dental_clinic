@@ -128,6 +128,36 @@ export interface RevenueKPISummary {
     affected_providers: number;
 }
 
+export interface RevenueLostSummary {
+    appointments_lost_amount: number;  // Appmts Lost $ (Failed or Cancelled $$$)
+    recovered_amount: number;  // Failed Re-Appnt $ (Recovered)
+    lost_appointments_percent: number;  // Lost Appmts %
+}
+
+export interface RevenueLostOpportunity {
+    failed_percent: number;
+    cancelled_percent: number;
+    failed_reappnt_percent: number;
+    cancelled_reappnt_percent: number;
+    failed_count: number;
+    cancelled_count: number;
+    failed_reappnt_count: number;
+    cancelled_reappnt_count: number;
+}
+
+export interface LostAppointmentDetail {
+    appointment_id: number;
+    patient_id: number;
+    patient_name?: string;
+    original_date: string;
+    status: string;  // "Failed" or "Cancelled"
+    procedure_codes?: string[];
+    production_amount: number;
+    appointment_type?: string;
+    next_date?: string;  // If rescheduled
+    is_rescheduled: boolean;
+}
+
 export interface ProviderPerformance {
     provider_name: string;
     provider_specialty: string;

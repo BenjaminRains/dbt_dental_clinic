@@ -66,7 +66,7 @@ class RevenueOpportunity(BaseModel):
     recovery_potential: str
     
     # Enhanced business logic
-    opportunity_hour: int
+    opportunity_hour: Optional[int] = None  # Can be NULL for date-only fields (Treatment Plan Delay, Claim Rejection)
     time_period: str
     revenue_impact_category: str
     time_impact_category: str
@@ -87,10 +87,8 @@ class RevenueOpportunity(BaseModel):
     
     # Metadata
     _loaded_at: Optional[datetime] = None
-    _created_at: Optional[datetime] = None
     _updated_at: Optional[datetime] = None
-    _transformed_at: Optional[datetime] = None
-    _mart_refreshed_at: Optional[datetime] = None
+    _created_by: Optional[int] = None
     
     class Config:
         from_attributes = True
@@ -121,6 +119,45 @@ class RevenueRecoveryPlan(BaseModel):
     recommended_actions: List[str]
     estimated_recovery_amount: Optional[float] = None
     recovery_timeline: str
+    
+    class Config:
+        from_attributes = True
+
+class RevenueLostSummary(BaseModel):
+    """PBN-style Revenue Lost summary metrics"""
+    appointments_lost_amount: float  # Appmts Lost $ (Failed or Cancelled $$$)
+    recovered_amount: float  # Failed Re-Appnt $ (Recovered)
+    lost_appointments_percent: float  # Lost Appmts %
+    
+    class Config:
+        from_attributes = True
+
+class RevenueLostOpportunity(BaseModel):
+    """PBN-style Opportunity metrics (Failed %, Cancelled %, Re-appnt %)"""
+    failed_percent: float
+    cancelled_percent: float
+    failed_reappnt_percent: float
+    cancelled_reappnt_percent: float
+    failed_count: int
+    cancelled_count: int
+    failed_reappnt_count: int
+    cancelled_reappnt_count: int
+    
+    class Config:
+        from_attributes = True
+
+class LostAppointmentDetail(BaseModel):
+    """Detailed information about a cancelled or failed appointment"""
+    appointment_id: int
+    patient_id: int
+    patient_name: Optional[str] = None
+    original_date: str
+    status: str  # "Failed" or "Cancelled"
+    procedure_codes: Optional[List[str]] = None
+    production_amount: float
+    appointment_type: Optional[str] = None
+    next_date: Optional[str] = None  # If rescheduled
+    is_rescheduled: bool
     
     class Config:
         from_attributes = True

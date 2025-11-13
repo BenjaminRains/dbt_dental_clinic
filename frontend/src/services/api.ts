@@ -7,6 +7,9 @@ import {
     RevenueOpportunity,
     RevenueOpportunitySummary,
     RevenueRecoveryPlan,
+    RevenueLostSummary,
+    RevenueLostOpportunity,
+    LostAppointmentDetail,
     ProviderPerformance,
     ProviderSummary,
     ARSummary,
@@ -147,6 +150,25 @@ export const revenueApi = {
 
     getOpportunityById: async (opportunityId: number): Promise<ApiResponse<RevenueOpportunity>> => {
         return apiCall(() => api.get(`/revenue/opportunities/${opportunityId}`));
+    },
+
+    // PBN-style Revenue Lost endpoints
+    getLostSummary: async (params: DateRange = {}): Promise<ApiResponse<RevenueLostSummary>> => {
+        return apiCall(() => api.get('/revenue/lost-summary', { params }));
+    },
+
+    getLostOpportunity: async (params: DateRange = {}): Promise<ApiResponse<RevenueLostOpportunity>> => {
+        return apiCall(() => api.get('/revenue/lost-opportunity', { params }));
+    },
+
+    getLostAppointments: async (
+        skip: number = 0,
+        limit: number = 100,
+        params: DateRange & { status?: string } = {}
+    ): Promise<ApiResponse<LostAppointmentDetail[]>> => {
+        return apiCall(() => api.get('/revenue/lost-appointments', {
+            params: { skip, limit, ...params }
+        }));
     },
 };
 

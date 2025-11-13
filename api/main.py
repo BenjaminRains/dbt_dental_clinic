@@ -1,6 +1,16 @@
 # api/main.py
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+import logging
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
+    handlers=[
+        logging.StreamHandler()  # Ensure logs go to console
+    ]
+)
 
 from routers import patient, reports, appointment, provider, revenue, dbt_metadata, ar, treatment_acceptance
 

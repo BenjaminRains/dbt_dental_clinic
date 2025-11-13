@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
 from database import get_db
+import logging
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/revenue", tags=["revenue"])
 
@@ -13,14 +16,20 @@ from services.revenue_service import (
     get_revenue_opportunities,
     get_revenue_opportunity_summary,
     get_revenue_recovery_plan,
-    get_revenue_opportunity_by_id
+    get_revenue_opportunity_by_id,
+    get_revenue_lost_summary,
+    get_revenue_lost_opportunity,
+    get_lost_appointments_detail
 )
 from models.revenue import (
     RevenueTrend,
     RevenueKPISummary,
     RevenueOpportunity,
     RevenueOpportunitySummary,
-    RevenueRecoveryPlan
+    RevenueRecoveryPlan,
+    RevenueLostSummary,
+    RevenueLostOpportunity,
+    LostAppointmentDetail
 )
 
 @router.get("/trends", response_model=List[RevenueTrend])
@@ -55,10 +64,23 @@ async def get_revenue_opportunities_endpoint(
     db: Session = Depends(get_db)
 ):
     """Get detailed revenue opportunities from mart_revenue_lost"""
-    return get_revenue_opportunities(
-        db, skip, limit, start_date, end_date, 
-        provider_id, opportunity_type, recovery_potential, min_priority_score
-    )
+    try:
+        print(f"[DEBUG] Revenue opportunities endpoint called: opportunity_type={opportunity_type}, min_priority_score={min_priority_score}")
+        logger.info(f"Revenue opportunities endpoint called: opportunity_type={opportunity_type}, min_priority_score={min_priority_score}")
+        result = get_revenue_opportunities(
+            db, skip, limit, start_date, end_date, 
+            provider_id, opportunity_type, recovery_potential, min_priority_score
+        )
+        print(f"[DEBUG] Revenue opportunities endpoint returning {len(result)} results")
+        logger.info(f"Revenue opportunities endpoint returning {len(result)} results")
+        return result
+    except Exception as e:
+        error_msg = str(e)
+        print(f"[ERROR] Error in revenue opportunities endpoint: {error_msg}")
+        import traceback
+        print(f"[ERROR] Traceback: {traceback.format_exc()}")
+        logger.error(f"Error in revenue opportunities endpoint: {error_msg}", exc_info=True)
+        raise HTTPException(status_code=500, detail=f"Error fetching revenue opportunities: {error_msg}")
 
 @router.get("/opportunities/summary", response_model=List[RevenueOpportunitySummary])
 async def get_revenue_opportunity_summary_endpoint(
@@ -77,7 +99,10 @@ async def get_revenue_recovery_plan_endpoint(
     db: Session = Depends(get_db)
 ):
     """Get revenue recovery plan with actionable items"""
-    return get_revenue_recovery_plan(db, start_date, end_date, min_priority_score)
+    try:
+        return get_revenue_recovery_plan(db, start_date, end_date, min_priority_score)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching recovery plan: {str(e)}")
 
 @router.get("/opportunities/{opportunity_id}", response_model=RevenueOpportunity)
 async def get_revenue_opportunity_by_id_endpoint(
@@ -89,3 +114,43 @@ async def get_revenue_opportunity_by_id_endpoint(
     if opportunity is None:
         raise HTTPException(status_code=404, detail="Revenue opportunity not found")
     return opportunity
+
+# PBN-style Revenue Lost endpoints
+@router.get("/lost-summary", response_model=RevenueLostSummary)
+async def get_revenue_lost_summary_endpoint(
+    start_date: Optional[date] = Query(None, description="Start date for analysis"),
+    end_date: Optional[date] = Query(None, description="End date for analysis"),
+    db: Session = Depends(get_db)
+):
+    """Get PBN-style Revenue Lost summary (Appmts Lost $, Recovered $, Lost Appmts %)"""
+    try:
+        return get_revenue_lost_summary(db, start_date, end_date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching revenue lost summary: {str(e)}")
+
+@router.get("/lost-opportunity", response_model=RevenueLostOpportunity)
+async def get_revenue_lost_opportunity_endpoint(
+    start_date: Optional[date] = Query(None, description="Start date for analysis"),
+    end_date: Optional[date] = Query(None, description="End date for analysis"),
+    db: Session = Depends(get_db)
+):
+    """Get PBN-style Opportunity metrics (Failed %, Cancelled %, Re-appnt %)"""
+    try:
+        return get_revenue_lost_opportunity(db, start_date, end_date)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching revenue lost opportunity: {str(e)}")
+
+@router.get("/lost-appointments", response_model=List[LostAppointmentDetail])
+async def get_lost_appointments_detail_endpoint(
+    skip: int = Query(0, description="Number of records to skip"),
+    limit: int = Query(100, description="Maximum number of records to return"),
+    start_date: Optional[date] = Query(None, description="Start date for analysis"),
+    end_date: Optional[date] = Query(None, description="End date for analysis"),
+    status: Optional[str] = Query(None, description="Filter by status: 'Failed' or 'Cancelled'"),
+    db: Session = Depends(get_db)
+):
+    """Get detailed list of cancelled/failed appointments"""
+    try:
+        return get_lost_appointments_detail(db, skip, limit, start_date, end_date, status)
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"Error fetching lost appointments detail: {str(e)}")
