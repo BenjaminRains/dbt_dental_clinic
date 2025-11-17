@@ -199,7 +199,7 @@ const Appointments: React.FC = () => {
                                 <Card>
                                     <CardContent>
                                         <Typography variant="h6" gutterBottom>
-                                            {summary.provider_name} - {formatDate(summary.date)}
+                                            Provider {summary.provider_id} - {formatDate(summary.date)}
                                         </Typography>
                                         <Grid container spacing={2}>
                                             <Grid item xs={6}>
@@ -280,7 +280,7 @@ const Appointments: React.FC = () => {
                                     <TableRow key={appointment.appointment_id}>
                                         <TableCell>{appointment.appointment_time}</TableCell>
                                         <TableCell>{appointment.patient_id}</TableCell>
-                                        <TableCell>{appointment.provider_name}</TableCell>
+                                        <TableCell>Provider {appointment.provider_id}</TableCell>
                                         <TableCell>{appointment.appointment_type}</TableCell>
                                         <TableCell>{getStatusChip(appointment)}</TableCell>
                                         <TableCell>{formatCurrency(appointment.scheduled_production_amount)}</TableCell>
@@ -324,7 +324,7 @@ const Appointments: React.FC = () => {
                                         <TableCell>{formatDate(appointment.appointment_date)}</TableCell>
                                         <TableCell>{appointment.appointment_time}</TableCell>
                                         <TableCell>{appointment.patient_id}</TableCell>
-                                        <TableCell>{appointment.provider_name}</TableCell>
+                                        <TableCell>Provider {appointment.provider_id}</TableCell>
                                         <TableCell>{appointment.appointment_type}</TableCell>
                                         <TableCell>{getStatusChip(appointment)}</TableCell>
                                         <TableCell>{formatCurrency(appointment.scheduled_production_amount)}</TableCell>

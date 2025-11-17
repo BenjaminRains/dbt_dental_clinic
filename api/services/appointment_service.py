@@ -15,7 +15,7 @@ def get_appointment_summary(
     query = """
     SELECT 
         fa.appointment_date as date_actual,
-        dp.provider_name,
+        fa.provider_id,
         COUNT(*) as total_appointments,
         SUM(CASE WHEN fa.is_completed THEN 1 ELSE 0 END) as completed_appointments,
         SUM(CASE WHEN fa.is_no_show THEN 1 ELSE 0 END) as no_show_appointments,
@@ -29,7 +29,6 @@ def get_appointment_summary(
         SUM(fa.scheduled_production_amount) as total_scheduled_production,
         SUM(CASE WHEN fa.is_completed THEN fa.scheduled_production_amount ELSE 0 END) as completed_production
     FROM raw_marts.fact_appointment fa
-    LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
     WHERE fa.appointment_date IS NOT NULL
     """
     
@@ -44,13 +43,13 @@ def get_appointment_summary(
         query += " AND fa.provider_id = :provider_id"
         params['provider_id'] = provider_id
     
-    query += " GROUP BY fa.appointment_date, dp.provider_name ORDER BY fa.appointment_date DESC, dp.provider_name"
+    query += " GROUP BY fa.appointment_date, fa.provider_id ORDER BY fa.appointment_date DESC, fa.provider_id"
     
     result = db.execute(text(query), params).fetchall()
     return [
         AppointmentSummary(
             date=row.date_actual.isoformat(),
-            provider_name=row.provider_name or "Unknown",
+            provider_id=row.provider_id or 0,
             total_appointments=row.total_appointments,
             completed_appointments=row.completed_appointments,
             no_show_appointments=row.no_show_appointments,
@@ -81,7 +80,7 @@ def get_appointments(
     SELECT 
         fa.appointment_id,
         fa.patient_id,
-        dp.provider_name,
+        fa.provider_id,
         fa.appointment_date,
         fa.appointment_datetime,
         fa.appointment_type,
@@ -92,7 +91,6 @@ def get_appointments(
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
     FROM raw_marts.fact_appointment fa
-    LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
     WHERE fa.appointment_date IS NOT NULL
     """
     
@@ -116,7 +114,7 @@ def get_appointments(
         AppointmentDetail(
             appointment_id=row.appointment_id,
             patient_id=row.patient_id,
-            provider_name=row.provider_name or "Unknown",
+            provider_id=row.provider_id or 0,
             appointment_date=row.appointment_date.isoformat(),
             appointment_time=row.appointment_datetime.strftime("%H:%M") if row.appointment_datetime else "",
             appointment_type=row.appointment_type or "Unknown",
@@ -136,7 +134,7 @@ def get_appointment_by_id(db: Session, appointment_id: int) -> Optional[Appointm
     SELECT 
         fa.appointment_id,
         fa.patient_id,
-        dp.provider_name,
+        fa.provider_id,
         fa.appointment_date,
         fa.appointment_datetime,
         fa.appointment_type,
@@ -147,7 +145,6 @@ def get_appointment_by_id(db: Session, appointment_id: int) -> Optional[Appointm
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
     FROM raw_marts.fact_appointment fa
-    LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
     WHERE fa.appointment_id = :appointment_id
     """
     
@@ -158,7 +155,7 @@ def get_appointment_by_id(db: Session, appointment_id: int) -> Optional[Appointm
     return AppointmentDetail(
         appointment_id=result.appointment_id,
         patient_id=result.patient_id,
-        provider_name=result.provider_name or "Unknown",
+        provider_id=result.provider_id or 0,
         appointment_date=result.appointment_date.isoformat(),
         appointment_time=result.appointment_datetime.strftime("%H:%M") if result.appointment_datetime else "",
         appointment_type=result.appointment_type or "Unknown",
@@ -176,7 +173,7 @@ def get_today_appointments(db: Session, provider_id: Optional[int] = None) -> Li
     SELECT 
         fa.appointment_id,
         fa.patient_id,
-        dp.provider_name,
+        fa.provider_id,
         fa.appointment_date,
         fa.appointment_datetime,
         fa.appointment_type,
@@ -187,7 +184,6 @@ def get_today_appointments(db: Session, provider_id: Optional[int] = None) -> Li
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
     FROM raw_marts.fact_appointment fa
-    LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
     WHERE fa.appointment_date = CURRENT_DATE
     """
     
@@ -203,7 +199,7 @@ def get_today_appointments(db: Session, provider_id: Optional[int] = None) -> Li
         AppointmentDetail(
             appointment_id=row.appointment_id,
             patient_id=row.patient_id,
-            provider_name=row.provider_name or "Unknown",
+            provider_id=row.provider_id or 0,
             appointment_date=row.appointment_date.isoformat(),
             appointment_time=row.appointment_datetime.strftime("%H:%M") if row.appointment_datetime else "",
             appointment_type=row.appointment_type or "Unknown",
@@ -223,7 +219,7 @@ def get_upcoming_appointments(db: Session, days: int = 7, provider_id: Optional[
     SELECT 
         fa.appointment_id,
         fa.patient_id,
-        dp.provider_name,
+        fa.provider_id,
         fa.appointment_date,
         fa.appointment_datetime,
         fa.appointment_type,
@@ -234,8 +230,7 @@ def get_upcoming_appointments(db: Session, days: int = 7, provider_id: Optional[
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
     FROM raw_marts.fact_appointment fa
-    LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
-    WHERE fa.appointment_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL ':days days'
+    WHERE fa.appointment_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '1 day' * :days
     """
     
     params = {"days": days}
@@ -250,7 +245,7 @@ def get_upcoming_appointments(db: Session, days: int = 7, provider_id: Optional[
         AppointmentDetail(
             appointment_id=row.appointment_id,
             patient_id=row.patient_id,
-            provider_name=row.provider_name or "Unknown",
+            provider_id=row.provider_id or 0,
             appointment_date=row.appointment_date.isoformat(),
             appointment_time=row.appointment_datetime.strftime("%H:%M") if row.appointment_datetime else "",
             appointment_type=row.appointment_type or "Unknown",

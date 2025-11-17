@@ -442,7 +442,7 @@ export interface ProviderFilter extends DateRange {
 // Appointment interfaces matching the backend models
 export interface AppointmentSummary {
     date: string;
-    provider_name: string;
+    provider_id: number;
     total_appointments: number;
     completed_appointments: number;
     no_show_appointments: number;
@@ -461,7 +461,7 @@ export interface AppointmentSummary {
 export interface AppointmentDetail {
     appointment_id: number;
     patient_id: number;
-    provider_name: string;
+    provider_id: number;
     appointment_date: string;
     appointment_time: string;
     appointment_type: string;
@@ -582,6 +582,16 @@ export interface TreatmentAcceptanceProviderPerformance {
     procedures_accepted: number;
     same_day_treatment_amount: number;
     same_day_treatment_rate: number | null;
+}
+
+// Hygiene Retention Types
+export interface HygieneRetentionSummary {
+    recall_current_percent: number;  // Recall Current %
+    hyg_pre_appointment_percent: number;  // Hyg Pre-Appointment Any %
+    hyg_patients_seen: number;  // Hyg Patients Seen
+    hyg_pts_reappntd: number;  // Hyg Pts Re-appntd
+    recall_overdue_percent: number;  // Recall Overdue %
+    not_on_recall_percent: number;  // Not on Recall %
 }
 
 // API Response wrapper for error handling

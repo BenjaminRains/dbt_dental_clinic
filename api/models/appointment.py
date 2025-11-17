@@ -4,7 +4,7 @@ from datetime import datetime
 
 class AppointmentSummary(BaseModel):
     date: str
-    provider_name: str
+    provider_id: int
     total_appointments: int
     completed_appointments: int
     no_show_appointments: int
@@ -22,7 +22,7 @@ class AppointmentSummary(BaseModel):
 class AppointmentDetail(BaseModel):
     appointment_id: int
     patient_id: int
-    provider_name: str
+    provider_id: int
     appointment_date: str
     appointment_time: str
     appointment_type: str
