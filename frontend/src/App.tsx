@@ -8,6 +8,7 @@ import Patients from './pages/Patients';
 import Appointments from './pages/Appointments';
 import AR from './pages/AR';
 import TreatmentAcceptance from './pages/TreatmentAcceptance';
+import HygieneRetention from './pages/HygieneRetention';
 
 function App() {
     return (
@@ -21,6 +22,7 @@ function App() {
                     <Route path="/appointments" element={<Appointments />} />
                     <Route path="/ar-aging" element={<AR />} />
                     <Route path="/treatment-acceptance" element={<TreatmentAcceptance />} />
+                    <Route path="/hygiene-retention" element={<HygieneRetention />} />
                 </Routes>
             </Layout>
         </Box>

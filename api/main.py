@@ -12,7 +12,7 @@ logging.basicConfig(
     ]
 )
 
-from routers import patient, reports, appointment, provider, revenue, dbt_metadata, ar, treatment_acceptance
+from routers import patient, reports, appointment, provider, revenue, dbt_metadata, ar, treatment_acceptance, hygiene
 
 
 app = FastAPI(
@@ -39,6 +39,7 @@ app.include_router(revenue.router)
 app.include_router(dbt_metadata.router)
 app.include_router(ar.router)
 app.include_router(treatment_acceptance.router)
+app.include_router(hygiene.router)
 
 @app.get("/")
 def read_root():

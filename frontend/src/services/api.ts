@@ -29,7 +29,8 @@ import {
     TreatmentAcceptanceKPISummary,
     TreatmentAcceptanceSummary,
     TreatmentAcceptanceTrend,
-    TreatmentAcceptanceProviderPerformance
+    TreatmentAcceptanceProviderPerformance,
+    HygieneRetentionSummary
 } from '../types/api';
 
 // Configure axios base URL
@@ -226,6 +227,15 @@ export const arApi = {
     },
 };
 
+// Hygiene Retention API calls
+export const hygieneApi = {
+    getRetentionSummary: async (
+        params: DateRange = {}
+    ): Promise<ApiResponse<HygieneRetentionSummary>> => {
+        return apiCall(() => api.get('/hygiene/retention-summary', { params }));
+    },
+};
+
 // Treatment Acceptance API calls
 export const treatmentAcceptanceApi = {
     getKPISummary: async (params?: {
@@ -372,6 +382,7 @@ export const apiService = {
     appointment: appointmentApi,
     dbt: dbtMetadataApi,
     treatmentAcceptance: treatmentAcceptanceApi,
+    hygiene: hygieneApi,
     utils: dateUtils,
 };
 
