@@ -89,9 +89,10 @@ PostgreSQL Optimization: Resolved case sensitivity and column quoting issues
 - **Orchestration**: Python-based intelligent pipeline with parallel processing
 - **Monitoring**: Built-in performance tracking, quality validation, and pipeline monitoring
 - **Metadata Management**: Comprehensive data lineage and traceability system
-- **API Layer**: FastAPI with automatic OpenAPI documentation and CORS support
+- **API Layer**: FastAPI with automatic OpenAPI documentation, API key authentication, rate limiting, and CORS support
 - **Frontend**: React TypeScript with Material-UI components and responsive design
 - **Data Visualization**: Recharts for interactive charts and executive dashboards
+- **Security**: Multi-layer security with API key authentication, rate limiting, request logging, and CORS protection
 
 ## 🌐 API & Frontend Layer
 
@@ -102,8 +103,25 @@ PostgreSQL Optimization: Resolved case sensitivity and column quoting issues
 - **RESTful Endpoints**: Patient management, appointment scheduling, and comprehensive reporting
 - **Analytics Integration**: Direct access to DBT mart models for real-time business intelligence
 - **Data Validation**: Pydantic models ensure type safety and data integrity
+- **Security Features**: API key authentication, rate limiting, request logging, and CORS protection
 - **CORS Support**: Seamless integration with frontend applications
 - **Environment Management**: Separate test and production configurations
+
+#### Security Features
+- **API Key Authentication**: All business endpoints require valid API key in `X-API-Key` header
+- **Rate Limiting**: IP-based rate limiting (60 requests/minute, 1000 requests/hour) to prevent abuse
+- **Request Logging**: Comprehensive logging of all requests with IP, method, path, auth status, and response time
+- **CORS Protection**: Restricted to approved frontend domains only (no wildcards in production)
+- **Error Sanitization**: Error messages don't expose sensitive information
+- **Input Validation**: Pydantic models validate all request data
+- **SQL Injection Protection**: Parameterized queries via SQLAlchemy
+
+**Production Deployment:**
+- **Live API**: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com)
+- **Hosting**: AWS EC2 + Application Load Balancer (ALB)
+- **SSL/TLS**: HTTPS only with AWS Certificate Manager
+- **Network Security**: Security groups, private subnets for database, Systems Manager for access
+- **For detailed security documentation**: See `api/README.md` - Security Architecture section
 
 #### API Endpoints
 - **Patient Management**: `/patients/` - Patient data access and management
@@ -115,12 +133,21 @@ PostgreSQL Optimization: Resolved case sensitivity and column quoting issues
 ### React TypeScript Dashboard
 **Modern Web Application** providing intuitive access to dental practice analytics:
 
+#### 🚀 Live Deployment
+- **Production URL**: [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
+- **Hosting**: AWS S3 + CloudFront CDN
+- **SSL Certificate**: AWS Certificate Manager (ACM)
+- **DNS**: Route 53
+- **Status**: ✅ Live and accessible
+
 #### Dashboard Features
 - **Executive Dashboard**: Real-time KPI overview with revenue trends and provider performance
 - **Revenue Analytics**: Interactive charts showing revenue lost, recovery potential, and trends
+- **AR Aging Dashboard**: Accounts receivable analysis and collection prioritization
 - **Provider Management**: Performance metrics, collection rates, and productivity analysis
 - **Patient Insights**: Patient demographics, treatment patterns, and retention metrics
 - **Appointment Analytics**: Scheduling efficiency and operational insights
+- **Treatment Acceptance**: Treatment acceptance rates and provider performance
 
 #### Technical Implementation
 - **Modern React**: Functional components with hooks and TypeScript for type safety
@@ -129,12 +156,14 @@ PostgreSQL Optimization: Resolved case sensitivity and column quoting issues
 - **Data Visualization**: Recharts for interactive charts and executive reporting
 - **API Integration**: Axios-based service layer with error handling and loading states
 - **Routing**: React Router for seamless navigation between dashboard sections
+- **Security**: Error message sanitization, PII removal, search engine blocking
 
 #### User Experience
 - **Responsive Design**: Optimized for desktop, tablet, and mobile devices
 - **Real-time Updates**: Live data refresh with loading states and error handling
 - **Interactive Charts**: Drill-down capabilities and trend analysis
 - **Executive Focus**: High-level KPIs with drill-down to detailed analytics
+- **Error Handling**: User-friendly error messages (technical details hidden)
 
 ### Project Structure
 ```
@@ -175,14 +204,31 @@ dbt_dental_clinic/
 │   │   ├── Revenue.tsx      # Revenue analytics
 │   │   ├── Providers.tsx    # Provider performance
 │   │   ├── Patients.tsx     # Patient management
+│   │   ├── AR.tsx           # AR Aging dashboard
 │   │   └── Appointments.tsx # Appointment scheduling
 │   ├── src/components/      # Reusable UI components
 │   │   ├── charts/          # Data visualization components
 │   │   └── layout/          # Navigation and layout
 │   ├── src/services/        # API integration layer
-│   └── src/types/           # TypeScript type definitions
+│   ├── src/types/           # TypeScript type definitions
+│   ├── public/              # Static assets
+│   │   ├── robots.txt       # Search engine blocking
+│   │   └── sitemap.xml      # Sitemap
+│   └── dist/                # Production build output
+├── scripts/
+│   ├── environment_manager.ps1      # Main environment management script
+│   │                                # Provides: dbt-init, etl-init, api-init, frontend-deploy, env-status
+│   │                                # ⭐ Use 'frontend-deploy' for frontend deployments
+│   └── deployment/          # Deployment scripts
+│       ├── verify_deployment.ps1    # AWS deployment verification
+│       ├── setup-env.sh             # EC2 environment setup
+│       ├── configure_nginx.py       # Nginx configuration
+│       └── install_service.py       # Systemd service installation
+├── DEPLOYMENT_NOTES.md      # Deployment configuration and history
 ├── analysis/                 # Exploratory analysis workspace
 ├── docs/                     # Comprehensive documentation
+│   ├── DEPLOYMENT_WORKFLOW.md # Complete deployment guide
+│   └── FRONTEND_DEPLOYMENT_DOMAIN.md # AWS deployment details
 └── tests/                    # Data quality validation
 ```
 
@@ -199,7 +245,11 @@ dbt_dental_clinic/
 - **Data Quality**: Comprehensive testing and validation framework - All tests passing
 - **Monitoring**: End-to-end pipeline tracking and performance monitoring
 - **API Layer**: FastAPI backend with comprehensive reporting endpoints and patient management
-- **Frontend Dashboard**: React TypeScript application with executive KPI dashboard and analytics views
+- **Frontend Dashboard**: ✅ **LIVE** - React TypeScript application deployed to [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
+  - **Deployment**: AWS S3 + CloudFront CDN
+  - **Security**: Error sanitization, PII removal, search engine blocking
+  - **SSL**: HTTPS with AWS Certificate Manager
+  - **Status**: Production-ready and accessible
 
 ### Business Intelligence Ready
 - **Revenue Analytics**: Production tracking, AR analysis, revenue lost identification
@@ -234,23 +284,84 @@ dbt_dental_clinic/
 - **Data Separation**: Generator output is isolated from production systems
 - **Safe for Public Demos**: Can be freely shared in portfolio and demo environments
 
-### AWS Cloud Hosting Plan
-**Public Demo Infrastructure** for employer/client showcase:
+### AWS Cloud Deployment
+**Production Frontend Infrastructure** - Live and accessible:
 
-#### Architecture Overview
+#### Frontend Architecture (✅ Deployed)
+```
+React Build → S3 Bucket → CloudFront CDN → Route 53 → https://dbtdentalclinic.com
+(Static Files)  (Storage)    (Global CDN)    (DNS)      (HTTPS)
+```
+
+#### Frontend Infrastructure Components
+- **S3 Bucket**: `dbtdentalclinic-frontend-3345` - Static file hosting
+- **CloudFront Distribution**: `E2VD20WF0IB7QE` - Global CDN with edge caching
+- **SSL Certificate**: AWS Certificate Manager (ACM) - HTTPS enabled
+- **Route 53 DNS**: Custom domain `dbtdentalclinic.com` with A record alias
+- **Security**: Origin Access Control (OAC), error sanitization, PII removal
+- **SEO**: robots.txt (blocks search engines), meta tags (noindex)
+
+#### Frontend Features
+- **Live Dashboard**: Accessible at [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
+- **Global CDN**: Fast content delivery via CloudFront edge locations
+- **HTTPS**: Secure SSL/TLS encryption
+- **Automated Deployment**: Use `frontend-deploy` command for one-command deployments
+- **Error Handling**: User-friendly error messages (technical details hidden)
+- **Security**: PII removed from frontend, search engines blocked, fail-fast configuration validation
+
+#### Frontend Deployment
+**⭐ Primary Method: Use `frontend-deploy` command**
+
+The project includes an environment manager (`scripts/environment_manager.ps1`) that provides the **recommended** deployment method:
+
+**Deployment Command:**
+```powershell
+frontend-deploy
+```
+
+**What it does:**
+1. Validates prerequisites (AWS CLI, credentials, Node.js, npm, S3 bucket, CloudFront distribution)
+2. Builds the React frontend (`npm run build`)
+3. Uploads to S3 bucket with proper cache headers
+4. Invalidates CloudFront cache for immediate updates
+
+**Configuration Required:**
+The deployment requires explicit configuration (no hardcoded defaults for security):
+- **Option 1**: Environment variables (recommended)
+  - `$env:FRONTEND_BUCKET_NAME`
+  - `$env:FRONTEND_DIST_ID`
+  - `$env:FRONTEND_DOMAIN`
+- **Option 2**: Config file (`.frontend-deploy.json` in project root)
+  ```json
+  {
+    "BucketName": "your-bucket-name",
+    "DistributionId": "your-distribution-id",
+    "Domain": "https://your-domain.com"
+  }
+  ```
+
+
+**Other Environment Manager Commands:**
+- `dbt-init` - Initialize dbt environment
+- `etl-init` - Initialize ETL environment (interactive)
+- `api-init` - Initialize API environment (interactive)
+- `frontend-status` - Check frontend deployment configuration
+- `env-status` - Check environment status
+
+#### Backend Infrastructure (Planned)
 ```
 Synthetic Data → RDS PostgreSQL → DBT Models → EC2 Web/App → Public HTTPS
 (Fake Data)      (Private DB)      (Analytics)    (FastAPI)     (Portfolio)
 ```
 
-#### Infrastructure Components
+#### Backend Infrastructure Components (Planned)
 - **RDS PostgreSQL**: Private database with synthetic data only (no public access)
 - **EC2 Instance**: Amazon Linux 2023 hosting FastAPI backend and DBT docs
 - **VPC Security**: Public subnet for web server, private subnet for database
 - **Security Groups**: HTTP/HTTPS public access, SSH restricted to authorized IPs only
 - **Domain & TLS**: Custom domain with Let's Encrypt SSL certificate
 
-#### Demo Features
+#### Backend Features (Planned)
 - **DBT Documentation**: Interactive lineage graphs and data catalog at `/dbt-docs/`
 - **REST API**: FastAPI endpoints for real-time analytics and KPI dashboards
 - **Read-Only Access**: Demo database user with SELECT-only permissions
@@ -262,7 +373,9 @@ Synthetic Data → RDS PostgreSQL → DBT Models → EC2 Web/App → Public HTTP
 - **Synthetic Data Only**: All demo data generated by synthetic data generator
 - **Cost Optimized**: t3.micro instances suitable for demo workload (<$20/month)
 
-**Status**: Synthetic data generator completed and tested. AWS deployment guide ready for implementation.
+**Status**: 
+- ✅ **Frontend**: Live and deployed at https://dbtdentalclinic.com
+- 📋 **Backend**: Synthetic data generator completed and tested. AWS deployment guide ready for implementation.
 
 ## 🎯 Key Technical Achievements
 
@@ -304,9 +417,11 @@ Synthetic Data → RDS PostgreSQL → DBT Models → EC2 Web/App → Public HTTP
 - **Git**: Version control, collaborative development
 - **Docker**: Containerization and deployment
 - **API Development**: FastAPI, RESTful services, OpenAPI documentation, CORS integration
+- **Security Implementation**: API key authentication, rate limiting, request logging, CORS protection, error sanitization
 - **Frontend Development**: React, TypeScript, Material-UI, responsive design
 - **Data Visualization**: Recharts, interactive dashboards, executive reporting
-- **Cloud Architecture**: AWS (EC2, RDS, VPC), cloud deployment, infrastructure planning
+- **Cloud Architecture**: AWS (S3, CloudFront, Route 53, ACM, EC2, RDS, VPC, ALB), cloud deployment, infrastructure planning
+- **DevOps**: CI/CD, automated deployment scripts, infrastructure as code
 - **Data Generation**: Synthetic data generation, Faker library, referential integrity management
 
 ### Data Engineering Skills
@@ -345,12 +460,14 @@ This project demonstrates **production-ready data engineering and analytics capa
 - **Enterprise Scale**: 432+ tables, 3.7GB database, 17.8M rows processed efficiently
 - **Modern Data Stack**: Python ETL, PostgreSQL, DBT, with comprehensive testing and monitoring
 - **Healthcare Expertise**: HIPAA-compliant processing of complex medical workflows
+- **Live Production Deployment**: Frontend accessible at [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
 
 **Seeking opportunities in:**
-- Data Engineering • Analytics Engineering • Healthcare Data Systems • Business Intelligence
+- Data Engineering • Analytics Engineering • Healthcare Data Systems • Business Intelligence • Full-Stack Development
 
 📧 **Contact:** [rains.bp@gmail.com]  
-💼 **Portfolio:** This repository demonstrates real-world data engineering at enterprise scale
+💼 **Portfolio:** This repository demonstrates real-world data engineering at enterprise scale  
+🌐 **Live Demo:** [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
 
 ---
 
