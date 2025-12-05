@@ -87,6 +87,14 @@ connection.json
 !.sqlfluffignore
 tables.yml
 
+# SSH keys and certificates
+*.pem
+*.key
+*.crt
+*.cer
+*.p12
+*.pfx
+
 # Sensitive files in scripts directory
 scripts/check_env.py
 scripts/run_dbt.ps1
@@ -105,6 +113,13 @@ build/
 *.egg-info/
 tmp/
 temp/
+*.tar.gz
+
+# Deployment notes (contains deployment-specific info)
+DEPLOYMENT_NOTES.md
+bucket-name.txt
+deployment-notes.txt
+.frontend-deploy.json
 
 # any log files:
 *.log
