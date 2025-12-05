@@ -33,3 +33,6 @@ structlog>=23.0.0
 # Security (for production)
 python-jose[cryptography]>=3.3.0
 passlib[bcrypt]>=1.7.4
+
+# AWS SDK (for Secrets Manager access)
+boto3>=1.28.0
