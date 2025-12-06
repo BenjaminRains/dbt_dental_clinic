@@ -6,6 +6,7 @@ from typing import List, Optional, Dict, Any
 from datetime import datetime
 
 from database import get_db
+from auth.api_key import require_api_key
 from api_types import DBTModelMetadata, DBTMetricLineage, MetricLineageInfo
 
 router = APIRouter(
@@ -111,7 +112,8 @@ METRIC_LINEAGE_MAPPING = {
 @router.get("/model-metadata/{model_name}", response_model=DBTModelMetadata)
 async def get_model_metadata(
     model_name: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get DBT model metadata and lineage information"""
     
@@ -163,7 +165,8 @@ async def get_model_metadata(
 @router.get("/metric-lineage/{metric_name}", response_model=MetricLineageInfo)
 async def get_metric_lineage(
     metric_name: str,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get lineage information for a specific metric"""
     
@@ -185,7 +188,8 @@ async def get_metric_lineage(
 
 @router.get("/metric-lineage", response_model=List[MetricLineageInfo])
 async def get_all_metric_lineage(
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get lineage information for all available metrics"""
     
@@ -207,7 +211,8 @@ async def get_all_metric_lineage(
 async def get_all_models(
     model_type: Optional[str] = Query(None, description="Filter by model type"),
     schema_name: Optional[str] = Query(None, description="Filter by schema name"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get all DBT model metadata with optional filtering"""
     

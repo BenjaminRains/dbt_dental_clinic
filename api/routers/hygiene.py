@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import Optional
 from datetime import date
 from database import get_db
+from auth.api_key import require_api_key
 
 router = APIRouter(prefix="/hygiene", tags=["hygiene"])
 
@@ -15,7 +16,8 @@ from models.hygiene import HygieneRetentionSummary
 async def get_hygiene_retention_summary_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for analysis (ISO format: YYYY-MM-DD). Defaults to 12 months ago if not provided."),
     end_date: Optional[date] = Query(None, description="End date for analysis (ISO format: YYYY-MM-DD). Defaults to today if not provided."),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """
     Get Hygiene Retention KPI summary for dashboard

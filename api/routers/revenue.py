@@ -3,6 +3,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
 from database import get_db
+from auth.api_key import require_api_key
 import logging
 
 logger = logging.getLogger(__name__)
@@ -37,7 +38,8 @@ async def get_revenue_trends_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for trend analysis"),
     end_date: Optional[date] = Query(None, description="End date for trend analysis"),
     provider_id: Optional[int] = Query(None, description="Filter by specific provider"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get revenue trends over time from mart_revenue_lost"""
     return get_revenue_trends(db, start_date, end_date, provider_id)
@@ -46,7 +48,8 @@ async def get_revenue_trends_endpoint(
 async def get_revenue_kpi_summary_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for KPI analysis"),
     end_date: Optional[date] = Query(None, description="End date for KPI analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get revenue KPI summary for dashboard display"""
     return get_revenue_kpi_summary(db, start_date, end_date)
@@ -61,7 +64,8 @@ async def get_revenue_opportunities_endpoint(
     opportunity_type: Optional[str] = Query(None, description="Filter by opportunity type"),
     recovery_potential: Optional[str] = Query(None, description="Filter by recovery potential"),
     min_priority_score: Optional[int] = Query(None, description="Minimum priority score filter"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get detailed revenue opportunities from mart_revenue_lost"""
     try:
@@ -86,7 +90,8 @@ async def get_revenue_opportunities_endpoint(
 async def get_revenue_opportunity_summary_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for summary analysis"),
     end_date: Optional[date] = Query(None, description="End date for summary analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get revenue opportunity summary by type and category"""
     return get_revenue_opportunity_summary(db, start_date, end_date)
@@ -96,7 +101,8 @@ async def get_revenue_recovery_plan_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for recovery plan"),
     end_date: Optional[date] = Query(None, description="End date for recovery plan"),
     min_priority_score: int = Query(50, description="Minimum priority score for recovery plan"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get revenue recovery plan with actionable items"""
     try:
@@ -107,7 +113,8 @@ async def get_revenue_recovery_plan_endpoint(
 @router.get("/opportunities/{opportunity_id}", response_model=RevenueOpportunity)
 async def get_revenue_opportunity_by_id_endpoint(
     opportunity_id: int,
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get specific revenue opportunity by ID"""
     opportunity = get_revenue_opportunity_by_id(db, opportunity_id)
@@ -120,7 +127,8 @@ async def get_revenue_opportunity_by_id_endpoint(
 async def get_revenue_lost_summary_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get PBN-style Revenue Lost summary (Appmts Lost $, Recovered $, Lost Appmts %)"""
     try:
@@ -132,7 +140,8 @@ async def get_revenue_lost_summary_endpoint(
 async def get_revenue_lost_opportunity_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get PBN-style Opportunity metrics (Failed %, Cancelled %, Re-appnt %)"""
     try:
@@ -147,7 +156,8 @@ async def get_lost_appointments_detail_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
     status: Optional[str] = Query(None, description="Filter by status: 'Failed' or 'Cancelled'"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get detailed list of cancelled/failed appointments"""
     try:

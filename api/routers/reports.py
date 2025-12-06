@@ -7,6 +7,7 @@ from datetime import datetime, date
 import pandas as pd
 
 from database import get_db
+from auth.api_key import require_api_key
 from api_types import (
     RevenueTrend, RevenueKPISummary, ProviderPerformance, 
     ProviderSummary, ARSummary, DashboardKPIs
@@ -24,7 +25,8 @@ async def get_revenue_trends(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
     provider_id: Optional[int] = Query(None, description="Filter by provider"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get revenue trends over time with filtering capabilities"""
     query = """
@@ -68,7 +70,8 @@ async def get_revenue_trends(
 async def get_revenue_kpi_summary(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get key revenue performance indicators"""
     query = """
@@ -108,7 +111,8 @@ async def get_provider_performance(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
     provider_id: Optional[int] = Query(None, description="Filter by specific provider"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get comprehensive provider performance metrics"""
     query = """
@@ -165,7 +169,8 @@ async def get_provider_performance(
 async def get_provider_summary(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get aggregated provider performance summary"""
     query = """
@@ -222,7 +227,8 @@ async def get_appointment_summary(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
     provider_id: Optional[int] = Query(None, description="Filter by provider"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get appointment summary and scheduling metrics"""
     query = """
@@ -286,7 +292,8 @@ async def get_appointment_summary(
 async def get_ar_summary(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get accounts receivable summary and aging analysis"""
     query = """
@@ -343,7 +350,8 @@ async def get_ar_summary(
 async def get_dashboard_kpis(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get key performance indicators for dashboard overview"""
     # This would aggregate data from multiple marts for a comprehensive dashboard view

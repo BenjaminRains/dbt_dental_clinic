@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 from typing import List, Optional
 from datetime import date
 from database import get_db
+from auth.api_key import require_api_key
 
 router = APIRouter(prefix="/treatment-acceptance", tags=["treatment-acceptance"])
 
@@ -27,7 +28,8 @@ async def get_treatment_acceptance_kpi_summary_endpoint(
     end_date: Optional[date] = Query(None, description="End date for KPI analysis"),
     provider_id: Optional[int] = Query(None, description="Filter by provider"),
     clinic_id: Optional[int] = Query(None, description="Filter by clinic"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get Treatment Acceptance KPI summary for dashboard"""
     try:
@@ -42,7 +44,8 @@ async def get_treatment_acceptance_summary_endpoint(
     end_date: Optional[date] = Query(None, description="End date for analysis"),
     provider_id: Optional[int] = Query(None, description="Filter by provider"),
     clinic_id: Optional[int] = Query(None, description="Filter by clinic"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get Treatment Acceptance daily summary"""
     try:
@@ -58,7 +61,8 @@ async def get_treatment_acceptance_trends_endpoint(
     provider_id: Optional[int] = Query(None, description="Filter by provider"),
     clinic_id: Optional[int] = Query(None, description="Filter by clinic"),
     group_by: str = Query("month", description="Group by period: day, week, month"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get Treatment Acceptance trends over time"""
     try:
@@ -72,7 +76,8 @@ async def get_treatment_acceptance_provider_performance_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
     end_date: Optional[date] = Query(None, description="End date for analysis"),
     clinic_id: Optional[int] = Query(None, description="Filter by clinic"),
-    db: Session = Depends(get_db)
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key)
 ):
     """Get Treatment Acceptance provider performance breakdown"""
     try:
