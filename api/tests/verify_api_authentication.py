@@ -142,23 +142,36 @@ def test_endpoint(
         status_code = response.status_code
         
         # Check if status matches expected
-        if expected_status and status_code != expected_status:
-            return (
-                False,
-                f"Expected {expected_status}, got {status_code}",
-                status_code,
-            )
+        if expected_status:
+            if status_code == expected_status:
+                # Status matches expected - this is a success
+                # Try to get detail message for better reporting
+                try:
+                    data = response.json()
+                    detail = data.get("detail", "") if isinstance(data, dict) else ""
+                    if detail:
+                        return (True, f"Status {status_code}: {detail[:80]}", status_code)
+                except:
+                    pass
+                return (True, f"Status {status_code}", status_code)
+            else:
+                # Status doesn't match expected - this is a failure
+                return (
+                    False,
+                    f"Expected {expected_status}, got {status_code}",
+                    status_code,
+                )
         
-        # Try to parse response
-        try:
-            data = response.json()
-            detail = data.get("detail", "") if isinstance(data, dict) else ""
-            # If there's an error detail, include it in the message
-            if detail and status_code >= 400:
-                return (False, f"Status {status_code}: {detail[:80]}", status_code)
-        except:
-            detail = response.text[:100]
-            if status_code >= 400:
+        # No expected status specified - treat 4xx/5xx as errors
+        if status_code >= 400:
+            # Try to parse response for error details
+            try:
+                data = response.json()
+                detail = data.get("detail", "") if isinstance(data, dict) else ""
+                if detail:
+                    return (False, f"Status {status_code}: {detail[:80]}", status_code)
+            except:
+                detail = response.text[:100]
                 return (False, f"Status {status_code}: {detail}", status_code)
         
         return (True, f"Status {status_code}", status_code)
