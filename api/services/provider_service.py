@@ -4,6 +4,33 @@ from sqlalchemy import text
 from typing import List, Optional
 from datetime import date
 
+def _int_to_hex_color(color_int):
+    """Convert integer color value to hex string format (#RRGGBB)"""
+    if color_int is None:
+        return None
+    # Convert signed 32-bit integer to unsigned (handle negative values)
+    # Windows color format uses signed integers for ARGB
+    if color_int < 0:
+        # Convert negative to unsigned 32-bit
+        color_int = color_int & 0xFFFFFFFF
+    # Extract RGB (skip alpha channel)
+    # Format: ARGB -> we want RGB, so take lower 24 bits
+    rgb = color_int & 0xFFFFFF
+    # Format as #RRGGBB
+    return f"#{rgb:06X}"
+
+def _convert_provider_row(row_dict):
+    """Convert provider row data to match Pydantic model expectations"""
+    # Convert provider_color from integer to hex string
+    if 'provider_color' in row_dict:
+        row_dict['provider_color'] = _int_to_hex_color(row_dict['provider_color'])
+    
+    # Convert outline_color from integer to hex string
+    if 'outline_color' in row_dict:
+        row_dict['outline_color'] = _int_to_hex_color(row_dict['outline_color'])
+    
+    return row_dict
+
 def get_providers(
     db: Session,
     skip: int = 0,
@@ -22,7 +49,7 @@ def get_providers(
         provider_status,
         provider_status_description,
         anesthesia_provider_type,
-        anesthesia_provider_type_description,
+        anesthesia_type_description as anesthesia_provider_type_description,
         is_secondary,
         is_hidden,
         is_using_tin,
@@ -61,10 +88,11 @@ def get_providers(
         query += " AND provider_status_category = 'Active'"
     
     query += " ORDER BY provider_id"
-    query += f" LIMIT {limit} OFFSET {skip}"
+    query += " LIMIT :limit OFFSET :skip"
     
-    result = db.execute(text(query)).fetchall()
-    return [dict(row._mapping) for row in result]
+    result = db.execute(text(query), {"limit": limit, "skip": skip}).fetchall()
+    # Convert rows to dicts and fix data types
+    return [_convert_provider_row(dict(row._mapping)) for row in result]
 
 def get_provider_by_id(
     db: Session,
@@ -82,7 +110,7 @@ def get_provider_by_id(
         provider_status,
         provider_status_description,
         anesthesia_provider_type,
-        anesthesia_provider_type_description,
+        anesthesia_type_description as anesthesia_provider_type_description,
         is_secondary,
         is_hidden,
         is_using_tin,
@@ -118,7 +146,9 @@ def get_provider_by_id(
     """
     
     result = db.execute(text(query), {"provider_id": provider_id}).fetchone()
-    return dict(result._mapping) if result else None
+    if result:
+        return _convert_provider_row(dict(result._mapping))
+    return None
 
 def get_provider_summary(
     db: Session,
