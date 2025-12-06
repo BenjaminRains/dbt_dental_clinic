@@ -405,8 +405,8 @@ def get_ar_priority_queue(
     Get AR priority queue sorted by collection_priority_score
     
     Joins:
-    - dim_patient for patient_name
-    - dim_provider for provider_name
+    # - dim_provider for provider_name (removed for portfolio)
+    Note: patient_name removed (PII) for portfolio use
     
     Filters:
     - min_priority_score: Minimum priority score threshold
@@ -459,8 +459,8 @@ def get_ar_priority_queue(
     SELECT 
         ls.patient_id,
         ls.provider_id,
-        COALESCE(dp.preferred_name, 'Unknown') as patient_name,
-        CONCAT(COALESCE(dpr.provider_first_name, ''), ' ', COALESCE(dpr.provider_last_name, '')) as provider_name,
+        -- patient_name removed (PII)
+        # CONCAT(COALESCE(dpr.provider_first_name, ''), ' ', COALESCE(dpr.provider_last_name, '')) as provider_name,
         ls.total_balance,
         ls.balance_0_30_days,
         ls.balance_31_60_days,
@@ -472,7 +472,7 @@ def get_ar_priority_queue(
         ls.payment_recency,
         ls.collection_rate_last_year as collection_rate
     FROM latest_snapshots ls
-    JOIN raw_marts.dim_patient dp ON ls.patient_id = dp.patient_id
+    -- Removed dim_patient join (no longer needed without patient_name)
     JOIN raw_marts.dim_provider dpr ON ls.provider_id = dpr.provider_id
     ORDER BY ls.collection_priority_score DESC, ls.total_balance DESC
     LIMIT :limit OFFSET :skip
@@ -483,8 +483,8 @@ def get_ar_priority_queue(
         {
             "patient_id": int(row.patient_id),
             "provider_id": int(row.provider_id),
-            "patient_name": str(row.patient_name or "").strip(),
-            "provider_name": str(row.provider_name or "").strip(),
+            # "patient_name": Removed (PII)
+            # "provider_name": str(row.provider_name or "").strip(),
             "total_balance": float(row.total_balance or 0),
             "balance_0_30_days": float(row.balance_0_30_days or 0),
             "balance_31_60_days": float(row.balance_31_60_days or 0),
