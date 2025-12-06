@@ -90,9 +90,6 @@ adjustment_base as (
 provider_dimension as (
     select 
         provider_id,
-        provider_last_name,
-        provider_first_name,
-        provider_preferred_name,
         provider_type_category,
         provider_specialty_category
     from {{ ref('dim_provider') }}
@@ -365,9 +362,6 @@ final as (
         oe.appointment_id,
         
         -- Provider Information
-        prov.provider_last_name,
-        prov.provider_first_name,
-        prov.provider_preferred_name,
         prov.provider_type_category,
         prov.provider_specialty_category,
         

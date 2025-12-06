@@ -1,6 +1,7 @@
 {{ config(
     materialized='incremental',
-    unique_key='billing_statement_id'
+    unique_key='billing_statement_id',
+    on_schema_change='sync_all_columns'
 ) }}
 
 /*
@@ -66,7 +67,6 @@ WITH statement_base AS (
 patient_info AS (
     SELECT
         patient_id,
-        preferred_name,
         total_ar_balance AS total_balance,
         balance_0_30_days,
         balance_31_60_days,
@@ -191,7 +191,6 @@ SELECT
     sb.sms_send_status,
     
     -- Patient AR information
-    pi.preferred_name AS patient_name,
     pi.total_balance,
     pi.balance_0_30_days,
     pi.balance_31_60_days,

@@ -65,7 +65,7 @@ text_templates AS (
         'appointment' AS category,
         NULL AS subject,
         content_pattern AS content,
-        ARRAY['PATIENT_NAME', 'PHONE_NUMBER', 'CLINIC_NAME']::text[] AS variables,
+        ARRAY['PHONE_NUMBER', 'CLINIC_NAME']::text[] AS variables,
         TRUE AS is_active,
         NULL AS created_by,
         CURRENT_TIMESTAMP AS created_at,
@@ -114,7 +114,7 @@ communication_templates AS (
         -- Use a representative content example
         MIN(content) AS content,
         -- Placeholder for variables detection
-        ARRAY['PATIENT_NAME', 'DATE', 'PROVIDER']::text[] AS variables,
+        ARRAY['DATE', 'PROVIDER']::text[] AS variables,
         TRUE::boolean AS is_active,
         -- Only set created_by if user_id exists in stg_opendental__userod
         CASE 

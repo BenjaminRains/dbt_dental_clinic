@@ -6,7 +6,8 @@
         {'columns': ['patient_id']},
         {'columns': ['communication_id']}
     ],
-    incremental_strategy='delete+insert'
+    incremental_strategy='delete+insert',
+    on_schema_change='sync_all_columns'
 ) }}
 
 /*
@@ -89,12 +90,10 @@ automated_comms AS (
         base.program_id,
         
         -- Patient context
-        base.patient_name,
         base.patient_status,
         base.birth_date,
         
         -- User context
-        base.user_name,
         base.provider_id,
         
         -- Automation flags and metrics
@@ -148,10 +147,8 @@ SELECT
     communication_category,
     outcome,
     program_id,
-    patient_name,
     patient_status,
     birth_date,
-    user_name,
     provider_id,
     trigger_type,
     status,

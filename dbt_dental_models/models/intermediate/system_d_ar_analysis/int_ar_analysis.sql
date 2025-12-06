@@ -295,8 +295,6 @@ ClaimActivity AS (
 BasePatientInfo AS (
     SELECT
         p.patient_id,
-        p.preferred_name,
-        p.middle_initial,
         p.patient_status,
         p.position_code,
         p.birth_date,
@@ -337,7 +335,7 @@ BasePatientInfo AS (
     LEFT JOIN {{ ref('stg_opendental__procedurelog') }} pl 
         ON p.patient_id = pl.patient_id
     WHERE p.patient_status IN (0, 1, 2, 3)  -- Only include active patients
-    GROUP BY p.patient_id, p.preferred_name, p.middle_initial, p.patient_status, p.position_code,
+    GROUP BY p.patient_id, p.patient_status, p.position_code,
      p.birth_date, p.has_insurance_flag, p.first_visit_date
 ),
 
@@ -380,8 +378,6 @@ InsuranceCoverage AS (
 PatientInfo AS (
     SELECT
         bpi.patient_id,
-        bpi.preferred_name,
-        bpi.middle_initial,
         bpi.patient_status,
         bpi.position_code,
         bpi.birth_date,
@@ -470,8 +466,6 @@ SELECT
     ca.last_claim_verification,
     COALESCE(ca.total_benefits_used, 0) AS total_benefits_used,
     COALESCE(ca.total_benefits_remaining, 0) AS total_benefits_remaining,
-    pi.preferred_name,
-    pi.middle_initial,
     pi.patient_status,
     pi.position_code,
     pi.patient_category,

@@ -98,9 +98,6 @@ with production_base as (
 production_dimensions as (
     select 
         provider_id,
-        provider_first_name,
-        provider_last_name,
-        provider_preferred_name,
         specialty_description,
         provider_status_description
     from {{ ref('dim_provider') }}
@@ -237,9 +234,6 @@ final as (
         pe.clinic_id,
         
         -- Provider and Clinic Information
-        pd.provider_first_name,
-        pd.provider_last_name,
-        pd.provider_preferred_name,
         pd.specialty_description,
         pd.provider_status_description,
         

@@ -1,7 +1,7 @@
 {{ config(
     materialized='incremental',
-    
-    unique_key='communication_id'
+    unique_key='communication_id',
+    on_schema_change='sync_all_columns'
 ) }}
 
 /*
@@ -145,7 +145,6 @@ last_completed_visit AS (
 patient_info AS (
     SELECT
         p.patient_id,
-        p.preferred_name,
         p.patient_status,
         p.birth_date,
         p.first_visit_date,
@@ -157,7 +156,6 @@ patient_info AS (
 user_info AS (
     SELECT
         u.user_id,
-        u.username AS user_name,
         u.is_hidden,
         u.provider_id
     FROM {{ ref('stg_opendental__userod') }} u
@@ -194,12 +192,10 @@ SELECT
     cb.program_id,
     
     -- Additional context fields
-    pi.preferred_name AS patient_name,
     pi.patient_status,
     pi.birth_date,
     pi.first_visit_date,
     pi.last_visit_date,
-    ui.user_name,
     ui.provider_id,
     
     -- Metadata fields

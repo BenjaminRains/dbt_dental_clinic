@@ -75,12 +75,6 @@ provider_enhanced as (
         p.provider_id,
         
         -- Provider identifiers
-        p.provider_abbreviation,
-        p.last_name as provider_last_name,
-        p.first_name as provider_first_name,
-        p.middle_initial as provider_middle_initial,
-        p.name_suffix as provider_suffix,
-        p.preferred_name as provider_preferred_name,
         p.custom_id as provider_custom_id,
         
         -- Provider classifications
@@ -93,13 +87,7 @@ provider_enhanced as (
         p.anesthesia_provider_type,
         p.anesthesia_type_description,
         
-        -- Provider credentials
-        p.state_license_number as state_license,
-        p.dea_number,
-        p.blue_cross_id,
-        p.medicaid_id,
-        p.national_provider_id,
-        p.state_rx_id,
+        -- Provider credentials (non-PII only)
         p.state_where_licensed,
         p.taxonomy_code_override,
         

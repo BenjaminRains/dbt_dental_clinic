@@ -104,9 +104,6 @@ with appointment_base as (
 appointment_dimensions as (
     select 
         provider_id,
-        provider_first_name,
-        provider_last_name,
-        provider_preferred_name,
         provider_type_category as provider_type,
         specialty_description as specialty
     from {{ ref('dim_provider') }}
@@ -220,9 +217,6 @@ final as (
         ae.clinic_id,
         
         -- Provider and Date Information
-        prov.provider_first_name,
-        prov.provider_last_name,
-        prov.provider_preferred_name,
         prov.provider_type,
         prov.specialty,
         dd.day_name,

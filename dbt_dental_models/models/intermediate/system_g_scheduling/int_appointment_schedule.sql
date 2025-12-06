@@ -1,7 +1,7 @@
 {{ config(
     materialized='incremental',
-    
-    unique_key='schedule_id'
+    unique_key='schedule_id',
+    on_schema_change='sync_all_columns'
 ) }}
 
 /*
@@ -32,7 +32,6 @@ date_spine_formatted AS (
 provider_schedule AS (
     SELECT
         p.provider_id,
-        p.provider_abbreviation as provider_name,
         p.is_hidden,
         p.specialty_id as specialty
     FROM {{ ref('stg_opendental__provider') }} p
@@ -73,7 +72,6 @@ daily_schedule AS (
         md5(COALESCE(ps.provider_id::text, '') || COALESCE(ds.schedule_date::text, '')) as schedule_id,
         ds.schedule_date,
         ps.provider_id,
-        ps.provider_name,
         COALESCE(am.total_appointments, 0) as total_appointments,
         COALESCE(am.completed_appointments, 0) as completed_appointments,
         COALESCE(am.cancelled_appointments, 0) as cancelled_appointments,
@@ -100,7 +98,6 @@ daily_schedule AS (
         AND ds.schedule_date = pa.schedule_date
     GROUP BY 
         ps.provider_id,
-        ps.provider_name,
         ds.schedule_date,
         am.total_appointments,
         am.completed_appointments,
@@ -118,7 +115,6 @@ SELECT
     schedule_id,
     schedule_date,
     provider_id,
-    provider_name,
     total_appointments,
     completed_appointments,
     cancelled_appointments,

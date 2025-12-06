@@ -255,10 +255,8 @@ final as (
         pt.first_visit_date,
         
         -- Provider Information
-        concat(prov.provider_first_name, ' ', prov.provider_last_name) as provider_name,
         prov.provider_type_category,
         prov.specialty_description,
-        concat(hyg.provider_first_name, ' ', hyg.provider_last_name) as hygienist_name,
         
         -- Date Information
         dd.year,

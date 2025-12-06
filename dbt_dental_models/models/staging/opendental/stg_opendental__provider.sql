@@ -1,6 +1,7 @@
 {{ config(
     materialized='incremental',
-    unique_key='provider_id'
+    unique_key='provider_id',
+    on_schema_change='sync_all_columns'
 ) }}
 
 with source_data as (
@@ -23,25 +24,10 @@ renamed_columns as (
         ]) }},
         
         -- Provider identifiers and names
-        "Abbr" as provider_abbreviation,
         "ItemOrder" as display_order,
-        "LName" as last_name,
-        "FName" as first_name,
-        "MI" as middle_initial,
-        "Suffix" as name_suffix,
-        "PreferredName" as preferred_name,
         "CustomID" as custom_id,
         
         -- Professional identifiers
-        "SSN" as social_security_number,
-        "StateLicense" as state_license_number,
-        "DEANum" as dea_number,
-        "BlueCrossID" as blue_cross_id,
-        "MedicaidID" as medicaid_id,
-        "NationalProvID" as national_provider_id,
-        "CanadianOfficeNum" as canadian_office_number,
-        "EcwID" as ecw_id,
-        "StateRxID" as state_rx_id,
         "StateWhereLicensed" as state_where_licensed,
         "TaxonomyCodeOverride" as taxonomy_code_override,
         

@@ -75,8 +75,6 @@ patient_family_links as (
 patient_notes_lookup as (
     select
         patient_id,
-        ice_name,
-        ice_phone,
         medical,
         treatment,
         pronoun,
@@ -120,8 +118,6 @@ patient_demographics_enhanced as (
         fee_schedule_id,
         
         -- Core demographics
-        preferred_name,
-        middle_initial,
         gender,
         language,
         birth_date,
@@ -187,8 +183,6 @@ patient_integrated as (
         pde.fee_schedule_id,
         
         -- Demographics
-        pde.preferred_name,
-        pde.middle_initial,
         pde.gender,
         pde.language,
         pde.birth_date,
@@ -221,8 +215,6 @@ patient_integrated as (
         pfl.total_family_links,
         
         -- Emergency contacts and notes
-        pnl.ice_name as emergency_contact_name,
-        pnl.ice_phone as emergency_contact_phone,
         pnl.medical as medical_notes,
         pnl.treatment as treatment_notes,
         pnl.pronoun,

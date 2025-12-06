@@ -116,27 +116,12 @@ provider_enhanced as (
     select
         -- Core identifiers
         provider_id,
-        provider_abbreviation,
         display_order,
         
         -- Provider name fields
-        last_name,
-        first_name,
-        middle_initial,
-        name_suffix,
-        preferred_name,
         custom_id,
         
-        -- Professional identifiers  
-        social_security_number,
-        state_license_number,
-        dea_number,
-        blue_cross_id,
-        medicaid_id,
-        national_provider_id,
-        canadian_office_number,
-        ecw_id,
-        state_rx_id,
+        -- Professional identifiers (non-PII only)
         state_where_licensed,
         taxonomy_code_override,
         
@@ -191,7 +176,6 @@ provider_enhanced as (
         -- Additional business logic
         case
             when is_not_person = true then true
-            when last_name is null or trim(last_name) = '' then true
             else false
         end as is_non_person_provider,
         
@@ -200,15 +184,11 @@ provider_enhanced as (
             else false
         end as is_terminated_provider,
         
-        case
-            when dea_number is not null and trim(dea_number) != '' then true
-            else false
-        end as can_prescribe_controlled_substances,
+        -- PII fields removed - cannot determine from available data
+        NULL::boolean as can_prescribe_controlled_substances,
         
-        case
-            when state_license_number is not null and trim(state_license_number) != '' then true
-            else false
-        end as has_state_license,
+        -- PII fields removed - cannot determine from available data  
+        NULL::boolean as has_state_license,
         
         -- Metadata (preserved from source staging model)
         _loaded_at,
@@ -245,27 +225,12 @@ provider_integrated as (
     select
         -- Core provider fields
         pc.provider_id,
-        pc.provider_abbreviation,
         pc.display_order,
         
         -- Provider name fields
-        pc.last_name,
-        pc.first_name,
-        pc.middle_initial,
-        pc.name_suffix,
-        pc.preferred_name,
         pc.custom_id,
         
         -- Professional identifiers  
-        pc.social_security_number,
-        pc.state_license_number,
-        pc.dea_number,
-        pc.blue_cross_id,
-        pc.medicaid_id,
-        pc.national_provider_id,
-        pc.canadian_office_number,
-        pc.ecw_id,
-        pc.state_rx_id,
         pc.state_where_licensed,
         pc.taxonomy_code_override,
         

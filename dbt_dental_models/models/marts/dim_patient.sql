@@ -63,8 +63,6 @@ patient_enhanced as (
         s.patient_id,  -- Unique identifier for each patient
         
         -- Demographics (from intermediate model)
-        s.middle_initial,  -- Patient's middle initial
-        s.preferred_name,  -- Patient's preferred name
         case s.gender
             when 0 then 'M'
             when 1 then 'F'
@@ -147,8 +145,6 @@ patient_enhanced as (
         s.medical_notes,  -- General medical notes
         s.treatment_notes,  -- Notes related to treatment
         null as financial_notes,  -- Not available in intermediate (was family_financial in staging)
-        s.emergency_contact_name,  -- Name of emergency contact
-        s.emergency_contact_phone,  -- Phone number of emergency contact
         
         -- Patient Links (from intermediate model - already aggregated)
         array_to_string(s.family_ids, ',') as linked_patient_ids,  -- Convert array to text for compatibility

@@ -22,8 +22,6 @@ renamed_columns as (
         "Service" as service,
         "MedicalComp" as medical_comp,
         "Treatment" as treatment,
-        "ICEName" as ice_name,
-        "ICEPhone" as ice_phone,
         "Consent" as consent,
         "Pronoun" as pronoun,
         

@@ -19,8 +19,6 @@ renamed_columns as (
         ]) }},
         
         -- Demographics
-        "MiddleI" as middle_initial,
-        "Preferred" as preferred_name,
         "Gender" as gender,
         "Language" as language,
         

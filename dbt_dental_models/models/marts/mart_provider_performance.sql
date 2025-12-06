@@ -231,9 +231,6 @@ final as (
         pp.provider_id,
         
         -- Provider Information
-        prov.provider_preferred_name,
-        prov.provider_first_name,
-        prov.provider_last_name,
         prov.specialty_description,
         prov.provider_status,
         prov.provider_status_description,

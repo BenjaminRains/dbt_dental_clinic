@@ -477,8 +477,6 @@ final as (
         ae.clinic_id,
         
         -- Provider Information
-        prov.provider_first_name,
-        prov.provider_last_name,
         prov.provider_type_category,
         prov.specialty_description,
         

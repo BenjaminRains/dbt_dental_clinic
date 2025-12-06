@@ -174,7 +174,6 @@ final as (
         np.clinic_id,
         
         -- Provider Information
-        concat(prov.provider_first_name, ' ', prov.provider_last_name) as primary_provider_name,
         prov.provider_type_category as primary_provider_type,
         prov.specialty_description as primary_provider_specialty,
         

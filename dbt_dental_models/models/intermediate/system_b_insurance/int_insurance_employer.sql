@@ -32,13 +32,8 @@ with employer as (
         employer_id,
         -- Attributes
         employer_name,
-        address,
-        address2,
         city,
         state,
-        zip,
-        phone,
-        
         -- Metadata (only pipeline metadata available from employer table)
         _loaded_at,
         _transformed_at
@@ -88,12 +83,8 @@ final as (
         
         -- Employer Details
         e.employer_name,
-        e.address,
-        e.address2,
         e.city,
         e.state,
-        e.zip,
-        e.phone,
         
         -- Insurance Plan Information
         coalesce(epc.plan_count, 0) as plan_count,

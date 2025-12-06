@@ -1,7 +1,7 @@
 {{ config(
     materialized='incremental',
-    
-    unique_key='appointment_id'
+    unique_key='appointment_id',
+    on_schema_change='sync_all_columns'
 ) }}
 
 /*
@@ -137,7 +137,6 @@ appointment_types AS (
 provider_info AS (
     SELECT
         p.provider_id,
-        p.provider_abbreviation as provider_abbr,
         p.provider_color,
         p.is_hidden,
         p.specialty_id as specialty
@@ -147,7 +146,6 @@ provider_info AS (
 patient_info AS (
     SELECT
         pt.patient_id,
-        pt.preferred_name,
         pt.patient_status,
         pt.first_visit_date
     FROM {{ ref('stg_opendental__patient') }} pt
@@ -238,12 +236,10 @@ SELECT
     ha.rescheduled_appointment_id,
     
     -- Provider information
-    pi.provider_abbr AS provider_name,
     pi.specialty AS provider_specialty,
     pi.provider_color,
     
     -- Patient information
-    pat.preferred_name AS patient_name,
     pat.patient_status,
     pat.first_visit_date,
     

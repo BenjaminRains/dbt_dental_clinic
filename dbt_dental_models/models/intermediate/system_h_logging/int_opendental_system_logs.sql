@@ -14,7 +14,6 @@ with entry_logs as (
 users as (
     select
         user_id,
-        username,
         user_group_id
     from {{ ref('stg_opendental__userod') }}
 )
@@ -29,7 +28,6 @@ select
     el.entry_datetime,
     
     -- User Information
-    u.username,
     COALESCE(u.user_group_id, 0) as user_group_id  -- Default to 0 for system entries
 
 from entry_logs el
