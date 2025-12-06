@@ -97,7 +97,7 @@ class TreatmentAcceptanceTrend(BaseModel):
 class TreatmentAcceptanceProviderPerformance(BaseModel):
     """Provider-level performance breakdown"""
     provider_id: int
-    provider_name: str
+    # provider_name: str (removed for portfolio)
     tx_acceptance_rate: Optional[float]
     patient_acceptance_rate: Optional[float]
     diagnosis_rate: Optional[float]

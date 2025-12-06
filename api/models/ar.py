@@ -33,11 +33,11 @@ class ARAgingSummary(BaseModel):
         from_attributes = True
 
 class ARPriorityQueueItem(BaseModel):
-    """Individual AR item for priority queue"""
+    """Individual AR item for priority queue (PII removed for portfolio)"""
     patient_id: int
     provider_id: int
-    patient_name: str  # From dim_patient join
-    provider_name: str  # From dim_provider join
+    # patient_name: Removed (PII)
+    # provider_name: str  # From dim_provider join
     total_balance: float
     balance_0_30_days: float
     balance_31_60_days: float

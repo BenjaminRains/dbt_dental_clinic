@@ -150,7 +150,7 @@ class LostAppointmentDetail(BaseModel):
     """Detailed information about a cancelled or failed appointment"""
     appointment_id: int
     patient_id: int
-    patient_name: Optional[str] = None
+    # patient_name: Optional[str] = None (removed for portfolio)
     original_date: str
     status: str  # "Failed" or "Cancelled"
     procedure_codes: Optional[List[str]] = None

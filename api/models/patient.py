@@ -7,12 +7,9 @@ class Patient(BaseModel):
     # Primary identification
     patient_id: int
     
-    # Demographics
-    middle_initial: Optional[str] = None
-    preferred_name: Optional[str] = None
+    # Demographics (PII removed for portfolio)
     gender: Optional[str] = None  # M=Male, F=Female, O=Other
     language: Optional[str] = None
-    birth_date: Optional[datetime] = None
     age: Optional[int] = None
     age_category: Optional[str] = None  # Minor, Adult, Senior
     
@@ -55,12 +52,10 @@ class Patient(BaseModel):
     clinic_id: Optional[int] = None
     fee_schedule_id: Optional[int] = None
     
-    # Patient Notes
-    medical_notes: Optional[str] = None
-    treatment_notes: Optional[str] = None
-    financial_notes: Optional[str] = None
-    emergency_contact_name: Optional[str] = None
-    emergency_contact_phone: Optional[str] = None
+    # Patient Notes (PII removed for portfolio)
+    # medical_notes: Removed (PII)
+    # treatment_notes: Removed (PII)
+    # financial_notes: Removed (PII)
     
     # Patient Links (arrays)
     linked_patient_ids: Optional[List[str]] = None
