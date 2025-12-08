@@ -1,0 +1,27 @@
+include README.md
+include LICENSE
+include requirements.txt
+include dental_corrections.json
+include *.md
+include *.txt
+include *.json
+
+recursive-include templates *
+recursive-include tests *
+recursive-exclude * __pycache__
+recursive-exclude * *.py[co]
+recursive-exclude * *.so
+recursive-exclude * .DS_Store
+recursive-exclude * .git*
+recursive-exclude * .env*
+recursive-exclude * whisper_env*
+recursive-exclude * raw_audio*
+recursive-exclude * transcripts*
+recursive-exclude * transcripts_clean*
+recursive-exclude * api_claude_summary_analysis*
+recursive-exclude * manual_claude_summary_analysis*
+recursive-exclude * html_output*
+recursive-exclude * pdf_output*
+recursive-exclude * api_debug_responses*
+recursive-exclude * logs*
+recursive-exclude * __pycache__* 

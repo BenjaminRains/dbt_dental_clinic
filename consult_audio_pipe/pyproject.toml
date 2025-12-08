@@ -1,0 +1,106 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "dental-consultation-pipeline"
+version = "1.0.0"
+description = "A complete automated pipeline for processing dental consultation audio recordings"
+readme = "README.md"
+license = {text = "MIT"}
+authors = [
+    {name = "Dental Analysis Team", email = "your-email@example.com"}
+]
+maintainers = [
+    {name = "Dental Analysis Team", email = "your-email@example.com"}
+]
+keywords = ["dental", "audio", "transcription", "analysis", "claude", "whisper", "healthcare"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Healthcare Industry",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.8",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Topic :: Scientific/Engineering :: Artificial Intelligence",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+    "Topic :: Text Processing :: Linguistic",
+]
+requires-python = ">=3.8"
+dependencies = [
+    "certifi>=2025.4.26",
+    "charset-normalizer>=3.4.2",
+    "colorama>=0.4.6",
+    "filelock>=3.18.0",
+    "fsspec>=2025.3.2",
+    "idna>=3.10",
+    "Jinja2>=3.1.6",
+    "llvmlite>=0.44.0",
+    "lxml>=5.4.0",
+    "MarkupSafe>=3.0.2",
+    "more-itertools>=10.7.0",
+    "mpmath>=1.3.0",
+    "networkx>=3.4.2",
+    "numba>=0.61.2",
+    "numpy>=2.2.5",
+    "openai-whisper @ git+https://github.com/openai/whisper.git@13907bed90989951b41ecb4448a258cd834ffbc6",
+    "pillow>=11.0.0",
+    "python-docx>=1.1.2",
+    "python-dotenv>=1.0.0",
+    "regex>=2024.11.6",
+    "requests>=2.32.3",
+    "sentence-transformers>=2.2.2",
+    "sympy>=1.14.0",
+    "tiktoken>=0.9.0",
+    "torch>=2.7.0",
+    "torchaudio>=2.7.0",
+    "torchvision>=0.22.0",
+    "tqdm>=4.67.1",
+    "typing_extensions>=4.13.2",
+    "urllib3>=2.4.0",
+    "watchdog>=6.0.0",
+    "markdown2>=2.4.10",
+    "reportlab>=4.0.7",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0.0",
+    "pytest-cov>=2.0",
+    "black>=21.0",
+    "flake8>=3.8",
+    "mypy>=0.800",
+]
+docs = [
+    "sphinx>=4.0",
+    "sphinx-rtd-theme>=1.0",
+]
+
+[project.scripts]
+dental-transcribe = "dental_consultation_pipeline.transcription:main"
+dental-clean = "dental_consultation_pipeline.cleaning:main"
+dental-analyze = "dental_consultation_pipeline.analysis:main"
+dental-convert = "dental_consultation_pipeline.conversion:main"
+
+[project.urls]
+Homepage = "https://github.com/yourusername/dental-consultation-pipeline"
+Documentation = "https://dental-consultation-pipeline.readthedocs.io/"
+Repository = "https://github.com/yourusername/dental-consultation-pipeline"
+"Bug Tracker" = "https://github.com/yourusername/dental-consultation-pipeline/issues"
+
+[tool.setuptools.packages.find]
+where = ["."]
+
+[tool.setuptools.package-data]
+"*" = ["*.json", "*.md", "*.txt"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short" 
