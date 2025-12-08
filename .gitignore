@@ -103,7 +103,8 @@ scripts/run_dbt.sh
 scripts/deployment/
 
 # Documentation with sensitive business info
-# (add specific paths here)
+docs/
+etl_pipeline/docs/
 
 # Personal migration documents (desktop-specific setup)
 docs/DESKTOP_TO_LAPTOP_MIGRATION_PLAN.md
