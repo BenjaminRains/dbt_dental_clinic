@@ -99,6 +99,7 @@ tables.yml
 scripts/check_env.py
 scripts/run_dbt.ps1
 scripts/run_dbt.sh
+scripts/deployment/
 
 # Documentation with sensitive business info
 # (add specific paths here)
@@ -117,6 +118,7 @@ temp/
 
 # Deployment notes (contains deployment-specific info)
 DEPLOYMENT_NOTES.md
+deployment_credentials.json
 bucket-name.txt
 deployment-notes.txt
 .frontend-deploy.json
@@ -128,3 +130,41 @@ deployment-notes.txt
 *.log.*.*.*
 *.log.*.*.*.*
 *.log.*.*.*.*.* 
+frontend/.env.production
+
+# Consult Audio Pipeline - output directories and generated files
+consult_audio_pipe/api_chatgpt_summary_analysis/
+consult_audio_pipe/api_claude_summary_analysis/
+consult_audio_pipe/manual_claude_summary_analysis/
+consult_audio_pipe/pdf_output/
+consult_audio_pipe/raw_audio/
+consult_audio_pipe/raw_audio_archive/
+consult_audio_pipe/transcripts/
+consult_audio_pipe/transcripts_clean/
+consult_audio_pipe/html_output/
+consult_audio_pipe/htmlcov/
+consult_audio_pipe/whisper_env/
+consult_audio_pipe/api_debug_responses/
+consult_audio_pipe/progress.log
+consult_audio_pipe/dental_consultation_pipeline.egg-info/
+
+# Consult Audio Pipeline - PII files (documents, audio, transcripts)
+consult_audio_pipe/**/*.md
+!consult_audio_pipe/README.md
+consult_audio_pipe/**/*.docx
+consult_audio_pipe/**/*.pdf
+# Audio files
+consult_audio_pipe/**/*.mp3
+consult_audio_pipe/**/*.wav
+consult_audio_pipe/**/*.m4a
+consult_audio_pipe/**/*.flac
+consult_audio_pipe/**/*.ogg
+consult_audio_pipe/**/*.aac
+consult_audio_pipe/**/*.wma
+consult_audio_pipe/**/*.mp4
+consult_audio_pipe/**/*.m4v
+# Transcript files
+consult_audio_pipe/**/*.transcript
+consult_audio_pipe/**/*.srt
+consult_audio_pipe/**/*.vtt
+# Note: .txt and .json files in consult_audio_pipe are already covered by global patterns above
