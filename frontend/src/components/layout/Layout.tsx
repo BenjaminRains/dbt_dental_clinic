@@ -17,6 +17,7 @@ import {
 } from '@mui/material';
 import {
     Menu as MenuIcon,
+    Home as HomeIcon,
     Dashboard as DashboardIcon,
     AttachMoney as RevenueIcon,
     People as ProvidersIcon,
@@ -35,7 +36,8 @@ interface LayoutProps {
 }
 
 const menuItems = [
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/' },
+    { text: 'Portfolio', icon: <HomeIcon />, path: '/' },
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
     { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
     { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
     { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
@@ -118,7 +120,18 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     >
                         <MenuIcon />
                     </IconButton>
-                    <Typography variant="h6" noWrap component="div">
+                    <Typography
+                        variant="h6"
+                        noWrap
+                        component="div"
+                        onClick={() => handleNavigation('/')}
+                        sx={{
+                            cursor: 'pointer',
+                            '&:hover': {
+                                opacity: 0.8,
+                            },
+                        }}
+                    >
                         Dental Practice Analytics Dashboard
                     </Typography>
                 </Toolbar>
