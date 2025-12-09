@@ -1,31 +1,106 @@
 import { Routes, Route } from 'react-router-dom';
-import { Box } from '@mui/material';
+import { Suspense, lazy } from 'react';
+import { Box, CircularProgress } from '@mui/material';
 import Layout from './components/layout/Layout';
-import Dashboard from './pages/Dashboard';
-import Revenue from './pages/Revenue';
-import Providers from './pages/Providers';
-import Patients from './pages/Patients';
-import Appointments from './pages/Appointments';
-import AR from './pages/AR';
-import TreatmentAcceptance from './pages/TreatmentAcceptance';
-import HygieneRetention from './pages/HygieneRetention';
+import Portfolio from './pages/Portfolio';
+
+// Lazy load dashboard pages for code splitting
+const Dashboard = lazy(() => import('./pages/Dashboard'));
+const Revenue = lazy(() => import('./pages/Revenue'));
+const Providers = lazy(() => import('./pages/Providers'));
+const Patients = lazy(() => import('./pages/Patients'));
+const Appointments = lazy(() => import('./pages/Appointments'));
+const AR = lazy(() => import('./pages/AR'));
+const TreatmentAcceptance = lazy(() => import('./pages/TreatmentAcceptance'));
+const HygieneRetention = lazy(() => import('./pages/HygieneRetention'));
+
+// Loading fallback component
+const PageLoader = () => (
+    <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
+        <CircularProgress />
+    </Box>
+);
 
 function App() {
     return (
-        <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-            <Layout>
-                <Routes>
-                    <Route path="/" element={<Dashboard />} />
-                    <Route path="/revenue" element={<Revenue />} />
-                    <Route path="/providers" element={<Providers />} />
-                    <Route path="/patients" element={<Patients />} />
-                    <Route path="/appointments" element={<Appointments />} />
-                    <Route path="/ar-aging" element={<AR />} />
-                    <Route path="/treatment-acceptance" element={<TreatmentAcceptance />} />
-                    <Route path="/hygiene-retention" element={<HygieneRetention />} />
-                </Routes>
-            </Layout>
-        </Box>
+        <Routes>
+            {/* Portfolio page without Layout (standalone landing page) */}
+            <Route path="/" element={<Portfolio />} />
+
+            {/* All other pages with Layout (sidebar navigation) - lazy loaded for code splitting */}
+            <Route path="/dashboard" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <Dashboard />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/revenue" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <Revenue />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/providers" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <Providers />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/patients" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <Patients />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/appointments" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <Appointments />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/ar-aging" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <AR />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/treatment-acceptance" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <TreatmentAcceptance />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/hygiene-retention" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <HygieneRetention />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+        </Routes>
     );
 }
 
