@@ -74,7 +74,11 @@ async def get_ar_priority_queue_endpoint(
             risk_category, min_balance, provider_id
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching AR priority queue: {str(e)}")
+        # Log full error for debugging, but return generic message to client
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching AR priority queue: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while fetching data. Please try again later.")
 
 @router.get("/risk-distribution", response_model=List[ARRiskDistribution])
 async def get_ar_risk_distribution_endpoint(
