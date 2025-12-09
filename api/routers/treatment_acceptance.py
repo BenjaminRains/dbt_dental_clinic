@@ -36,7 +36,11 @@ async def get_treatment_acceptance_kpi_summary_endpoint(
         result = get_treatment_acceptance_kpi_summary(db, start_date, end_date, provider_id, clinic_id)
         return TreatmentAcceptanceKPISummary(**result)
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching Treatment Acceptance KPI summary: {str(e)}")
+        # Log full error for debugging, but return generic message to client
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching Treatment Acceptance KPI summary: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while fetching data. Please try again later.")
 
 @router.get("/summary", response_model=List[TreatmentAcceptanceSummary])
 async def get_treatment_acceptance_summary_endpoint(
@@ -52,7 +56,11 @@ async def get_treatment_acceptance_summary_endpoint(
         results = get_treatment_acceptance_summary(db, start_date, end_date, provider_id, clinic_id)
         return [TreatmentAcceptanceSummary(**row) for row in results]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching Treatment Acceptance summary: {str(e)}")
+        # Log full error for debugging, but return generic message to client
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching Treatment Acceptance summary: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while fetching data. Please try again later.")
 
 @router.get("/trends", response_model=List[TreatmentAcceptanceTrend])
 async def get_treatment_acceptance_trends_endpoint(
@@ -69,7 +77,11 @@ async def get_treatment_acceptance_trends_endpoint(
         results = get_treatment_acceptance_trends(db, start_date, end_date, provider_id, clinic_id, group_by)
         return [TreatmentAcceptanceTrend(**row) for row in results]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching Treatment Acceptance trends: {str(e)}")
+        # Log full error for debugging, but return generic message to client
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching Treatment Acceptance trends: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while fetching data. Please try again later.")
 
 @router.get("/provider-performance", response_model=List[TreatmentAcceptanceProviderPerformance])
 async def get_treatment_acceptance_provider_performance_endpoint(
@@ -84,5 +96,9 @@ async def get_treatment_acceptance_provider_performance_endpoint(
         results = get_treatment_acceptance_provider_performance(db, start_date, end_date, clinic_id)
         return [TreatmentAcceptanceProviderPerformance(**row) for row in results]
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching Treatment Acceptance provider performance: {str(e)}")
+        # Log full error for debugging, but return generic message to client
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.error(f"Error fetching Treatment Acceptance provider performance: {str(e)}", exc_info=True)
+        raise HTTPException(status_code=500, detail="An error occurred while fetching data. Please try again later.")
 
