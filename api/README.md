@@ -274,7 +274,7 @@ Security groups act as virtual firewalls at the instance level, controlling inbo
 - ✅ **API Key Authentication**: All business endpoints require `X-API-Key` header
 - ✅ **Health Check Exception**: The `/health` endpoint is excluded from API key authentication to allow ALB health checks
 - ✅ **CORS Configuration**: Restricts requests to approved frontend domains
-- ✅ **Rate Limiting**: IP-based rate limiting (60 requests/minute, 1000 requests/hour)
+- ✅ **Rate Limiting**: IP-based rate limiting (300 requests/minute, 5000 requests/hour)
 - ✅ **Request Logging**: Comprehensive logging of all requests with IP, method, path, auth status, and response time
 - ✅ **Input Validation**: Pydantic models validate all request data
 - ✅ **Error Sanitization**: Error messages don't expose sensitive information
@@ -602,8 +602,8 @@ The frontend automatically includes the API key in all requests via axios interc
 IP-based rate limiting prevents abuse and ensures fair resource usage. Rate limits are enforced per IP address.
 
 **Limits:**
-- **60 requests per minute** per IP address
-- **1000 requests per hour** per IP address
+- **300 requests per minute** per IP address
+- **5000 requests per hour** per IP address
 
 **Implementation:**
 - In-memory storage (suitable for single-instance deployments)
@@ -619,9 +619,9 @@ Rate limiting is skipped for:
 
 **Rate Limit Headers:**
 All responses include rate limit information:
-- `X-RateLimit-Limit-Minute`: Maximum requests per minute (60)
+- `X-RateLimit-Limit-Minute`: Maximum requests per minute (300)
 - `X-RateLimit-Remaining-Minute`: Remaining requests in current minute window
-- `X-RateLimit-Limit-Hour`: Maximum requests per hour (1000)
+- `X-RateLimit-Limit-Hour`: Maximum requests per hour (5000)
 - `X-RateLimit-Remaining-Hour`: Remaining requests in current hour window
 
 **Error Response:**
@@ -630,13 +630,13 @@ When rate limit is exceeded:
 - **Response Body**:
   ```json
   {
-    "detail": "Rate limit exceeded. Maximum 60 requests per minute."
+    "detail": "Rate limit exceeded. Maximum 300 requests per minute."
   }
   ```
   or
   ```json
   {
-    "detail": "Rate limit exceeded. Maximum 1000 requests per hour."
+    "detail": "Rate limit exceeded. Maximum 5000 requests per hour."
   }
   ```
 

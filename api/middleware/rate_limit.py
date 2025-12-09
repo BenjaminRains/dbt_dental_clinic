@@ -212,7 +212,7 @@ class RateLimiter:
             )
         
         # Check if limit exceeded (BEFORE recording this request)
-        # If we have 60 requests already, the 61st should be blocked
+        # If we have reached the limit, the next request should be blocked
         if minute_count >= self.requests_per_minute:
             logger.warning(
                 f"[RATE_LIMIT] BLOCKED IP={client_ip} | "
@@ -241,8 +241,8 @@ class RateLimiter:
             )
         
         # Record this request (AFTER checking limits)
-        # This ensures we check BEFORE recording, so if we have 60 requests,
-        # the 61st will see count=60 and be blocked
+        # This ensures we check BEFORE recording, so if we have reached the limit,
+        # the next request will see count=limit and be blocked
         # defaultdict will automatically create an empty list if the key doesn't exist
         logger.debug(
             f"[RATE_LIMIT] Recording request | "
@@ -286,8 +286,8 @@ class RateLimiter:
 
 # Global rate limiter instance
 rate_limiter = RateLimiter(
-    requests_per_minute=60,  # 60 requests per minute
-    requests_per_hour=1000   # 1000 requests per hour
+    requests_per_minute=300,  # 300 requests per minute (increased for dashboard with multiple simultaneous requests)
+    requests_per_hour=5000   # 5000 requests per hour (increased to match)
 )
 
 
