@@ -16,6 +16,18 @@ export default defineConfig({
     },
     build: {
         outDir: 'dist',
-        sourcemap: true
+        sourcemap: true,
+        rollupOptions: {
+            output: {
+                manualChunks: {
+                    // Separate vendor chunks for better caching
+                    'react-vendor': ['react', 'react-dom', 'react-router-dom'],
+                    'mui-vendor': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
+                    'chart-vendor': ['recharts'],
+                    'utils-vendor': ['axios', 'zustand']
+                }
+            }
+        },
+        chunkSizeWarningLimit: 600 // Increase limit slightly since we're code-splitting
     }
 })
