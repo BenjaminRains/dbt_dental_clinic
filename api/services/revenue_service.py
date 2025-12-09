@@ -129,7 +129,14 @@ def get_revenue_opportunities(
         appointment_id,
         provider_type_category,
         provider_specialty_category,
-        patient_age,
+        -- patient_age removed (PII) - replaced with numeric age_category
+        CASE 
+            WHEN patient_age IS NULL THEN NULL
+            WHEN patient_age <= 17 THEN 1  -- Minor (0-17)
+            WHEN patient_age <= 34 THEN 2  -- Young Adult (18-34)
+            WHEN patient_age <= 54 THEN 3  -- Middle Aged (35-54)
+            ELSE 4  -- Older Adult (55+)
+        END as patient_age_category,
         patient_gender,
         has_insurance_flag,
         patient_specific,
@@ -323,7 +330,14 @@ def get_revenue_opportunities_from_source(
                 dd.is_holiday,
                 dp.provider_type_category,
                 dp.provider_specialty_category,
-                pt.age as patient_age,
+                -- Calculate numeric age_category from age (PII removal: age -> age_category)
+                CASE 
+                    WHEN pt.age IS NULL THEN NULL
+                    WHEN pt.age <= 17 THEN 1  -- Minor (0-17)
+                    WHEN pt.age <= 34 THEN 2  -- Young Adult (18-34)
+                    WHEN pt.age <= 54 THEN 3  -- Middle Aged (35-54)
+                    ELSE 4  -- Older Adult (55+)
+                END as patient_age_category,
                 pt.gender as patient_gender,
                 pt.has_insurance_flag,
                 CASE WHEN pt.patient_id IS NOT NULL THEN true ELSE false END as patient_specific
@@ -342,7 +356,7 @@ def get_revenue_opportunities_from_source(
             appointment_id,
             provider_type_category,
             provider_specialty_category,
-            patient_age,
+            patient_age_category,
             patient_gender,
             has_insurance_flag,
             patient_specific,
@@ -491,7 +505,7 @@ def get_revenue_opportunities_from_source(
             appointment_id,
             provider_type_category,
             provider_specialty_category,
-            patient_age,
+            patient_age_category,
             patient_gender,
             has_insurance_flag,
             patient_specific,
@@ -613,7 +627,14 @@ def get_revenue_opportunities_from_source(
                 dd.is_holiday,
                 dp.provider_type_category,
                 dp.provider_specialty_category,
-                pt.age as patient_age,
+                -- Calculate numeric age_category from age (PII removal: age -> age_category)
+                CASE 
+                    WHEN pt.age IS NULL THEN NULL
+                    WHEN pt.age <= 17 THEN 1  -- Minor (0-17)
+                    WHEN pt.age <= 34 THEN 2  -- Young Adult (18-34)
+                    WHEN pt.age <= 54 THEN 3  -- Middle Aged (35-54)
+                    ELSE 4  -- Older Adult (55+)
+                END as patient_age_category,
                 pt.gender as patient_gender,
                 pt.has_insurance_flag,
                 CASE WHEN pt.patient_id IS NOT NULL THEN true ELSE false END as patient_specific
@@ -632,7 +653,7 @@ def get_revenue_opportunities_from_source(
             appointment_id,
             provider_type_category,
             provider_specialty_category,
-            patient_age,
+            patient_age_category,
             patient_gender,
             has_insurance_flag,
             patient_specific,
@@ -852,7 +873,14 @@ def get_revenue_opportunity_by_id(
         appointment_id,
         provider_type_category,
         provider_specialty_category,
-        patient_age,
+        -- patient_age removed (PII) - replaced with numeric age_category
+        CASE 
+            WHEN patient_age IS NULL THEN NULL
+            WHEN patient_age <= 17 THEN 1  -- Minor (0-17)
+            WHEN patient_age <= 34 THEN 2  -- Young Adult (18-34)
+            WHEN patient_age <= 54 THEN 3  -- Middle Aged (35-54)
+            ELSE 4  -- Older Adult (55+)
+        END as patient_age_category,
         patient_gender,
         has_insurance_flag,
         patient_specific,
@@ -1224,7 +1252,7 @@ def get_lost_appointments_detail(
     SELECT 
         la.appointment_id,
         la.patient_id,
-        pt.preferred_name as patient_name,
+        -- patient_name removed (PII) - only patient_id is returned
         la.appointment_date::text as original_date,
         la.status,
         la.procedure_codes,
@@ -1236,8 +1264,6 @@ def get_lost_appointments_detail(
             ELSE false
         END as is_rescheduled
     FROM lost_appointments la
-    LEFT JOIN raw_staging.stg_opendental__patient pt
-        ON la.patient_id = pt.patient_id
     LEFT JOIN rescheduled_info ri
         ON la.appointment_id = ri.appointment_id
     ORDER BY la.appointment_date DESC, la.production_amount DESC
@@ -1253,7 +1279,7 @@ def get_lost_appointments_detail(
         {
             "appointment_id": int(row.appointment_id),
             "patient_id": int(row.patient_id),
-            "patient_name": row.patient_name,
+            # patient_name removed (PII) - only patient_id is returned
             "original_date": row.original_date,
             "status": row.status,
             "procedure_codes": row.procedure_codes if row.procedure_codes else [],
