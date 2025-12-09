@@ -73,14 +73,14 @@ const AR: React.FC = () => {
     // Date range state
     const [useDateRange, setUseDateRange] = useState<boolean>(false);
     const [dateRange, setDateRange] = useState<DateRange>({});
-    const [availableDates, setAvailableDates] = useState<string[]>([]);
 
     // Load available snapshot dates on mount
     useEffect(() => {
         const loadSnapshotDates = async () => {
             const response = await arApi.getSnapshotDates();
             if (!response.error && response.data) {
-                setAvailableDates(response.data.map(d => d.snapshot_date).filter(Boolean));
+                // Snapshot dates loaded (available for future use if needed)
+                // const availableDates = response.data.map(d => d.snapshot_date).filter(Boolean);
             }
         };
         loadSnapshotDates();
