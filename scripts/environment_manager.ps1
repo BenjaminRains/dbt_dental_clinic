@@ -733,6 +733,404 @@ function Start-APIServer {
 }
 
 # =============================================================================
+# FRONTEND COMMANDS
+# =============================================================================
+
+function Start-FrontendDev {
+    $projectPath = Get-Location
+    $frontendPath = "$projectPath\frontend"
+    
+    if (-not (Test-Path $frontendPath)) {
+        Write-Host "❌ Frontend directory not found: $frontendPath" -ForegroundColor Red
+        return
+    }
+    
+    if (-not (Test-Path "$frontendPath\package.json")) {
+        Write-Host "❌ No package.json found in frontend directory" -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "🚀 Starting frontend development server..." -ForegroundColor Cyan
+    
+    # Check for API key setup
+    $envFile = "$frontendPath\.env"
+    $envLocalFile = "$frontendPath\.env.local"
+    $apiKeyFile = "$projectPath\.ssh\dbt-dental-clinic-api-key.pem"
+    
+    $hasApiKey = $false
+    if (Test-Path $envLocalFile) {
+        $envContent = Get-Content $envLocalFile -Raw
+        if ($envContent -match 'VITE_API_KEY\s*=') {
+            $hasApiKey = $true
+        }
+    }
+    if (-not $hasApiKey -and (Test-Path $envFile)) {
+        $envContent = Get-Content $envFile -Raw
+        if ($envContent -match 'VITE_API_KEY\s*=') {
+            $hasApiKey = $true
+        }
+    }
+    
+    if (-not $hasApiKey) {
+        Write-Host "`n⚠️  API key not configured in frontend .env file" -ForegroundColor Yellow
+        if (Test-Path $apiKeyFile) {
+            Write-Host "🔧 API key file found. Setting up API key..." -ForegroundColor Cyan
+            Push-Location $frontendPath
+            try {
+                & "$frontendPath\setup_api_key.ps1"
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "✅ API key configured successfully" -ForegroundColor Green
+                } else {
+                    Write-Host "⚠️  Failed to set up API key automatically. You may need to run setup_api_key.ps1 manually." -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "⚠️  Could not run setup script automatically. Run 'frontend\setup_api_key.ps1' manually." -ForegroundColor Yellow
+            } finally {
+                Pop-Location
+            }
+        } else {
+            Write-Host "❌ API key file not found at: $apiKeyFile" -ForegroundColor Red
+            Write-Host "   Frontend will not be able to authenticate with the API." -ForegroundColor Yellow
+            Write-Host "   Ensure the API key file exists or run 'frontend\setup_api_key.ps1' manually." -ForegroundColor Yellow
+        }
+    }
+    
+    Push-Location $frontendPath
+    try {
+        # Check if node_modules exists, if not run npm install
+        if (-not (Test-Path "node_modules")) {
+            Write-Host "`n📦 Installing frontend dependencies..." -ForegroundColor Yellow
+            npm install
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to install dependencies" -ForegroundColor Red
+                Pop-Location
+                return
+            }
+        }
+        
+        Write-Host "`n🔧 Starting Vite dev server..." -ForegroundColor Green
+        Write-Host "   Frontend will be available at http://localhost:3000" -ForegroundColor Gray
+        if ($hasApiKey -or (Test-Path $envFile) -or (Test-Path $envLocalFile)) {
+            Write-Host "   API key configured - API requests should work" -ForegroundColor Green
+        } else {
+            Write-Host "   ⚠️  API key not configured - API requests will fail with 401" -ForegroundColor Yellow
+        }
+        Write-Host ""
+        npm run dev
+    } catch {
+        Write-Host "❌ Failed to start frontend dev server: $_" -ForegroundColor Red
+    } finally {
+        Pop-Location
+    }
+}
+
+function Deploy-Frontend {
+    $projectPath = Get-Location
+    $frontendPath = "$projectPath\frontend"
+    
+    if (-not (Test-Path $frontendPath)) {
+        Write-Host "❌ Frontend directory not found: $frontendPath" -ForegroundColor Red
+        return
+    }
+    
+    if (-not (Test-Path "$frontendPath\package.json")) {
+        Write-Host "❌ No package.json found in frontend directory" -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "🚀 Deploying frontend to AWS..." -ForegroundColor Cyan
+    
+    # Validate prerequisites
+    Write-Host "`n🔍 Validating prerequisites..." -ForegroundColor Yellow
+    
+    # Check AWS CLI
+    try {
+        $awsVersion = aws --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ AWS CLI not found. Please install AWS CLI first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ AWS CLI found: $awsVersion" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ AWS CLI not found. Please install AWS CLI first." -ForegroundColor Red
+        return
+    }
+    
+    # Check AWS credentials
+    try {
+        $awsIdentity = aws sts get-caller-identity 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ AWS credentials not configured. Please run 'aws configure' first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ AWS credentials configured" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ AWS credentials not configured. Please run 'aws configure' first." -ForegroundColor Red
+        return
+    }
+    
+    # Check Node.js and npm
+    try {
+        $nodeVersion = node --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Node.js not found. Please install Node.js first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ Node.js found: $nodeVersion" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Node.js not found. Please install Node.js first." -ForegroundColor Red
+        return
+    }
+    
+    try {
+        $npmVersion = npm --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ npm not found. Please install npm first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ npm found: $npmVersion" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ npm not found. Please install npm first." -ForegroundColor Red
+        return
+    }
+    
+    # Get configuration from environment variables or deployment_credentials.json
+    $bucketName = $env:FRONTEND_BUCKET_NAME
+    $distributionId = $env:FRONTEND_DIST_ID
+    $domain = $env:FRONTEND_DOMAIN
+    
+    # Try to load from deployment_credentials.json if env vars not set
+    if (-not $bucketName -or -not $distributionId) {
+        $credentialsPath = "$projectPath\deployment_credentials.json"
+        if (Test-Path $credentialsPath) {
+            try {
+                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
+                if (-not $bucketName) {
+                    $bucketName = $credentials.frontend.s3_buckets.frontend.bucket_name
+                }
+                if (-not $distributionId) {
+                    $distributionId = $credentials.frontend.cloudfront.distribution_id
+                }
+                if (-not $domain) {
+                    $domain = "https://$($credentials.frontend.domain)"
+                }
+                Write-Host "✅ Loaded configuration from deployment_credentials.json" -ForegroundColor Green
+            } catch {
+                Write-Host "⚠️ Failed to parse deployment_credentials.json: $_" -ForegroundColor Yellow
+            }
+        }
+    }
+    
+    # Validate configuration
+    if (-not $bucketName) {
+        Write-Host "❌ FRONTEND_BUCKET_NAME not set. Set environment variable or ensure deployment_credentials.json exists." -ForegroundColor Red
+        return
+    }
+    
+    if (-not $distributionId) {
+        Write-Host "❌ FRONTEND_DIST_ID not set. Set environment variable or ensure deployment_credentials.json exists." -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "`n📋 Deployment Configuration:" -ForegroundColor Cyan
+    Write-Host "  Bucket: $bucketName" -ForegroundColor White
+    Write-Host "  CloudFront Distribution: $distributionId" -ForegroundColor White
+    if ($domain) {
+        Write-Host "  Domain: $domain" -ForegroundColor White
+    }
+    
+    # Validate S3 bucket exists
+    Write-Host "`n🔍 Validating S3 bucket..." -ForegroundColor Yellow
+    try {
+        $bucketCheck = aws s3api head-bucket --bucket $bucketName 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ S3 bucket '$bucketName' not found or not accessible" -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ S3 bucket validated" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to validate S3 bucket: $_" -ForegroundColor Red
+        return
+    }
+    
+    # Validate CloudFront distribution
+    Write-Host "🔍 Validating CloudFront distribution..." -ForegroundColor Yellow
+    try {
+        $distCheck = aws cloudfront get-distribution --id $distributionId 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ CloudFront distribution '$distributionId' not found or not accessible" -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ CloudFront distribution validated" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to validate CloudFront distribution: $_" -ForegroundColor Red
+        return
+    }
+    
+    # Build frontend
+    Push-Location $frontendPath
+    try {
+        Write-Host "`n📦 Building frontend..." -ForegroundColor Yellow
+        
+        # Install dependencies if needed
+        if (-not (Test-Path "node_modules")) {
+            Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
+            npm install
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to install dependencies" -ForegroundColor Red
+                Pop-Location
+                return
+            }
+        }
+        
+        # Build
+        npm run build
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Frontend build failed" -ForegroundColor Red
+            Pop-Location
+            return
+        }
+        
+        Write-Host "✅ Frontend build completed" -ForegroundColor Green
+        
+        # Upload to S3
+        Write-Host "`n☁️ Uploading to S3..." -ForegroundColor Yellow
+        $distPath = "dist"
+        if (Test-Path $distPath) {
+            aws s3 sync "$distPath\*" "s3://$bucketName/" --delete --cache-control "public, max-age=31536000, immutable" --exclude "*.html" --exclude "*.json"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to upload static assets" -ForegroundColor Red
+                Pop-Location
+                return
+            }
+            
+            # Upload HTML files with no-cache
+            aws s3 sync "$distPath\*" "s3://$bucketName/" --cache-control "no-cache, no-store, must-revalidate" --exclude "*" --include "*.html" --include "*.json"
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to upload HTML files" -ForegroundColor Red
+                Pop-Location
+                return
+            }
+            
+            Write-Host "✅ Files uploaded to S3" -ForegroundColor Green
+        } else {
+            Write-Host "❌ Build directory 'dist' not found" -ForegroundColor Red
+            Pop-Location
+            return
+        }
+        
+        # Invalidate CloudFront cache
+        Write-Host "`n🔄 Invalidating CloudFront cache..." -ForegroundColor Yellow
+        $invalidation = aws cloudfront create-invalidation --distribution-id $distributionId --paths "/*" 2>&1 | ConvertFrom-Json
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ CloudFront cache invalidation created: $($invalidation.Invalidation.Id)" -ForegroundColor Green
+        } else {
+            Write-Host "⚠️ Failed to create CloudFront invalidation (deployment may still be successful)" -ForegroundColor Yellow
+        }
+        
+        Write-Host "`n✅ Frontend deployment completed!" -ForegroundColor Green
+        if ($domain) {
+            Write-Host "🌐 Frontend available at: $domain" -ForegroundColor Cyan
+        }
+        
+    } catch {
+        Write-Host "❌ Deployment failed: $_" -ForegroundColor Red
+    } finally {
+        Pop-Location
+    }
+}
+
+function Get-FrontendStatus {
+    $projectPath = Get-Location
+    
+    Write-Host "`n📊 Frontend Deployment Status:" -ForegroundColor White
+    
+    # Check configuration
+    $bucketName = $env:FRONTEND_BUCKET_NAME
+    $distributionId = $env:FRONTEND_DIST_ID
+    $domain = $env:FRONTEND_DOMAIN
+    
+    # Try to load from deployment_credentials.json
+    $credentialsPath = "$projectPath\deployment_credentials.json"
+    if (Test-Path $credentialsPath) {
+        try {
+            $credentials = Get-Content $credentialsPath | ConvertFrom-Json
+            if (-not $bucketName) {
+                $bucketName = $credentials.frontend.s3_buckets.frontend.bucket_name
+            }
+            if (-not $distributionId) {
+                $distributionId = $credentials.frontend.cloudfront.distribution_id
+            }
+            if (-not $domain) {
+                $domain = "https://$($credentials.frontend.domain)"
+            }
+        } catch {
+            Write-Host "⚠️ Failed to parse deployment_credentials.json" -ForegroundColor Yellow
+        }
+    }
+    
+    Write-Host "`n🔧 Configuration:" -ForegroundColor White
+    if ($bucketName) {
+        Write-Host "  S3 Bucket: $bucketName" -ForegroundColor Green
+    } else {
+        Write-Host "  S3 Bucket: ❌ Not configured" -ForegroundColor Red
+    }
+    
+    if ($distributionId) {
+        Write-Host "  CloudFront Distribution: $distributionId" -ForegroundColor Green
+    } else {
+        Write-Host "  CloudFront Distribution: ❌ Not configured" -ForegroundColor Red
+    }
+    
+    if ($domain) {
+        Write-Host "  Domain: $domain" -ForegroundColor Green
+    } else {
+        Write-Host "  Domain: ❌ Not configured" -ForegroundColor Red
+    }
+    
+    # Check prerequisites
+    Write-Host "`n🔍 Prerequisites:" -ForegroundColor White
+    
+    # AWS CLI
+    try {
+        $awsVersion = aws --version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  AWS CLI: ✅ $awsVersion" -ForegroundColor Green
+        } else {
+            Write-Host "  AWS CLI: ❌ Not found" -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "  AWS CLI: ❌ Not found" -ForegroundColor Red
+    }
+    
+    # Node.js
+    try {
+        $nodeVersion = node --version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  Node.js: ✅ $nodeVersion" -ForegroundColor Green
+        } else {
+            Write-Host "  Node.js: ❌ Not found" -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "  Node.js: ❌ Not found" -ForegroundColor Red
+    }
+    
+    # npm
+    try {
+        $npmVersion = npm --version 2>&1
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "  npm: ✅ $npmVersion" -ForegroundColor Green
+        } else {
+            Write-Host "  npm: ❌ Not found" -ForegroundColor Red
+        }
+    } catch {
+        Write-Host "  npm: ❌ Not found" -ForegroundColor Red
+    }
+    
+    Write-Host ""
+}
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
@@ -947,6 +1345,11 @@ Set-Alias -Name api-docs -Value Start-APIDocs -Scope Global
 Set-Alias -Name api-run -Value Start-APIServer -Scope Global
 Set-Alias -Name api-env-status -Value Get-APIEnvironmentStatus -Scope Global
 
+# Frontend Commands
+Set-Alias -Name frontend-dev -Value Start-FrontendDev -Scope Global
+Set-Alias -Name frontend-deploy -Value Deploy-Frontend -Scope Global
+Set-Alias -Name frontend-status -Value Get-FrontendStatus -Scope Global
+
 # Utility
 Set-Alias -Name env-status -Value Get-EnvironmentStatus -Scope Global
 
@@ -963,6 +1366,8 @@ Write-Host "`n🚀 Quick Start:" -ForegroundColor White
 Write-Host "  dbt-init       - Initialize dbt environment" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
 Write-Host "  api-init       - Initialize API environment (interactive)" -ForegroundColor Blue
+Write-Host "  frontend-dev   - Start frontend development server" -ForegroundColor Green
+Write-Host "  frontend-deploy - Deploy frontend to AWS S3/CloudFront" -ForegroundColor Green
 Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
 # Auto-detect project type
@@ -975,6 +1380,9 @@ if (Test-Path "$cwd\etl_pipeline\Pipfile") {
 }
 if (Test-Path "$cwd\api\main.py") {
     Write-Host "🌐 API server detected (main.py in api/). Run 'api-init' to start (creates venv & installs deps)." -ForegroundColor Blue
+}
+if (Test-Path "$cwd\frontend\package.json") {
+    Write-Host "🎨 Frontend detected (package.json in frontend/). Run 'frontend-dev' to start dev server or 'frontend-deploy' to deploy." -ForegroundColor Green
 }
 
 Write-Host ""
