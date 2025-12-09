@@ -46,9 +46,17 @@ const api = axios.create({
     },
 });
 
-// Request interceptor for logging
+// Request interceptor for API key and logging
 api.interceptors.request.use(
     (config) => {
+        // Add API key from environment variable
+        const apiKey = import.meta.env.VITE_API_KEY;
+        if (apiKey) {
+            config.headers['X-API-Key'] = apiKey;
+        } else {
+            console.warn('VITE_API_KEY not set - API requests may fail authentication');
+        }
+
         console.log(`API Request: ${config.method?.toUpperCase()} ${config.url}`);
         return config;
     },
@@ -65,7 +73,22 @@ api.interceptors.response.use(
         return response;
     },
     (error) => {
-        console.error('API Response Error:', error.response?.data || error.message);
+        // Log full error for debugging (only in development)
+        if (import.meta.env.DEV) {
+            console.error('API Response Error:', error.response?.data || error.message);
+        }
+
+        // Sanitize error messages for security - don't expose internal details
+        if (error.response?.data?.detail) {
+            const detail = error.response.data.detail;
+            // Only show generic messages to users
+            if (detail.includes('SQL') || detail.includes('database') || detail.includes('column') ||
+                detail.includes('psycopg2') || detail.includes('UndefinedColumn') ||
+                detail.includes('syntax error') || detail.includes('connection')) {
+                error.response.data.detail = 'A network error occurred. Please try again later.';
+            }
+        }
+
         return Promise.reject(error);
     }
 );
@@ -81,16 +104,33 @@ async function apiCall<T>(
             loading: false,
         };
     } catch (error: any) {
-        let errorMessage = 'An error occurred';
+        // Sanitize error messages for security - show generic messages only
+        let errorMessage = 'A network error occurred. Please try again later.';
 
-        if (error.response?.data?.detail) {
-            if (Array.isArray(error.response.data.detail)) {
-                errorMessage = error.response.data.detail.map((d: any) => d.msg || d).join(', ');
-            } else {
-                errorMessage = error.response.data.detail;
+        // Only show user-friendly error messages
+        if (error.response?.status === 401) {
+            errorMessage = 'Authentication required. Please check your API key.';
+        } else if (error.response?.status === 403) {
+            errorMessage = 'Access denied.';
+        } else if (error.response?.status === 404) {
+            errorMessage = 'Resource not found.';
+        } else if (error.response?.status === 429) {
+            errorMessage = 'Too many requests. Please try again later.';
+        } else if (error.response?.status >= 500) {
+            errorMessage = 'A server error occurred. Please try again later.';
+        } else if (error.response?.data?.detail) {
+            // Use sanitized detail from API (already sanitized by backend)
+            const detail = error.response.data.detail;
+            // Only use if it's a generic message (not technical details)
+            if (!detail.includes('SQL') && !detail.includes('database') &&
+                !detail.includes('column') && !detail.includes('psycopg2') &&
+                !detail.includes('UndefinedColumn') && !detail.includes('syntax error')) {
+                errorMessage = detail;
             }
-        } else if (error.message) {
-            errorMessage = error.message;
+        } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
+            errorMessage = 'Request timed out. Please try again.';
+        } else if (error.message?.includes('Network Error') || !error.response) {
+            errorMessage = 'Network error. Please check your connection.';
         }
 
         return {
