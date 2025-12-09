@@ -304,7 +304,6 @@ def get_treatment_acceptance_provider_performance(
     query = """
     SELECT 
         mas.provider_id,
-        CONCAT(COALESCE(dp.provider_first_name, ''), ' ', COALESCE(dp.provider_last_name, '')) as provider_name,
         
         -- Percentage Metrics (calculated from aggregated totals)
         CASE 
@@ -355,7 +354,6 @@ def get_treatment_acceptance_provider_performance(
         END as same_day_treatment_rate
         
     FROM raw_marts.mart_procedure_acceptance_summary mas
-    LEFT JOIN raw_marts.dim_provider dp ON mas.provider_id = dp.provider_id
     WHERE 1=1
     """
     
@@ -370,18 +368,14 @@ def get_treatment_acceptance_provider_performance(
         query += " AND mas.clinic_id = :clinic_id"
         params['clinic_id'] = clinic_id
     
-    query += " GROUP BY mas.provider_id, dp.provider_first_name, dp.provider_last_name ORDER BY mas.provider_id"
+    query += " GROUP BY mas.provider_id ORDER BY mas.provider_id"
     
     try:
         result = db.execute(text(query), params).fetchall()
         rows = []
         for row in result:
             row_dict = dict(row._mapping)
-            # Handle empty provider_name
-            if not row_dict.get('provider_name') or row_dict['provider_name'].strip() == '':
-                row_dict['provider_name'] = f"Provider {row_dict['provider_id']}"
-            else:
-                row_dict['provider_name'] = row_dict['provider_name'].strip()
+            # Provider names removed (PII) - only provider_id is returned
             rows.append(row_dict)
         return rows
     except SQLAlchemyError as e:

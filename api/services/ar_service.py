@@ -459,8 +459,7 @@ def get_ar_priority_queue(
     SELECT 
         ls.patient_id,
         ls.provider_id,
-        -- patient_name removed (PII)
-        # CONCAT(COALESCE(dpr.provider_first_name, ''), ' ', COALESCE(dpr.provider_last_name, '')) as provider_name,
+        -- patient_name and provider_name removed (PII)
         ls.total_balance,
         ls.balance_0_30_days,
         ls.balance_31_60_days,
@@ -472,8 +471,6 @@ def get_ar_priority_queue(
         ls.payment_recency,
         ls.collection_rate_last_year as collection_rate
     FROM latest_snapshots ls
-    -- Removed dim_patient join (no longer needed without patient_name)
-    JOIN raw_marts.dim_provider dpr ON ls.provider_id = dpr.provider_id
     ORDER BY ls.collection_priority_score DESC, ls.total_balance DESC
     LIMIT :limit OFFSET :skip
     """

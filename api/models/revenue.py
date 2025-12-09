@@ -43,7 +43,8 @@ class RevenueOpportunity(BaseModel):
     provider_specialty_category: Optional[str] = None
     
     # Patient information
-    patient_age: Optional[int] = None
+    # patient_age removed (PII) - replaced with numeric age_category
+    patient_age_category: Optional[int] = None  # 1=Minor (0-17), 2=Young Adult (18-34), 3=Middle Aged (35-54), 4=Older Adult (55+)
     patient_gender: Optional[str] = None
     has_insurance_flag: Optional[bool] = None
     patient_specific: bool

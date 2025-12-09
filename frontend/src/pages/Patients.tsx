@@ -62,6 +62,17 @@ const Patients: React.FC = () => {
         }).format(amount);
     };
 
+    const getAgeCategoryLabel = (ageCategory?: number): string => {
+        if (ageCategory === undefined || ageCategory === null) return 'N/A';
+        switch (ageCategory) {
+            case 1: return 'Minor (0-17)';
+            case 2: return 'Young Adult (18-34)';
+            case 3: return 'Middle Aged (35-54)';
+            case 4: return 'Older Adult (55+)';
+            default: return 'N/A';
+        }
+    };
+
     // Calculate total pages from backend response
     const totalPages = patientsData.data ? Math.ceil(patientsData.data.total / patientsPerPage) : 1;
     const patients = patientsData.data?.patients || [];
@@ -126,7 +137,7 @@ const Patients: React.FC = () => {
                                                 />
                                             </TableCell>
                                             <TableCell>
-                                                {patient.age ? `${patient.age} (${patient.age_category})` : 'N/A'}
+                                                {getAgeCategoryLabel(patient.age_category)}
                                             </TableCell>
                                             <TableCell>
                                                 {patient.gender === 'M' ? 'Male' :

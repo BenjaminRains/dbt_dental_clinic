@@ -10,8 +10,8 @@ class Patient(BaseModel):
     # Demographics (PII removed for portfolio)
     gender: Optional[str] = None  # M=Male, F=Female, O=Other
     language: Optional[str] = None
-    age: Optional[int] = None
-    age_category: Optional[str] = None  # Minor, Adult, Senior
+    # age removed (PII) - replaced with numeric age_category
+    age_category: Optional[int] = None  # 1=Minor (0-17), 2=Young Adult (18-34), 3=Middle Aged (35-54), 4=Older Adult (55+)
     
     # Status and Classification
     patient_status: Optional[str] = None  # Patient, NonPatient, Inactive, Archived, Deceased, Deleted

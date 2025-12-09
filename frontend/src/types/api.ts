@@ -42,8 +42,8 @@ export interface Patient {
     gender?: string; // M=Male, F=Female, O=Other, U=Unknown
     language?: string;
     birth_date?: string; // ISO date string
-    age?: number;
-    age_category?: string; // Minor, Adult, Senior
+    // age removed (PII) - replaced with numeric age_category
+    age_category?: number; // 1=Minor (0-17), 2=Young Adult (18-34), 3=Middle Aged (35-54), 4=Older Adult (55+)
 
     // Status and Classification
     patient_status?: string; // Patient, NonPatient, Inactive, Archived, Deceased, Deleted

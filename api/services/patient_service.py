@@ -5,6 +5,35 @@ import json
 
 def _convert_patient_row(row_dict):
     """Convert patient row data to match Pydantic model expectations"""
+    # Convert age_category from string to numeric (PII removal: age -> numeric age_category)
+    if 'age' in row_dict and row_dict['age'] is not None:
+        age = row_dict['age']
+        if age <= 17:
+            row_dict['age_category'] = 1  # Minor (0-17)
+        elif age <= 34:
+            row_dict['age_category'] = 2  # Young Adult (18-34)
+        elif age <= 54:
+            row_dict['age_category'] = 3  # Middle Aged (35-54)
+        else:
+            row_dict['age_category'] = 4  # Older Adult (55+)
+    elif 'age_category' in row_dict:
+        # Convert string age_category to numeric if it exists
+        age_cat_str = str(row_dict.get('age_category', '')).lower()
+        if 'minor' in age_cat_str:
+            row_dict['age_category'] = 1
+        elif 'young' in age_cat_str or (age_cat_str and '18' in age_cat_str):
+            row_dict['age_category'] = 2
+        elif 'middle' in age_cat_str or (age_cat_str and '35' in age_cat_str):
+            row_dict['age_category'] = 3
+        elif 'senior' in age_cat_str or 'older' in age_cat_str or (age_cat_str and '55' in age_cat_str):
+            row_dict['age_category'] = 4
+        else:
+            row_dict['age_category'] = None
+    
+    # Remove age field (PII)
+    if 'age' in row_dict:
+        del row_dict['age']
+    
     # Convert linked_patient_ids to list
     if 'linked_patient_ids' in row_dict:
         if row_dict['linked_patient_ids'] is None:
