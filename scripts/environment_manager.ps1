@@ -995,28 +995,61 @@ function Deploy-Frontend {
         
         # Upload to S3
         Write-Host "`n☁️ Uploading to S3..." -ForegroundColor Yellow
-        $distPath = "dist"
-        if (Test-Path $distPath) {
-            aws s3 sync "$distPath\*" "s3://$bucketName/" --delete --cache-control "public, max-age=31536000, immutable" --exclude "*.html" --exclude "*.json"
-            if ($LASTEXITCODE -ne 0) {
-                Write-Host "❌ Failed to upload static assets" -ForegroundColor Red
+        
+        # Verify we're in the frontend directory and construct absolute path to dist
+        $currentDir = (Get-Location).Path
+        $distPath = Join-Path $currentDir "dist"
+        
+        if (-not (Test-Path $distPath)) {
+            Write-Host "❌ Build directory 'dist' not found at: $distPath" -ForegroundColor Red
+            Write-Host "  Current directory contents:" -ForegroundColor Yellow
+            Get-ChildItem | Select-Object Name, PSIsContainer | Format-Table
+            Pop-Location
+            return
+        }
+        
+        if (-not (Test-Path $distPath -PathType Container)) {
+            Write-Host "❌ Path exists but is not a directory: $distPath" -ForegroundColor Red
+            Pop-Location
+            return
+        }
+        
+        # Change to dist directory using absolute path
+        Push-Location $distPath
+        try {
+            $distContents = Get-ChildItem
+            if ($distContents.Count -eq 0) {
+                Write-Host "⚠️ Warning: dist directory is empty - nothing to upload" -ForegroundColor Yellow
+                Pop-Location
                 Pop-Location
                 return
             }
             
-            # Upload HTML files with no-cache
-            aws s3 sync "$distPath\*" "s3://$bucketName/" --cache-control "no-cache, no-store, must-revalidate" --exclude "*" --include "*.html" --include "*.json"
+            # Upload static assets with long cache (immutable)
+            Write-Host "  Uploading static assets..." -ForegroundColor Gray
+            $syncOutput = & aws s3 sync . "s3://$bucketName/" --delete --cache-control "public, max-age=31536000, immutable" --exclude "*.html" --exclude "*.json" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to upload static assets" -ForegroundColor Red
+                Write-Host "  Error: $syncOutput" -ForegroundColor Red
+                Pop-Location
+                Pop-Location
+                return
+            }
+            
+            # Upload HTML and JSON files with no-cache
+            Write-Host "  Uploading HTML and JSON files..." -ForegroundColor Gray
+            $syncOutput = & aws s3 sync . "s3://$bucketName/" --cache-control "no-cache, no-store, must-revalidate" --exclude "*" --include "*.html" --include "*.json" 2>&1
             if ($LASTEXITCODE -ne 0) {
                 Write-Host "❌ Failed to upload HTML files" -ForegroundColor Red
+                Write-Host "  Error: $syncOutput" -ForegroundColor Red
+                Pop-Location
                 Pop-Location
                 return
             }
             
             Write-Host "✅ Files uploaded to S3" -ForegroundColor Green
-        } else {
-            Write-Host "❌ Build directory 'dist' not found" -ForegroundColor Red
+        } finally {
             Pop-Location
-            return
         }
         
         # Invalidate CloudFront cache
@@ -1128,6 +1161,235 @@ function Get-FrontendStatus {
     }
     
     Write-Host ""
+}
+
+function Deploy-DBTDocs {
+    $projectPath = Get-Location
+    $dbtProjectPath = "$projectPath\dbt_dental_models"
+    
+    if (-not (Test-Path $dbtProjectPath)) {
+        Write-Host "❌ dbt_dental_models directory not found: $dbtProjectPath" -ForegroundColor Red
+        return
+    }
+    
+    # Check if dbt docs have been generated
+    $targetPath = "$dbtProjectPath\target"
+    if (-not (Test-Path $targetPath) -or -not (Test-Path "$targetPath\index.html")) {
+        Write-Host "⚠️  dbt docs not found. Generating docs now..." -ForegroundColor Yellow
+        Write-Host "   This requires dbt to be initialized." -ForegroundColor Gray
+        
+        # Check if dbt is available
+        $dbtAvailable = $false
+        try {
+            $dbtVersion = dbt --version 2>&1
+            if ($LASTEXITCODE -eq 0) {
+                $dbtAvailable = $true
+                Write-Host "✅ dbt is available" -ForegroundColor Green
+            }
+        } catch {
+            Write-Host "❌ dbt command not found" -ForegroundColor Red
+        }
+        
+        if (-not $dbtAvailable) {
+            Write-Host "`n❌ dbt is not initialized or not in PATH." -ForegroundColor Red
+            Write-Host "   Please run 'dbt-init' first, then 'dbt docs generate' in the dbt_dental_models directory." -ForegroundColor Yellow
+            Write-Host "   Or manually run: cd dbt_dental_models && dbt docs generate" -ForegroundColor Yellow
+            return
+        }
+        
+        # Try to generate docs
+        Push-Location $dbtProjectPath
+        try {
+            Write-Host "`n📚 Generating dbt docs..." -ForegroundColor Cyan
+            dbt docs generate
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to generate dbt docs" -ForegroundColor Red
+                Pop-Location
+                return
+            }
+            Write-Host "✅ dbt docs generated successfully" -ForegroundColor Green
+        } catch {
+            Write-Host "❌ Error generating dbt docs: $_" -ForegroundColor Red
+            Pop-Location
+            return
+        } finally {
+            Pop-Location
+        }
+        
+        # Verify docs were generated
+        if (-not (Test-Path "$targetPath\index.html")) {
+            Write-Host "❌ dbt docs generation completed but index.html not found" -ForegroundColor Red
+            return
+        }
+    } else {
+        Write-Host "✅ Found existing dbt docs in: $targetPath" -ForegroundColor Green
+    }
+    
+    Write-Host "🚀 Deploying dbt docs to AWS..." -ForegroundColor Cyan
+    
+    # Validate prerequisites
+    Write-Host "`n🔍 Validating prerequisites..." -ForegroundColor Yellow
+    
+    # Check AWS CLI
+    try {
+        $awsVersion = aws --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ AWS CLI not found. Please install AWS CLI first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ AWS CLI found: $awsVersion" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ AWS CLI not found. Please install AWS CLI first." -ForegroundColor Red
+        return
+    }
+    
+    # Check AWS credentials
+    try {
+        $awsIdentity = aws sts get-caller-identity 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ AWS credentials not configured. Please run 'aws configure' first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ AWS credentials configured" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ AWS credentials not configured. Please run 'aws configure' first." -ForegroundColor Red
+        return
+    }
+    
+    # Get configuration from environment variables or deployment_credentials.json
+    $bucketName = $env:FRONTEND_BUCKET_NAME
+    $distributionId = $env:FRONTEND_DIST_ID
+    $domain = $env:FRONTEND_DOMAIN
+    
+    # Try to load from deployment_credentials.json if env vars not set
+    if (-not $bucketName -or -not $distributionId) {
+        $credentialsPath = "$projectPath\deployment_credentials.json"
+        if (Test-Path $credentialsPath) {
+            try {
+                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
+                if (-not $bucketName) {
+                    $bucketName = $credentials.frontend.s3_buckets.frontend.bucket_name
+                }
+                if (-not $distributionId) {
+                    $distributionId = $credentials.frontend.cloudfront.distribution_id
+                }
+                if (-not $domain) {
+                    $domain = "https://$($credentials.frontend.domain)"
+                }
+                Write-Host "✅ Loaded configuration from deployment_credentials.json" -ForegroundColor Green
+            } catch {
+                Write-Host "⚠️ Failed to parse deployment_credentials.json: $_" -ForegroundColor Yellow
+            }
+        }
+    }
+    
+    # Validate configuration
+    if (-not $bucketName) {
+        Write-Host "❌ FRONTEND_BUCKET_NAME not set. Set environment variable or ensure deployment_credentials.json exists." -ForegroundColor Red
+        return
+    }
+    
+    if (-not $distributionId) {
+        Write-Host "❌ FRONTEND_DIST_ID not set. Set environment variable or ensure deployment_credentials.json exists." -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "`n📋 Deployment Configuration:" -ForegroundColor Cyan
+    Write-Host "  Bucket: $bucketName" -ForegroundColor White
+    Write-Host "  CloudFront Distribution: $distributionId" -ForegroundColor White
+    Write-Host "  Target Path: s3://$bucketName/dbt-docs/" -ForegroundColor White
+    if ($domain) {
+        Write-Host "  Domain: $domain/dbt-docs/" -ForegroundColor White
+    }
+    
+    # Validate S3 bucket exists
+    Write-Host "`n🔍 Validating S3 bucket..." -ForegroundColor Yellow
+    try {
+        $bucketCheck = aws s3api head-bucket --bucket $bucketName 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ S3 bucket '$bucketName' not found or not accessible" -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ S3 bucket validated" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to validate S3 bucket: $_" -ForegroundColor Red
+        return
+    }
+    
+    # Upload dbt docs to S3
+    Write-Host "`n☁️ Uploading dbt docs to S3..." -ForegroundColor Yellow
+    
+    # Get absolute path - Resolve-Path returns PathInfo, get .Path property
+    $resolvedPathInfo = Resolve-Path $targetPath -ErrorAction Stop
+    $resolvedPath = $resolvedPathInfo.Path
+    Write-Host "  Source path: $resolvedPath" -ForegroundColor Gray
+    
+    # Verify the path exists and is a directory
+    if (-not (Test-Path $resolvedPath -PathType Container)) {
+        Write-Host "❌ Resolved path is not a directory: $resolvedPath" -ForegroundColor Red
+        return
+    }
+    
+    try {
+        # Change to the target directory to avoid path issues
+        Push-Location $resolvedPath
+        try {
+            # First upload non-JSON files with longer cache
+            Write-Host "  Uploading HTML and asset files..." -ForegroundColor Gray
+            & aws s3 sync . "s3://$bucketName/dbt-docs/" --delete `
+                --cache-control "public, max-age=3600" `
+                --exclude "*.json"
+        
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to upload dbt docs files" -ForegroundColor Red
+                Write-Host "   Error details: Check AWS CLI output above" -ForegroundColor Yellow
+                Pop-Location
+                return
+            }
+            
+            # Upload JSON files with shorter cache (they change when models change)
+            Write-Host "  Uploading JSON files..." -ForegroundColor Gray
+            & aws s3 sync . "s3://$bucketName/dbt-docs/" `
+                --cache-control "public, max-age=300" `
+                --exclude "*" `
+                --include "*.json"
+            
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to upload dbt docs JSON files" -ForegroundColor Red
+                Write-Host "   Error details: Check AWS CLI output above" -ForegroundColor Yellow
+                Pop-Location
+                return
+            }
+            
+            Write-Host "✅ dbt docs uploaded to S3" -ForegroundColor Green
+        } finally {
+            Pop-Location
+        }
+    } catch {
+        Write-Host "❌ Failed to upload dbt docs: $_" -ForegroundColor Red
+        Write-Host "   Error: $($_.Exception.Message)" -ForegroundColor Yellow
+        return
+    }
+    
+    # Invalidate CloudFront cache
+    Write-Host "`n🔄 Invalidating CloudFront cache..." -ForegroundColor Yellow
+    try {
+        $invalidation = aws cloudfront create-invalidation --distribution-id $distributionId --paths "/dbt-docs/*" 2>&1 | ConvertFrom-Json
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ CloudFront cache invalidation created: $($invalidation.Invalidation.Id)" -ForegroundColor Green
+        } else {
+            Write-Host "⚠️ Failed to create CloudFront invalidation (deployment may still be successful)" -ForegroundColor Yellow
+        }
+    } catch {
+        Write-Host "⚠️ Failed to create CloudFront invalidation: $_" -ForegroundColor Yellow
+    }
+    
+    Write-Host "`n✅ dbt docs deployment completed!" -ForegroundColor Green
+    if ($domain) {
+        Write-Host "📚 dbt docs available at: $domain/dbt-docs/" -ForegroundColor Cyan
+    } else {
+        Write-Host "📚 dbt docs available at: https://$bucketName.s3-website.amazonaws.com/dbt-docs/" -ForegroundColor Cyan
+    }
 }
 
 # =============================================================================
@@ -1350,6 +1612,9 @@ Set-Alias -Name frontend-dev -Value Start-FrontendDev -Scope Global
 Set-Alias -Name frontend-deploy -Value Deploy-Frontend -Scope Global
 Set-Alias -Name frontend-status -Value Get-FrontendStatus -Scope Global
 
+# dbt Docs Commands
+Set-Alias -Name dbt-docs-deploy -Value Deploy-DBTDocs -Scope Global
+
 # Utility
 Set-Alias -Name env-status -Value Get-EnvironmentStatus -Scope Global
 
@@ -1368,6 +1633,7 @@ Write-Host "  etl-init       - Initialize ETL environment (interactive)" -Foregr
 Write-Host "  api-init       - Initialize API environment (interactive)" -ForegroundColor Blue
 Write-Host "  frontend-dev   - Start frontend development server" -ForegroundColor Green
 Write-Host "  frontend-deploy - Deploy frontend to AWS S3/CloudFront" -ForegroundColor Green
+Write-Host "  dbt-docs-deploy - Deploy dbt documentation to AWS S3/CloudFront" -ForegroundColor Cyan
 Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
 # Auto-detect project type
