@@ -2,7 +2,7 @@ import { Routes, Route } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import Layout from './components/layout/Layout';
-import Portfolio from './pages/Portfolio';
+import Portfolio from './pages/Portfolio_v2';
 
 // Lazy load dashboard pages for code splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -13,6 +13,7 @@ const Appointments = lazy(() => import('./pages/Appointments'));
 const AR = lazy(() => import('./pages/AR'));
 const TreatmentAcceptance = lazy(() => import('./pages/TreatmentAcceptance'));
 const HygieneRetention = lazy(() => import('./pages/HygieneRetention'));
+const EnvironmentManager = lazy(() => import('./pages/EnvironmentManager'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -100,6 +101,14 @@ function App() {
                     </Layout>
                 </Box>
             } />
+            <Route
+                path="/environment-manager"
+                element={
+                    <Suspense fallback={<PageLoader />}>
+                        <EnvironmentManager />
+                    </Suspense>
+                }
+            />
         </Routes>
     );
 }
