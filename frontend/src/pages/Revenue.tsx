@@ -30,7 +30,7 @@ const Revenue: React.FC = () => {
     const [recoveryPlan, setRecoveryPlan] = useState<RevenueRecoveryPlan[]>([]);
     const [loading, setLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
-    const [selectedProvider, setSelectedProvider] = useState<number | ''>('');
+    const [selectedProvider] = useState<number | ''>('');
     const [selectedOpportunityType, setSelectedOpportunityType] = useState<string>('');
     const [minPriorityScore, setMinPriorityScore] = useState<number>(50);
 
