@@ -1257,7 +1257,20 @@ const Portfolio: React.FC = () => {
                         </Card>
                     </Grid>
                     <Grid item xs={12} md={6}>
-                        <Card elevation={2}>
+                        <Card
+                            elevation={2}
+                            sx={{
+                                height: '100%',
+                                cursor: 'pointer',
+                                transition: 'transform 0.2s, box-shadow 0.2s',
+                                '&:hover': {
+                                    transform: 'translateY(-4px)',
+                                    boxShadow: 6,
+                                },
+                            }}
+                            component={RouterLink}
+                            to="/schema-discovery"
+                        >
                             <CardContent>
                                 <Box sx={{ display: 'flex', alignItems: 'center', mb: 2 }}>
                                     <Settings sx={{ fontSize: 32, color: 'primary.main', mr: 1 }} />
@@ -1266,15 +1279,23 @@ const Portfolio: React.FC = () => {
                                     </Typography>
                                 </Box>
                                 <Typography variant="body2" color="text.secondary" paragraph>
-                                    SQLAlchemy-based introspection utilities that generate metadata, drive
-                                    replication configs, and power the incremental load logic used in the
-                                    clinic’s ELT pipeline.
+                                    <strong>analyze_opendental_schema.py</strong> performs automated schema
+                                    introspection using SQLAlchemy to discover 450+ tables, generate{' '}
+                                    <Box component="span" sx={{ fontFamily: 'monospace', bgcolor: 'grey.200', px: 0.5, borderRadius: 0.5 }}>
+                                        tables.yml
+                                    </Box>{' '}
+                                    configuration, and monitor slowly changing dimensions (SCDs). Powers
+                                    incremental loading strategies and detects schema drift automatically.
                                 </Typography>
-                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
                                     <Chip label="SQLAlchemy" size="small" />
                                     <Chip label="Schema Introspection" size="small" />
+                                    <Chip label="SCD Detection" size="small" />
                                     <Chip label="Incremental Loading" size="small" />
                                 </Box>
+                                <Typography variant="caption" color="primary" sx={{ fontWeight: 600 }}>
+                                    Learn more →
+                                </Typography>
                             </CardContent>
                         </Card>
                     </Grid>

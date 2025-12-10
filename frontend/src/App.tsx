@@ -14,6 +14,7 @@ const AR = lazy(() => import('./pages/AR'));
 const TreatmentAcceptance = lazy(() => import('./pages/TreatmentAcceptance'));
 const HygieneRetention = lazy(() => import('./pages/HygieneRetention'));
 const EnvironmentManager = lazy(() => import('./pages/EnvironmentManager'));
+const SchemaDiscovery = lazy(() => import('./pages/SchemaDiscovery'));
 
 // Loading fallback component
 const PageLoader = () => (
@@ -106,6 +107,14 @@ function App() {
                 element={
                     <Suspense fallback={<PageLoader />}>
                         <EnvironmentManager />
+                    </Suspense>
+                }
+            />
+            <Route
+                path="/schema-discovery"
+                element={
+                    <Suspense fallback={<PageLoader />}>
+                        <SchemaDiscovery />
                     </Suspense>
                 }
             />
