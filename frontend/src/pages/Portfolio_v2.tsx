@@ -618,48 +618,95 @@ const Portfolio: React.FC = () => {
                         </Box>
                     </Grid>
                     <Grid item xs={12}>
-                        <Card elevation={3}>
-                            <CardContent>
-                                <Typography variant="h6" gutterBottom sx={{ fontWeight: 'bold', mb: 2 }}>
-                                    dbt Lineage Graph
+                        <Box
+                            sx={{
+                                borderRadius: 2,
+                                overflow: 'hidden',
+                                bgcolor: 'grey.100',
+                                position: 'relative',
+                                width: '100%',
+                                boxShadow: 3,
+                                '&:hover': {
+                                    boxShadow: 6,
+                                    transform: 'translateY(-2px)',
+                                    transition: 'all 0.3s ease',
+                                },
+                            }}
+                        >
+                            <Typography
+                                variant="h6"
+                                sx={{
+                                    fontWeight: 'bold',
+                                    p: 2,
+                                    pb: 1,
+                                    bgcolor: 'background.paper',
+                                    borderBottom: '1px solid',
+                                    borderColor: 'divider',
+                                }}
+                            >
+                                dbt Lineage Graph
+                                dim_patient DAG shown below
+                            </Typography>
+                            <Box
+                                sx={{
+                                    width: '100%',
+                                    maxHeight: '400px',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'center',
+                                    p: 2,
+                                    overflow: 'hidden',
+                                }}
+                            >
+                                <img
+                                    src="/dim_patient_DAG.png"
+                                    alt="dbt Lineage Graph - dim_patient DAG"
+                                    onError={(e) => {
+                                        const target = e.target as HTMLImageElement;
+                                        target.style.display = 'none';
+                                    }}
+                                    style={{
+                                        width: '100%',
+                                        height: 'auto',
+                                        maxHeight: '400px',
+                                        objectFit: 'contain',
+                                        display: 'block',
+                                    }}
+                                />
+                            </Box>
+                            <Box
+                                sx={{
+                                    bgcolor: 'background.paper',
+                                    p: 2,
+                                    display: 'flex',
+                                    flexDirection: 'column',
+                                    alignItems: 'center',
+                                    gap: 2,
+                                }}
+                            >
+                                <Typography
+                                    variant="body2"
+                                    color="text.secondary"
+                                    sx={{ textAlign: 'center' }}
+                                >
+                                    Interactive dbt lineage showing how 150+ models connect raw OpenDental
+                                    sources to business-ready marts and KPIs.
                                 </Typography>
-                                <Box
+                                <Button
+                                    variant="contained"
+                                    color="primary"
+                                    component={Link}
+                                    href="https://dbtdentalclinic.com/dbt-docs/"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
                                     sx={{
-                                        bgcolor: 'grey.100',
-                                        borderRadius: 2,
-                                        p: 4,
-                                        minHeight: '300px',
-                                        display: 'flex',
-                                        flexDirection: 'column',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        gap: 2,
+                                        textTransform: 'none',
                                     }}
                                 >
-                                    <Typography
-                                        variant="body2"
-                                        color="text.secondary"
-                                        sx={{ mb: 2, textAlign: 'center' }}
-                                    >
-                                        Interactive dbt lineage showing how 150+ models connect raw OpenDental
-                                        sources to business-ready marts and KPIs.
-                                    </Typography>
-                                    <Button
-                                        variant="contained"
-                                        color="primary"
-                                        component={Link}
-                                        href="https://dbtdentalclinic.com/dbt-docs/"
-                                        target="_blank"
-                                        rel="noopener noreferrer"
-                                        sx={{
-                                            textTransform: 'none',
-                                        }}
-                                    >
-                                        View dbt Lineage Graph
-                                    </Button>
-                                </Box>
-                            </CardContent>
-                        </Card>
+                                    View dbt Lineage Graph
+                                </Button>
+                            </Box>
+                        </Box>
                     </Grid>
                     <Grid item xs={12}>
                         <Card elevation={3}>
