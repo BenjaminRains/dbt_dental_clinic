@@ -122,7 +122,7 @@ async def get_revenue_opportunity_by_id_endpoint(
         raise HTTPException(status_code=404, detail="Revenue opportunity not found")
     return opportunity
 
-# PBN-style Revenue Lost endpoints
+# Revenue Lost endpoints
 @router.get("/lost-summary", response_model=RevenueLostSummary)
 async def get_revenue_lost_summary_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for analysis"),
@@ -130,7 +130,7 @@ async def get_revenue_lost_summary_endpoint(
     db: Session = Depends(get_db),
     _api_key: dict = Depends(require_api_key)
 ):
-    """Get PBN-style Revenue Lost summary (Appmts Lost $, Recovered $, Lost Appmts %)"""
+    """Get Revenue Lost summary (Appmts Lost $, Recovered $, Lost Appmts %)"""
     try:
         return get_revenue_lost_summary(db, start_date, end_date)
     except Exception as e:
@@ -143,7 +143,7 @@ async def get_revenue_lost_opportunity_endpoint(
     db: Session = Depends(get_db),
     _api_key: dict = Depends(require_api_key)
 ):
-    """Get PBN-style Opportunity metrics (Failed %, Cancelled %, Re-appnt %)"""
+    """Get Opportunity metrics (Failed %, Cancelled %, Re-appnt %)"""
     try:
         return get_revenue_lost_opportunity(db, start_date, end_date)
     except Exception as e:
