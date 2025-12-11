@@ -8,7 +8,11 @@ from auth.api_key import require_api_key
 
 logger = logging.getLogger(__name__)
 
-router = APIRouter(prefix="/providers", tags=["providers"])
+router = APIRouter(
+    prefix="/providers", 
+    tags=["providers"],
+    dependencies=[Depends(require_api_key)]  # All endpoints in this router require API key
+)
 
 # Import services and models
 from services.provider_service import get_provider_summary, get_providers, get_provider_by_id

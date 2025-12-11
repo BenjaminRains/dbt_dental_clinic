@@ -18,6 +18,7 @@ router = APIRouter(
     prefix="/patients",
     tags=["patients"],
     responses={404: {"description": "Not found"}},
+    dependencies=[Depends(require_api_key)],  # All endpoints in this router require API key
 )
 
 @router.get("/", response_model=PaginatedPatients)
