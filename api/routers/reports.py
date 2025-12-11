@@ -117,7 +117,7 @@ async def get_provider_performance(
     """Get comprehensive provider performance metrics"""
     query = """
     SELECT 
-        mpp.provider_name,
+        mpp.provider_id,
         mpp.specialty as provider_specialty,
         mpp.production_date as date_actual,
         mpp.total_production as production_amount,
@@ -144,12 +144,12 @@ async def get_provider_performance(
         query += " AND mpp.provider_id = :provider_id"
         params['provider_id'] = provider_id
     
-    query += " ORDER BY mpp.production_date DESC, mpp.provider_name"
+    query += " ORDER BY mpp.production_date DESC, mpp.provider_id"
     
     result = db.execute(text(query), params).fetchall()
     return [
         {
-            "provider_name": row.provider_name,
+            "provider_id": row.provider_id,
             "provider_specialty": row.provider_specialty,
             "date": row.date_actual.isoformat(),
             "production_amount": float(row.production_amount or 0),
@@ -175,7 +175,7 @@ async def get_provider_summary(
     """Get aggregated provider performance summary"""
     query = """
     SELECT 
-        mpp.provider_name,
+        mpp.provider_id,
         mpp.specialty as provider_specialty,
         SUM(mpp.total_production) as total_production,
         SUM(mpp.total_collections) as total_collection,
@@ -199,22 +199,22 @@ async def get_provider_summary(
         params['end_date'] = end_date
     
     query += """
-    GROUP BY mpp.provider_id, mpp.provider_name, mpp.specialty
+    GROUP BY mpp.provider_id, mpp.specialty
     ORDER BY total_production DESC
     """
     
     result = db.execute(text(query), params).fetchall()
     return [
         {
-            "provider_name": row.provider_name,
+            "provider_id": row.provider_id,
             "provider_specialty": row.provider_specialty,
-            "total_production": float(row.production_amount or 0),
-            "total_collection": float(row.collection_amount or 0),
-            "avg_collection_rate": float(row.collection_rate or 0),
-            "total_patients": row.patient_count,
-            "total_appointments": row.appointment_count,
-            "total_no_shows": row.no_show_count,
-            "avg_no_show_rate": float(row.no_show_rate or 0),
+            "total_production": float(row.total_production or 0),
+            "total_collection": float(row.total_collection or 0),
+            "avg_collection_rate": float(row.avg_collection_rate or 0),
+            "total_patients": row.total_patients,
+            "total_appointments": row.total_appointments,
+            "total_no_shows": row.total_no_shows,
+            "avg_no_show_rate": float(row.avg_no_show_rate or 0),
             "avg_production_per_patient": float(row.avg_production_per_patient or 0),
             "avg_production_per_appointment": float(row.avg_production_per_appointment or 0)
         }
@@ -234,7 +234,7 @@ async def get_appointment_summary(
     query = """
     SELECT 
         fa.appointment_date as date_actual,
-        dp.provider_name,
+        fa.provider_id,
         COUNT(*) as total_appointments,
         SUM(CASE WHEN fa.is_completed THEN 1 ELSE 0 END) as completed_appointments,
         SUM(CASE WHEN fa.is_no_show THEN 1 ELSE 0 END) as no_show_appointments,
@@ -248,7 +248,6 @@ async def get_appointment_summary(
         SUM(fa.scheduled_production_amount) as total_scheduled_production,
         SUM(CASE WHEN fa.is_completed THEN fa.scheduled_production_amount ELSE 0 END) as completed_production
     FROM raw_marts.fact_appointment fa
-    LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
     WHERE fa.appointment_date IS NOT NULL
     """
     
@@ -263,13 +262,13 @@ async def get_appointment_summary(
         query += " AND fa.provider_id = :provider_id"
         params['provider_id'] = provider_id
     
-    query += " GROUP BY fa.appointment_date, dp.provider_name ORDER BY fa.appointment_date DESC, dp.provider_name"
+    query += " GROUP BY fa.appointment_date, fa.provider_id ORDER BY fa.appointment_date DESC, fa.provider_id"
     
     result = db.execute(text(query), params).fetchall()
     return [
         {
             "date": row.date_actual.isoformat(),
-            "provider_name": row.provider_name,
+            "provider_id": row.provider_id,
             "total_appointments": row.total_appointments,
             "completed_appointments": row.completed_appointments,
             "no_show_appointments": row.no_show_appointments,
