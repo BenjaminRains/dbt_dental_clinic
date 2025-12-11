@@ -167,7 +167,30 @@ app.include_router(hygiene.router)
 @app.get("/")
 def read_root():
     """Root endpoint - public access for API discovery"""
-    return {"message": "Welcome to the Dental Practice API"}
+    return {
+        "message": "Welcome to the Dental Practice API",
+        "version": "0.1.0",
+        "documentation": {
+            "swagger_ui": "/docs",
+            "redoc": "/redoc",
+            "openapi_json": "/openapi.json"
+        },
+        "endpoints": {
+            "health": "/health",
+            "patients": "/patients/",
+            "reports": {
+                "revenue": "/reports/revenue/",
+                "providers": "/reports/providers/",
+                "dashboard": "/reports/dashboard/",
+                "ar": "/reports/ar/"
+            },
+            "appointments": "/appointments/"
+        },
+        "authentication": {
+            "required": "Most endpoints require X-API-Key header",
+            "public_endpoints": ["/", "/health", "/docs", "/openapi.json", "/redoc"]
+        }
+    }
 
 @app.get("/health")
 def health_check():
