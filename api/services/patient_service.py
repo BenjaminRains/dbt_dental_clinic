@@ -1,6 +1,7 @@
 # api/services/patient_service.py
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from datetime import datetime, date
 import json
 
 def _convert_patient_row(row_dict):
@@ -33,6 +34,38 @@ def _convert_patient_row(row_dict):
     # Remove age field (PII)
     if 'age' in row_dict:
         del row_dict['age']
+    
+    # Convert datetime to date for date-only fields
+    # SQLAlchemy may return DATE columns as datetime objects
+    if 'first_visit_date' in row_dict and row_dict['first_visit_date'] is not None:
+        if isinstance(row_dict['first_visit_date'], datetime):
+            row_dict['first_visit_date'] = row_dict['first_visit_date'].date()
+        elif isinstance(row_dict['first_visit_date'], str):
+            # Handle string dates from database
+            try:
+                dt = datetime.fromisoformat(row_dict['first_visit_date'].replace('Z', '+00:00'))
+                row_dict['first_visit_date'] = dt.date()
+            except (ValueError, AttributeError):
+                pass
+    
+    if 'admit_date' in row_dict and row_dict['admit_date'] is not None:
+        if isinstance(row_dict['admit_date'], datetime):
+            row_dict['admit_date'] = row_dict['admit_date'].date()
+        elif isinstance(row_dict['admit_date'], str):
+            # Handle string dates from database
+            try:
+                dt = datetime.fromisoformat(row_dict['admit_date'].replace('Z', '+00:00'))
+                row_dict['admit_date'] = dt.date()
+            except (ValueError, AttributeError):
+                pass
+    
+    # Ensure age_category is an integer, not a string
+    if 'age_category' in row_dict and row_dict['age_category'] is not None:
+        try:
+            row_dict['age_category'] = int(row_dict['age_category'])
+        except (ValueError, TypeError):
+            # If conversion fails, set to None
+            row_dict['age_category'] = None
     
     # Convert linked_patient_ids to list
     if 'linked_patient_ids' in row_dict:
@@ -95,6 +128,7 @@ def get_patients(db: Session, skip: int = 0, limit: int = 100):
     patients = result.fetchall()
     
     # Convert rows to dicts and fix data types
+    # The _convert_patient_row function handles date conversions
     patient_list = [_convert_patient_row(dict(row._mapping)) for row in patients]
     
     return {
@@ -110,5 +144,6 @@ def get_patient_by_id(db: Session, patient_id: int):
     result = db.execute(query, {"patient_id": patient_id})
     row = result.fetchone()
     if row:
+        # The _convert_patient_row function handles date conversions
         return _convert_patient_row(dict(row._mapping))
     return None
