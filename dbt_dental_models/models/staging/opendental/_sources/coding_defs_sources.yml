@@ -3,7 +3,7 @@ version: 2
 sources:
   - name: opendental
     description: "OpenDental data in PostgreSQL"
-    database: opendental_analytics
+    # database: omitted - uses target database from profiles.yml
     schema: raw  # Raw data from ETL pipeline
     
     # Global settings for all tables

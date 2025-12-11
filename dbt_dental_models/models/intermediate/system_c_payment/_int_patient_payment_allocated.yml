@@ -168,9 +168,9 @@ models:
                 adjustment_id != 0 
                 AND payment_type_id != 0 
                 AND EXISTS (
-                  SELECT 1 FROM "opendental_analytics"."raw"."adjustment" a 
-                  WHERE a."AdjNum" = adjustment_id 
-                  AND a."AdjDate" >= '2023-01-01'
+                  SELECT 1 FROM {{ ref('stg_opendental__adjustment') }} a 
+                  WHERE a.adjustment_id = adjustment_id 
+                  AND a.adjustment_date >= '2023-01-01'
                 )
               config:
                 severity: warn

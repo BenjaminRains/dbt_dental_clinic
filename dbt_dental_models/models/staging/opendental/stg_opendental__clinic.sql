@@ -1,7 +1,7 @@
 {#
     Note: This staging model is prepared for when data becomes available.
     Current Status (2024-03-14):
-    - Database: opendental_analytics
+    - Database: Uses target database from profiles.yml
     - Schema: raw
     - Table: clinic
     - Status: No data available in local development environment

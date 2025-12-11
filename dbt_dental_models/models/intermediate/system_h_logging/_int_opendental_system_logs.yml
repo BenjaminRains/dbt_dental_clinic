@@ -93,7 +93,6 @@ models:
               severity: warn
               name: fk_system_logs_user_valid
               config:
-                database: opendental_analytics
                 schema: intermediate
                 description: >
                   Warning expected for user_id = 0 (system-generated entries) 
@@ -159,7 +158,7 @@ models:
               where: "user_group_id != 0"
               severity: warn
               config:
-                database: opendental_analytics
+                # database: omitted - uses target database from profiles.yml
                 schema: intermediate
                 description: >
                   Warning expected for user_group_id = 0 (system or unassigned entries).
