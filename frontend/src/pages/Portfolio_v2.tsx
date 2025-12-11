@@ -355,7 +355,7 @@ const Portfolio: React.FC = () => {
                                     variant="h6"
                                     fontWeight="bold"
                                     component={Link}
-                                    href="https://github.com/BenjaminRains/dbt_dental_clinic/tree/main/api"
+                                    href="https://api.dbtdentalclinic.com/docs#"
                                     target="_blank"
                                     rel="noopener noreferrer"
                                     sx={{
