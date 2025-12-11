@@ -13,9 +13,8 @@ class ARKPISummary(BaseModel):
     patient_ar: float  # Patient responsibility portion
     insurance_ar: float  # Insurance estimate portion
     dso_days: float  # Days Sales Outstanding (legacy calculation)
-    pbn_ar_days: float  # Practice by Numbers AR Days = (Total AR × 30) ÷ collections_30_days
     collection_rate: float  # Collection rate (last 365 days): Collections / Production
-    ar_ratio: float  # AR Ratio (PBN style, current month): Collections / Production
+    ar_ratio: float  # AR Ratio (current month): Collections / Production
     high_risk_count: int
     high_risk_amount: float
     
@@ -70,87 +69,6 @@ class ARAgingTrend(BaseModel):
     over_60_amount: float
     over_90_amount: float
     total_amount: float
-    
-    class Config:
-        from_attributes = True
-
-class PBNARSummary(BaseModel):
-    """Practice by Numbers AR summary"""
-    total_ar_outstanding: float
-    current_amount: float
-    current_percentage: float
-    amount_30_60: float
-    percentage_30_60: float
-    amount_60_90: float
-    percentage_60_90: float
-    amount_over_90: float
-    percentage_over_90: float
-    patient_ar: float
-    insurance_ar: float
-    
-    class Config:
-        from_attributes = True
-
-class StandardKPISummary(BaseModel):
-    """Standard KPI metrics for comparison"""
-    total_ar_outstanding: float
-    current_amount: float
-    current_percentage: float
-    over_90_amount: float
-    over_90_percentage: float
-    patient_ar: float
-    insurance_ar: float
-    dso_days: float
-    pbn_ar_days: float
-    collection_rate: float
-    
-    class Config:
-        from_attributes = True
-
-class PBNKPISummary(BaseModel):
-    """PBN KPI metrics for comparison"""
-    total_ar_outstanding: float
-    current_amount: float
-    current_percentage: float
-    amount_30_60: float
-    percentage_30_60: float
-    amount_60_90: float
-    percentage_60_90: float
-    amount_over_90: float
-    percentage_over_90: float
-    patient_ar: float
-    insurance_ar: float
-    
-    class Config:
-        from_attributes = True
-
-class ComparisonDifferences(BaseModel):
-    """Differences between standard and PBN KPIs"""
-    total_ar_difference: float
-    current_amount_difference: float
-    current_percentage_difference: float
-    over_90_amount_difference: float
-    over_90_percentage_difference: float
-    
-    class Config:
-        from_attributes = True
-
-class ComparisonMetadata(BaseModel):
-    """Metadata for the comparison"""
-    snapshot_date: Optional[str]
-    start_date: Optional[str]
-    end_date: Optional[str]
-    comparison_type: str
-    
-    class Config:
-        from_attributes = True
-
-class ARComparison(BaseModel):
-    """Complete AR comparison between standard and PBN"""
-    comparison_metadata: ComparisonMetadata
-    standard_kpi: StandardKPISummary
-    pbn_kpi: PBNKPISummary
-    differences: ComparisonDifferences
     
     class Config:
         from_attributes = True
