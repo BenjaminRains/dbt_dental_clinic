@@ -15,18 +15,14 @@ from services.ar_service import (
     get_ar_priority_queue,
     get_ar_risk_distribution,
     get_ar_aging_trends,
-    get_available_snapshot_dates,
-    get_pbn_ar_summary,
-    get_ar_comparison
+    get_available_snapshot_dates
 )
 from models.ar import (
     ARKPISummary,
     ARAgingSummary,
     ARPriorityQueueItem,
     ARRiskDistribution,
-    ARAgingTrend,
-    PBNARSummary,
-    ARComparison
+    ARAgingTrend
 )
 
 @router.get("/kpi-summary", response_model=ARKPISummary)
@@ -117,32 +113,4 @@ async def get_snapshot_dates_endpoint(
         return get_available_snapshot_dates(db)
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Error fetching snapshot dates: {str(e)}")
-
-@router.get("/pbn-summary", response_model=PBNARSummary)
-async def get_pbn_ar_summary_endpoint(
-    snapshot_date: Optional[date] = Query(None, description="Specific snapshot date, or latest if not provided"),
-    start_date: Optional[date] = Query(None, description="Start date for date range filter"),
-    end_date: Optional[date] = Query(None, description="End date for date range filter"),
-    db: Session = Depends(get_db),
-    _api_key: dict = Depends(require_api_key)
-):
-    """Get Practice by Numbers AR summary"""
-    try:
-        return get_pbn_ar_summary(db, snapshot_date, start_date, end_date)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching PBN AR summary: {str(e)}")
-
-@router.get("/comparison", response_model=ARComparison)
-async def get_ar_comparison_endpoint(
-    snapshot_date: Optional[date] = Query(None, description="Specific snapshot date, or latest if not provided"),
-    start_date: Optional[date] = Query(None, description="Start date for date range filter"),
-    end_date: Optional[date] = Query(None, description="End date for date range filter"),
-    db: Session = Depends(get_db),
-    _api_key: dict = Depends(require_api_key)
-):
-    """Compare standard KPI with Practice by Numbers KPI"""
-    try:
-        return get_ar_comparison(db, snapshot_date, start_date, end_date)
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Error fetching AR comparison: {str(e)}")
 
