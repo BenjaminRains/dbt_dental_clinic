@@ -20,7 +20,7 @@ class RevenueKPISummary(BaseModel):
 
 # Provider Performance Types
 class ProviderPerformance(BaseModel):
-    provider_name: str
+    provider_id: int
     provider_specialty: str
     date: str
     production_amount: float
@@ -34,7 +34,7 @@ class ProviderPerformance(BaseModel):
     avg_production_per_appointment: float
 
 class ProviderSummary(BaseModel):
-    provider_name: str
+    provider_id: int
     provider_specialty: str
     total_production: float
     total_collection: float
