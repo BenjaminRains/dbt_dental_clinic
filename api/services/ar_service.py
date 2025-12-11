@@ -72,14 +72,6 @@ def get_ar_kpi_summary(
             COALESCE(SUM(CASE WHEN aging_risk_category = 'High Risk' THEN total_balance ELSE 0 END), 0) as high_risk_amount
         FROM latest_snapshots
     ),
-    -- Calculate total collections for PBN AR Days formula
-    -- PBN uses: AR Days = (Total AR × 30) ÷ Collections (last 55 days)
-    practice_collections AS (
-        SELECT 
-            SUM(payment_amount) as total_collections_30_days
-        FROM raw_marts.fact_payment
-        WHERE payment_date >= CURRENT_DATE - INTERVAL '55 days'
-    ),
     -- Calculate collection rate using ALL procedures and ALL payments (correct for direct-pay practice)
     -- Production: All procedures from fact_procedure (both insurance and direct-pay)
     -- Collections: All payments from fact_payment (both insurance and patient, excluding refunds)
@@ -96,8 +88,7 @@ def get_ar_kpi_summary(
              WHERE payment_date >= CURRENT_DATE - INTERVAL '365 days'
                AND payment_direction = 'Income') as total_collections
     ),
-    -- Calculate AR Ratio (PBN style): Collections (current month) / Production (current month)
-    -- This matches Practice by Numbers AR Ratio calculation
+    -- Calculate AR Ratio: Collections (current month) / Production (current month)
     ar_ratio_calc AS (
         SELECT 
             -- Production: All procedures in current month
@@ -133,8 +124,7 @@ def get_ar_kpi_summary(
             THEN (crc.total_collections / NULLIF(crc.total_production, 0)) * 100
             ELSE 0
         END as collection_rate,
-        -- AR Ratio (PBN style): Collections (current month) / Production (current month)
-        -- This matches Practice by Numbers AR Ratio metric
+        -- AR Ratio: Collections (current month) / Production (current month)
         CASE 
             WHEN arc.monthly_production > 0 
             THEN (arc.monthly_collections / NULLIF(arc.monthly_production, 0)) * 100
@@ -146,16 +136,9 @@ def get_ar_kpi_summary(
             WHEN at.total_ar > 0 
             THEN ((at.balance_over_90 / NULLIF(at.total_ar, 0)) * 90) + 30
             ELSE 0
-        END as dso_days,
-        -- PBN AR Days calculation: AR Days = (Total AR × 30) ÷ collections_30_days
-        CASE 
-            WHEN pc.total_collections_30_days > 0 
-            THEN (at.total_ar * 30.0) / pc.total_collections_30_days
-            ELSE 0
-        END as pbn_ar_days
+        END as dso_days
     FROM ar_totals at
     CROSS JOIN risk_metrics rm
-    CROSS JOIN practice_collections pc
     CROSS JOIN collection_rate_calc crc
     CROSS JOIN ar_ratio_calc arc
     """
@@ -179,7 +162,6 @@ def get_ar_kpi_summary(
             "patient_ar": 0.0,
             "insurance_ar": 0.0,
             "dso_days": 0.0,
-            "pbn_ar_days": 0.0,
             "collection_rate": 0.0,
             "ar_ratio": 0.0,
             "high_risk_count": 0,
@@ -196,7 +178,6 @@ def get_ar_kpi_summary(
             "patient_ar": float(getattr(result, 'patient_ar', 0) or 0),
             "insurance_ar": float(getattr(result, 'insurance_ar', 0) or 0),
             "dso_days": float(result.dso_days or 0),
-            "pbn_ar_days": float(getattr(result, 'pbn_ar_days', 0) or 0),
             "collection_rate": float(result.collection_rate or 0),
             "ar_ratio": float(getattr(result, 'ar_ratio', 0) or 0),
             "high_risk_count": int(result.high_risk_count or 0),
@@ -212,7 +193,6 @@ def get_ar_kpi_summary(
             "patient_ar": 0.0,
             "insurance_ar": 0.0,
             "dso_days": 0.0,
-            "pbn_ar_days": 0.0,
             "collection_rate": 0.0,
             "ar_ratio": 0.0,
             "high_risk_count": 0,
@@ -665,208 +645,4 @@ def get_ar_aging_trends(
         }
         for row in result
     ]
-
-def get_pbn_ar_summary(
-    db: Session,
-    snapshot_date: Optional[date] = None,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None
-) -> dict:
-    """
-    Get Practice by Numbers AR summary using PBN aging buckets
-    
-    Returns PBN format aging buckets with amounts and percentages
-    """
-    params = {}
-    date_filter = ""
-    
-    if snapshot_date:
-        params["snapshot_date"] = snapshot_date
-        date_filter = "AND snapshot_date = :snapshot_date"
-    elif start_date or end_date:
-        if start_date:
-            date_filter += " AND snapshot_date >= :start_date"
-            params["start_date"] = start_date
-        if end_date:
-            date_filter += " AND snapshot_date <= :end_date"
-            params["end_date"] = end_date
-    else:
-        # Get latest snapshot date
-        latest_date_query = """
-        SELECT MAX(snapshot_date) as latest_date
-        FROM raw_marts.mart_ar_summary
-        """
-        latest_result = db.execute(text(latest_date_query)).fetchone()
-        if latest_result and latest_result.latest_date:
-            date_filter = "AND snapshot_date = :snapshot_date"
-            params["snapshot_date"] = latest_result.latest_date
-    
-    query = f"""
-    WITH latest_snapshots AS (
-        SELECT DISTINCT ON (patient_id, provider_id)
-            patient_id,
-            provider_id,
-            total_balance,
-            pbn_total_ar_current,
-            pbn_total_ar_30_60,
-            pbn_total_ar_60_90,
-            pbn_total_ar_over_90,
-            patient_responsibility,
-            insurance_estimate
-        FROM raw_marts.mart_ar_summary
-        WHERE total_balance > 0 {date_filter}
-        ORDER BY patient_id, provider_id, snapshot_date DESC
-    ),
-    pbn_totals AS (
-        SELECT 
-            SUM(total_balance) as total_ar,
-            SUM(pbn_total_ar_current) as current_amount,
-            SUM(pbn_total_ar_30_60) as amount_30_60,
-            SUM(pbn_total_ar_60_90) as amount_60_90,
-            SUM(pbn_total_ar_over_90) as amount_over_90,
-            SUM(patient_responsibility) as patient_ar,
-            SUM(insurance_estimate) as insurance_ar
-        FROM latest_snapshots
-    )
-    SELECT 
-        total_ar,
-        current_amount,
-        CASE 
-            WHEN total_ar > 0 
-            THEN (current_amount / NULLIF(total_ar, 0)) * 100
-            ELSE 0
-        END as current_percentage,
-        amount_30_60,
-        CASE 
-            WHEN total_ar > 0 
-            THEN (amount_30_60 / NULLIF(total_ar, 0)) * 100
-            ELSE 0
-        END as percentage_30_60,
-        amount_60_90,
-        CASE 
-            WHEN total_ar > 0 
-            THEN (amount_60_90 / NULLIF(total_ar, 0)) * 100
-            ELSE 0
-        END as percentage_60_90,
-        amount_over_90,
-        CASE 
-            WHEN total_ar > 0 
-            THEN (amount_over_90 / NULLIF(total_ar, 0)) * 100
-            ELSE 0
-        END as percentage_over_90,
-        patient_ar,
-        insurance_ar
-    FROM pbn_totals
-    """
-    
-    try:
-        result = db.execute(text(query), params).fetchone()
-        if result:
-            return {
-                "total_ar_outstanding": float(result.total_ar or 0),
-                "current_amount": float(result.current_amount or 0),
-                "current_percentage": float(result.current_percentage or 0),
-                "amount_30_60": float(result.amount_30_60 or 0),
-                "percentage_30_60": float(result.percentage_30_60 or 0),
-                "amount_60_90": float(result.amount_60_90 or 0),
-                "percentage_60_90": float(result.percentage_60_90 or 0),
-                "amount_over_90": float(result.amount_over_90 or 0),
-                "percentage_over_90": float(result.percentage_over_90 or 0),
-                "patient_ar": float(result.patient_ar or 0),
-                "insurance_ar": float(result.insurance_ar or 0)
-            }
-        else:
-            return {
-                "total_ar_outstanding": 0.0,
-                "current_amount": 0.0,
-                "current_percentage": 0.0,
-                "amount_30_60": 0.0,
-                "percentage_30_60": 0.0,
-                "amount_60_90": 0.0,
-                "percentage_60_90": 0.0,
-                "amount_over_90": 0.0,
-                "percentage_over_90": 0.0,
-                "patient_ar": 0.0,
-                "insurance_ar": 0.0
-            }
-    except Exception as e:
-        logger.error(f"Error executing PBN AR summary query: {e}", exc_info=True)
-        return {
-            "total_ar_outstanding": 0.0,
-            "current_amount": 0.0,
-            "current_percentage": 0.0,
-            "amount_30_60": 0.0,
-            "percentage_30_60": 0.0,
-            "amount_60_90": 0.0,
-            "percentage_60_90": 0.0,
-            "amount_over_90": 0.0,
-            "percentage_over_90": 0.0,
-            "patient_ar": 0.0,
-            "insurance_ar": 0.0
-        }
-
-def get_ar_comparison(
-    db: Session,
-    snapshot_date: Optional[date] = None,
-    start_date: Optional[date] = None,
-    end_date: Optional[date] = None
-) -> dict:
-    """
-    Compare our standard KPI with Practice by Numbers KPI
-    
-    Returns both sets of metrics side-by-side with differences
-    """
-    # Get standard KPI
-    standard_kpi = get_ar_kpi_summary(db, start_date, end_date)
-    
-    # Get PBN KPI
-    pbn_kpi = get_pbn_ar_summary(db, snapshot_date, start_date, end_date)
-    
-    # Calculate differences
-    total_diff = pbn_kpi["total_ar_outstanding"] - standard_kpi["total_ar_outstanding"]
-    current_diff = pbn_kpi["current_amount"] - standard_kpi["current_amount"]
-    current_pct_diff = pbn_kpi["current_percentage"] - standard_kpi["current_percentage"]
-    over_90_diff = pbn_kpi["amount_over_90"] - standard_kpi["over_90_amount"]
-    over_90_pct_diff = pbn_kpi["percentage_over_90"] - standard_kpi["over_90_percentage"]
-    
-    return {
-        "comparison_metadata": {
-            "snapshot_date": snapshot_date.isoformat() if snapshot_date else None,
-            "start_date": start_date.isoformat() if start_date else None,
-            "end_date": end_date.isoformat() if end_date else None,
-            "comparison_type": "Standard vs Practice by Numbers"
-        },
-        "standard_kpi": {
-            "total_ar_outstanding": standard_kpi["total_ar_outstanding"],
-            "current_amount": standard_kpi["current_amount"],
-            "current_percentage": standard_kpi["current_percentage"],
-            "over_90_amount": standard_kpi["over_90_amount"],
-            "over_90_percentage": standard_kpi["over_90_percentage"],
-            "patient_ar": standard_kpi["patient_ar"],
-            "insurance_ar": standard_kpi["insurance_ar"],
-            "dso_days": standard_kpi["dso_days"],
-            "pbn_ar_days": standard_kpi["pbn_ar_days"],
-            "collection_rate": standard_kpi["collection_rate"]
-        },
-        "pbn_kpi": {
-            "total_ar_outstanding": pbn_kpi["total_ar_outstanding"],
-            "current_amount": pbn_kpi["current_amount"],
-            "current_percentage": pbn_kpi["current_percentage"],
-            "amount_30_60": pbn_kpi["amount_30_60"],
-            "percentage_30_60": pbn_kpi["percentage_30_60"],
-            "amount_60_90": pbn_kpi["amount_60_90"],
-            "percentage_60_90": pbn_kpi["percentage_60_90"],
-            "amount_over_90": pbn_kpi["amount_over_90"],
-            "percentage_over_90": pbn_kpi["percentage_over_90"],
-            "patient_ar": pbn_kpi["patient_ar"],
-            "insurance_ar": pbn_kpi["insurance_ar"]
-        },
-        "differences": {
-            "total_ar_difference": total_diff,
-            "current_amount_difference": current_diff,
-            "current_percentage_difference": current_pct_diff,
-            "over_90_amount_difference": over_90_diff,
-            "over_90_percentage_difference": over_90_pct_diff
-        }
-    }
 
