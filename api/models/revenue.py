@@ -125,7 +125,7 @@ class RevenueRecoveryPlan(BaseModel):
         from_attributes = True
 
 class RevenueLostSummary(BaseModel):
-    """PBN-style Revenue Lost summary metrics"""
+    """Revenue Lost summary metrics"""
     appointments_lost_amount: float  # Appmts Lost $ (Failed or Cancelled $$$)
     recovered_amount: float  # Failed Re-Appnt $ (Recovered)
     lost_appointments_percent: float  # Lost Appmts %
@@ -134,7 +134,7 @@ class RevenueLostSummary(BaseModel):
         from_attributes = True
 
 class RevenueLostOpportunity(BaseModel):
-    """PBN-style Opportunity metrics (Failed %, Cancelled %, Re-appnt %)"""
+    """Opportunity metrics (Failed %, Cancelled %, Re-appnt %)"""
     failed_percent: float
     cancelled_percent: float
     failed_reappnt_percent: float
