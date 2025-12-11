@@ -274,7 +274,6 @@ export interface ARKPISummary {
     patient_ar?: number;  // Patient responsibility portion
     insurance_ar?: number;  // Insurance estimate portion
     dso_days: number;  // Legacy DSO calculation
-    pbn_ar_days: number;  // Practice by Numbers AR Days = (Total AR × 360) ÷ billed_last_year
     collection_rate: number;  // Collection rate (last 365 days): Collections / Production
     ar_ratio?: number;  // AR Ratio (PBN style, current month): Collections / Production
     high_risk_count: number;
