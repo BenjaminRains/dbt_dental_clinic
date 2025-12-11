@@ -5,7 +5,7 @@ from datetime import date
 
 class TreatmentAcceptanceKPISummary(BaseModel):
     """KPI summary for Treatment Acceptance dashboard"""
-    # Primary KPIs (matching PBN)
+    # Primary KPIs
     tx_acceptance_rate: Optional[float]  # Tx Accept %
     patient_acceptance_rate: Optional[float]  # Pt Accept %
     diagnosis_rate: Optional[float]  # Diag %
