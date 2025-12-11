@@ -348,7 +348,7 @@ const AR: React.FC = () => {
                                     AR Days
                                 </Typography>
                                 <Typography variant="h5" component="div">
-                                    {kpiSummary.pbn_ar_days?.toFixed(1) || kpiSummary.dso_days.toFixed(1)} days
+                                    {kpiSummary.dso_days.toFixed(1)} days
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     Collection Rate: {kpiSummary.collection_rate.toFixed(1)}%
@@ -360,7 +360,7 @@ const AR: React.FC = () => {
                         <Card>
                             <CardContent>
                                 <Typography color="textSecondary" gutterBottom>
-                                    AR Ratio (PBN)
+                                    AR Ratio
                                 </Typography>
                                 <Typography variant="h5" component="div">
                                     {(kpiSummary.ar_ratio ?? 0).toFixed(1)}%
