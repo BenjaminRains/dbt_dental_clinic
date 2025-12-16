@@ -501,10 +501,10 @@ API_KEY=<DEMO_API_KEY>  # Demo API key for public access
 ```
 
 **Local/Production API (localhost) - Production Database:**
-Environment variables are configured in `.env_api_local` or `.env_api_production` files:
+Environment variables are configured in `.env_api_local` file:
 ```bash
 # Environment
-API_ENVIRONMENT=local  # or 'production' for production mode
+API_ENVIRONMENT=local
 
 # Database Connection - PRODUCTION DATABASE (retrieved from Secrets Manager)
 POSTGRES_ANALYTICS_HOST=<RDS endpoint>
@@ -519,8 +519,10 @@ API_HOST=0.0.0.0
 API_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 
 # Security
-API_KEY=<PRODUCTION_API_KEY>  # Production API key (not publicly accessible)
+# API_KEY is loaded from .ssh/dbt-dental-clinic-api-key.pem file (local development only)
 ```
+
+**Note:** `.env_api_production` is for the demo API (uses `opendental_demo` with synthetic data), not for production database access. For localhost development with real PHI data, use `.env_api_local`.
 
 **Security Notes:**
 - Database passwords are retrieved from AWS Secrets Manager at startup
