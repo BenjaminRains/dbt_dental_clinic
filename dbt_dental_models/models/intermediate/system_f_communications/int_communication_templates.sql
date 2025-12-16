@@ -1,11 +1,15 @@
 {{ config(
     materialized='table',
-    
-    unique_key='template_id',
-    post_hook=[
-        "CREATE INDEX IF NOT EXISTS {{ this.name }}_content_gin_idx ON {{ this }} USING gin (content gin_trgm_ops)"
-    ]
+    unique_key='template_id'
 ) }}
+
+{# 
+    Note: GIN index with gin_trgm_ops removed due to extension compatibility issues.
+    The index can be created manually if needed:
+    CREATE INDEX int_communication_templates_content_gin_idx 
+    ON intermediate.int_communication_templates 
+    USING gin (content gin_trgm_ops);
+#}
 
 /*
     Note: The pg_trgm extension must be created at the database level before running this model.
