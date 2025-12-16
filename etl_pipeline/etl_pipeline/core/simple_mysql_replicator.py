@@ -71,6 +71,11 @@ from ..exceptions.database import DatabaseConnectionError, DatabaseQueryError
 from ..exceptions.data import DataExtractionError
 from ..exceptions.configuration import ConfigurationError
 
+# Import method tracking for usage analysis
+scripts_path = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts')
+sys.path.insert(0, str(scripts_path))
+from method_tracker import track_method, save_tracking_report, print_tracking_report  # type: ignore
+
 # Get logger (uses proper configuration from logging module)
 logger = logging.getLogger(__name__)
 
@@ -337,6 +342,7 @@ class PerformanceOptimizations:
     # REMOVED: _copy_large_table_ultra_fast() - Replaced by unified _copy_full_table_unified() in SimpleMySQLReplicator
     # REMOVED: _copy_medium_small_table_optimized() - Replaced by unified _copy_full_table_unified() in SimpleMySQLReplicator
     
+    @track_method
     def _copy_incremental_bulk(self, table_name: str, config: Dict, batch_size: int) -> Tuple[bool, int]:
         """
         Optimized incremental copy using bulk operations.
@@ -399,6 +405,7 @@ class PerformanceOptimizations:
     
     # REMOVED: _copy_medium_table_optimized() - Replaced by unified _execute_table_copy()
     
+    @track_method
     def _process_incremental_batches_bulk(self, table_name: str, primary_column: str, 
                                         last_processed: Any, batch_size: int, 
                                         total_records: int) -> Tuple[bool, int]:
@@ -969,6 +976,7 @@ class SimpleMySQLReplicator:
         valid_strategies = ['full_table', 'incremental', 'incremental_chunked']
         return strategy in valid_strategies
     
+    @track_method
     def copy_table(self, table_name: str, force_full: bool = False) -> Tuple[bool, Dict]:
         """
         Copy a single table from source to target.
@@ -1149,6 +1157,7 @@ class SimpleMySQLReplicator:
             
             return False, metadata
     
+    @track_method
     def _execute_table_copy(self, table_name: str, config: Dict, 
                            extraction_strategy: str) -> Tuple[bool, int]:
         """
@@ -1185,6 +1194,7 @@ class SimpleMySQLReplicator:
             logger.error(f"Error in unified table copy for {table_name}: {str(e)}")
             return False, 0
     
+    @track_method
     def _copy_full_table_unified(self, table_name: str, batch_size: int, config: Dict) -> Tuple[bool, int]:
         """
         Unified full table copy handling all performance categories.
@@ -1300,6 +1310,7 @@ class SimpleMySQLReplicator:
                     pass
             return False, 0
     
+    @track_method
     def _copy_incremental_unified(self, table_name: str, config: Dict, batch_size: int) -> Tuple[bool, int]:
         """
         Unified incremental copy handling all performance categories.
@@ -1571,6 +1582,7 @@ class SimpleMySQLReplicator:
             logger.error(f"Error getting max primary value from copied data for {table_name}: {str(e)}")
             return None
 
+    @track_method
     def copy_all_tables(self, table_filter: Optional[List[str]] = None) -> Dict[str, bool]:
         """
         Copy all tables or filtered subset.
@@ -1624,6 +1636,7 @@ class SimpleMySQLReplicator:
             logger.error(f"Error in copy_all_tables: {e}")
             raise
     
+    @track_method
     def copy_tables_by_processing_priority(self, max_priority: int = 10) -> Dict[str, bool]:
         """
         Copy tables by processing priority (new feature leveraging schema analyzer metadata).
@@ -1675,6 +1688,7 @@ class SimpleMySQLReplicator:
         
         return self.copy_all_tables(tables_to_copy)
     
+    @track_method
     def copy_tables_by_performance_category(self, category: str) -> Dict[str, bool]:
         """
         Copy tables by performance category (new feature leveraging schema analyzer metadata).
@@ -1923,6 +1937,7 @@ class SimpleMySQLReplicator:
                 'column_strategy': 'single'
             }
 
+    @track_method
     def _copy_incremental_records(self, table_name: str, incremental_columns: List[str], 
                                  last_processed: Any, batch_size: int) -> Tuple[bool, int]:
         """
@@ -1970,6 +1985,7 @@ class SimpleMySQLReplicator:
             logger.error(f"Error in unified incremental copy for {table_name}: {str(e)}")
             return False, 0
 
+    @track_method
     def _copy_incremental_chunked(self, table_name: str, config: Dict, batch_size: int) -> Tuple[bool, int]:
         """
         Copy incremental data using chunked processing for very large tables.
@@ -2059,6 +2075,7 @@ class SimpleMySQLReplicator:
             logger.error(f"Error in incremental chunked copy for {table_name}: {str(e)}")
             return False, 0
 
+    @track_method
     def _copy_incremental_records_chunked(self, table_name: str, incremental_columns: List[str], 
                                          last_processed: Any, chunk_size: int, 
                                          primary_column: Optional[str] = None) -> Tuple[bool, int]:
