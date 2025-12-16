@@ -19,6 +19,7 @@ class Environment(Enum):
     """Supported API environments."""
     TEST = "test"
     PRODUCTION = "production"
+    LOCAL = "local"
 
 
 class DatabaseType(Enum):
@@ -48,6 +49,15 @@ class APIConfig:
                 'user': 'POSTGRES_ANALYTICS_USER',
                 'password': 'POSTGRES_ANALYTICS_PASSWORD'
             }
+        },
+        Environment.LOCAL.value: {
+            DatabaseType.ANALYTICS.value: {
+                'host': 'POSTGRES_ANALYTICS_HOST',
+                'port': 'POSTGRES_ANALYTICS_PORT',
+                'database': 'POSTGRES_ANALYTICS_DB',
+                'user': 'POSTGRES_ANALYTICS_USER',
+                'password': 'POSTGRES_ANALYTICS_PASSWORD'
+            }
         }
     }
     
@@ -69,7 +79,7 @@ class APIConfig:
         if not environment:
             raise ValueError(
                 "API_ENVIRONMENT environment variable is not set. "
-                "Must be one of: test, production"
+                "Must be one of: test, production, local"
             )
         
         valid_environments = [e.value for e in Environment]
