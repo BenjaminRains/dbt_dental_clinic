@@ -29,6 +29,8 @@ ENV/
 .env_production
 .env_api_test
 .env_api_production
+.env_api_demo
+.env_api_local
 !.env.template
 !**/.env.template
 
@@ -124,6 +126,9 @@ deployment_credentials.json
 bucket-name.txt
 deployment-notes.txt
 .frontend-deploy.json
+
+# Development notes
+TODO.md
 
 # Portfolio directory (local development assets)
 portfolio/
