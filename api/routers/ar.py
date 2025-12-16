@@ -29,8 +29,8 @@ from models.ar import (
 async def get_ar_kpi_summary_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for KPI analysis"),
     end_date: Optional[date] = Query(None, description="End date for KPI analysis"),
-    db: Session = Depends(get_db),
-    _api_key: dict = Depends(require_api_key)
+    _api_key: dict = Depends(require_api_key),
+    db: Session = Depends(get_db)
 ):
     """Get AR KPI summary for dashboard"""
     try:
@@ -43,8 +43,8 @@ async def get_ar_aging_summary_endpoint(
     snapshot_date: Optional[date] = Query(None, description="Specific snapshot date, or latest if not provided"),
     start_date: Optional[date] = Query(None, description="Start date for date range filter"),
     end_date: Optional[date] = Query(None, description="End date for date range filter"),
-    db: Session = Depends(get_db),
-    _api_key: dict = Depends(require_api_key)
+    _api_key: dict = Depends(require_api_key),
+    db: Session = Depends(get_db)
 ):
     """Get AR aging summary by bucket"""
     try:
@@ -60,8 +60,8 @@ async def get_ar_priority_queue_endpoint(
     risk_category: Optional[str] = Query(None, description="Filter by aging risk category"),
     min_balance: Optional[float] = Query(None, ge=0, description="Minimum total balance threshold"),
     provider_id: Optional[int] = Query(None, description="Filter by specific provider"),
-    db: Session = Depends(get_db),
-    _api_key: dict = Depends(require_api_key)
+    _api_key: dict = Depends(require_api_key),
+    db: Session = Depends(get_db)
 ):
     """Get AR priority queue sorted by collection priority"""
     try:
@@ -81,8 +81,8 @@ async def get_ar_risk_distribution_endpoint(
     snapshot_date: Optional[date] = Query(None, description="Specific snapshot date, or latest if not provided"),
     start_date: Optional[date] = Query(None, description="Start date for date range filter"),
     end_date: Optional[date] = Query(None, description="End date for date range filter"),
-    db: Session = Depends(get_db),
-    _api_key: dict = Depends(require_api_key)
+    _api_key: dict = Depends(require_api_key),
+    db: Session = Depends(get_db)
 ):
     """Get risk category distribution"""
     try:
@@ -94,8 +94,8 @@ async def get_ar_risk_distribution_endpoint(
 async def get_ar_aging_trends_endpoint(
     start_date: Optional[date] = Query(None, description="Start date for trend analysis"),
     end_date: Optional[date] = Query(None, description="End date for trend analysis"),
-    db: Session = Depends(get_db),
-    _api_key: dict = Depends(require_api_key)
+    _api_key: dict = Depends(require_api_key),
+    db: Session = Depends(get_db)
 ):
     """Get AR aging trends over time"""
     try:
@@ -105,8 +105,8 @@ async def get_ar_aging_trends_endpoint(
 
 @router.get("/snapshot-dates")
 async def get_snapshot_dates_endpoint(
-    db: Session = Depends(get_db),
-    _api_key: dict = Depends(require_api_key)
+    _api_key: dict = Depends(require_api_key),
+    db: Session = Depends(get_db)
 ):
     """Get list of available snapshot dates from mart_ar_summary"""
     try:
