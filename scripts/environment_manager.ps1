@@ -410,15 +410,23 @@ function Initialize-APIEnvironment {
     # Interactive Environment Selection
     Write-Host "`n🔧 API Environment Selection" -ForegroundColor Cyan
     Write-Host "Which environment would you like to use?" -ForegroundColor White
-    Write-Host "  Type 'production' for Production (.env_api_production)" -ForegroundColor Yellow
+    Write-Host "  Type 'local' for Local Development (.env_api_local) - opendental_analytics on localhost (PHI)" -ForegroundColor Yellow
+    Write-Host "  Type 'production' for Demo API (.env_api_production) - opendental_demo (synthetic data)" -ForegroundColor Yellow
+    Write-Host "    - EC2 deployment: api.dbtdentalclinic.com" -ForegroundColor Gray
+    Write-Host "    - Local testing: Change POSTGRES_ANALYTICS_HOST to localhost" -ForegroundColor Gray
     Write-Host "  Type 'test' for Test (.env_api_test)" -ForegroundColor Yellow
     Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
     
     do {
-        $choice = Read-Host "`nEnter environment (production/test/cancel)"
+        $choice = Read-Host "`nEnter environment (local/production/test/cancel)"
         $choice = $choice.ToLower().Trim()
         
         switch ($choice) {
+            "local" { 
+                $envFile = ".env_api_local"
+                $envName = "Local"
+                break
+            }
             "production" { 
                 $envFile = ".env_api_production"
                 $envName = "Production"
@@ -434,10 +442,10 @@ function Initialize-APIEnvironment {
                 return
             }
             default { 
-                Write-Host "❌ Invalid choice. Please enter 'production', 'test', or 'cancel'." -ForegroundColor Red
+                Write-Host "❌ Invalid choice. Please enter 'local', 'production', 'test', or 'cancel'." -ForegroundColor Red
             }
         }
-    } while ($choice -notin @("production", "test", "cancel"))
+    } while ($choice -notin @("local", "production", "test", "cancel"))
 
     # Load the selected API environment file
     $apiPath = "$ProjectPath\api"
@@ -500,6 +508,7 @@ function Stop-APIEnvironment {
         'POSTGRES_ANALYTICS_DB', 
         'POSTGRES_ANALYTICS_USER',
         'POSTGRES_ANALYTICS_PASSWORD',
+        'DEMO_API_KEY',
         'API_CORS_ORIGINS',
         'API_DEBUG',
         'API_LOG_LEVEL',
@@ -750,49 +759,49 @@ function Start-FrontendDev {
         return
     }
     
-    Write-Host "🚀 Starting frontend development server..." -ForegroundColor Cyan
+    Write-Host "🚀 Starting frontend development server (LOCAL environment)..." -ForegroundColor Cyan
     
-    # Check for API key setup
-    $envFile = "$frontendPath\.env"
+    # Setup local environment configuration
     $envLocalFile = "$frontendPath\.env.local"
     $apiKeyFile = "$projectPath\.ssh\dbt-dental-clinic-api-key.pem"
     
-    $hasApiKey = $false
-    if (Test-Path $envLocalFile) {
-        $envContent = Get-Content $envLocalFile -Raw
-        if ($envContent -match 'VITE_API_KEY\s*=') {
-            $hasApiKey = $true
-        }
-    }
-    if (-not $hasApiKey -and (Test-Path $envFile)) {
-        $envContent = Get-Content $envFile -Raw
-        if ($envContent -match 'VITE_API_KEY\s*=') {
-            $hasApiKey = $true
+    # Read API key from .pem file for local development
+    $apiKey = $null
+    if (Test-Path $apiKeyFile) {
+        try {
+            $apiKey = (Get-Content $apiKeyFile -Raw).Trim()
+            # Remove PEM headers/footers if present
+            $apiKey = $apiKey -replace '-----BEGIN[^-]+-----', '' -replace '-----END[^-]+-----', '' -replace '\s', ''
+        } catch {
+            Write-Host "⚠️  Could not read API key file: $_" -ForegroundColor Yellow
         }
     }
     
-    if (-not $hasApiKey) {
-        Write-Host "`n⚠️  API key not configured in frontend .env file" -ForegroundColor Yellow
-        if (Test-Path $apiKeyFile) {
-            Write-Host "🔧 API key file found. Setting up API key..." -ForegroundColor Cyan
-            Push-Location $frontendPath
-            try {
-                & "$frontendPath\setup_api_key.ps1"
-                if ($LASTEXITCODE -eq 0) {
-                    Write-Host "✅ API key configured successfully" -ForegroundColor Green
-                } else {
-                    Write-Host "⚠️  Failed to set up API key automatically. You may need to run setup_api_key.ps1 manually." -ForegroundColor Yellow
-                }
-            } catch {
-                Write-Host "⚠️  Could not run setup script automatically. Run 'frontend\setup_api_key.ps1' manually." -ForegroundColor Yellow
-            } finally {
-                Pop-Location
-            }
-        } else {
-            Write-Host "❌ API key file not found at: $apiKeyFile" -ForegroundColor Red
-            Write-Host "   Frontend will not be able to authenticate with the API." -ForegroundColor Yellow
-            Write-Host "   Ensure the API key file exists or run 'frontend\setup_api_key.ps1' manually." -ForegroundColor Yellow
-        }
+    # Create or update .env.local with local development settings
+    $envLocalContent = @"
+# Frontend Local Development Environment
+# Auto-generated by frontend-dev command
+# This file is for LOCAL development only (opendental_analytics on localhost)
+
+# API Configuration for Local Development
+VITE_API_URL=http://localhost:8000
+"@
+    
+    if ($apiKey) {
+        $envLocalContent += "`nVITE_API_KEY=$apiKey"
+        Write-Host "✅ API key loaded from .ssh/dbt-dental-clinic-api-key.pem" -ForegroundColor Green
+    } else {
+        Write-Host "⚠️  API key file not found at: $apiKeyFile" -ForegroundColor Yellow
+        Write-Host "   Frontend will not be able to authenticate with the API." -ForegroundColor Yellow
+        Write-Host "   Ensure the API key file exists or run 'frontend\setup_api_key.ps1' manually." -ForegroundColor Yellow
+    }
+    
+    # Write .env.local file
+    try {
+        Set-Content -Path $envLocalFile -Value $envLocalContent -Force
+        Write-Host "✅ Created/updated .env.local for local development" -ForegroundColor Green
+    } catch {
+        Write-Host "⚠️  Could not write .env.local file: $_" -ForegroundColor Yellow
     }
     
     Push-Location $frontendPath
@@ -810,8 +819,10 @@ function Start-FrontendDev {
         
         Write-Host "`n🔧 Starting Vite dev server..." -ForegroundColor Green
         Write-Host "   Frontend will be available at http://localhost:3000" -ForegroundColor Gray
-        if ($hasApiKey -or (Test-Path $envFile) -or (Test-Path $envLocalFile)) {
-            Write-Host "   API key configured - API requests should work" -ForegroundColor Green
+        Write-Host "   API URL: http://localhost:8000 (local development)" -ForegroundColor Gray
+        Write-Host "   Database: opendental_analytics (local)" -ForegroundColor Gray
+        if ($apiKey) {
+            Write-Host "   ✅ API key configured - API requests should work" -ForegroundColor Green
         } else {
             Write-Host "   ⚠️  API key not configured - API requests will fail with 401" -ForegroundColor Yellow
         }
@@ -967,10 +978,38 @@ function Deploy-Frontend {
         return
     }
     
+    # Load DEMO_API_KEY from .env_api_production for production build
+    Write-Host "`n🔑 Loading production API configuration..." -ForegroundColor Yellow
+    $apiProductionEnvFile = "$projectPath\api\.env_api_production"
+    $demoApiKey = $null
+    
+    if (Test-Path $apiProductionEnvFile) {
+        Get-Content $apiProductionEnvFile | ForEach-Object {
+            if ($_ -match '^DEMO_API_KEY\s*=\s*(.+)$' -and $_ -notmatch '^\s*#') {
+                $demoApiKey = $matches[1].Trim()
+            }
+        }
+    }
+    
+    # Also check environment variable (in case it's already set)
+    if (-not $demoApiKey) {
+        $demoApiKey = $env:DEMO_API_KEY
+    }
+    
+    if (-not $demoApiKey) {
+        Write-Host "❌ DEMO_API_KEY not found in .env_api_production or environment variables" -ForegroundColor Red
+        Write-Host "   Production build requires DEMO_API_KEY for API authentication" -ForegroundColor Yellow
+        return
+    }
+    
+    Write-Host "✅ DEMO_API_KEY loaded for production build" -ForegroundColor Green
+    
     # Build frontend
     Push-Location $frontendPath
     try {
-        Write-Host "`n📦 Building frontend..." -ForegroundColor Yellow
+        Write-Host "`n📦 Building frontend with production configuration..." -ForegroundColor Yellow
+        Write-Host "   API URL: https://api.dbtdentalclinic.com" -ForegroundColor Gray
+        Write-Host "   Database: opendental_demo (production)" -ForegroundColor Gray
         
         # Install dependencies if needed
         if (-not (Test-Path "node_modules")) {
@@ -982,6 +1021,12 @@ function Deploy-Frontend {
                 return
             }
         }
+        
+        # Set production environment variables for Vite build
+        $env:VITE_API_URL = "https://api.dbtdentalclinic.com"
+        $env:VITE_API_KEY = $demoApiKey
+        
+        Write-Host "🔧 Building with production environment variables..." -ForegroundColor Cyan
         
         # Build
         npm run build
@@ -1532,9 +1577,15 @@ function Get-APIEnvironmentStatus {
     if ($environment -eq "production") {
         Write-Host "  POSTGRES_ANALYTICS_DB: $($env:POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
         Write-Host "  POSTGRES_ANALYTICS_HOST: $($env:POSTGRES_ANALYTICS_HOST)" -ForegroundColor Gray
+        Write-Host "  DEMO_API_KEY: $(if ($env:DEMO_API_KEY) { '***configured***' } else { 'not set' })" -ForegroundColor Gray
+    } elseif ($environment -eq "local") {
+        Write-Host "  POSTGRES_ANALYTICS_DB: $($env:POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
+        Write-Host "  POSTGRES_ANALYTICS_HOST: $($env:POSTGRES_ANALYTICS_HOST)" -ForegroundColor Gray
+        Write-Host "  API_KEY: Loaded from .ssh/dbt-dental-clinic-api-key.pem" -ForegroundColor Gray
     } elseif ($environment -eq "test") {
         Write-Host "  TEST_POSTGRES_ANALYTICS_DB: $($env:TEST_POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
         Write-Host "  TEST_POSTGRES_ANALYTICS_HOST: $($env:TEST_POSTGRES_ANALYTICS_HOST)" -ForegroundColor Gray
+        Write-Host "  API_KEY: Loaded from .ssh/dbt-dental-clinic-api-key.pem" -ForegroundColor Gray
     }
     Write-Host "  API_PORT: $($env:API_PORT)" -ForegroundColor Gray
     Write-Host "  API_DEBUG: $($env:API_DEBUG)" -ForegroundColor Gray
