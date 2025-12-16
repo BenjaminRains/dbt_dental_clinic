@@ -7,6 +7,7 @@ from fastapi import Security, HTTPException, status, Depends
 from fastapi.security import APIKeyHeader
 from pathlib import Path
 from typing import Optional
+import os
 
 API_KEY_NAME = "X-API-Key"
 api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
@@ -14,10 +15,20 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 
 def load_api_key() -> str:
     """
-    Load API key from .ssh/api-key.pem file in project root.
+    Load API key with priority:
+    1. DEMO_API_KEY environment variable (when API_ENVIRONMENT=production - public portfolio site)
+    2. .ssh/dbt-dental-clinic-api-key.pem file (for test/demo environments - localhost only)
     
     Raises ValueError if no key is found (fail-fast).
     """
+    # Check if we're in production environment (public portfolio site) and DEMO_API_KEY is set
+    api_environment = os.getenv("API_ENVIRONMENT", "").lower()
+    if api_environment == "production":
+        demo_api_key = os.getenv("DEMO_API_KEY")
+        if demo_api_key and demo_api_key.strip():
+            return demo_api_key.strip()
+        # If DEMO_API_KEY not set, fall through to file-based loading
+    
     # Read from .ssh/dbt-dental-clinic-api-key.pem file
     # Find project root (go up from api/auth/ directory)
     # __file__ is at api/auth/api_key.py
@@ -76,14 +87,20 @@ def load_api_key() -> str:
             )
     
     # Fail fast if no key found
-    raise ValueError(
-        f"API key not found. Create .ssh/api-key.pem file at: {pem_file}\n"
-        "The API will not start without a valid API key."
-    )
+    if api_environment == "production":
+        raise ValueError(
+            f"DEMO_API_KEY not found. Set DEMO_API_KEY environment variable or create .ssh/api-key.pem file at: {pem_file}\n"
+            "The API will not start without a valid API key."
+        )
+    else:
+        raise ValueError(
+            f"API key not found. Create .ssh/api-key.pem file at: {pem_file}\n"
+            "The API will not start without a valid API key."
+        )
 
 
 # Generate or load API key
-DEMO_API_KEY = load_api_key()
+API_KEY = load_api_key()
 
 
 def verify_api_key(api_key: Optional[str] = Security(api_key_header)) -> dict:
@@ -105,7 +122,7 @@ def verify_api_key(api_key: Optional[str] = Security(api_key_header)) -> dict:
             "rate_limit_per_hour": 500
         }
     
-    if api_key != DEMO_API_KEY:
+    if api_key != API_KEY:
         raise HTTPException(
             status_code=status.HTTP_401_UNAUTHORIZED,
             detail="Invalid API Key",

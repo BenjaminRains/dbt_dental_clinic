@@ -10,6 +10,76 @@
 - **DNS**: Route 53
 - **Status**: ✅ Live and accessible
 
+## 🔐 API Environment Separation
+
+**CRITICAL:** This project maintains strict separation between demo and production APIs to protect sensitive patient data (PHI).
+
+### Demo API (Public Portfolio Site)
+
+**Deployment:**
+- **URL**: `https://api.dbtdentalclinic.com`
+- **Access**: Publicly accessible via internet
+- **Database**: `opendental_demo` (PostgreSQL on RDS)
+- **Data**: Contains **anonymized/synthetic data only** (no PHI)
+- **Purpose**: Powers the public portfolio website (`dbtdentalclinic.com`)
+- **Security**: API key authentication required for all business endpoints
+
+**Key Characteristics:**
+- ✅ Safe for public access (no real patient data)
+- ✅ Uses demo database with synthetic/anonymized data
+- ✅ Accessible via HTTPS from anywhere
+- ✅ Used by portfolio frontend for demonstrations
+
+### Local/Production API (Protected)
+
+**Deployment:**
+- **URL**: `http://localhost:8000` (local development)
+- **Access**: **Localhost only** (not accessible via `api.dbtdentalclinic.com`)
+- **Database**: `opendental_analytics` (PostgreSQL on RDS)
+- **Data**: Contains **real patient data** (PHI-protected)
+- **Purpose**: Internal analytics and business operations
+- **Security**: Never exposed to public internet
+
+**Key Characteristics:**
+- ⚠️ **Contains real PHI** (HIPAA-protected data)
+- ⚠️ **Never publicly accessible** (localhost only)
+- ⚠️ **Not reachable via `api.dbtdentalclinic.com`**
+- ✅ Used for local development and internal analytics
+- ✅ Separate from demo API infrastructure
+
+### Why This Separation Matters
+
+**Security & Compliance:**
+- **HIPAA Compliance**: Production database with real PHI must never be publicly accessible
+- **Data Protection**: Prevents accidental exposure of sensitive patient information
+- **Risk Mitigation**: Demo API can be safely used for portfolio demonstrations without security concerns
+- **Clear Boundaries**: Explicit separation prevents configuration errors that could expose PHI
+
+**Architecture Benefits:**
+- **Portfolio Safety**: Public site can showcase functionality without security risks
+- **Development Flexibility**: Local API can be used for testing with real data in secure environment
+- **Compliance**: Meets HIPAA requirements for PHI protection
+- **Scalability**: Demo and production can be scaled independently
+
+**Database Configuration:**
+- **Demo Database** (`opendental_demo`): Used by public API at `api.dbtdentalclinic.com`
+  - Contains synthetic/anonymized data
+  - Safe for public access
+  - Stored in AWS Secrets Manager as `dental-clinic/demo-database`
+  
+- **Production Database** (`opendental_analytics`): Used by localhost API only
+  - Contains real patient data (PHI)
+  - **Never accessible via public API**
+  - Stored in AWS Secrets Manager as `dental-clinic/database`
+  - Only accessible from localhost or authorized internal networks
+
+**Important Notes:**
+- ⚠️ The production database (`opendental_analytics`) is **NOT** used by the public API at `api.dbtdentalclinic.com`
+- ⚠️ The demo database (`opendental_demo`) is **NOT** used by the localhost API
+- ✅ Environment variables on EC2 instance configure which database to use
+- ✅ Local development uses `.env_api_local` or `.env_api_production` files
+- ✅ Public API uses `.env_api_production` on EC2 (configured for demo database)
+
 ## 📋 API Endpoints
 
 ### Patient Management
@@ -48,8 +118,11 @@ This API is deployed on AWS using a **defense-in-depth security model** that bal
 - **Security Groups**: Stateful firewalls controlling network traffic at the instance level
 
 **Database:**
-- **RDS (Relational Database Service)**: Managed PostgreSQL database in a private subnet
-- **DB Subnet Group**: Ensures database is deployed across multiple availability zones
+- **RDS (Relational Database Service)**: Managed PostgreSQL databases in a private subnet
+  - **Demo Database** (`opendental_demo`): Used by public API at `api.dbtdentalclinic.com` (synthetic data only)
+  - **Production Database** (`opendental_analytics`): Used by localhost API only (contains PHI, never publicly accessible)
+- **DB Subnet Group**: Ensures databases are deployed across multiple availability zones
+- **Secrets Manager**: Stores separate credentials for demo and production databases
 
 **Security & Access:**
 - **AWS Certificate Manager (ACM)**: Manages SSL/TLS certificates for HTTPS
@@ -95,6 +168,14 @@ EC2 Instance (Public Subnet, but secured)
    └─ Security Group: Only allows port 80 from ALB security group
    ↓
 RDS PostgreSQL (Private Subnet)
+   ├─ Demo Database (opendental_demo)
+   │  ├─ Used by public API at api.dbtdentalclinic.com
+   │  ├─ Contains synthetic/anonymized data only
+   │  └─ Safe for public access
+   ├─ Production Database (opendental_analytics)
+   │  ├─ Used by localhost API only (NOT accessible via api.dbtdentalclinic.com)
+   │  ├─ Contains real PHI (HIPAA-protected)
+   │  └─ Never publicly accessible
    ├─ No internet gateway route
    ├─ No public IP address
    └─ Security Group: Only allows port 5432 from EC2 security group
@@ -169,6 +250,9 @@ ALB (HTTPS → HTTP) → Nginx:80 (adds security headers, logs) → FastAPI:8000
 - **High Availability**: Multi-AZ deployment options available
 - **Security**: Encryption at rest and in transit
 - **Private Subnet**: Complete network isolation from internet
+- **Dual Database Architecture**: 
+  - Demo database (`opendental_demo`) for public API (synthetic data)
+  - Production database (`opendental_analytics`) for localhost API only (PHI-protected)
 
 **Route 53:**
 - **DNS Management**: Reliable domain name resolution
@@ -392,19 +476,20 @@ aws ec2 describe-security-groups --group-ids <ALB_SECURITY_GROUP_ID>
 
 ### Environment Variables
 
-The API uses environment variables configured in `/opt/dbt_dental_clinic/api/.env` on the EC2 instance. These are loaded at runtime by the application.
+The API uses environment variables configured differently depending on the deployment:
 
-**Required Variables:**
+**Public API (api.dbtdentalclinic.com) - Demo Database:**
+Environment variables are configured in `/opt/dbt_dental_clinic/api/.env` on the EC2 instance:
 ```bash
 # Environment
 API_ENVIRONMENT=production
 
-# Database Connection (retrieved from Secrets Manager)
+# Database Connection - DEMO DATABASE (retrieved from Secrets Manager)
 POSTGRES_ANALYTICS_HOST=<RDS endpoint>
 POSTGRES_ANALYTICS_PORT=5432
-POSTGRES_ANALYTICS_DB=opendental_analytics
-POSTGRES_ANALYTICS_USER=analytics_user
-POSTGRES_ANALYTICS_PASSWORD=<retrieved from Secrets Manager>
+POSTGRES_ANALYTICS_DB=opendental_demo  # ⚠️ DEMO DATABASE (not production)
+POSTGRES_ANALYTICS_USER=demo_user
+POSTGRES_ANALYTICS_PASSWORD=<retrieved from Secrets Manager: dental-clinic/demo-database>
 
 # API Configuration
 API_PORT=8000
@@ -412,14 +497,39 @@ API_HOST=0.0.0.0
 API_CORS_ORIGINS=https://dbtdentalclinic.com,https://www.dbtdentalclinic.com
 
 # Security
-DEMO_API_KEY=<generated API key>
+API_KEY=<DEMO_API_KEY>  # Demo API key for public access
+```
+
+**Local/Production API (localhost) - Production Database:**
+Environment variables are configured in `.env_api_local` or `.env_api_production` files:
+```bash
+# Environment
+API_ENVIRONMENT=local  # or 'production' for production mode
+
+# Database Connection - PRODUCTION DATABASE (retrieved from Secrets Manager)
+POSTGRES_ANALYTICS_HOST=<RDS endpoint>
+POSTGRES_ANALYTICS_PORT=5432
+POSTGRES_ANALYTICS_DB=opendental_analytics  # ⚠️ PRODUCTION DATABASE (contains PHI)
+POSTGRES_ANALYTICS_USER=analytics_user
+POSTGRES_ANALYTICS_PASSWORD=<retrieved from Secrets Manager: dental-clinic/database>
+
+# API Configuration
+API_PORT=8000
+API_HOST=0.0.0.0
+API_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
+
+# Security
+API_KEY=<PRODUCTION_API_KEY>  # Production API key (not publicly accessible)
 ```
 
 **Security Notes:**
-- Database password is retrieved from AWS Secrets Manager at startup
-- API key is generated during deployment and stored securely
-- Environment file has restricted permissions (600) on EC2
+- Database passwords are retrieved from AWS Secrets Manager at startup
+- **Public API uses demo database** (`opendental_demo`) - safe for public access
+- **Local API uses production database** (`opendental_analytics`) - contains PHI, localhost only
+- API keys are generated during deployment and stored securely
+- Environment files have restricted permissions (600) on EC2
 - No credentials are hardcoded in application code
+- **Critical**: Production database credentials are never used by the public API
 
 ### Service Management
 
@@ -559,7 +669,7 @@ All business endpoints require a valid API key in the `X-API-Key` header. This p
 **How It Works:**
 1. API key is stored in `.ssh/dbt-dental-clinic-api-key.pem` file (development) or environment variable (production)
 2. Client includes API key in request header: `X-API-Key: <your-api-key>`
-3. FastAPI validates the key against the configured `DEMO_API_KEY`
+3. FastAPI validates the key against the configured `API_KEY`
 4. Invalid or missing keys return `401 Unauthorized`
 
 **Public Endpoints (No API Key Required):**
