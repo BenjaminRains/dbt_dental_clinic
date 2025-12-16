@@ -32,6 +32,19 @@ copy .env_demo.template .env_demo
 **Note**: The synthetic data generator dependencies are included in the ETL environment's Pipfile, so no separate installation is needed!
 
 ## Database Setup (10 minutes)
+w
+**Option A: If opendental_demo already exists (recreate schema)**
+
+If the database exists but the schema is outdated, use the automated script:
+
+```powershell
+cd etl_pipeline/synthetic_data_generator
+.\recreate_schema.ps1 -ProductionDbPassword "your_prod_password" -DemoDbPassword "your_demo_password"
+```
+
+This will safely drop and recreate the `raw` schema with the latest production structure.
+
+**Option B: Create new database**
 
 ```bash
 # 1. Create database
@@ -48,6 +61,39 @@ pg_dump -h localhost -U postgres -d opendental_analytics \
 
 # 4. Apply schema to demo database
 psql -d opendental_demo -f schema/create_tables.sql
+```
+
+## Test Generators (Optional but Recommended)
+
+Before generating full datasets, test that all generators work correctly:
+
+```powershell
+# Test all generators with small dataset (100 patients)
+python test_generators.py --patients 100 --db-password "yourpassword"
+
+# Test specific generator
+python test_generators.py --generator foundation --db-password "yourpassword"
+python test_generators.py --generator patients --db-password "yourpassword"
+
+# Test with custom database settings
+python test_generators.py --db-host localhost --db-name opendental_demo --db-user postgres --db-password "yourpassword"
+```
+
+The test script will:
+- Verify database connection
+- Test each generator independently
+- Check that required tables are created
+- Verify record counts match expectations
+- Print a summary of all tests
+
+**Expected output:**
+```
+✓ FoundationGenerator: PASS
+✓ PatientGenerator: PASS
+✓ InsuranceGenerator: PASS
+✓ ClinicalGenerator: PASS
+✓ FinancialGenerator: PASS
+✓ SupportingGenerator: PASS
 ```
 
 ## Generate Data (5-20 minutes)
