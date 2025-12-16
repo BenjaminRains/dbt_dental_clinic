@@ -508,6 +508,11 @@ function Stop-APIEnvironment {
         'POSTGRES_ANALYTICS_DB', 
         'POSTGRES_ANALYTICS_USER',
         'POSTGRES_ANALYTICS_PASSWORD',
+        'DEMO_POSTGRES_HOST',
+        'DEMO_POSTGRES_PORT',
+        'DEMO_POSTGRES_DB',
+        'DEMO_POSTGRES_USER',
+        'DEMO_POSTGRES_PASSWORD',
         'DEMO_API_KEY',
         'API_CORS_ORIGINS',
         'API_DEBUG',
@@ -1575,8 +1580,8 @@ function Get-APIEnvironmentStatus {
     # Show some key environment variables
     Write-Host "`n🔧 Key Environment Variables:" -ForegroundColor White
     if ($environment -eq "production") {
-        Write-Host "  POSTGRES_ANALYTICS_DB: $($env:POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
-        Write-Host "  POSTGRES_ANALYTICS_HOST: $($env:POSTGRES_ANALYTICS_HOST)" -ForegroundColor Gray
+        Write-Host "  DEMO_POSTGRES_DB: $($env:DEMO_POSTGRES_DB)" -ForegroundColor Gray
+        Write-Host "  DEMO_POSTGRES_HOST: $($env:DEMO_POSTGRES_HOST)" -ForegroundColor Gray
         Write-Host "  DEMO_API_KEY: $(if ($env:DEMO_API_KEY) { '***configured***' } else { 'not set' })" -ForegroundColor Gray
     } elseif ($environment -eq "local") {
         Write-Host "  POSTGRES_ANALYTICS_DB: $($env:POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray

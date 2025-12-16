@@ -43,11 +43,11 @@ class APIConfig:
         },
         Environment.PRODUCTION.value: {
             DatabaseType.ANALYTICS.value: {
-                'host': 'POSTGRES_ANALYTICS_HOST',
-                'port': 'POSTGRES_ANALYTICS_PORT',
-                'database': 'POSTGRES_ANALYTICS_DB',
-                'user': 'POSTGRES_ANALYTICS_USER',
-                'password': 'POSTGRES_ANALYTICS_PASSWORD'
+                'host': 'DEMO_POSTGRES_HOST',
+                'port': 'DEMO_POSTGRES_PORT',
+                'database': 'DEMO_POSTGRES_DB',
+                'user': 'DEMO_POSTGRES_USER',
+                'password': 'DEMO_POSTGRES_PASSWORD'
             }
         },
         Environment.LOCAL.value: {
@@ -93,12 +93,11 @@ class APIConfig:
     
     def _load_environment_file(self):
         """Load API-specific environment file."""
-        # Find the project root directory (where .env files are located)
+        # Look for .env files in the api/ directory (where this file is located)
         current_dir = Path(__file__).parent  # api directory
-        project_root = current_dir.parent    # project root
         
-        # Use API-specific .env files
-        env_file = project_root / f".env_api_{self.environment}"
+        # Use API-specific .env files from api/ directory
+        env_file = current_dir / f".env_api_{self.environment}"
         
         if env_file.exists():
             load_dotenv(env_file, override=True)

@@ -485,11 +485,12 @@ Environment variables are configured in `/opt/dbt_dental_clinic/api/.env` on the
 API_ENVIRONMENT=production
 
 # Database Connection - DEMO DATABASE (retrieved from Secrets Manager)
-POSTGRES_ANALYTICS_HOST=<RDS endpoint>
-POSTGRES_ANALYTICS_PORT=5432
-POSTGRES_ANALYTICS_DB=opendental_demo  # ⚠️ DEMO DATABASE (not production)
-POSTGRES_ANALYTICS_USER=demo_user
-POSTGRES_ANALYTICS_PASSWORD=<retrieved from Secrets Manager: dental-clinic/demo-database>
+# NOTE: Using DEMO_POSTGRES_* variables to clearly distinguish from production database
+DEMO_POSTGRES_HOST=<RDS endpoint>
+DEMO_POSTGRES_PORT=5432
+DEMO_POSTGRES_DB=opendental_demo  # ⚠️ DEMO DATABASE (not production)
+DEMO_POSTGRES_USER=demo_user
+DEMO_POSTGRES_PASSWORD=<retrieved from Secrets Manager: dental-clinic/demo-database>
 
 # API Configuration
 API_PORT=8000
@@ -497,7 +498,7 @@ API_HOST=0.0.0.0
 API_CORS_ORIGINS=https://dbtdentalclinic.com,https://www.dbtdentalclinic.com
 
 # Security
-API_KEY=<DEMO_API_KEY>  # Demo API key for public access
+DEMO_API_KEY=<DEMO_API_KEY>  # Demo API key for public access
 ```
 
 **Local/Production API (localhost) - Production Database:**
