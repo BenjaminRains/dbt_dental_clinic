@@ -104,6 +104,15 @@ scripts/run_dbt.ps1
 scripts/run_dbt.sh
 scripts/deployment/
 
+# Deployment scripts (contain hardcoded credentials and sensitive info)
+deployment/scripts/*.sh
+deployment/scripts/*.ps1
+deployment/scripts/*.json
+deployment/scripts/*.py
+deployment/scripts/*.md
+
+!deployment/scripts/README_ENVIRONMENT_SETUP.md
+
 # Documentation with sensitive business info
 docs/
 etl_pipeline/docs/
