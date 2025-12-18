@@ -15,11 +15,13 @@ This module creates the foundation that all other data depends on.
 """
 
 import random
+import logging
 from datetime import datetime
 from typing import Dict, List
 from faker import Faker
 
 fake = Faker()
+logger = logging.getLogger(__name__)
 
 
 # Procedure category IDs (must be numeric)
@@ -274,22 +276,58 @@ class FoundationGenerator:
         self.data_store['counts']['operatory'] = len(operatories)
     
     def _generate_procedure_codes(self, db):
-        """Generate procedure codes (CDT codes)"""
-        proc_codes = []
-        code_mapping = {}
+        """Generate procedure codes (CDT codes) - uses production codes if available"""
+        import json
+        import os
         
-        for i, code_data in enumerate(CDT_CODES, start=1):
-            proc_codes.append((
-                i,  # CodeNum
-                code_data['code'],  # ProcCode
-                code_data['desc'],  # Descript
-                code_data['desc'][:50],  # AbbrDesc
-                code_data['category'],  # ProcCat
-                to_opendental_boolean(code_data['code'].startswith('D1')),  # IsHygiene
-                to_opendental_boolean(False),  # IsProsth
-                datetime.now(),  # DateTStamp
-            ))
-            code_mapping[code_data['code']] = i
+        # Try to load procedure codes from production extraction
+        proc_codes_file = os.path.join(
+            os.path.dirname(__file__), 
+            '../data/procedure_codes.json'
+        )
+        
+        if os.path.exists(proc_codes_file):
+            logger.info(f"Loading procedure codes from production: {proc_codes_file}")
+            with open(proc_codes_file, 'r') as f:
+                prod_codes = json.load(f)
+            
+            proc_codes = []
+            code_mapping = {}
+            
+            for code_data in prod_codes:
+                descript = code_data.get('Descript') or ''
+                abbr_desc = code_data.get('AbbrDesc') or (descript[:50] if descript else '')
+                proc_codes.append((
+                    code_data['CodeNum'],
+                    code_data.get('ProcCode', ''),
+                    descript,
+                    abbr_desc,
+                    code_data.get('ProcCat', 0),
+                    to_opendental_boolean(code_data.get('IsHygiene', False)),
+                    to_opendental_boolean(code_data.get('IsProsth', False)),
+                    datetime.fromisoformat(code_data['DateTStamp']) if code_data.get('DateTStamp') else datetime.now(),
+                ))
+                code_mapping[code_data.get('ProcCode', '')] = code_data['CodeNum']
+            
+            logger.info(f"Loaded {len(proc_codes)} procedure codes from production")
+        else:
+            # Fallback to hardcoded CDT codes
+            logger.info("Production procedure codes not found, using hardcoded CDT codes")
+            proc_codes = []
+            code_mapping = {}
+            
+            for i, code_data in enumerate(CDT_CODES, start=1):
+                proc_codes.append((
+                    i,  # CodeNum
+                    code_data['code'],  # ProcCode
+                    code_data['desc'],  # Descript
+                    code_data['desc'][:50],  # AbbrDesc
+                    code_data['category'],  # ProcCat
+                    to_opendental_boolean(code_data['code'].startswith('D1')),  # IsHygiene
+                    to_opendental_boolean(False),  # IsProsth
+                    datetime.now(),  # DateTStamp
+                ))
+                code_mapping[code_data['code']] = i
         
         sql = """
             INSERT INTO raw.procedurecode (
@@ -301,7 +339,7 @@ class FoundationGenerator:
         
         db.execute_batch(sql, proc_codes)
         self.data_store['procedure_codes'] = code_mapping
-        self.data_store['cdt_codes'] = CDT_CODES
+        self.data_store['cdt_codes'] = CDT_CODES  # Keep for backward compatibility
         self.data_store['counts']['procedurecode'] = len(proc_codes)
     
     def _generate_definitions(self, db):
