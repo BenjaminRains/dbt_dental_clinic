@@ -8,6 +8,13 @@ $script:IsAPIActive = $false
 $script:ActiveProject = $null
 $script:VenvPath = $null
 
+# AWS SSM state tracking
+$script:APIInstanceId = $null
+$script:DemoDBInstanceId = $null
+$script:RDSEndpoint = $null
+$script:DemoDBHost = $null
+$script:DemoDBPort = $null
+
 # =============================================================================
 # DBT ENVIRONMENT
 # =============================================================================
@@ -1443,6 +1450,316 @@ function Deploy-DBTDocs {
 }
 
 # =============================================================================
+# AWS SSM ENVIRONMENT
+# =============================================================================
+
+function Initialize-AWSSSMEnvironment {
+    param([string]$ProjectPath = (Get-Location))
+
+    Write-Host "`n☁️  Initializing AWS SSM Environment" -ForegroundColor Cyan
+
+    # Check if Session Manager Plugin is installed
+    Write-Host "🔍 Checking Session Manager Plugin..." -ForegroundColor Yellow
+    $ssmPluginPath = Get-Command session-manager-plugin -ErrorAction SilentlyContinue
+    
+    # If not found in PATH, check common installation locations
+    if (-not $ssmPluginPath) {
+        $commonPaths = @(
+            "$env:ProgramFiles\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe",
+            "${env:ProgramFiles(x86)}\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe",
+            "$env:LOCALAPPDATA\Programs\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe",
+            "$env:USERPROFILE\AppData\Local\Programs\Amazon\SessionManagerPlugin\bin\session-manager-plugin.exe"
+        )
+        
+        $foundPath = $null
+        foreach ($path in $commonPaths) {
+            if (Test-Path $path) {
+                $foundPath = $path
+                break
+            }
+        }
+        
+        if ($foundPath) {
+            # Add the directory to PATH for this session
+            $pluginDir = Split-Path $foundPath -Parent
+            if ($env:Path -notlike "*$pluginDir*") {
+                $env:Path = "$pluginDir;$env:Path"
+                Write-Host "✅ Session Manager Plugin found at: $foundPath" -ForegroundColor Green
+                Write-Host "   Added to PATH for this session" -ForegroundColor Gray
+            } else {
+                Write-Host "✅ Session Manager Plugin found at: $foundPath" -ForegroundColor Green
+            }
+            $ssmPluginPath = Get-Command session-manager-plugin -ErrorAction SilentlyContinue
+        } else {
+            Write-Host "❌ Session Manager Plugin not found" -ForegroundColor Red
+            Write-Host "`n📦 Installation Instructions:" -ForegroundColor Yellow
+            Write-Host "  1. Install via winget (recommended):" -ForegroundColor White
+            Write-Host "     winget install Amazon.SessionManagerPlugin" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  2. Or download manually:" -ForegroundColor White
+            Write-Host "     https://docs.aws.amazon.com/systems-manager/latest/userguide/session-manager-working-with-install-plugin.html" -ForegroundColor Gray
+            Write-Host ""
+            Write-Host "  3. After installation, run 'aws-ssm-init' again" -ForegroundColor White
+            Write-Host ""
+            Write-Host "⚠️  Environment variables will still be loaded, but SSM commands won't work until plugin is installed." -ForegroundColor Yellow
+        }
+    } else {
+        Write-Host "✅ Session Manager Plugin found: $($ssmPluginPath.Source)" -ForegroundColor Green
+    }
+
+    # Load credentials from deployment_credentials.json
+    $credentialsPath = "$ProjectPath\deployment_credentials.json"
+    if (-not (Test-Path $credentialsPath)) {
+        Write-Host "❌ deployment_credentials.json not found at: $credentialsPath" -ForegroundColor Red
+        Write-Host "   Environment variables will use defaults" -ForegroundColor Yellow
+    } else {
+        try {
+            $credentials = Get-Content $credentialsPath | ConvertFrom-Json
+            Write-Host "✅ Loaded credentials from deployment_credentials.json" -ForegroundColor Green
+
+            # Set AWS region
+            if ($credentials.aws_account.region) {
+                $env:AWS_DEFAULT_REGION = $credentials.aws_account.region
+                Write-Host "  AWS_DEFAULT_REGION: $($env:AWS_DEFAULT_REGION)" -ForegroundColor Gray
+            }
+
+            # Store instance IDs for helper functions
+            if ($credentials.backend_api.ec2.instance_id) {
+                $script:APIInstanceId = $credentials.backend_api.ec2.instance_id
+                Write-Host "  API EC2 Instance: $script:APIInstanceId" -ForegroundColor Gray
+            }
+
+            if ($credentials.demo_database.ec2.instance_id) {
+                $script:DemoDBInstanceId = $credentials.demo_database.ec2.instance_id
+                Write-Host "  Demo DB EC2 Instance: $script:DemoDBInstanceId" -ForegroundColor Gray
+            }
+
+            # Load RDS endpoint for port forwarding
+            if ($credentials.backend_api.production_database_reference.rds.endpoint) {
+                $script:RDSEndpoint = $credentials.backend_api.production_database_reference.rds.endpoint
+                Write-Host "  RDS Endpoint: $script:RDSEndpoint" -ForegroundColor Gray
+            }
+
+            # Load demo database connection info
+            if ($credentials.demo_database.database_connection) {
+                $script:DemoDBHost = $credentials.demo_database.database_connection.host
+                $script:DemoDBPort = $credentials.demo_database.database_connection.port
+                Write-Host "  Demo DB Host: $script:DemoDBHost" -ForegroundColor Gray
+            }
+
+        } catch {
+            Write-Host "⚠️  Failed to parse deployment_credentials.json: $_" -ForegroundColor Yellow
+            Write-Host "   Using default values" -ForegroundColor Yellow
+        }
+    }
+
+    # Set default AWS region if not set
+    if (-not $env:AWS_DEFAULT_REGION) {
+        $env:AWS_DEFAULT_REGION = "us-east-1"
+        Write-Host "  AWS_DEFAULT_REGION: $($env:AWS_DEFAULT_REGION) (default)" -ForegroundColor Gray
+    }
+
+    # PATH was already refreshed above, just confirm
+    if ($ssmPluginPath) {
+        Write-Host "✅ PATH configured for Session Manager Plugin" -ForegroundColor Green
+    }
+
+    # Set database environment variables for local development (via SSH tunnel)
+    # These are used when connecting via port forwarding
+    if (-not $env:POSTGRES_HOST) {
+        $env:POSTGRES_HOST = "localhost"
+    }
+    if (-not $env:POSTGRES_PORT) {
+        $env:POSTGRES_PORT = "5433"  # Default local forwarded port for RDS
+    }
+    if (-not $env:POSTGRES_DB) {
+        $env:POSTGRES_DB = "opendental_analytics"
+    }
+    if (-not $env:POSTGRES_USER) {
+        $env:POSTGRES_USER = "analytics_user"
+    }
+    # Password should be set manually or from credentials
+
+    # Demo database variables (for direct connection or port forwarding)
+    if (-not $env:DEMO_POSTGRES_HOST) {
+        $env:DEMO_POSTGRES_HOST = "localhost"
+    }
+    if (-not $env:DEMO_POSTGRES_PORT) {
+        $env:DEMO_POSTGRES_PORT = "5434"  # Default local forwarded port for demo DB
+    }
+    if (-not $env:DEMO_POSTGRES_DB) {
+        $env:DEMO_POSTGRES_DB = "opendental_demo"
+    }
+    if (-not $env:DEMO_POSTGRES_USER) {
+        $env:DEMO_POSTGRES_USER = "opendental_demo_user"
+    }
+
+    Write-Host "`n✅ AWS SSM Environment ready!" -ForegroundColor Green
+    Write-Host "Commands:" -ForegroundColor Cyan
+    Write-Host "  ssm-connect-api        - Connect to API EC2 instance" -ForegroundColor White
+    Write-Host "  ssm-connect-demo-db    - Connect to Demo DB EC2 instance" -ForegroundColor White
+    Write-Host "  ssm-port-forward-rds   - Start port forwarding to RDS (production analytics DB)" -ForegroundColor White
+    Write-Host "  ssm-port-forward-demo-db - Start port forwarding to demo database" -ForegroundColor White
+    Write-Host "  ssm-status             - Check SSM plugin status" -ForegroundColor White
+    Write-Host ""
+}
+
+function Connect-SSMAPI {
+    if (-not $script:APIInstanceId) {
+        Write-Host "❌ API EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "🔌 Connecting to API EC2 instance: $script:APIInstanceId" -ForegroundColor Cyan
+    aws ssm start-session --target $script:APIInstanceId
+}
+
+function Connect-SSMDemoDB {
+    if (-not $script:DemoDBInstanceId) {
+        Write-Host "❌ Demo DB EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "🔌 Connecting to Demo DB EC2 instance: $script:DemoDBInstanceId" -ForegroundColor Cyan
+    aws ssm start-session --target $script:DemoDBInstanceId
+}
+
+function Start-SSMPortForwardRDS {
+    if (-not $script:APIInstanceId) {
+        Write-Host "❌ API EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+        return
+    }
+    
+    if (-not $script:RDSEndpoint) {
+        Write-Host "❌ RDS endpoint not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+        return
+    }
+
+    $localPort = $env:POSTGRES_PORT
+    if (-not $localPort) {
+        $localPort = "5433"
+    }
+
+    Write-Host "🔌 Starting port forwarding to RDS..." -ForegroundColor Cyan
+    Write-Host "  Local port: $localPort" -ForegroundColor Gray
+    Write-Host "  Remote: $script:RDSEndpoint:5432" -ForegroundColor Gray
+    Write-Host "  Via: $script:APIInstanceId" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "💡 Keep this terminal open. Use Ctrl+C to stop forwarding." -ForegroundColor Yellow
+    Write-Host ""
+
+    $params = @{
+        host = @($script:RDSEndpoint)
+        portNumber = @("5432")
+        localPortNumber = @($localPort)
+    } | ConvertTo-Json -Compress
+
+    aws ssm start-session --target $script:APIInstanceId --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters $params
+}
+
+function Start-SSMPortForwardDemoDB {
+    if (-not $script:APIInstanceId) {
+        Write-Host "❌ API EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+        return
+    }
+    
+    if (-not $script:DemoDBHost) {
+        Write-Host "❌ Demo DB host not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+        return
+    }
+
+    $localPort = $env:DEMO_POSTGRES_PORT
+    if (-not $localPort) {
+        $localPort = "5434"
+    }
+
+    Write-Host "🔌 Starting port forwarding to Demo Database..." -ForegroundColor Cyan
+    Write-Host "  Local port: $localPort" -ForegroundColor Gray
+    Write-Host "  Remote: $script:DemoDBHost:5432" -ForegroundColor Gray
+    Write-Host "  Via: $script:APIInstanceId" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "💡 Keep this terminal open. Use Ctrl+C to stop forwarding." -ForegroundColor Yellow
+    Write-Host ""
+
+    $params = @{
+        host = @($script:DemoDBHost)
+        portNumber = @("5432")
+        localPortNumber = @($localPort)
+    } | ConvertTo-Json -Compress
+
+    aws ssm start-session --target $script:APIInstanceId --document-name AWS-StartPortForwardingSessionToRemoteHost --parameters $params
+}
+
+function Get-SSMStatus {
+    Write-Host "`n📊 SSM Environment Status" -ForegroundColor White
+    Write-Host ""
+
+    # Check Session Manager Plugin
+    $ssmPluginPath = Get-Command session-manager-plugin -ErrorAction SilentlyContinue
+    if ($ssmPluginPath) {
+        Write-Host "  Session Manager Plugin: ✅ Installed" -ForegroundColor Green
+        Write-Host "    Location: $($ssmPluginPath.Source)" -ForegroundColor Gray
+    } else {
+        Write-Host "  Session Manager Plugin: ❌ Not found" -ForegroundColor Red
+        Write-Host "    Run 'winget install Amazon.SessionManagerPlugin' to install" -ForegroundColor Yellow
+    }
+
+    # Check AWS CLI
+    $awsCliPath = Get-Command aws -ErrorAction SilentlyContinue
+    if ($awsCliPath) {
+        $awsVersion = aws --version 2>&1
+        Write-Host "  AWS CLI: ✅ Installed" -ForegroundColor Green
+        Write-Host "    Version: $awsVersion" -ForegroundColor Gray
+    } else {
+        Write-Host "  AWS CLI: ❌ Not found" -ForegroundColor Red
+    }
+
+    # Check AWS credentials
+    try {
+        $identity = aws sts get-caller-identity 2>&1 | ConvertFrom-Json
+        if ($identity) {
+            Write-Host "  AWS Credentials: ✅ Configured" -ForegroundColor Green
+            Write-Host "    Account: $($identity.Account)" -ForegroundColor Gray
+            Write-Host "    User/Role: $($identity.Arn)" -ForegroundColor Gray
+        }
+    } catch {
+        Write-Host "  AWS Credentials: ❌ Not configured or invalid" -ForegroundColor Red
+    }
+
+    # Show loaded instance IDs
+    Write-Host ""
+    Write-Host "  Loaded Resources:" -ForegroundColor White
+    if ($script:APIInstanceId) {
+        Write-Host "    API EC2: ✅ $script:APIInstanceId" -ForegroundColor Green
+    } else {
+        Write-Host "    API EC2: ⭕ Not loaded" -ForegroundColor Gray
+    }
+    
+    if ($script:DemoDBInstanceId) {
+        Write-Host "    Demo DB EC2: ✅ $script:DemoDBInstanceId" -ForegroundColor Green
+    } else {
+        Write-Host "    Demo DB EC2: ⭕ Not loaded" -ForegroundColor Gray
+    }
+
+    if ($script:RDSEndpoint) {
+        Write-Host "    RDS Endpoint: ✅ $script:RDSEndpoint" -ForegroundColor Green
+    } else {
+        Write-Host "    RDS Endpoint: ⭕ Not loaded" -ForegroundColor Gray
+    }
+
+    # Show environment variables
+    Write-Host ""
+    Write-Host "  Environment Variables:" -ForegroundColor White
+    Write-Host "    AWS_DEFAULT_REGION: $($env:AWS_DEFAULT_REGION)" -ForegroundColor Gray
+    Write-Host "    POSTGRES_HOST: $($env:POSTGRES_HOST)" -ForegroundColor Gray
+    Write-Host "    POSTGRES_PORT: $($env:POSTGRES_PORT)" -ForegroundColor Gray
+    Write-Host "    DEMO_POSTGRES_HOST: $($env:DEMO_POSTGRES_HOST)" -ForegroundColor Gray
+    Write-Host "    DEMO_POSTGRES_PORT: $($env:DEMO_POSTGRES_PORT)" -ForegroundColor Gray
+
+    Write-Host ""
+}
+
+# =============================================================================
 # HELPER FUNCTIONS
 # =============================================================================
 
@@ -1640,6 +1957,7 @@ Set-Alias -Name etl-init -Value Initialize-ETLEnvironment -Scope Global
 Set-Alias -Name etl-deactivate -Value Stop-ETLEnvironment -Scope Global
 Set-Alias -Name api-init -Value Initialize-APIEnvironment -Scope Global
 Set-Alias -Name api-deactivate -Value Stop-APIEnvironment -Scope Global
+Set-Alias -Name aws-ssm-init -Value Initialize-AWSSSMEnvironment -Scope Global
 
 # DBT Commands
 Set-Alias -Name dbt -Value Invoke-DBT -Scope Global
@@ -1671,6 +1989,13 @@ Set-Alias -Name frontend-status -Value Get-FrontendStatus -Scope Global
 # dbt Docs Commands
 Set-Alias -Name dbt-docs-deploy -Value Deploy-DBTDocs -Scope Global
 
+# AWS SSM Commands
+Set-Alias -Name ssm-connect-api -Value Connect-SSMAPI -Scope Global
+Set-Alias -Name ssm-connect-demo-db -Value Connect-SSMDemoDB -Scope Global
+Set-Alias -Name ssm-port-forward-rds -Value Start-SSMPortForwardRDS -Scope Global
+Set-Alias -Name ssm-port-forward-demo-db -Value Start-SSMPortForwardDemoDB -Scope Global
+Set-Alias -Name ssm-status -Value Get-SSMStatus -Scope Global
+
 # Utility
 Set-Alias -Name env-status -Value Get-EnvironmentStatus -Scope Global
 
@@ -1687,6 +2012,7 @@ Write-Host "`n🚀 Quick Start:" -ForegroundColor White
 Write-Host "  dbt-init       - Initialize dbt environment" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
 Write-Host "  api-init       - Initialize API environment (interactive)" -ForegroundColor Blue
+Write-Host "  aws-ssm-init   - Initialize AWS SSM environment (loads credentials, checks plugin)" -ForegroundColor DarkCyan
 Write-Host "  frontend-dev   - Start frontend development server" -ForegroundColor Green
 Write-Host "  frontend-deploy - Deploy frontend to AWS S3/CloudFront" -ForegroundColor Green
 Write-Host "  dbt-docs-deploy - Deploy dbt documentation to AWS S3/CloudFront" -ForegroundColor Cyan
