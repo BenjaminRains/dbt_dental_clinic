@@ -49,12 +49,15 @@ class GeneratorConfig:
     db_schema: str = "raw"
     
     # Data volumes
-    num_clinics: int = 5
-    num_providers: int = 12
-    num_operatories: int = 20
-    num_patients: int = 5000
-    num_appointments: int = 15000
-    num_procedures: int = 20000
+    # Updated to match production ratios (based on opendental_analytics analysis)
+    # Production: 34,445 patients, 2.34 appts/patient, 22.84 procs/patient
+    # Demo: 10,000 patients (29% of production) with same ratios
+    num_clinics: int = 5  # Multi-clinic demo (production has 1 clinic)
+    num_providers: int = 12  # Demo size (production has 57)
+    num_operatories: int = 50  # 10 per clinic for multi-clinic demo (production has 16)
+    num_patients: int = 10000  # 29% of production (34,445)
+    num_appointments: int = 23379  # 2.34 per patient (production ratio)
+    num_procedures: int = 228365  # 22.84 per patient (production ratio)
     
     # Date range (CRITICAL: dbt models filter to >= 2023-01-01)
     start_date: datetime = datetime(2023, 1, 1)
@@ -366,12 +369,16 @@ def main():
         description='Generate synthetic dental practice data'
     )
     parser.add_argument(
-        '--patients', type=int, default=5000,
-        help='Number of patients to generate (default: 5000)'
+        '--patients', type=int, default=10000,
+        help='Number of patients to generate (default: 10000)'
     )
     parser.add_argument(
         '--db-host', default='localhost',
         help='Database host (default: localhost)'
+    )
+    parser.add_argument(
+        '--db-port', type=int, default=5432,
+        help='Database port (default: 5432)'
     )
     parser.add_argument(
         '--db-name', default='opendental_demo',
@@ -395,6 +402,7 @@ def main():
     # Create configuration
     config = GeneratorConfig(
         db_host=args.db_host,
+        db_port=args.db_port,
         db_name=args.db_name,
         db_user=args.db_user,
         db_password=args.db_password,
