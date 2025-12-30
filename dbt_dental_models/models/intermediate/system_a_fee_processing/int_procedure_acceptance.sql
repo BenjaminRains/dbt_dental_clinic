@@ -31,7 +31,7 @@
     Data Sources:
     - int_procedure_complete: Procedure data with fees and status
     - int_appointment_details: Appointment data for scheduled procedures
-    - dim_procedure: Procedure code definitions and categories
+    - int_procedure_catalog: Procedure code definitions and categories
     
     Performance Considerations:
     - Incremental materialization based on procedure_date for efficient updates
@@ -68,10 +68,10 @@ procedure_definitions AS (
     SELECT
         procedure_code_id,
         procedure_code,
-        description AS procedure_description,
+        procedure_description,
         procedure_category,
         is_radiology
-    FROM {{ ref('dim_procedure') }}
+    FROM {{ ref('int_procedure_catalog') }}
 ),
 
 -- 4. Exam procedure identification
