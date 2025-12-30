@@ -102,6 +102,10 @@ tables.yml
 scripts/check_env.py
 scripts/run_dbt.ps1
 scripts/run_dbt.sh
+scripts/create_dbt_profiles_yml.ps1
+scripts/create_dbt_profiles_yml_simple.ps1
+scripts/run_dbt_ssm.ps1
+scripts/run_dbt_debug_ssm.sh
 scripts/deployment/
 
 # Deployment scripts (contain hardcoded credentials and sensitive info)
