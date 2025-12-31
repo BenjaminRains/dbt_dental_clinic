@@ -187,13 +187,18 @@ class ConnectionFactory:
 
     @staticmethod
     def _apply_postgres_performance_settings(engine: Engine) -> None:
-        """Apply PostgreSQL bulk loading optimizations."""
+        """Apply PostgreSQL bulk loading optimizations.
+        
+        Note: wal_buffers cannot be set at runtime and must be configured
+        in postgresql.conf (requires server restart). See documentation in
+        etl_pipeline/docs/postgres_wal_buffers_configuration.md for details.
+        """
         try:
             with engine.connect() as conn:
                 conn.execute(text("SET work_mem = '256MB'"))
                 conn.execute(text("SET maintenance_work_mem = '1GB'"))
                 conn.execute(text("SET synchronous_commit = off"))
-                conn.execute(text("SET wal_buffers = '64MB'"))
+                # Note: wal_buffers requires server restart - see documentation
                 logger.debug("Applied PostgreSQL performance optimizations")
         except Exception as e:
             logger.warning(f"Failed to apply PostgreSQL performance settings: {e}")
