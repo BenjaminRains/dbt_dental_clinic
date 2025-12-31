@@ -5,7 +5,7 @@ from sqlalchemy import text
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.core.postgres_schema import PostgresSchema
-from etl_pipeline.loaders.postgres_loader_refactor_load_strategies import PostgresLoaderRefactored
+from etl_pipeline.loaders.postgres_loader import PostgresLoader
 
 
 @pytest.mark.integration
@@ -21,7 +21,7 @@ def test_noop_run_does_not_advance_loaded_at_for_patient():
         settings=settings,
     )
 
-    loader = PostgresLoaderRefactored(
+    loader = PostgresLoader(
         replication_engine=replication_engine,
         analytics_engine=analytics_engine,
         settings=settings,
@@ -71,7 +71,7 @@ def test_incremental_handles_invalid_incremental_columns_for_appointment():
         settings=settings,
     )
 
-    loader = PostgresLoaderRefactored(
+    loader = PostgresLoader(
         replication_engine=replication_engine,
         analytics_engine=analytics_engine,
         settings=settings,
@@ -109,7 +109,7 @@ def test_recompute_last_primary_value_when_stored_as_timestamp_patient():
         settings=settings,
     )
 
-    loader = PostgresLoaderRefactored(
+    loader = PostgresLoader(
         replication_engine=replication_engine,
         analytics_engine=analytics_engine,
         settings=settings,

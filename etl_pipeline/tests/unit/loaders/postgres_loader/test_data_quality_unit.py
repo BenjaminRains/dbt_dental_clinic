@@ -47,6 +47,7 @@ def real_postgres_loader_instance():
     
     # Set up basic attributes
     mock_loader.analytics_schema = 'raw'
+    mock_loader.target_schema = 'raw'  # Used by _build_upsert_sql
     mock_loader.settings = MagicMock()
     mock_loader.table_configs = {
         'patient': {'incremental_columns': ['DateModified'], 'primary_key': 'PatientNum'},
@@ -96,11 +97,7 @@ def real_postgres_loader_instance():
     mock_loader._update_load_status = MagicMock(return_value=True)
     mock_loader._get_loaded_at_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
     mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
-    mock_loader.stream_mysql_data = MagicMock(return_value=[[{'id': 1, 'data': 'test'}]])
-    mock_loader.load_table_copy_csv = MagicMock(return_value=True)
-    mock_loader.load_table_standard = MagicMock(return_value=True)
-    mock_loader.load_table_streaming = MagicMock(return_value=True)
-    mock_loader.load_table_chunked = MagicMock(return_value=True)
+    mock_loader.load_table = MagicMock(return_value=(True, {}))
     
     # Import the real PostgresLoader class to get access to its methods
     from etl_pipeline.loaders.postgres_loader import PostgresLoader
@@ -112,8 +109,7 @@ def real_postgres_loader_instance():
     # Bind real methods to the mock loader for testing
     mock_loader._filter_valid_incremental_columns = PostgresLoader._filter_valid_incremental_columns.__get__(mock_loader, PostgresLoader)
     mock_loader._build_upsert_sql = PostgresLoader._build_upsert_sql.__get__(mock_loader, PostgresLoader)
-    mock_loader._validate_incremental_integrity = PostgresLoader._validate_incremental_integrity.__get__(mock_loader, PostgresLoader)
-    mock_loader._convert_sqlalchemy_row_to_dict = PostgresLoader._convert_sqlalchemy_row_to_dict.__get__(mock_loader, PostgresLoader)
+    mock_loader._validate_incremental_columns = PostgresLoader._validate_incremental_columns.__get__(mock_loader, PostgresLoader)
     
     return mock_loader
 
@@ -175,7 +171,7 @@ class TestPostgresLoaderDataQuality:
     
     def test_build_upsert_sql_success(self, real_postgres_loader_instance):
         """
-        Test building PostgreSQL UPSERT SQL statement.
+        Test building PostgreSQL UPSERT SQL statement with change detection.
         """
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
@@ -192,41 +188,60 @@ class TestPostgresLoaderDataQuality:
         assert '"FName"' in result
         assert 'ON CONFLICT ("PatientNum")' in result
         assert 'DO UPDATE SET' in result
+        # Verify change detection WHERE clause is present
+        assert 'WHERE' in result
+        assert 'IS DISTINCT FROM' in result
+        assert 'EXCLUDED."LName"' in result
+        assert 'EXCLUDED."FName"' in result
     
-    def test_validate_incremental_integrity_success(self, real_postgres_loader_instance):
+    def test_validate_incremental_columns_success(self, real_postgres_loader_instance):
         """
-        Test incremental integrity validation.
+        Test incremental column validation (schema-based).
         """
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
         
         loader = real_postgres_loader_instance
         
-        # Mock the replication engine connection
+        # Mock the replication engine connection to return column names
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.scalar.return_value = 5  # 5 new records
+        # Mock INFORMATION_SCHEMA query result - returns rows with column names
+        # The query returns rows where row[0] is the column name
+        mock_rows = [
+            ('DateModified',),
+            ('DateCreated',),
+            ('PatientNum',)
+        ]
+        mock_result = MagicMock()
+        mock_result.__iter__ = lambda self: iter(mock_rows)
+        mock_conn.execute.return_value = mock_result
         loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
         
-        # Act - call the real method
-        result = loader._validate_incremental_integrity('patient', ['DateModified'], datetime(2024, 1, 1, 10, 0, 0))
+        # Mock settings for database config
+        loader.settings.get_database_config.return_value = {'database': 'test_db'}
         
-        # Assert - should return True for successful validation
-        assert result is True
+        # Act - call the real method
+        result = loader._validate_incremental_columns('patient', ['DateModified', 'DateCreated', 'NonExistent'])
+        
+        # Assert - should return only columns that exist
+        assert 'DateModified' in result
+        assert 'DateCreated' in result
+        assert 'NonExistent' not in result
     
-    def test_validate_incremental_integrity_no_columns(self, real_postgres_loader_instance):
+    def test_validate_incremental_columns_empty(self, real_postgres_loader_instance):
         """
-        Test incremental integrity validation with no incremental columns.
+        Test incremental column validation with empty list.
         """
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
         
         loader = real_postgres_loader_instance
         
-        # Act - no columns should skip validation
-        result = loader._validate_incremental_integrity('patient', [], datetime(2024, 1, 1, 10, 0, 0))
+        # Act - empty list should return empty list
+        result = loader._validate_incremental_columns('patient', [])
         
         # Assert
-        assert result is True  # Should skip validation when no columns
+        assert result == []  # Should return empty list for empty input
     
     def test_data_quality_validation_edge_cases(self, real_postgres_loader_instance):
         """

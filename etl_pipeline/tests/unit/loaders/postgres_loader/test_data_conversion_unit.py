@@ -48,6 +48,7 @@ def real_postgres_loader_instance():
     
     # Set up basic attributes
     mock_loader.analytics_schema = 'raw'
+    mock_loader.target_schema = 'raw'  # Used by _build_upsert_sql
     mock_loader.settings = MagicMock()
     mock_loader.table_configs = {
         'patient': {'incremental_columns': ['DateModified'], 'primary_key': 'PatientNum'},
@@ -97,11 +98,7 @@ def real_postgres_loader_instance():
     mock_loader._update_load_status = MagicMock(return_value=True)
     mock_loader._get_loaded_at_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
     mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
-    mock_loader.stream_mysql_data = MagicMock(return_value=[[{'id': 1, 'data': 'test'}]])
-    mock_loader.load_table_copy_csv = MagicMock(return_value=True)
-    mock_loader.load_table_standard = MagicMock(return_value=True)
-    mock_loader.load_table_streaming = MagicMock(return_value=True)
-    mock_loader.load_table_chunked = MagicMock(return_value=True)
+    mock_loader.load_table = MagicMock(return_value=(True, {}))
     
     # Import the real PostgresLoader class to get access to its methods
     from etl_pipeline.loaders.postgres_loader import PostgresLoader
@@ -110,11 +107,9 @@ def real_postgres_loader_instance():
     # Set up logger for the mock loader
     mock_loader.logger = logging.getLogger('etl_pipeline.loaders.postgres_loader')
     
-    # Bind real methods to the mock loader for testing
+    # Bind real methods to the mock loader for testing (only public/testable methods)
     mock_loader._filter_valid_incremental_columns = PostgresLoader._filter_valid_incremental_columns.__get__(mock_loader, PostgresLoader)
     mock_loader._build_upsert_sql = PostgresLoader._build_upsert_sql.__get__(mock_loader, PostgresLoader)
-    mock_loader._validate_incremental_integrity = PostgresLoader._validate_incremental_integrity.__get__(mock_loader, PostgresLoader)
-    mock_loader._convert_sqlalchemy_row_to_dict = PostgresLoader._convert_sqlalchemy_row_to_dict.__get__(mock_loader, PostgresLoader)
     
     return mock_loader
 
@@ -131,9 +126,14 @@ class TestPostgresLoaderDataConversion:
         - No real database connections, full mocking
     """
     
+    @pytest.mark.skip(reason="_convert_sqlalchemy_row_to_dict is now internal to strategies - row conversion handled internally")
     def test_convert_sqlalchemy_row_to_dict(self, real_postgres_loader_instance):
-        """Test the SQLAlchemy row to dictionary conversion method."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test the SQLAlchemy row to dictionary conversion method.
+        
+        This method is now internal to strategies. Row conversion is handled internally.
+        """
+        pytest.skip("_convert_sqlalchemy_row_to_dict is now internal - row conversion handled by strategies")
         
         # Test with modern SQLAlchemy Row object (has _mapping)
         class MockRow:
@@ -189,9 +189,15 @@ class TestPostgresLoaderDataConversion:
         result = loader._convert_sqlalchemy_row_to_dict(invalid_row, ['id', 'name'])
         assert result == {}
     
+    @pytest.mark.skip(reason="Data type conversion is now handled by schema_adapter (PostgresSchema) - not a PostgresLoader method")
     def test_convert_data_types_for_test_environment(self, real_postgres_loader_instance):
-        """Test that data type conversion works correctly for test environment."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test that data type conversion works correctly for test environment.
+        
+        Data type conversion is now handled by schema_adapter.convert_row_data_types().
+        This is an internal implementation detail, not part of PostgresLoader's public API.
+        """
+        pytest.skip("Data type conversion is now handled by schema_adapter - not a PostgresLoader method")
         
         # Test data with integer boolean values
         test_row = {
@@ -230,9 +236,14 @@ class TestPostgresLoaderDataConversion:
         assert converted_appointment['AptNum'] == 1
         assert converted_appointment['AptDateTime'] == '2023-01-01 10:00:00'
     
+    @pytest.mark.skip(reason="Data type conversion is now handled by schema_adapter (PostgresSchema) - not a PostgresLoader method")
     def test_convert_data_types_with_mixed_data(self, real_postgres_loader_instance):
-        """Test data type conversion with mixed data types."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test data type conversion with mixed data types.
+        
+        Data type conversion is now handled by schema_adapter.
+        """
+        pytest.skip("Data type conversion is now handled by schema_adapter - not a PostgresLoader method")
         
         # Test with mixed data types
         mixed_row = {
@@ -260,9 +271,14 @@ class TestPostgresLoaderDataConversion:
         assert converted_row['score'] == 95.5
         assert converted_row['count'] == 42
     
+    @pytest.mark.skip(reason="Data type conversion is now handled by schema_adapter (PostgresSchema) - not a PostgresLoader method")
     def test_convert_data_types_with_null_values(self, real_postgres_loader_instance):
-        """Test data type conversion with null values."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test data type conversion with null values.
+        
+        Data type conversion is now handled by schema_adapter.
+        """
+        pytest.skip("Data type conversion is now handled by schema_adapter - not a PostgresLoader method")
         
         # Test with null values
         null_row = {
@@ -282,9 +298,14 @@ class TestPostgresLoaderDataConversion:
         assert converted_row['is_deleted'] is False
         assert converted_row['created_date'] is None
     
+    @pytest.mark.skip(reason="Data type conversion is now handled by schema_adapter (PostgresSchema) - not a PostgresLoader method")
     def test_convert_data_types_with_string_booleans(self, real_postgres_loader_instance):
-        """Test data type conversion with string boolean values."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test data type conversion with string boolean values.
+        
+        Data type conversion is now handled by schema_adapter.
+        """
+        pytest.skip("Data type conversion is now handled by schema_adapter - not a PostgresLoader method")
         
         # Test with string boolean values
         string_bool_row = {
@@ -308,9 +329,14 @@ class TestPostgresLoaderDataConversion:
         assert converted_row['id'] == 1
         assert converted_row['name'] == 'Test'
     
+    @pytest.mark.skip(reason="_convert_sqlalchemy_row_to_dict is now internal to strategies - row conversion handled internally")
     def test_convert_sqlalchemy_row_with_missing_columns(self, real_postgres_loader_instance):
-        """Test SQLAlchemy row conversion with missing columns."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test SQLAlchemy row conversion with missing columns.
+        
+        This method is now internal to strategies. Row conversion is handled internally.
+        """
+        pytest.skip("_convert_sqlalchemy_row_to_dict is now internal - row conversion handled by strategies")
         
         # Test with row that has fewer columns than expected
         class MockRow:
@@ -325,9 +351,14 @@ class TestPostgresLoaderDataConversion:
         assert result == {'id': 1, 'name': 'test'}
         assert 'missing_col' not in result
     
+    @pytest.mark.skip(reason="_convert_sqlalchemy_row_to_dict is now internal to strategies - row conversion handled internally")
     def test_convert_sqlalchemy_row_with_extra_columns(self, real_postgres_loader_instance):
-        """Test SQLAlchemy row conversion with extra columns."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test SQLAlchemy row conversion with extra columns.
+        
+        This method is now internal to strategies. Row conversion is handled internally.
+        """
+        pytest.skip("_convert_sqlalchemy_row_to_dict is now internal - row conversion handled by strategies")
         
         # Test with row that has more columns than requested
         class MockRow:
@@ -342,9 +373,14 @@ class TestPostgresLoaderDataConversion:
         assert result == {'id': 1, 'name': 'test'}
         assert 'extra_col' not in result
     
+    @pytest.mark.skip(reason="_convert_sqlalchemy_row_to_dict is now internal to strategies - row conversion handled internally")
     def test_convert_sqlalchemy_row_with_empty_data(self, real_postgres_loader_instance):
-        """Test SQLAlchemy row conversion with empty data."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test SQLAlchemy row conversion with empty data.
+        
+        This method is now internal to strategies. Row conversion is handled internally.
+        """
+        pytest.skip("_convert_sqlalchemy_row_to_dict is now internal - row conversion handled by strategies")
         
         # Test with empty row
         class MockRow:
@@ -357,9 +393,14 @@ class TestPostgresLoaderDataConversion:
         # Should return empty dict
         assert result == {}
     
+    @pytest.mark.skip(reason="Data type conversion is now handled by schema_adapter (PostgresSchema) - not a PostgresLoader method")
     def test_convert_data_types_with_unknown_table(self, real_postgres_loader_instance):
-        """Test data type conversion with unknown table (should not convert booleans)."""
-        loader = real_postgres_loader_instance
+        """
+        OBSOLETE: Test data type conversion with unknown table.
+        
+        Data type conversion is now handled by schema_adapter.
+        """
+        pytest.skip("Data type conversion is now handled by schema_adapter - not a PostgresLoader method")
         
         # Test with unknown table
         test_row = {

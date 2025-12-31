@@ -88,15 +88,20 @@ def mock_postgres_loader_instance():
         return mock_loader.table_configs.get(table_name, {})
     
     mock_loader.get_table_config = MagicMock(side_effect=get_table_config_side_effect)
-    mock_loader._build_load_query = MagicMock(return_value="SELECT * FROM test_table")
-    mock_loader._update_load_status = MagicMock(return_value=True)
+    mock_loader.target_schema = 'raw'  # Used by tracking methods
     mock_loader._get_loaded_at_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
-    mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
-    mock_loader.stream_mysql_data = MagicMock(return_value=[[{'id': 1, 'data': 'test'}]])
-    mock_loader.load_table_copy_csv = MagicMock(return_value=True)
-    mock_loader.load_table_standard = MagicMock(return_value=True)
-    mock_loader.load_table_streaming = MagicMock(return_value=True)
-    mock_loader.load_table_chunked = MagicMock(return_value=True)
+    mock_loader.load_table = MagicMock(return_value=(True, {}))
+    
+    # Import the real PostgresLoader class to bind real methods for testing
+    from etl_pipeline.loaders.postgres_loader import PostgresLoader
+    import logging
+    
+    # Set up logger for the mock loader
+    mock_loader.logger = logging.getLogger('etl_pipeline.loaders.postgres_loader')
+    
+    # Bind real tracking methods that exist in the new architecture
+    mock_loader._ensure_tracking_record_exists = PostgresLoader._ensure_tracking_record_exists.__get__(mock_loader, PostgresLoader)
+    mock_loader._update_load_status = PostgresLoader._update_load_status.__get__(mock_loader, PostgresLoader)
     
     return mock_loader
 
@@ -123,15 +128,20 @@ class TestPostgresLoaderTrackingStatus:
         
         # Mock the analytics engine connection
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.rowcount = 0  # No existing record
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
+        # First call returns 0 (no existing record), second call is the INSERT
+        mock_conn.execute.return_value.scalar.return_value = 0  # No existing record
+        mock_conn.execute.return_value.rowcount = 1  # INSERT successful
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_conn
+        mock_context.__exit__.return_value = None
+        loader.analytics_engine.connect.return_value = mock_context
         
         # Act
         result = loader._ensure_tracking_record_exists(table_name)
         
         # Assert
         assert result is True
-        mock_conn.execute.assert_called()
+        assert mock_conn.execute.call_count >= 1  # At least SELECT and possibly INSERT
     
     def test_ensure_tracking_record_exists_already_exists(self, mock_postgres_loader_instance):
         """Test tracking record that already exists."""
@@ -143,15 +153,19 @@ class TestPostgresLoaderTrackingStatus:
         
         # Mock the analytics engine connection
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.rowcount = 1  # Record already exists
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
+        # Record already exists (count > 0)
+        mock_conn.execute.return_value.scalar.return_value = 1  # Record already exists
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_conn
+        mock_context.__exit__.return_value = None
+        loader.analytics_engine.connect.return_value = mock_context
         
         # Act
         result = loader._ensure_tracking_record_exists(table_name)
         
         # Assert
         assert result is True
-        mock_conn.execute.assert_called()
+        assert mock_conn.execute.call_count >= 1  # At least the SELECT
     
     def test_update_load_status_success(self, mock_postgres_loader_instance):
         """Test successful load status update."""
@@ -161,20 +175,23 @@ class TestPostgresLoaderTrackingStatus:
         loader = mock_postgres_loader_instance
         table_name = 'patient'
         rows_loaded = 1000
-        load_start = datetime(2024, 1, 1, 10, 0, 0)
-        load_end = datetime(2024, 1, 1, 10, 5, 0)
+        status = 'success'
         
         # Mock the analytics engine connection
         mock_conn = MagicMock()
         mock_conn.execute.return_value.rowcount = 1  # Update successful
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_conn
+        mock_context.__exit__.return_value = None
+        loader.analytics_engine.connect.return_value = mock_context
         
-        # Act
-        result = loader._update_load_status(table_name, rows_loaded, load_start, load_end)
+        # Act - signature: (table_name, rows_loaded, status)
+        result = loader._update_load_status(table_name, rows_loaded, status)
         
         # Assert
         assert result is True
-        mock_conn.execute.assert_called()
+        assert mock_conn.execute.call_count >= 1  # Should call execute
+        mock_conn.commit.assert_called()  # Method calls commit() explicitly
     
     def test_update_load_status_failure(self, mock_postgres_loader_instance):
         """Test load status update failure."""
@@ -184,127 +201,66 @@ class TestPostgresLoaderTrackingStatus:
         loader = mock_postgres_loader_instance
         table_name = 'patient'
         rows_loaded = 1000
-        load_start = datetime(2024, 1, 1, 10, 0, 0)
-        load_end = datetime(2024, 1, 1, 10, 5, 0)
+        status = 'success'
         
-        # Mock the analytics engine connection to fail
+        # Mock the analytics engine connection to raise exception
         mock_conn = MagicMock()
-        mock_conn.execute.return_value.rowcount = 0  # Update failed
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
+        mock_conn.execute.side_effect = Exception("Database error")
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_conn
+        mock_context.__exit__.return_value = None
+        loader.analytics_engine.connect.return_value = mock_context
         
-        # Act
-        result = loader._update_load_status(table_name, rows_loaded, load_start, load_end)
+        # Act - signature: (table_name, rows_loaded, status)
+        result = loader._update_load_status(table_name, rows_loaded, status)
         
-        # Assert
+        # Assert - method catches exception and returns False
         assert result is False
-        mock_conn.execute.assert_called()
     
+    @pytest.mark.skip(reason="_validate_tracking_tables_exist is not part of the new architecture - validation handled internally")
     def test_validate_tracking_tables_exist_success(self, mock_postgres_loader_instance):
-        """Test successful validation of tracking tables."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test successful validation of tracking tables.
         
-        loader = mock_postgres_loader_instance
-        
-        # Mock the analytics engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchone.return_value = ('etl_load_status',)  # Table exists
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act
-        result = loader._validate_tracking_tables_exist()
-        
-        # Assert
-        assert result is True
-        mock_conn.execute.assert_called()
+        Tracking table validation is now handled internally.
+        """
+        pytest.skip("_validate_tracking_tables_exist is not part of the new architecture")
     
+    @pytest.mark.skip(reason="_validate_tracking_tables_exist is not part of the new architecture - validation handled internally")
     def test_validate_tracking_tables_exist_failure(self, mock_postgres_loader_instance):
-        """Test validation failure when tracking tables don't exist."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test validation failure when tracking tables don't exist.
         
-        loader = mock_postgres_loader_instance
-        
-        # Mock the analytics engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchone.return_value = None  # Table doesn't exist
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act
-        result = loader._validate_tracking_tables_exist()
-        
-        # Assert
-        assert result is False
-        mock_conn.execute.assert_called()
+        Tracking table validation is now handled internally.
+        """
+        pytest.skip("_validate_tracking_tables_exist is not part of the new architecture")
     
+    @pytest.mark.skip(reason="track_performance_metrics is not part of the new architecture - metrics handled internally")
     def test_track_performance_metrics_success(self, mock_postgres_loader_instance):
-        """Test successful performance metrics tracking."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test successful performance metrics tracking.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'patient'
-        strategy = 'streaming'
-        duration = 5.5
-        memory_mb = 150.0
-        rows_processed = 10000
-        
-        # Mock the analytics engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.rowcount = 1  # Insert successful
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act
-        loader.track_performance_metrics(table_name, strategy, duration, memory_mb, rows_processed)
-        
-        # Assert
-        mock_conn.execute.assert_called()
+        Performance metrics tracking is now handled internally.
+        """
+        pytest.skip("track_performance_metrics is not part of the new architecture")
     
+    @pytest.mark.skip(reason="get_performance_report is not part of the new architecture - reporting handled internally")
     def test_get_performance_report_success(self, mock_postgres_loader_instance):
-        """Test successful performance report generation."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test successful performance report generation.
         
-        loader = mock_postgres_loader_instance
-        
-        # Mock the analytics engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = [
-            ('patient', 'streaming', 5.5, 150.0, 10000, datetime(2024, 1, 1, 10, 0, 0)),
-            ('appointment', 'standard', 3.2, 75.0, 5000, datetime(2024, 1, 1, 11, 0, 0))
-        ]
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act
-        result = loader.get_performance_report()
-        
-        # Assert
-        assert isinstance(result, str)
-        assert 'patient' in result
-        assert 'appointment' in result
-        assert 'streaming' in result
-        assert 'standard' in result
-        mock_conn.execute.assert_called()
+        Performance reporting is now handled internally.
+        """
+        pytest.skip("get_performance_report is not part of the new architecture")
     
+    @pytest.mark.skip(reason="get_performance_report is not part of the new architecture - reporting handled internally")
     def test_get_performance_report_empty(self, mock_postgres_loader_instance):
-        """Test performance report generation with no data."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test performance report generation with no data.
         
-        loader = mock_postgres_loader_instance
-        
-        # Mock the analytics engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []  # No performance data
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act
-        result = loader.get_performance_report()
-        
-        # Assert
-        assert isinstance(result, str)
-        assert 'No performance data available' in result or 'No records found' in result
-        mock_conn.execute.assert_called()
+        Performance reporting is now handled internally.
+        """
+        pytest.skip("get_performance_report is not part of the new architecture")
     
     def test_tracking_record_creation_with_error_handling(self, mock_postgres_loader_instance):
         """Test tracking record creation with database error handling."""
@@ -317,60 +273,44 @@ class TestPostgresLoaderTrackingStatus:
         # Mock the analytics engine connection to raise an exception
         mock_conn = MagicMock()
         mock_conn.execute.side_effect = Exception("Database connection error")
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_conn
+        mock_context.__exit__.return_value = None
+        loader.analytics_engine.connect.return_value = mock_context
         
-        # Act & Assert
-        with pytest.raises(Exception, match="Database connection error"):
-            loader._ensure_tracking_record_exists(table_name)
+        # Act & Assert - method should catch exception and return False
+        result = loader._ensure_tracking_record_exists(table_name)
+        assert result is False
     
     def test_load_status_update_with_transaction_rollback(self, mock_postgres_loader_instance):
-        """Test load status update with transaction rollback on error."""
+        """Test load status update with error handling."""
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
         
         loader = mock_postgres_loader_instance
         table_name = 'patient'
         rows_loaded = 1000
-        load_start = datetime(2024, 1, 1, 10, 0, 0)
-        load_end = datetime(2024, 1, 1, 10, 5, 0)
+        status = 'success'
         
-        # Mock the analytics engine connection with transaction context
+        # Mock the analytics engine connection to raise exception
         mock_conn = MagicMock()
-        mock_transaction = MagicMock()
-        mock_conn.begin.return_value = mock_transaction
         mock_conn.execute.side_effect = Exception("Update failed")
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
+        mock_context = MagicMock()
+        mock_context.__enter__.return_value = mock_conn
+        mock_context.__exit__.return_value = None
+        loader.analytics_engine.connect.return_value = mock_context
         
-        # Act & Assert
-        with pytest.raises(Exception, match="Update failed"):
-            loader._update_load_status(table_name, rows_loaded, load_start, load_end)
-        
-        # Verify transaction rollback was called
-        mock_transaction.rollback.assert_called()
+        # Act & Assert - method should catch exception and return False
+        result = loader._update_load_status(table_name, rows_loaded, status)
+        assert result is False
     
+    @pytest.mark.skip(reason="track_performance_metrics is not part of the new architecture - metrics handled internally")
     def test_performance_metrics_with_large_dataset(self, mock_postgres_loader_instance):
-        """Test performance metrics tracking for large datasets."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test performance metrics tracking for large datasets.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'large_table'
-        strategy = 'chunked'
-        duration = 120.5  # 2 minutes
-        memory_mb = 2048.0  # 2GB
-        rows_processed = 1000000  # 1 million rows
-        
-        # Mock the analytics engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.rowcount = 1  # Insert successful
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act
-        loader.track_performance_metrics(table_name, strategy, duration, memory_mb, rows_processed)
-        
-        # Assert
-        mock_conn.execute.assert_called()
-        # Verify the call contains the large dataset parameters
-        call_args = mock_conn.execute.call_args[0][0]
+        Performance metrics tracking is now handled internally.
+        """
+        pytest.skip("track_performance_metrics is not part of the new architecture")
         assert 'large_table' in call_args
         assert 'chunked' in call_args 

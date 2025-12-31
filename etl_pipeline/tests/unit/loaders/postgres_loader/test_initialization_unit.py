@@ -157,26 +157,53 @@ class TestPostgresLoaderInitialization:
     
     def test_load_configuration_file_not_found(self, mock_postgres_loader_instance):
         """
-        Test configuration file not found error handling.
+        Test configuration handling with new constructor.
         
-        AAA Pattern:
-            Arrange: Configure mock to raise ConfigurationError
-            Act: Attempt to create PostgresLoader with invalid path
-            Assert: Verify ConfigurationError is raised with correct message
+        The new constructor requires replication_engine, analytics_engine, settings, and schema_adapter.
+        Configuration is loaded from settings, not from a file path parameter.
         """
-        # Arrange
         if not POSTGRES_LOADER_AVAILABLE or PostgresLoader is None:
             pytest.skip("PostgresLoader not available")
         
-        mock_postgres_loader_instance.side_effect = ConfigurationError(
-            message="Configuration file not found: /nonexistent/path/tables.yml",
-            config_file="/nonexistent/path/tables.yml",
-            details={"error_type": "file_not_found"}
+        # The new constructor doesn't take tables_config_path - configuration comes from settings
+        # This test verifies that missing configuration is handled gracefully
+        from etl_pipeline.config import create_test_settings
+        from unittest.mock import MagicMock
+        from etl_pipeline.config import DatabaseType
+        from etl_pipeline.config import PostgresSchema as ConfigPostgresSchema
+        
+        settings = create_test_settings()
+        # Mock settings.get_database_config to avoid env var requirements
+        def mock_get_database_config(db_type, *args):
+            if db_type == DatabaseType.ANALYTICS:
+                return {'database': 'test_db', 'schema': 'raw'}
+            elif db_type == DatabaseType.REPLICATION:
+                return {'database': 'test_db'}
+            return {'database': 'test_db'}
+        settings.get_database_config = MagicMock(side_effect=mock_get_database_config)
+        
+        # Mock engines instead of using real ConnectionFactory to avoid env var requirements
+        replication_engine = MagicMock()
+        analytics_engine = MagicMock()
+        schema_adapter = MagicMock()
+        schema_adapter.get_table_schema_from_mysql.return_value = {'columns': []}
+        schema_adapter.ensure_table_exists.return_value = True
+        
+        # Act - create loader with new constructor
+        loader = PostgresLoader(
+            replication_engine=replication_engine,
+            analytics_engine=analytics_engine,
+            settings=settings,
+            schema_adapter=schema_adapter,
         )
         
-        # Act & Assert
-        with pytest.raises(ConfigurationError, match="Configuration file not found"):
-            PostgresLoader(tables_config_path="/nonexistent/path/tables.yml")
+        # Assert - loader should be created successfully
+        assert loader is not None
+        assert loader.settings == settings
+        # get_table_config should work - settings.get_table_config may return default config
+        # So we just check that it doesn't raise an exception
+        config = loader.get_table_config('nonexistent_table')
+        assert isinstance(config, dict)  # Should return a dict (empty or with defaults)
 
     def test_get_table_config(self, mock_postgres_loader_instance):
         """

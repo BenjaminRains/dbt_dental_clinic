@@ -113,286 +113,120 @@ class TestPostgresLoaderAdvancedLoading:
         - No real database connections, full mocking
     """
     
+    @pytest.mark.skip(reason="load_table_parallel is not part of the new architecture - use load_table() public API instead")
     def test_load_table_parallel_success(self, mock_postgres_loader_instance):
-        """Test successful parallel table loading."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test successful parallel table loading.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'large_table'
-        force_full = False
-        
-        # Mock the replication engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.scalar.return_value = 10000  # Total rows
-        loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Mock the analytics engine connection
-        mock_analytics_conn = MagicMock()
-        mock_analytics_conn.execute.return_value.rowcount = 1  # Insert successful
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
-        
-        # Act
-        success, details = loader.load_table_parallel(table_name, force_full)
-        
-        # Assert
-        assert success is True
-        assert isinstance(details, dict)
-        mock_conn.execute.assert_called()
-        mock_analytics_conn.execute.assert_called()
+        Parallel loading is now handled internally by strategies. Use load_table() which
+        automatically selects the appropriate strategy.
+        """
+        pytest.skip("load_table_parallel is not part of the new architecture - use load_table() public API")
     
+    @pytest.mark.skip(reason="load_table_parallel is not part of the new architecture - use load_table() public API instead")
     def test_load_table_parallel_force_full(self, mock_postgres_loader_instance):
-        """Test parallel table loading with force full load."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test parallel table loading with force full load.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'large_table'
-        force_full = True
-        
-        # Mock the replication engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.scalar.return_value = 10000  # Total rows
-        loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Mock the analytics engine connection
-        mock_analytics_conn = MagicMock()
-        mock_analytics_conn.execute.return_value.rowcount = 1  # Insert successful
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
-        
-        # Act
-        success, details = loader.load_table_parallel(table_name, force_full)
-        
-        # Assert
-        assert success is True
-        assert isinstance(details, dict)
-        mock_conn.execute.assert_called()
-        mock_analytics_conn.execute.assert_called()
+        Parallel loading is now handled internally by strategies. Use load_table(table_name, force_full=True).
+        """
+        pytest.skip("load_table_parallel is not part of the new architecture - use load_table() public API")
     
+    @pytest.mark.skip(reason="process_chunk is not part of the new architecture - chunking handled internally by ChunkedStrategy")
     def test_process_chunk_success(self, mock_postgres_loader_instance):
-        """Test successful chunk processing."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test successful chunk processing.
         
-        loader = mock_postgres_loader_instance
-        chunk_start = 0
-        chunk_end = 1000
-        chunk_id = 1
-        
-        # Mock the replication engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = [{'id': i} for i in range(1000)]
-        loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Mock the analytics engine connection
-        mock_analytics_conn = MagicMock()
-        mock_analytics_conn.execute.return_value.rowcount = 1000  # Insert successful
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
-        
-        # Act
-        success, rows_processed = loader.process_chunk(chunk_start, chunk_end, chunk_id)
-        
-        # Assert
-        assert success is True
-        assert rows_processed == 1000
-        mock_conn.execute.assert_called()
-        mock_analytics_conn.execute.assert_called()
+        Chunk processing is now internal to ChunkedStrategy. Use load_table() which handles chunking automatically.
+        """
+        pytest.skip("process_chunk is not part of the new architecture - use load_table() public API")
     
+    @pytest.mark.skip(reason="process_chunk is not part of the new architecture - chunking handled internally by ChunkedStrategy")
     def test_process_chunk_empty_result(self, mock_postgres_loader_instance):
-        """Test chunk processing with empty result."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test chunk processing with empty result.
         
-        loader = mock_postgres_loader_instance
-        chunk_start = 0
-        chunk_end = 1000
-        chunk_id = 1
-        
-        # Mock the replication engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.fetchall.return_value = []  # Empty result
-        loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act
-        success, rows_processed = loader.process_chunk(chunk_start, chunk_end, chunk_id)
-        
-        # Assert
-        assert success is True
-        assert rows_processed == 0
-        mock_conn.execute.assert_called()
+        Chunk processing is now internal to ChunkedStrategy.
+        """
+        pytest.skip("process_chunk is not part of the new architecture - use load_table() public API")
     
+    @pytest.mark.skip(reason="_validate_data_completeness is not part of the new architecture - validation handled internally")
     def test_validate_data_completeness_success(self, mock_postgres_loader_instance):
-        """Test successful data completeness validation."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test successful data completeness validation.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'patient'
-        expected_count = 1000
-        actual_count = 1000
-        
-        # Act
-        result = loader._validate_data_completeness(table_name, expected_count, actual_count)
-        
-        # Assert
-        assert result is True
+        Data completeness validation is now handled internally by strategies.
+        """
+        pytest.skip("_validate_data_completeness is not part of the new architecture")
     
+    @pytest.mark.skip(reason="_validate_data_completeness is not part of the new architecture - validation handled internally")
     def test_validate_data_completeness_mismatch(self, mock_postgres_loader_instance):
-        """Test data completeness validation with count mismatch."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test data completeness validation with count mismatch.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'patient'
-        expected_count = 1000
-        actual_count = 950  # Mismatch
-        
-        # Act
-        result = loader._validate_data_completeness(table_name, expected_count, actual_count)
-        
-        # Assert
-        assert result is False
+        Data completeness validation is now handled internally.
+        """
+        pytest.skip("_validate_data_completeness is not part of the new architecture")
     
+    @pytest.mark.skip(reason="_validate_data_completeness is not part of the new architecture - validation handled internally")
     def test_validate_data_completeness_within_tolerance(self, mock_postgres_loader_instance):
-        """Test data completeness validation within tolerance."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test data completeness validation within tolerance.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'patient'
-        expected_count = 1000
-        actual_count = 995  # Within tolerance
-        
-        # Act
-        result = loader._validate_data_completeness(table_name, expected_count, actual_count)
-        
-        # Assert
-        assert result is True
+        Data completeness validation is now handled internally.
+        """
+        pytest.skip("_validate_data_completeness is not part of the new architecture")
     
+    @pytest.mark.skip(reason="load_table_parallel is not part of the new architecture - use load_table() public API instead")
     def test_load_table_parallel_with_error_handling(self, mock_postgres_loader_instance):
-        """Test parallel table loading with error handling."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test parallel table loading with error handling.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'large_table'
-        force_full = False
-        
-        # Mock the replication engine connection to raise an exception
-        mock_conn = MagicMock()
-        mock_conn.execute.side_effect = Exception("Database connection error")
-        loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act & Assert
-        with pytest.raises(Exception, match="Database connection error"):
-            loader.load_table_parallel(table_name, force_full)
+        Parallel loading is now handled internally. Error handling is done by strategies.
+        """
+        pytest.skip("load_table_parallel is not part of the new architecture - use load_table() public API")
     
+    @pytest.mark.skip(reason="process_chunk is not part of the new architecture - chunking handled internally by ChunkedStrategy")
     def test_process_chunk_with_database_error(self, mock_postgres_loader_instance):
-        """Test chunk processing with database error."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test chunk processing with database error.
         
-        loader = mock_postgres_loader_instance
-        chunk_start = 0
-        chunk_end = 1000
-        chunk_id = 1
-        
-        # Mock the replication engine connection to raise an exception
-        mock_conn = MagicMock()
-        mock_conn.execute.side_effect = Exception("Query execution error")
-        loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Act & Assert
-        with pytest.raises(Exception, match="Query execution error"):
-            loader.process_chunk(chunk_start, chunk_end, chunk_id)
+        Chunk processing is now internal. Error handling is done by ChunkedStrategy.
+        """
+        pytest.skip("process_chunk is not part of the new architecture - use load_table() public API")
     
+    @pytest.mark.skip(reason="load_table_parallel is not part of the new architecture - use load_table() public API instead")
     def test_load_table_parallel_with_large_dataset(self, mock_postgres_loader_instance):
-        """Test parallel table loading with large dataset."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test parallel table loading with large dataset.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'large_table'
-        force_full = False
-        
-        # Mock the replication engine connection
-        mock_conn = MagicMock()
-        mock_conn.execute.return_value.scalar.return_value = 1000000  # 1 million rows
-        loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Mock the analytics engine connection
-        mock_analytics_conn = MagicMock()
-        mock_analytics_conn.execute.return_value.rowcount = 1  # Insert successful
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
-        
-        # Act
-        success, details = loader.load_table_parallel(table_name, force_full)
-        
-        # Assert
-        assert success is True
-        assert isinstance(details, dict)
-        # Should handle large datasets efficiently
-        mock_conn.execute.assert_called()
-        mock_analytics_conn.execute.assert_called()
+        Parallel loading is now handled internally. Use load_table() which handles large datasets.
+        """
+        pytest.skip("load_table_parallel is not part of the new architecture - use load_table() public API")
     
+    @pytest.mark.skip(reason="process_chunk is not part of the new architecture - chunking handled internally by ChunkedStrategy")
     def test_process_chunk_with_memory_optimization(self, mock_postgres_loader_instance):
-        """Test chunk processing with memory optimization."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test chunk processing with memory optimization.
         
-        loader = mock_postgres_loader_instance
-        chunk_start = 0
-        chunk_end = 50000  # Large chunk
-        chunk_id = 1
-        
-        # Mock the replication engine connection
-        mock_conn = MagicMock()
-        # Return a large dataset that should trigger memory optimization
-        mock_conn.execute.return_value.fetchall.return_value = [{'id': i, 'data': 'x' * 1000} for i in range(50000)]
-        loader.replication_engine.connect.return_value.__enter__.return_value = mock_conn
-        
-        # Mock the analytics engine connection
-        mock_analytics_conn = MagicMock()
-        mock_analytics_conn.execute.return_value.rowcount = 50000  # Insert successful
-        loader.analytics_engine.connect.return_value.__enter__.return_value = mock_analytics_conn
-        
-        # Act
-        success, rows_processed = loader.process_chunk(chunk_start, chunk_end, chunk_id)
-        
-        # Assert
-        assert success is True
-        assert rows_processed == 50000
-        mock_conn.execute.assert_called()
-        mock_analytics_conn.execute.assert_called()
+        Chunk processing is now internal. Memory optimization is handled by ChunkedStrategy.
+        """
+        pytest.skip("process_chunk is not part of the new architecture - use load_table() public API")
     
+    @pytest.mark.skip(reason="_validate_data_completeness is not part of the new architecture - validation handled internally")
     def test_validate_data_completeness_with_zero_counts(self, mock_postgres_loader_instance):
-        """Test data completeness validation with zero counts."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test data completeness validation with zero counts.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'empty_table'
-        expected_count = 0
-        actual_count = 0
-        
-        # Act
-        result = loader._validate_data_completeness(table_name, expected_count, actual_count)
-        
-        # Assert
-        assert result is True  # Zero counts should be considered valid
+        Data completeness validation is now handled internally.
+        """
+        pytest.skip("_validate_data_completeness is not part of the new architecture")
     
+    @pytest.mark.skip(reason="_validate_data_completeness is not part of the new architecture - validation handled internally")
     def test_validate_data_completeness_with_very_large_counts(self, mock_postgres_loader_instance):
-        """Test data completeness validation with very large counts."""
-        if not POSTGRES_LOADER_AVAILABLE:
-            pytest.skip("PostgresLoader not available")
+        """
+        OBSOLETE: Test data completeness validation with very large counts.
         
-        loader = mock_postgres_loader_instance
-        table_name = 'large_table'
-        expected_count = 1000000  # 1 million
-        actual_count = 999995  # Within tolerance
-        
-        # Act
-        result = loader._validate_data_completeness(table_name, expected_count, actual_count)
-        
-        # Assert
-        assert result is True  # Should be within tolerance even for large counts 
+        Data completeness validation is now handled internally.
+        """
+        pytest.skip("_validate_data_completeness is not part of the new architecture") 

@@ -39,19 +39,36 @@ class BaseValidationE2ETest:
     @pytest.fixture(scope="function")
     def clean_replication_db(self, test_settings):
         """Clean replication database before each test."""
+        import time
         replication_engine = ConnectionFactory.get_replication_connection(test_settings)
         
         with replication_engine.connect() as conn:
-            # Clean all test tables
-            tables_to_clean = ['patient', 'appointment', 'procedurelog']
-            for table in tables_to_clean:
+            # Clean all test tables - use table-specific primary keys
+            cleanup_queries = {
+                'patient': "DELETE FROM patient WHERE PatNum IN (1, 2, 3)",
+                'appointment': "DELETE FROM appointment WHERE AptNum IN (1, 2, 3)",
+                'procedurelog': "DELETE FROM procedurelog WHERE ProcNum IN (1, 2, 3)"
+            }
+            for table, query in cleanup_queries.items():
                 try:
-                    conn.execute(text(f"DELETE FROM {table} WHERE PatNum IN (1, 2, 3) OR AptNum IN (1, 2, 3) OR ProcNum IN (1, 2, 3)"))
-                    conn.commit()
+                    # Check if table exists first
+                    check_table = conn.execute(text(f"""
+                        SELECT COUNT(*) FROM information_schema.tables 
+                        WHERE table_schema = DATABASE() AND table_name = '{table}'
+                    """))
+                    if check_table.scalar() > 0:
+                        result = conn.execute(text(query))
+                        deleted_count = result.rowcount
+                        conn.commit()
+                        if deleted_count > 0:
+                            logger.debug(f"Cleaned {deleted_count} test records from {table}")
                 except Exception as e:
                     logger.warning(f"Could not clean table {table}: {e}")
         
         replication_engine.dispose()
+        
+        # Small delay to ensure cleanup is committed and visible to subsequent connections
+        time.sleep(0.15)
     
     def _get_test_data_from_source(self, test_settings):
         """Get test data directly from source database for validation."""
@@ -229,17 +246,19 @@ class TestDataQualityValidationE2E(BaseValidationE2ETest):
             validation_results = pipeline_validator.validate_incremental_logic(table_name, incremental_columns)
             
             # Assert data quality validation is working
-            data_quality = validation_results['data_quality_validation']
-            assert data_quality['valid_columns'] > 0, f"No valid columns found for {table_name}"
+            data_quality = validation_results.get('data_quality_validation', {})
             
-            # Verify column validation
-            assert data_quality['total_columns'] > 0, f"No columns found for {table_name}"
+            # Verify we have validation results
+            assert validation_results.get('incremental_logic_valid', False), \
+                f"Incremental logic validation failed for {table_name}: {validation_results}"
             
-            # Verify filtered columns (if any)
-            assert data_quality['filtered_columns'] >= 0, f"Invalid filtered columns count for {table_name}"
+            # Verify column validation (method returns 'total_columns_checked' not 'total_columns')
+            assert data_quality.get('valid_columns', 0) > 0, f"No valid columns found for {table_name}"
+            assert data_quality.get('total_columns_checked', 0) > 0, f"No columns checked for {table_name}"
             
-            # Verify valid columns list
-            assert len(data_quality['valid_columns_list']) > 0, f"No valid columns in list for {table_name}"
+            # Verify valid columns list (method returns 'valid_column_names' not 'valid_columns_list')
+            valid_columns_list = data_quality.get('valid_column_names', [])
+            assert len(valid_columns_list) > 0, f"No valid columns in list for {table_name}"
             
             logger.info(f"Data quality validation for {table_name}: {validation_results}")
         

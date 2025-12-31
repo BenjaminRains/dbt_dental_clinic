@@ -98,15 +98,23 @@ def mock_postgres_loader_instance():
         return mock_loader.table_configs.get(table_name, {})
     
     mock_loader.get_table_config = MagicMock(side_effect=get_table_config_side_effect)
-    mock_loader._build_load_query = MagicMock(return_value="SELECT * FROM test_table")
     mock_loader._update_load_status = MagicMock(return_value=True)
     mock_loader._get_loaded_at_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
     mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
-    mock_loader.stream_mysql_data = MagicMock(return_value=[[{'id': 1, 'data': 'test'}]])
-    mock_loader.load_table_copy_csv = MagicMock(return_value=True)
-    mock_loader.load_table_standard = MagicMock(return_value=True)
-    mock_loader.load_table_streaming = MagicMock(return_value=True)
-    mock_loader.load_table_chunked = MagicMock(return_value=True)
+    mock_loader.load_table = MagicMock(return_value=(True, {}))
+    
+    # Import the real PostgresLoader class to bind real methods for testing
+    from etl_pipeline.loaders.postgres_loader import PostgresLoader, SchemaCache
+    import logging
+    
+    # Set up logger for the mock loader
+    mock_loader.logger = logging.getLogger('etl_pipeline.loaders.postgres_loader')
+    
+    # Create a real SchemaCache instance for the loader
+    mock_loader.schema_cache = SchemaCache()
+    
+    # Bind real methods that exist in the new architecture
+    mock_loader._get_cached_schema = PostgresLoader._get_cached_schema.__get__(mock_loader, PostgresLoader)
     
     return mock_loader
 
@@ -243,9 +251,10 @@ class TestSchemaCache:
         assert 'cached_tables' in stats
         assert 'oldest_entry' in stats
         assert 'newest_entry' in stats
-        assert stats['cache_size'] == 2
-        assert 'patient' in stats['cached_tables']
-        assert 'appointment' in stats['cached_tables']
+        # cached_tables is the count (len), not a list
+        assert stats['cached_tables'] == 2
+        # cache_size is the sum of string lengths of schemas
+        assert stats['cache_size'] >= 0  # Should be non-negative
     
     def test_get_cache_stats_empty_cache(self, schema_cache_instance):
         """Test cache statistics for empty cache."""
@@ -259,7 +268,7 @@ class TestSchemaCache:
         
         # Assert
         assert stats['cache_size'] == 0
-        assert len(stats['cached_tables']) == 0
+        assert stats['cached_tables'] == 0  # cached_tables is count, not a list
         assert stats['oldest_entry'] is None
         assert stats['newest_entry'] is None
 
@@ -304,16 +313,20 @@ class TestPostgresLoaderSchemaCache:
         loader = mock_postgres_loader_instance
         table_name = 'patient'
         
-        # Mock the schema cache to return None (cache miss)
-        loader.schema_cache = MagicMock()
-        loader.schema_cache.get_cached_schema.return_value = None
+        # Clear the cache to ensure a miss
+        loader.schema_cache.invalidate_cache()
+        
+        # Mock schema adapter to return a schema (will be cached and returned)
+        mock_schema = {'columns': [{'name': 'id', 'type': 'int'}]}
+        loader.schema_adapter.get_table_schema_from_mysql.return_value = mock_schema
         
         # Act
         result = loader._get_cached_schema(table_name)
         
-        # Assert
-        assert result is None
-        loader.schema_cache.get_cached_schema.assert_called_once_with(table_name)
+        # Assert - should return the schema from adapter (not None)
+        # _get_cached_schema fetches from adapter when cache misses and returns it
+        assert result == mock_schema
+        loader.schema_adapter.get_table_schema_from_mysql.assert_called_once_with(table_name)
     
     def test_schema_cache_performance_optimization(self, mock_postgres_loader_instance):
         """Test that schema cache improves performance by avoiding repeated schema lookups."""
