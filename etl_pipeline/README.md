@@ -85,6 +85,7 @@ Pipeline management and configuration tools (outside nightly ETL scope):
 - **`update_pipeline_config.py`**: **Configuration Management** - Settings validation, updates, and version control (13 methods)
 - **`analyze_connection_usage.py`**: **Connection Analysis** - Database connection usage analysis and optimization (15 methods)
 - **`setup_environments.py`**: **Environment Setup** - Automated environment configuration and validation (5 methods)
+- **`parse_etl_logs.py`**: **Log Parser** - Parse and reorganize ETL log files grouped by table with phase separation
 
 ### **Phase 2: Nightly ETL Components**
 
@@ -605,6 +606,7 @@ etl_pipeline/
 
 ### **Debugging Tools**
 - **Detailed Logging**: Comprehensive log output for debugging
+- **Log Parser**: `python scripts/parse_etl_logs.py <log_file>` - Parse logs grouped by table with phase separation
 - **Status Commands**: `python -m etl_pipeline status` for pipeline status
 - **Configuration Validation**: Settings validation and error reporting
 - **Schema Analysis Reports**: Detailed analysis from schema analysis script
@@ -615,15 +617,15 @@ etl_pipeline/
 ## Ecosystem Statistics
 
 ### **Complete Component Overview**
-- **Total Components**: 18 (13 nightly ETL + 5 management scripts)
-- **Total Methods**: 173 (148 nightly ETL + 25 management)
+- **Total Components**: 19 (13 nightly ETL + 6 management scripts)
+- **Total Methods**: 173+ (148 nightly ETL + 25+ management)
 - **Architecture**: Modern, clean, with clear separation of concerns
 - **Performance**: Optimized for both setup efficiency and nightly execution speed
 
 ### **Component Breakdown**
 | Phase | Components | Methods | Purpose |
 |-------|------------|---------|---------|
-| **Management** | 5 scripts | 25 methods | Schema analysis, test setup, config management, connection analysis |
+| **Management** | 6 scripts | 25+ methods | Schema analysis, test setup, config management, connection analysis, log parsing |
 | **Nightly ETL** | 13 components | 148 methods | Data extraction, loading, orchestration, monitoring, exceptions |
 | **Total** | **18** | **173** | **Complete pipeline ecosystem** |
 
