@@ -151,8 +151,8 @@ INSERT INTO dbt_metric_lineage (
  'Total number of scheduled appointments',
  'Daily', TRUE),
 
-('total_unique_patients', 'Total Unique Patients', 'mart_provider_performance', 'total_unique_patients',
- 'Sum of total_unique_patients column from mart_provider_performance',
+('total_unique_patients', 'Total Unique Patients', 'mart_provider_performance', 'daily_unique_patients',
+ 'Sum of daily_unique_patients column from mart_provider_performance',
  'Total number of unique patients with appointments',
  'Daily', TRUE)
 

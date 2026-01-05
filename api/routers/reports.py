@@ -118,16 +118,16 @@ async def get_provider_performance(
     query = """
     SELECT 
         mpp.provider_id,
-        mpp.specialty as provider_specialty,
+        mpp.specialty_description as provider_specialty,
         mpp.production_date as date_actual,
         mpp.total_production as production_amount,
         mpp.total_collections as collection_amount,
         mpp.collection_efficiency as collection_rate,
-        mpp.total_unique_patients as patient_count,
+        mpp.daily_unique_patients as patient_count,
         mpp.total_completed_appointments as appointment_count,
         mpp.total_missed_appointments as no_show_count,
         mpp.daily_no_show_rate as no_show_rate,
-        round(mpp.total_production / nullif(mpp.total_unique_patients, 0), 2) as avg_production_per_patient,
+        round(mpp.total_production / nullif(mpp.daily_unique_patients, 0), 2) as avg_production_per_patient,
         round(mpp.total_production / nullif(mpp.total_completed_appointments, 0), 2) as avg_production_per_appointment
     FROM raw_marts.mart_provider_performance mpp
     WHERE 1=1
@@ -176,15 +176,15 @@ async def get_provider_summary(
     query = """
     SELECT 
         mpp.provider_id,
-        mpp.specialty as provider_specialty,
+        mpp.specialty_description as provider_specialty,
         SUM(mpp.total_production) as total_production,
         SUM(mpp.total_collections) as total_collection,
         AVG(mpp.collection_efficiency) as avg_collection_rate,
-        SUM(mpp.total_unique_patients) as total_patients,
+        SUM(mpp.daily_unique_patients) as total_patients,
         SUM(mpp.total_completed_appointments) as total_appointments,
         SUM(mpp.total_missed_appointments) as total_no_shows,
         AVG(mpp.daily_no_show_rate) as avg_no_show_rate,
-        AVG(round(mpp.total_production / nullif(mpp.total_unique_patients, 0), 2)) as avg_production_per_patient,
+        AVG(round(mpp.total_production / nullif(mpp.daily_unique_patients, 0), 2)) as avg_production_per_patient,
         AVG(round(mpp.total_production / nullif(mpp.total_completed_appointments, 0), 2)) as avg_production_per_appointment
     FROM raw_marts.mart_provider_performance mpp
     WHERE 1=1
@@ -199,7 +199,7 @@ async def get_provider_summary(
         params['end_date'] = end_date
     
     query += """
-    GROUP BY mpp.provider_id, mpp.specialty
+    GROUP BY mpp.provider_id, mpp.specialty_description
     ORDER BY total_production DESC
     """
     
