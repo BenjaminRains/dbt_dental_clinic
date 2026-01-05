@@ -360,24 +360,39 @@ DEFAULT_LOG_CONFIG = {
 def init_default_logger():
     """Initialize default logger configuration."""
     try:
+        # Determine project root: 
+        # etl_pipeline/etl_pipeline/config/logging.py -> etl_pipeline -> etl_pipeline -> project root
+        current_file = Path(__file__).resolve()
+        # Go up: config -> etl_pipeline -> etl_pipeline -> project root
+        project_root = current_file.parent.parent.parent
+        
         # Detect test environment and set appropriate log directory
         etl_environment = os.getenv("ETL_ENVIRONMENT", "production")
         if etl_environment == "test":
-            default_log_dir = "logs/tests"
+            default_log_dir = project_root / "logs" / "tests"
         else:
-            default_log_dir = "logs/etl_pipeline"
+            default_log_dir = project_root / "logs" / "etl_pipeline"
         
-        # Try to get log directory from environment or use default
-        log_dir = os.getenv("ETL_LOG_PATH", default_log_dir)
+        # Allow override via environment variable (relative to project root)
+        env_log_path = os.getenv("ETL_LOG_PATH")
+        if env_log_path:
+            # If absolute path provided, use it; otherwise relative to project root
+            if Path(env_log_path).is_absolute():
+                log_dir = Path(env_log_path)
+            else:
+                log_dir = project_root / env_log_path
+        else:
+            log_dir = default_log_dir
+        
         log_level = os.getenv("ETL_LOG_LEVEL", "INFO")
         
         # Create organized log directory structure
-        os.makedirs(log_dir, exist_ok=True)
+        log_dir.mkdir(parents=True, exist_ok=True)
         
         # Use run-specific logging by default
         log_file_path = setup_run_logging(
             log_level=log_level,
-            log_dir=log_dir,
+            log_dir=str(log_dir),  # Convert Path to string for compatibility
             format_type="detailed"
         )
         
