@@ -730,12 +730,12 @@ class PostgresLoader:
         
         # Initialize schema cache for performance optimization
         self.schema_cache = SchemaCache()
-        logger.info("Initialized schema cache for performance optimization")
+        logger.debug("Initialized schema cache for performance optimization")
         
         # Load table configurations from tables.yml
         self.table_configs = table_configs or {}
         if not self.table_configs:
-            logger.warning("No table configurations provided, will load from settings as needed")
+            logger.debug("No table configurations provided, will load from settings as needed")
         
         # Initialize strategy instances (reusable)
         self._init_strategies()
@@ -1090,9 +1090,7 @@ class PostgresLoader:
                 self._update_load_status(
                     table_name=table_name,
                     rows_loaded=load_result.rows_loaded,
-                    load_status='success' if load_result.success else 'failed',
-                    last_primary_value=None,
-                    primary_column_name=None
+                    status='success' if load_result.success else 'failed'
                 )
             
             # ============================================================
@@ -1273,11 +1271,11 @@ class PostgresLoader:
         # Build change detection WHERE clause using IS DISTINCT FROM
         # Only update if at least one column value has changed
         # IS DISTINCT FROM handles NULL comparisons correctly
-        # NOTE: In ON CONFLICT WHERE clause, unqualified column names refer to the target table
-        # We cannot use schema-qualified table names (e.g., "raw.paysplit") in the WHERE clause
-        # Using just the table name or unqualified column names works correctly
+        # NOTE: In ON CONFLICT DO UPDATE WHERE clause, we need to use a table alias
+        # to qualify column names and avoid ambiguity between table and EXCLUDED columns
+        table_alias = 'target'
         change_detection_conditions = [
-            f'"{col}" IS DISTINCT FROM EXCLUDED."{col}"'
+            f'{table_alias}."{col}" IS DISTINCT FROM EXCLUDED."{col}"'
             for col in column_names
             if col != primary_key
         ]
@@ -1289,7 +1287,7 @@ class PostgresLoader:
             where_clause = f'\n            WHERE ({conditions_str})'
         
         return f"""
-            INSERT INTO {self.target_schema}.{table_name} ({columns})
+            INSERT INTO {self.target_schema}.{table_name} AS {table_alias} ({columns})
             VALUES ({placeholders})
             ON CONFLICT ("{primary_key}") DO UPDATE SET
                 {update_clause}{where_clause}
