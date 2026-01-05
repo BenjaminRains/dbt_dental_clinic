@@ -6,7 +6,7 @@ This module is the ACTIVE core implementation of individual table ETL processing
 serving as the workhorse of the pipeline. It's actively used by both PipelineOrchestrator
 and PriorityProcessor, making it the central component for table-level operations.
 
-STATUS: ACTIVE - Core ETL Implementation (REFACTORED)
+STATUS: ACTIVE - Core ETL Implementation
 ====================================================
 
 CURRENT STATE:
@@ -53,8 +53,8 @@ CONSTRUCTOR REQUIREMENTS:
 - config_reader: ConfigReader instance (optional, will be created if not provided)
 - config_path: Path to configuration file (used for ConfigReader)
 
-This component is the core of the ETL pipeline and has been refactored
-to use the integrated approach with static configuration.
+This component is the core of the ETL pipeline and uses
+the integrated approach with static configuration.
 """
 
 import logging
@@ -280,7 +280,7 @@ class TableProcessor:
                     missing_variables=[],
                     details={"critical": True, "error_type": "validation_failed"}
                 )
-            logger.info(f"Environment validation passed for {self.settings.environment} environment")
+            logger.debug(f"Environment validation passed for {self.settings.environment} environment")
         except EnvironmentError:
             # Re-raise environment errors as-is
             raise
@@ -312,9 +312,7 @@ class TableProcessor:
         Returns:
             bool: True if processing was successful
         """
-        # ✅ MODERN ARCHITECTURE: Validate environment before processing
-        self._validate_environment()
-        
+        # Environment validation is done in __init__(), no need to repeat for each table
         start_time = time.time()
         
         try:
@@ -515,15 +513,8 @@ class TableProcessor:
             strategy_used = metadata.get('strategy_used', 'unknown')
             duration = metadata.get('duration', 0.0)
             
-            # IMPROVED: Use consolidated tracking for consistency
-            tracking_metadata = {
-                'rows_processed': rows_extracted,
-                'last_primary_value': metadata.get('last_primary_value'),
-                'primary_column': metadata.get('primary_column'),
-                'duration': duration,
-                'strategy_used': strategy_used
-            }
-            self._update_pipeline_status(table_name, 'extract', 'success', tracking_metadata)
+            # NOTE: Extract phase tracking is handled by SimpleMySQLReplicator.copy_table()
+            # No need to call _update_pipeline_status() here to avoid duplicate copy status updates
             
             logger.info(f"Successfully extracted {table_name} ({performance_category}) to replication database "
                        f"({rows_extracted} rows, {strategy_used} strategy, {duration:.2f}s)")
@@ -588,9 +579,10 @@ class TableProcessor:
     
     def _update_pipeline_status(self, table_name: str, phase: str, status: str, metadata: Dict):
         """
-        Update both MySQL and PostgreSQL tracking tables consistently.
+        Update tracking tables for pipeline phases.
         
-        IMPROVED: Consolidated tracking to ensure consistency between both tracking systems.
+        NOTE: Extract phase tracking is handled by SimpleMySQLReplicator.copy_table()
+        internally, so this method only handles load phase tracking.
         
         Args:
             table_name: Name of the table
@@ -605,31 +597,34 @@ class TableProcessor:
             duration = metadata.get('duration', 0.0)
             
             if phase == 'extract':
-                # Update MySQL tracking table (etl_copy_status)
-                from ..core.simple_mysql_replicator import SimpleMySQLReplicator
-                replicator = SimpleMySQLReplicator(settings=self.settings)
-                
-                success = replicator._update_copy_status(
-                    table_name=table_name,
-                    rows_copied=rows_processed,
-                    copy_status=status,
-                    last_primary_value=last_primary_value,
-                    primary_column_name=primary_column
-                )
-                
-                if success:
-                    logger.debug(f"Updated MySQL tracking for {table_name} ({phase}): {status}")
-                else:
-                    logger.warning(f"Failed to update MySQL tracking for {table_name}")
+                # Extract phase tracking is handled by SimpleMySQLReplicator.copy_table()
+                # No need to update here to avoid duplicate logging
+                logger.debug(f"Extract phase tracking handled by copy_table() for {table_name}")
+                return
                     
             elif phase == 'load':
                 # Update PostgreSQL tracking table (etl_load_status)
                 from ..loaders.postgres_loader import PostgresLoader
-                # Detect test environment and pass appropriate parameters
-                use_test_environment = self.settings.environment == 'test'
-                loader = PostgresLoader(use_test_environment=use_test_environment, settings=self.settings)
+                from ..core.connections import ConnectionFactory
+                from ..core.postgres_schema import PostgresSchema as PostgresSchemaAdapter
+                from ..config import PostgresSchema as ConfigPostgresSchema
                 
-                success = loader._update_load_status(
+                # Create PostgresLoader with new 4-parameter constructor
+                replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+                analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
+                schema_adapter = PostgresSchemaAdapter(
+                    postgres_schema=ConfigPostgresSchema.RAW,
+                    settings=self.settings,
+                )
+                loader = PostgresLoader(
+                    replication_engine=replication_engine,
+                    analytics_engine=analytics_engine,
+                    settings=self.settings,
+                    schema_adapter=schema_adapter,
+                )
+                
+                # Use _update_load_status_hybrid for tracking with primary column values
+                success = loader._update_load_status_hybrid(
                     table_name=table_name,
                     rows_loaded=rows_processed,
                     load_status=status,
@@ -661,7 +656,7 @@ class TableProcessor:
         ENHANCED: Check if analytics needs updating from replication independently.
         """
         try:
-            # Loader instantiation with optional refactored implementation
+            # Loader instantiation
             loader = self._instantiate_loader()
             
             # ENHANCED: Check if analytics needs updating from replication
@@ -695,7 +690,7 @@ class TableProcessor:
                 logger.info(f"Using chunked loading for large table: {table_name} ({estimated_size_mb}MB)")
                 success, metadata = loader.load_table_chunked(table_name=table_name, force_full=force_full, chunk_size=batch_size)
             else:
-                logger.info(f"Using standard loading for table: {table_name}")
+                logger.debug(f"Using standard loading for table: {table_name}")
                 success, metadata = loader.load_table(table_name=table_name, force_full=force_full)
             
             if not success:
@@ -730,54 +725,46 @@ class TableProcessor:
             return False 
 
     def _instantiate_loader(self):
-        """Create a loader instance, optionally using the refactored implementation.
-
-        Controlled by env var ETL_USE_REFACTORED_LOADER = 'true'|'1'.
-        Falls back to current PostgresLoader otherwise.
+        """Create a loader instance using the PostgresLoader implementation.
+        
+        The loader uses the Strategy Pattern and provides consistent
+        behavior across all loading strategies with improved performance and maintainability.
         """
         try:
-            use_refactor = os.environ.get('ETL_USE_REFACTORED_LOADER', '').lower() in ['1', 'true', 'yes']
-            if use_refactor:
-                # Build dependencies for refactored loader
-                replication_engine = ConnectionFactory.get_replication_connection(self.settings)
-                analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
-                schema_adapter = PostgresSchema(
-                    postgres_schema=ConfigPostgresSchema.RAW,
-                    settings=self.settings,
-                )
-                from ..loaders.postgres_loader_refactor_load_strategies import PostgresLoaderRefactored
-
-                class _RefactoredAdapter:
-                    def __init__(self, impl):
-                        self._impl = impl
-
-                    def _check_analytics_needs_updating(self, table_name: str):
-                        return self._impl._check_analytics_needs_updating(table_name)
-
-                    def _update_load_status(self, table_name: str, rows_loaded: int, load_status: str, last_primary_value=None, primary_column_name=None):
-                        # Delegate to refactored standard updater (preserves 0-row timestamp behavior)
-                        return self._impl._update_load_status(table_name, rows_loaded, load_status)
-
-                    def load_table(self, table_name: str, force_full: bool = False):
-                        return self._impl.load_table(table_name, force_full)
-
-                    def load_table_chunked(self, table_name: str, force_full: bool = False, chunk_size: int = 5000):
-                        # Refactored loader chooses strategy internally; call unified entrypoint
-                        return self._impl.load_table(table_name, force_full)
-
-                return _RefactoredAdapter(PostgresLoaderRefactored(
-                    replication_engine=replication_engine,
-                    analytics_engine=analytics_engine,
-                    settings=self.settings,
-                    schema_adapter=schema_adapter,
-                ))
-
-            # Default: current loader
+            # Build dependencies for PostgresLoader
+            replication_engine = ConnectionFactory.get_replication_connection(self.settings)
+            analytics_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
+            schema_adapter = PostgresSchema(
+                postgres_schema=ConfigPostgresSchema.RAW,
+                settings=self.settings,
+            )
             from ..loaders.postgres_loader import PostgresLoader
-            use_test_environment = self.settings.environment == 'test'
-            return PostgresLoader(use_test_environment=use_test_environment, settings=self.settings)
+
+            # Create adapter to maintain backward compatibility with existing interface
+            class _LoaderAdapter:
+                def __init__(self, impl):
+                    self._impl = impl
+
+                def _check_analytics_needs_updating(self, table_name: str):
+                    return self._impl._check_analytics_needs_updating(table_name)
+
+                def _update_load_status(self, table_name: str, rows_loaded: int, load_status: str, last_primary_value=None, primary_column_name=None):
+                    # Delegate to loader's standard updater (preserves 0-row timestamp behavior)
+                    return self._impl._update_load_status(table_name, rows_loaded, load_status)
+
+                def load_table(self, table_name: str, force_full: bool = False):
+                    return self._impl.load_table(table_name, force_full)
+
+                def load_table_chunked(self, table_name: str, force_full: bool = False, chunk_size: int = 5000):
+                    # Loader chooses strategy internally; call unified entrypoint
+                    return self._impl.load_table(table_name, force_full)
+
+            return _LoaderAdapter(PostgresLoader(
+                replication_engine=replication_engine,
+                analytics_engine=analytics_engine,
+                settings=self.settings,
+                schema_adapter=schema_adapter,
+            ))
         except Exception as e:
-            logger.warning(f"Falling back to current PostgresLoader due to error creating refactored loader: {str(e)}")
-            from ..loaders.postgres_loader import PostgresLoader
-            use_test_environment = self.settings.environment == 'test'
-            return PostgresLoader(use_test_environment=use_test_environment, settings=self.settings)
+            logger.error(f"Error creating PostgresLoader: {str(e)}")
+            raise
