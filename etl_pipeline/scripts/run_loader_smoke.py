@@ -10,14 +10,14 @@ from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.core.postgres_schema import PostgresSchema
 from etl_pipeline.config.logging import get_logger
 
-from etl_pipeline.loaders.postgres_loader_refactor_load_strategies import PostgresLoaderRefactored
+from etl_pipeline.loaders.postgres_loader import PostgresLoader
 
 
 logger = get_logger(__name__)
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Run refactored Postgres loader for a single table")
+    parser = argparse.ArgumentParser(description="Smoke test PostgresLoader for a single table")
     parser.add_argument("table", help="Table name to load from replication to analytics")
     parser.add_argument("--force-full", action="store_true", help="Force full load (truncate then load)")
     args = parser.parse_args()
@@ -40,8 +40,8 @@ def main() -> int:
         settings=settings
     )
 
-    # Instantiate refactored loader
-    loader = PostgresLoaderRefactored(
+    # Instantiate PostgresLoader
+    loader = PostgresLoader(
         replication_engine=replication_engine,
         analytics_engine=analytics_engine,
         settings=settings,
@@ -66,5 +66,3 @@ def main() -> int:
 
 if __name__ == "__main__":
     sys.exit(main())
-
-
