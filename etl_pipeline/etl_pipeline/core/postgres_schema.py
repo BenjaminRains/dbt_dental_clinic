@@ -331,8 +331,13 @@ class PostgresSchema:
         Returns:
             str: Best PostgreSQL type for this column
         """
-        # Create cache key
-        cache_key = f"{table_name}.{column_name}.{mysql_type}"
+        # Normalize mysql_type to handle variations like "tinyint", "tinyint(1)", "tinyint(4)"
+        # Extract base type (e.g., "tinyint" from "tinyint(1)")
+        base_type = mysql_type.split('(')[0].strip().lower()
+        
+        # Create cache key using normalized base type to prevent duplicate analysis
+        # when same column is analyzed with different type formats (e.g., "tinyint" vs "tinyint(1)")
+        cache_key = f"{table_name}.{column_name}.{base_type}"
         
         # Check cache first
         if cache_key in self._type_analysis_cache:
@@ -447,6 +452,9 @@ class PostgresSchema:
         """
         Convert MySQL data type to PostgreSQL data type with intelligent analysis.
         
+        Uses cached column analysis to prevent duplicate database queries when the same
+        column is analyzed during both table creation and row conversion.
+        
         Args:
             mysql_type: MySQL type string
             table_name: Table name for data analysis
@@ -455,9 +463,9 @@ class PostgresSchema:
         Returns:
             str: PostgreSQL type
         """
-        # If we have table and column info, do intelligent analysis
+        # If we have table and column info, do intelligent analysis (using cached version)
         if table_name and column_name:
-            return self._analyze_column_data(table_name, column_name, mysql_type)
+            return self._analyze_column_data_cached(table_name, column_name, mysql_type)
         
         # Otherwise use standard conversion
         return self._convert_mysql_type_standard(mysql_type)
