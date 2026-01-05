@@ -1,27 +1,10 @@
 """
-DEPRECATION NOTICE - REFACTORING IN PROGRESS
-============================================
-
-This file is part of the ETL Pipeline Schema Analysis Refactoring Plan.
-See: docs/refactor_remove_schema_discovery_from_etl.md
-
-PLANNED CHANGES:
-- ✅ UPDATED: Now uses integrated approach with SimpleMySQLReplicator and PostgresLoader
-- ✅ UPDATED: Uses ConfigReader for static configuration instead of SchemaDiscovery
-- ✅ UPDATED: Maintains current parallel/sequential processing logic
-- ✅ UPDATED: Compatible with refactored TableProcessor
-- ✅ UPDATED: Preserves process_table() interface compatibility
-- ✅ UPDATED: Follows connection architecture with proper Settings injection
-
-TIMELINE: Phase 4 of refactoring plan
-STATUS: ✅ REFACTORED - Integrated approach implemented
-
 Priority Processor
 
 Handles table processing based on priority levels with intelligent parallelization.
 
-STATUS: ACTIVE - Core Orchestration Component (REFACTORED)
-=========================================================
+STATUS: ACTIVE - Core Orchestration Component
+==============================================
 
 This module is an active component of the orchestration framework that manages
 table processing based on priority levels. It's actively used by the PipelineOrchestrator
@@ -111,8 +94,8 @@ class PriorityProcessor:
         """
         Initialize the priority processor.
         
-        REFACTORED: Now uses integrated approach with SimpleMySQLReplicator and PostgresLoader.
-        This provides 5-10x faster performance by eliminating dynamic schema discovery.
+        Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
+        via TableProcessor for improved performance.
         
         CONNECTION ARCHITECTURE COMPLIANCE:
         - Uses get_settings() for proper environment detection and validation
@@ -174,22 +157,20 @@ class PriorityProcessor:
                           max_workers: int = 5,
                           force_full: bool = False) -> Dict[str, Dict[str, List[str]]]:
         """
-        Process tables by performance category (UPDATED).
+        Process tables by performance category.
         
-        REFACTORED: Uses performance_category from analyze_opendental_schema.py:
+        Uses performance_category from analyze_opendental_schema.py:
         - Large tables: Process in parallel for speed
         - Medium tables: Process sequentially
         - Small tables: Process sequentially
-        - Tiny tables: Process sequentially (NEW)
+        - Tiny tables: Process sequentially
         
         CONNECTION ARCHITECTURE COMPLIANCE:
         - Uses Settings injection for environment-agnostic operation
         - Each TableProcessor uses unified ConnectionFactory interface
         """
         try:
-            # ✅ CONNECTION ARCHITECTURE: Validate environment before processing
-            self._validate_environment()
-            
+            # NOTE: Environment validation is done in __init__(), no need to repeat here
             # Validate performance categories from schema analyzer
             self._validate_performance_categories()
             
@@ -198,7 +179,7 @@ class PriorityProcessor:
             large_tables = []
             medium_tables = []
             small_tables = []
-            tiny_tables = []  # NEW: Support for tiny tables
+            tiny_tables = []  # Support for tiny tables
             
             for table_name in all_tables:
                 config = self.settings.get_table_config(table_name)
@@ -255,7 +236,7 @@ class PriorityProcessor:
                     'total': len(small_tables)
                 }
             
-            # Process tiny tables sequentially (NEW)
+            # Process tiny tables sequentially
             if tiny_tables:
                 logger.info(f"Processing {len(tiny_tables)} tiny tables sequentially")
                 success_tables, failed_tables = self._process_sequential(
@@ -310,7 +291,7 @@ class PriorityProcessor:
         """
         Process tables in parallel using ThreadPoolExecutor.
         
-        REFACTORED: Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
+        Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
         via TableProcessor for each parallel task.
         
         CONNECTION ARCHITECTURE COMPLIANCE:
@@ -365,7 +346,7 @@ class PriorityProcessor:
         """
         Process tables sequentially.
         
-        REFACTORED: Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
+        Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
         via TableProcessor for each sequential task.
         
         CONNECTION ARCHITECTURE COMPLIANCE:
@@ -405,7 +386,7 @@ class PriorityProcessor:
         """
         Process a single table using a new TableProcessor instance.
         
-        REFACTORED: Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
+        Uses integrated approach with SimpleMySQLReplicator and PostgresLoader
         via TableProcessor for improved performance and reliability.
         
         CONNECTION ARCHITECTURE COMPLIANCE:
