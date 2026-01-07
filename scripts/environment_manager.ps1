@@ -723,7 +723,16 @@ function Start-APIServer {
     if (-not $port) { $port = "8000" }
     if (-not $apiHost) { $apiHost = "0.0.0.0" }
     
+    # Set API_ENVIRONMENT=local for local development with opendental_analytics database
+    if (-not $env:API_ENVIRONMENT) {
+        $env:API_ENVIRONMENT = "local"
+        Write-Host "🔧 Set API_ENVIRONMENT=local (for opendental_analytics database)" -ForegroundColor Cyan
+    } else {
+        Write-Host "🔧 Using API_ENVIRONMENT=$env:API_ENVIRONMENT" -ForegroundColor Cyan
+    }
+    
     Write-Host "🚀 Starting API server on $apiHost`:$port..." -ForegroundColor Blue
+    Write-Host "   Database: opendental_analytics (local development)" -ForegroundColor Gray
     
     # Check if we're already in the api directory or need to change to it
     $currentLocation = Get-Location
