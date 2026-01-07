@@ -258,7 +258,7 @@ const Portfolio: React.FC = () => {
                                 cursor: 'pointer',
                             }}
                             component={Link}
-                            href="https://github.com/BenjaminRains/dbt_dental_clinic/tree/main/dbt_dental_models"
+                            href="https://dbtdentalclinic.com/dbt-docs/"
                             target="_blank"
                             rel="noopener noreferrer"
                         >
