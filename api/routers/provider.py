@@ -43,7 +43,35 @@ async def get_provider_summary_endpoint(
     _api_key: dict = Depends(require_api_key)
 ):
     """Get provider performance summary aggregated from appointment data"""
-    return get_provider_summary(db, start_date, end_date)
+    logger.info(f"Provider summary endpoint called with start_date={start_date}, end_date={end_date}")
+    try:
+        result = get_provider_summary(db, start_date, end_date)
+        logger.info(f"Provider summary endpoint returning {len(result)} providers")
+        return result
+    except Exception as e:
+        import traceback
+        error_msg = str(e)
+        full_traceback = traceback.format_exc()
+        
+        # Log full error details
+        logger.error(f"Error fetching provider summary: {error_msg}")
+        logger.error(f"Full traceback:\n{full_traceback}")
+        
+        # Check error type and provide helpful message
+        error_lower = error_msg.lower()
+        if 'does not exist' in error_lower or 'relation' in error_lower:
+            detail_msg = "Provider data tables not found. Please ensure fact_appointment table exists."
+        elif 'permission denied' in error_lower:
+            detail_msg = "Permission error. Please check access configuration."
+        elif 'column' in error_lower and 'does not exist' in error_lower:
+            detail_msg = "Table schema mismatch. Please rebuild fact_appointment table."
+        elif 'syntax error' in error_lower or 'invalid' in error_lower:
+            detail_msg = f"Query error: {error_msg[:200]}"  # Show first 200 chars of SQL error
+        else:
+            # Include more detail for debugging
+            detail_msg = f"Error fetching provider summary: {error_msg[:300]}"
+        
+        raise HTTPException(status_code=500, detail=detail_msg)
 
 @router.get("/{provider_id}", response_model=Provider)
 async def get_provider_by_id_endpoint(
