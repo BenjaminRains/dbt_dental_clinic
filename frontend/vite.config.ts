@@ -30,16 +30,46 @@ export default defineConfig(({ command, mode }) => {
                 sourcemap: false, // Disabled for production (security & performance)
                 rollupOptions: {
                     output: {
-                        manualChunks: {
-                            // Separate vendor chunks for better caching
-                            'react-vendor': ['react', 'react-dom', 'react-router-dom'],
-                            'mui-vendor': ['@mui/material', '@mui/icons-material', '@emotion/react', '@emotion/styled'],
-                            'chart-vendor': ['recharts'],
-                            'utils-vendor': ['axios', 'zustand']
+                        manualChunks: (id) => {
+                            // Node modules chunking strategy
+                            if (id.includes('node_modules')) {
+                                // React core libraries
+                                if (id.includes('react') || id.includes('react-dom') || id.includes('react-router')) {
+                                    return 'react-vendor';
+                                }
+
+                                // MUI icons are large - separate them
+                                if (id.includes('@mui/icons-material')) {
+                                    return 'mui-icons';
+                                }
+
+                                // MUI core (material + emotion)
+                                if (id.includes('@mui/material') || id.includes('@emotion')) {
+                                    return 'mui-core';
+                                }
+
+                                // Charting library
+                                if (id.includes('recharts')) {
+                                    return 'chart-vendor';
+                                }
+
+                                // Mermaid (large library, already dynamically imported)
+                                if (id.includes('mermaid')) {
+                                    return 'mermaid-vendor';
+                                }
+
+                                // Utility libraries
+                                if (id.includes('axios') || id.includes('zustand')) {
+                                    return 'utils-vendor';
+                                }
+
+                                // All other node_modules go into a separate vendor chunk
+                                return 'vendor';
+                            }
                         }
                     }
                 },
-                chunkSizeWarningLimit: 600 // Increase limit slightly since we're code-splitting
+                chunkSizeWarningLimit: 500 // Keep warning at reasonable level to catch issues
             }
         })
     }
