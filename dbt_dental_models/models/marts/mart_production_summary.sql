@@ -70,7 +70,9 @@ with production_base as (
         
         -- Get actual production from procedures using intermediate
         coalesce(pc.procedure_fee, 0) as actual_production,
-        coalesce(fc.paid_amount, 0) as collected_amount,
+        -- Note: collected_amount from fact_claim only includes insurance payments
+        -- Actual collections will be calculated from payment_metrics (int_payment_split) which includes both patient and insurance payments
+        coalesce(fc.paid_amount, 0) as collected_amount_from_claims,
         
         -- Procedure information
         pc.procedure_code_id,
@@ -119,18 +121,29 @@ date_dimension as (
 ),
 
 -- 4. Payment metrics aggregation using intermediate payment splits
+-- NOTE: Payment type mapping:
+-- Patient payments: 69 (CASH), 70 (CREDIT_CARD), 71 (CHECK), 391, 412, 417, 574, 634
+-- Insurance payments: 261, 303, 465, 469, 466, 464 (typically come through int_insurance_payment_allocated)
+-- For synthetic data, most payments are patient payments (types 69, 70, 71)
 payment_metrics_raw as (
     select 
         ps.payment_date,
         ps.provider_id,
         coalesce(ps.clinic_id, 0) as clinic_id,  -- Handle NULL clinic_id
-        sum(case when ps.payment_type_id = 69 then ps.split_amount else 0 end) as patient_payments,
-        sum(case when ps.payment_type_id = 71 then ps.split_amount else 0 end) as insurance_payments,
+        -- Patient payments: types 69 (CASH), 70 (CREDIT_CARD), 71 (CHECK), and other common patient types
+        -- Exclude insurance types and administrative types (0)
+        sum(case when ps.payment_type_id IN (69, 70, 71, 391, 412, 417, 574, 634) 
+                 and ps.payment_type_id NOT IN (0, 261, 303, 465, 469, 466, 464, 72)  -- Exclude admin, insurance, refunds
+            then ps.split_amount else 0 end) as patient_payments,
+        -- Insurance payments: types 261, 303, 465, 469, 466, 464
+        sum(case when ps.payment_type_id IN (261, 303, 465, 469, 466, 464) 
+            then ps.split_amount else 0 end) as insurance_payments,
         0.0 as adjustments,  -- Adjustments handled separately below
         count(distinct ps.payment_id) as payment_transaction_count
     from {{ ref('int_payment_split') }} ps
     where ps.payment_date is not null
         and ps.provider_id is not null  -- Only include records with valid provider
+        and ps.split_amount > 0  -- Only count positive payments (exclude refunds)
     group by ps.payment_date, ps.provider_id, coalesce(ps.clinic_id, 0)
     
     UNION ALL
@@ -184,7 +197,10 @@ production_aggregated as (
         -- Production Metrics
         sum(pb.scheduled_production_amount) as scheduled_production,
         sum(case when pb.is_completed then pb.actual_production else 0 end) as actual_production,
-        sum(pb.collected_amount) as collections,
+        -- Collections: Will be calculated from payment_metrics join (includes both patient and insurance payments)
+        -- Note: Old approach used fact_claim.paid_amount which only includes insurance payments
+        -- New approach uses int_payment_split via payment_metrics which includes all payment types
+        0.0 as collections,  -- Calculated from payment_metrics join in final CTE
         
         -- Procedure Analysis
         count(distinct pb.procedure_code_id) as total_procedures,
@@ -263,11 +279,14 @@ final as (
         -- Production and Financial Metrics
         pe.scheduled_production,
         pe.actual_production,
-        pe.collections,
+        -- Collections: Sum of patient_payments + insurance_payments from payment_metrics
+        -- This includes ALL payments (both patient direct-pay and insurance), not just fact_claim.paid_amount
+        -- Critical for direct-pay practices and synthetic data where most payments are patient payments
+        coalesce(pm.patient_payments, 0) + coalesce(pm.insurance_payments, 0) as collections,
         round(pe.actual_production::numeric / nullif(pe.scheduled_production::numeric, 0) * 100, 2) as production_efficiency,
-        round(pe.collections::numeric / nullif(pe.actual_production::numeric, 0) * 100, 2) as collection_rate,
+        round((coalesce(pm.patient_payments, 0) + coalesce(pm.insurance_payments, 0))::numeric / nullif(pe.actual_production::numeric, 0) * 100, 2) as collection_rate,
         
-        -- Payment Information
+        -- Payment Information (detailed breakdown)
         coalesce(pm.patient_payments, 0) as patient_payments,
         coalesce(pm.insurance_payments, 0) as insurance_payments,
         coalesce(pm.adjustments, 0) as adjustments,
