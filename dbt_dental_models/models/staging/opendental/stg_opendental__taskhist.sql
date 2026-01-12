@@ -22,9 +22,15 @@ renamed_columns as (
             {'source': 'NULLIF("KeyNum", 0)', 'target': 'key_id'},
             {'source': 'NULLIF("FromNum", 0)', 'target': 'from_id'},
             {'source': 'NULLIF("UserNum", 0)', 'target': 'user_id'},
-            {'source': 'NULLIF("PriorityDefNum", 0)', 'target': 'priority_def_id'},
-            {'source': 'NULLIF("TriageCategory", 0)', 'target': 'triage_category_id'}
+            {'source': 'NULLIF("PriorityDefNum", 0)', 'target': 'priority_def_id'}
         ]) }},
+        
+        -- Triage category (handled separately to avoid macro evaluation issues)
+        -- Note: Source column is "Category" not "TriageCategory"
+        CASE 
+            WHEN "Category"::text ~ '^[0-9]+$' AND "Category" != 0 THEN "Category"::text::integer
+            ELSE NULL
+        END as triage_category_id,
         
         -- Timestamps
         {{ clean_opendental_date('"DateTStamp"') }} as timestamp,
