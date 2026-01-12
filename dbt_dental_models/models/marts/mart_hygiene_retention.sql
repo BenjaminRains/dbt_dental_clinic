@@ -152,7 +152,7 @@ hygiene_enhanced as (
         round(ha.hygiene_cancellations::numeric / nullif(ha.total_hygiene_appointments, 0) * 100, 2) as hygiene_cancellation_rate,
         round(ha.regular_interval_visits::numeric / nullif(ha.total_intervals, 0) * 100, 2) as regular_interval_percentage,
         round(ha.avg_hygiene_interval_days / 30.0, 1) as avg_hygiene_interval_months,
-        round(ha.avg_hygiene_production / nullif(ha.avg_hygiene_duration, 0) * 60, 2) as production_per_hour,
+        round(ha.avg_hygiene_production::numeric / nullif(ha.avg_hygiene_duration, 0) * 60, 2) as production_per_hour,
         
         -- Days since last hygiene
         case when ha.last_hygiene_date is not null 
@@ -317,8 +317,8 @@ final as (
         hc.days_since_last_hygiene,
         
         -- Patient lifetime value (hygiene)
-        round(hc.total_hygiene_production / nullif(
-            (current_date - pt.first_visit_date) / 365.0, 0), 2) as annual_hygiene_value,
+        round((hc.total_hygiene_production / nullif(
+            (current_date - pt.first_visit_date) / 365.0, 0))::numeric, 2) as annual_hygiene_value,
         
         -- Metadata
         {{ standardize_mart_metadata(
