@@ -23,7 +23,16 @@ cp .env.example .env
 3. Update `.env` with your API URL:
 ```
 VITE_API_URL=http://localhost:8000
+VITE_API_KEY=your_api_key_here
 ```
+
+### Environment Variables
+
+- `VITE_API_URL` - Backend API URL (default: `http://localhost:8000`)
+- `VITE_API_KEY` - API authentication key
+- `VITE_IS_DEMO` - Set to `"true"` to enable demo mode (shows synthetic data banner). 
+  - **Portfolio site build**: Set `VITE_IS_DEMO=true` in `.env.production` or build environment
+  - **Local production**: Leave unset or set to `"false"` (banner will not show)
 
 4. Start development server:
 ```bash
@@ -105,9 +114,27 @@ The application can be deployed to any static hosting service:
 - AWS S3 + CloudFront
 - GitHub Pages
 
-Build the application:
+### Building for Production
+
+**For Portfolio/Demo Site (dbtdentalclinic.com):**
 ```bash
+# Set demo mode environment variable
+export VITE_IS_DEMO=true  # Linux/Mac
+# or
+$env:VITE_IS_DEMO="true"  # Windows PowerShell
+
+# Build
+npm run build
+```
+
+**For Local Production (real data):**
+```bash
+# Don't set VITE_IS_DEMO (or set to false)
 npm run build
 ```
 
 The `dist` folder contains the production build.
+
+**Note:** The synthetic data disclaimer banner will automatically show on:
+- Portfolio site (dbtdentalclinic.com) - via hostname detection
+- Any build with `VITE_IS_DEMO=true` - via environment variable
