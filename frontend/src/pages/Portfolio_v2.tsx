@@ -410,6 +410,37 @@ const Portfolio: React.FC = () => {
                         </Grid>
                         <Grid item xs={12} md={4}>
                             <Box sx={{ display: 'flex', alignItems: 'center' }}>
+                                <SmartToy sx={{ fontSize: 28, color: 'primary.main', mr: 1.5 }} />
+                                <Typography
+                                    variant="h6"
+                                    fontWeight="bold"
+                                    component={Link}
+                                    href="https://github.com/BenjaminRains/dbt_dental_clinic/tree/main/etl_pipeline/synthetic_data_generator"
+                                    target="_blank"
+                                    rel="noopener noreferrer"
+                                    sx={{
+                                        textAlign: 'left',
+                                        color: 'inherit',
+                                        textDecoration: 'none',
+                                        '&:hover': {
+                                            textDecoration: 'underline',
+                                            color: 'primary.main',
+                                        },
+                                    }}
+                                >
+                                    Synthetic Data Generator
+                                </Typography>
+                            </Box>
+                        </Grid>
+                        <Grid item xs={12} md={8}>
+                            <Typography variant="body2" color="text.secondary" sx={{ textAlign: 'left' }}>
+                                Python generator that creates realistic synthetic dental practice data for testing
+                                150+ dbt models without real PHI. Generates 5,000 patients, 15,000 appointments,
+                                20,000 procedures with full referential integrity and business logic—100% HIPAA compliant.
+                            </Typography>
+                        </Grid>
+                        <Grid item xs={12} md={4}>
+                            <Box sx={{ display: 'flex', alignItems: 'center' }}>
                                 <Description sx={{ fontSize: 28, color: 'primary.main', mr: 1.5 }} />
                                 <Typography
                                     variant="h6"
