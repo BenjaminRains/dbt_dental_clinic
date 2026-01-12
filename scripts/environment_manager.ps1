@@ -20,7 +20,11 @@ $script:DemoDBPort = $null
 # =============================================================================
 
 function Initialize-DBTEnvironment {
-    param([string]$ProjectPath = (Get-Location))
+    param(
+        [string]$ProjectPath = (Get-Location),
+        [ValidateSet('dev', 'demo')]
+        [string]$Target = 'dev'
+    )
 
     if ($script:IsDBTActive) {
         Write-Host "❌ dbt environment already active. Use 'dbt-deactivate' first." -ForegroundColor Yellow
@@ -38,7 +42,7 @@ function Initialize-DBTEnvironment {
     }
 
     $projectName = Split-Path -Leaf $ProjectPath
-    Write-Host "`n🏗️  Initializing dbt environment: $projectName" -ForegroundColor Cyan
+    Write-Host "`n🏗️  Initializing dbt environment: $projectName (target: $Target)" -ForegroundColor Cyan
 
     # Verify dbt project - check both current directory and dbt_dental_clinic_prod subdirectory
     $dbtProjectPath = $ProjectPath
@@ -109,27 +113,109 @@ function Initialize-DBTEnvironment {
     [Environment]::SetEnvironmentVariable('DBT_PROFILES_DIR', $dbtProjectPath, 'Process')
     Write-Host "🔧 Set DBT_PROFILES_DIR to: $dbtProjectPath" -ForegroundColor Green
 
-    # Load environment variables from both project root and dbt project directory
-    @(".env_production", ".dbt-env") | ForEach-Object {
-        # Try dbt project directory first, then project root
-        $envFile = "$dbtProjectPath\$_"
-        if (-not (Test-Path $envFile)) {
-            $envFile = "$ProjectPath\$_"
+    # Set DBT_TARGET to the chosen target
+    [Environment]::SetEnvironmentVariable('DBT_TARGET', $Target, 'Process')
+    Write-Host "🎯 Set DBT_TARGET to: $Target" -ForegroundColor Green
+
+    # Load environment variables based on target
+    if ($Target -eq 'demo') {
+        # Demo target: Load from deployment_credentials.json
+        Write-Host "📋 Loading demo database credentials from deployment_credentials.json..." -ForegroundColor Yellow
+        $credentialsPath = "$ProjectPath\deployment_credentials.json"
+        if (Test-Path $credentialsPath) {
+            try {
+                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
+                if ($credentials.demo_database.postgresql) {
+                    $demo = $credentials.demo_database
+                    
+                    # Check if we're running locally (need port forwarding) or on EC2 (direct connection)
+                    # For local development, use localhost with forwarded port
+                    # For EC2, use private IP directly
+                    $isLocal = $true  # Assume local unless we detect EC2 environment
+                    $demoHost = "localhost"
+                    $demoPort = "5434"  # Default forwarded port for demo DB
+                    
+                    # Check if we're on EC2 (has AWS metadata service)
+                    try {
+                        $ec2Metadata = Invoke-WebRequest -Uri "http://169.254.169.254/latest/meta-data/instance-id" -TimeoutSec 1 -ErrorAction Stop
+                        if ($ec2Metadata.StatusCode -eq 200) {
+                            $isLocal = $false
+                            $demoHost = $demo.ec2.private_ip
+                            $demoPort = $demo.postgresql.port.ToString()
+                            Write-Host "🌐 Detected EC2 environment - using direct connection" -ForegroundColor Cyan
+                        }
+                    } catch {
+                        # Not on EC2, use port forwarding
+                        Write-Host "💻 Detected local environment - requires port forwarding" -ForegroundColor Cyan
+                        Write-Host "⚠️  IMPORTANT: Start port forwarding first!" -ForegroundColor Yellow
+                        Write-Host "   Run: aws-ssm-init" -ForegroundColor Gray
+                        Write-Host "   Then: ssm-port-forward-demo-db" -ForegroundColor Gray
+                        Write-Host "   (Keep that terminal open in the background)" -ForegroundColor Gray
+                        Write-Host ""
+                    }
+                    
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_HOST', $demoHost, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_PORT', $demoPort, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_DB', $demo.postgresql.database, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_USER', $demo.postgresql.user, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_PASSWORD', $demo.postgresql.password, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_SCHEMA', 'raw', 'Process')
+                    Write-Host "✅ Demo database credentials loaded:" -ForegroundColor Green
+                    Write-Host "   Host: $demoHost" -ForegroundColor Gray
+                    Write-Host "   Port: $demoPort" -ForegroundColor Gray
+                    Write-Host "   Database: $($demo.postgresql.database)" -ForegroundColor Gray
+                    Write-Host "   User: $($demo.postgresql.user)" -ForegroundColor Gray
+                    Write-Host "   Target: demo" -ForegroundColor Gray
+                } else {
+                    Write-Host "⚠️ Demo database credentials not found in deployment_credentials.json" -ForegroundColor Yellow
+                }
+            } catch {
+                Write-Host "❌ Failed to load demo credentials: $_" -ForegroundColor Red
+            }
+        } else {
+            Write-Host "⚠️ deployment_credentials.json not found. Demo credentials not loaded." -ForegroundColor Yellow
         }
-        if (Test-Path $envFile) {
-            Get-Content $envFile | ForEach-Object {
-                if ($_ -match '^([^#][^=]+)=(.*)$') {
-                    [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process')
+    } else {
+        # Dev target: Load from .env_production or existing environment variables
+        Write-Host "📋 Loading dev database credentials from environment files..." -ForegroundColor Yellow
+        @(".env_production", ".dbt-env") | ForEach-Object {
+            # Try dbt project directory first, then project root
+            $envFile = "$dbtProjectPath\$_"
+            if (-not (Test-Path $envFile)) {
+                $envFile = "$ProjectPath\$_"
+            }
+            if (Test-Path $envFile) {
+                Write-Host "   Loading from: $_" -ForegroundColor Gray
+                Get-Content $envFile | ForEach-Object {
+                    if ($_ -match '^([^#][^=]+)=(.*)$') {
+                        [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process')
+                    }
                 }
             }
+        }
+        
+        # Verify required variables are set
+        $requiredVars = @('POSTGRES_ANALYTICS_HOST', 'POSTGRES_ANALYTICS_PORT', 'POSTGRES_ANALYTICS_DB', 'POSTGRES_ANALYTICS_USER', 'POSTGRES_ANALYTICS_PASSWORD')
+        $missingVars = @()
+        foreach ($var in $requiredVars) {
+            if (-not [Environment]::GetEnvironmentVariable($var, 'Process')) {
+                $missingVars += $var
+            }
+        }
+        if ($missingVars.Count -gt 0) {
+            Write-Host "⚠️ Missing required environment variables: $($missingVars -join ', ')" -ForegroundColor Yellow
+            Write-Host "   Set these variables or add them to .env_production" -ForegroundColor Gray
+        } else {
+            Write-Host "✅ Dev database credentials loaded" -ForegroundColor Green
         }
     }
 
     $script:IsDBTActive = $true
     $script:ActiveProject = $projectName
 
-    Write-Host "`n✅ dbt environment ready!" -ForegroundColor Green
+    Write-Host "`n✅ dbt environment ready! (target: $Target)" -ForegroundColor Green
     Write-Host "Commands: dbt, notebook, format, lint, test" -ForegroundColor Cyan
+    Write-Host "To switch targets: run 'dbt-deactivate', then 'dbt-init -Target dev' or 'dbt-init -Target demo'" -ForegroundColor Gray
     Write-Host "To switch to ETL: run 'dbt-deactivate' first, then 'etl-init'`n" -ForegroundColor Gray
 }
 
@@ -143,7 +229,8 @@ function Stop-DBTEnvironment {
 
     # Clean up dbt environment variables
     [Environment]::SetEnvironmentVariable('DBT_PROFILES_DIR', $null, 'Process')
-    Write-Host "🔧 Cleared DBT_PROFILES_DIR" -ForegroundColor Green
+    [Environment]::SetEnvironmentVariable('DBT_TARGET', $null, 'Process')
+    Write-Host "🔧 Cleared DBT_PROFILES_DIR and DBT_TARGET" -ForegroundColor Green
 
     # Clean up pipenv shell environment
     if ($script:VenvPath) {
@@ -551,19 +638,42 @@ function Invoke-DBT {
         Write-Host "❌ dbt environment not active. Run 'dbt-init' first." -ForegroundColor Red
         return
     }
-    Write-Host "🚀 dbt $($args -join ' ')" -ForegroundColor Cyan
+    
+    # Check if target is specified in args, otherwise use DBT_TARGET env var
+    $target = [Environment]::GetEnvironmentVariable('DBT_TARGET', 'Process')
+    $targetSpecified = $false
+    $newArgs = @()
+    foreach ($arg in $args) {
+        if ($arg -match '^--target=(.+)$' -or $arg -eq '--target') {
+            $targetSpecified = $true
+            $newArgs += $arg
+        } elseif ($arg -eq '-t' -or $arg -eq '--target') {
+            $targetSpecified = $true
+            $newArgs += $arg
+        } else {
+            $newArgs += $arg
+        }
+    }
+    
+    # If no target specified in args and DBT_TARGET is set, add it
+    if (-not $targetSpecified -and $target) {
+        $newArgs += '--target', $target
+        Write-Host "🎯 Using target: $target (from dbt-init)" -ForegroundColor Gray
+    }
+    
+    Write-Host "🚀 dbt $($newArgs -join ' ')" -ForegroundColor Cyan
     # FIXED: Use pipenv run to avoid infinite recursion with dbt alias
     # Also change to dbt project directory before running commands
     $currentLocation = Get-Location
     if (Test-Path "dbt_dental_models") {
         Push-Location "dbt_dental_models"
         try {
-            pipenv run dbt $args
+            pipenv run dbt $newArgs
         } finally {
             Pop-Location
         }
     } else {
-        pipenv run dbt $args
+        pipenv run dbt $newArgs
     }
 }
 
@@ -1227,6 +1337,278 @@ function Get-FrontendStatus {
     }
     
     Write-Host ""
+}
+
+function Deploy-ClinicFrontend {
+    <#
+    .SYNOPSIS
+    Deploy clinic production frontend to AWS S3/CloudFront with IP restrictions.
+    
+    .DESCRIPTION
+    Builds and deploys the clinic production frontend to clinic.dbtdentalclinic.com.
+    This frontend connects to the production API (api-clinic.dbtdentalclinic.com) 
+    which accesses opendental_analytics database with real PHI.
+    
+    .EXAMPLE
+    Deploy-ClinicFrontend
+    #>
+    $projectPath = Get-Location
+    $frontendPath = "$projectPath\frontend"
+    
+    if (-not (Test-Path $frontendPath)) {
+        Write-Host "❌ Frontend directory not found: $frontendPath" -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "`n🏥 Deploying Clinic Production Frontend" -ForegroundColor Cyan
+    Write-Host "========================================" -ForegroundColor Cyan
+    
+    # Check AWS credentials
+    try {
+        $awsIdentity = aws sts get-caller-identity 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ AWS credentials not configured. Please run 'aws configure' first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ AWS credentials configured" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ AWS credentials not configured. Please run 'aws configure' first." -ForegroundColor Red
+        return
+    }
+    
+    # Check Node.js and npm
+    try {
+        $nodeVersion = node --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Node.js not found. Please install Node.js first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ Node.js found: $nodeVersion" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Node.js not found. Please install Node.js first." -ForegroundColor Red
+        return
+    }
+    
+    try {
+        $npmVersion = npm --version 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ npm not found. Please install npm first." -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ npm found: $npmVersion" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ npm not found. Please install npm first." -ForegroundColor Red
+        return
+    }
+    
+    # Get configuration from environment variables or deployment_credentials.json
+    $bucketName = $env:CLINIC_FRONTEND_BUCKET_NAME
+    $distributionId = $env:CLINIC_FRONTEND_DIST_ID
+    $domain = $env:CLINIC_FRONTEND_DOMAIN
+    $apiUrl = $env:CLINIC_API_URL
+    $apiKey = $env:CLINIC_API_KEY
+    
+    # Try to load from deployment_credentials.json if env vars not set
+    if (-not $bucketName -or -not $distributionId) {
+        $credentialsPath = "$projectPath\deployment_credentials.json"
+        if (Test-Path $credentialsPath) {
+            try {
+                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
+                if (-not $bucketName) {
+                    $bucketName = $credentials.frontend.s3_buckets.clinic_frontend.bucket_name
+                }
+                if (-not $distributionId) {
+                    $distributionId = $credentials.frontend.cloudfront.clinic_distribution_id
+                }
+                if (-not $domain) {
+                    $domain = "https://clinic.$($credentials.frontend.domain)"
+                }
+                if (-not $apiUrl) {
+                    $apiUrl = "https://api-clinic.$($credentials.frontend.domain)"
+                }
+                Write-Host "✅ Loaded configuration from deployment_credentials.json" -ForegroundColor Green
+            } catch {
+                Write-Host "⚠️ Failed to parse deployment_credentials.json: $_" -ForegroundColor Yellow
+            }
+        }
+    }
+    
+    # Validate configuration
+    if (-not $bucketName) {
+        Write-Host "❌ CLINIC_FRONTEND_BUCKET_NAME not set. Set environment variable or add to deployment_credentials.json." -ForegroundColor Red
+        return
+    }
+    
+    if (-not $distributionId) {
+        Write-Host "❌ CLINIC_FRONTEND_DIST_ID not set. Set environment variable or add to deployment_credentials.json." -ForegroundColor Red
+        return
+    }
+    
+    if (-not $apiUrl) {
+        Write-Host "❌ CLINIC_API_URL not set. Set environment variable or add to deployment_credentials.json." -ForegroundColor Red
+        return
+    }
+    
+    if (-not $apiKey) {
+        Write-Host "❌ CLINIC_API_KEY not set. This is required for clinic API authentication." -ForegroundColor Red
+        Write-Host "   Set environment variable CLINIC_API_KEY with the clinic API key." -ForegroundColor Yellow
+        return
+    }
+    
+    Write-Host "`n📋 Deployment Configuration:" -ForegroundColor Cyan
+    Write-Host "  Bucket: $bucketName" -ForegroundColor White
+    Write-Host "  CloudFront Distribution: $distributionId" -ForegroundColor White
+    Write-Host "  API URL: $apiUrl" -ForegroundColor White
+    if ($domain) {
+        Write-Host "  Domain: $domain" -ForegroundColor White
+    }
+    
+    # Validate S3 bucket exists
+    Write-Host "`n🔍 Validating S3 bucket..." -ForegroundColor Yellow
+    try {
+        $bucketCheck = aws s3api head-bucket --bucket $bucketName 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ S3 bucket '$bucketName' not found or not accessible" -ForegroundColor Red
+            Write-Host "   Create the bucket first: aws s3 mb s3://$bucketName --region us-east-1" -ForegroundColor Yellow
+            return
+        }
+        Write-Host "✅ S3 bucket validated" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to validate S3 bucket: $_" -ForegroundColor Red
+        return
+    }
+    
+    # Validate CloudFront distribution
+    Write-Host "🔍 Validating CloudFront distribution..." -ForegroundColor Yellow
+    try {
+        $distCheck = aws cloudfront get-distribution --id $distributionId 2>&1
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ CloudFront distribution '$distributionId' not found or not accessible" -ForegroundColor Red
+            return
+        }
+        Write-Host "✅ CloudFront distribution validated" -ForegroundColor Green
+    } catch {
+        Write-Host "❌ Failed to validate CloudFront distribution: $_" -ForegroundColor Red
+        return
+    }
+    
+    Write-Host "✅ CLINIC_API_KEY loaded for clinic build" -ForegroundColor Green
+    
+    # Build frontend
+    Push-Location $frontendPath
+    try {
+        Write-Host "`n📦 Building clinic frontend with production configuration..." -ForegroundColor Yellow
+        Write-Host "   API URL: $apiUrl" -ForegroundColor Gray
+        Write-Host "   Database: opendental_analytics (production - real PHI)" -ForegroundColor Gray
+        Write-Host "   Access: IP-restricted (clinic only)" -ForegroundColor Gray
+        
+        # Install dependencies if needed
+        if (-not (Test-Path "node_modules")) {
+            Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
+            npm install
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to install dependencies" -ForegroundColor Red
+                Pop-Location
+                return
+            }
+        }
+        
+        # Set production environment variables for Vite build
+        $env:VITE_API_URL = $apiUrl
+        $env:VITE_API_KEY = $apiKey
+        $env:VITE_IS_DEMO = "false"
+        
+        Write-Host "🔧 Building with clinic environment variables..." -ForegroundColor Cyan
+        
+        # Build
+        npm run build
+        if ($LASTEXITCODE -ne 0) {
+            Write-Host "❌ Frontend build failed" -ForegroundColor Red
+            Pop-Location
+            return
+        }
+        
+        Write-Host "✅ Frontend build completed" -ForegroundColor Green
+        
+        # Upload to S3
+        Write-Host "`n☁️ Uploading to S3..." -ForegroundColor Yellow
+        
+        # Verify we're in the frontend directory and construct absolute path to dist
+        $currentDir = (Get-Location).Path
+        $distPath = Join-Path $currentDir "dist"
+        
+        if (-not (Test-Path $distPath)) {
+            Write-Host "❌ Build directory 'dist' not found at: $distPath" -ForegroundColor Red
+            Write-Host "  Current directory contents:" -ForegroundColor Yellow
+            Get-ChildItem | Select-Object Name, PSIsContainer | Format-Table
+            Pop-Location
+            return
+        }
+        
+        if (-not (Test-Path $distPath -PathType Container)) {
+            Write-Host "❌ Path exists but is not a directory: $distPath" -ForegroundColor Red
+            Pop-Location
+            return
+        }
+        
+        # Change to dist directory using absolute path
+        Push-Location $distPath
+        try {
+            $distContents = Get-ChildItem
+            if ($distContents.Count -eq 0) {
+                Write-Host "⚠️ Warning: dist directory is empty - nothing to upload" -ForegroundColor Yellow
+                Pop-Location
+                Pop-Location
+                return
+            }
+            
+            # Upload static assets with long cache (immutable)
+            Write-Host "  Uploading static assets..." -ForegroundColor Gray
+            $syncOutput = & aws s3 sync . "s3://$bucketName/" --delete --cache-control "public, max-age=31536000, immutable" --exclude "*.html" --exclude "*.json" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to upload static assets" -ForegroundColor Red
+                Write-Host "  Error: $syncOutput" -ForegroundColor Red
+                Pop-Location
+                Pop-Location
+                return
+            }
+            
+            # Upload HTML and JSON files with no-cache
+            Write-Host "  Uploading HTML and JSON files..." -ForegroundColor Gray
+            $syncOutput = & aws s3 sync . "s3://$bucketName/" --cache-control "no-cache, no-store, must-revalidate" --exclude "*" --include "*.html" --include "*.json" 2>&1
+            if ($LASTEXITCODE -ne 0) {
+                Write-Host "❌ Failed to upload HTML files" -ForegroundColor Red
+                Write-Host "  Error: $syncOutput" -ForegroundColor Red
+                Pop-Location
+                Pop-Location
+                return
+            }
+            
+            Write-Host "✅ Files uploaded to S3" -ForegroundColor Green
+        } finally {
+            Pop-Location
+        }
+        
+        # Invalidate CloudFront cache
+        Write-Host "`n🔄 Invalidating CloudFront cache..." -ForegroundColor Yellow
+        $invalidation = aws cloudfront create-invalidation --distribution-id $distributionId --paths "/*" 2>&1 | ConvertFrom-Json
+        if ($LASTEXITCODE -eq 0) {
+            Write-Host "✅ CloudFront cache invalidation created: $($invalidation.Invalidation.Id)" -ForegroundColor Green
+        } else {
+            Write-Host "⚠️ Failed to create CloudFront invalidation (deployment may still be successful)" -ForegroundColor Yellow
+        }
+        
+        Write-Host "`n✅ Clinic frontend deployment completed!" -ForegroundColor Green
+        Write-Host "⚠️  IMPORTANT: This frontend is IP-restricted. Verify WAF rules are configured correctly." -ForegroundColor Yellow
+        if ($domain) {
+            Write-Host "🌐 Clinic frontend available at: $domain (clinic IPs only)" -ForegroundColor Cyan
+        }
+        
+    } catch {
+        Write-Host "❌ Deployment failed: $_" -ForegroundColor Red
+    } finally {
+        Pop-Location
+    }
 }
 
 function Deploy-DBTDocs {
@@ -1994,6 +2376,7 @@ Set-Alias -Name api-env-status -Value Get-APIEnvironmentStatus -Scope Global
 Set-Alias -Name frontend-dev -Value Start-FrontendDev -Scope Global
 Set-Alias -Name frontend-deploy -Value Deploy-Frontend -Scope Global
 Set-Alias -Name frontend-status -Value Get-FrontendStatus -Scope Global
+Set-Alias -Name clinic-frontend-deploy -Value Deploy-ClinicFrontend -Scope Global
 
 # dbt Docs Commands
 Set-Alias -Name dbt-docs-deploy -Value Deploy-DBTDocs -Scope Global
@@ -2018,12 +2401,14 @@ Write-Host "║            Dental Clinic ETL & dbt Pipeline             ║" -Fo
 Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkBlue
 
 Write-Host "`n🚀 Quick Start:" -ForegroundColor White
-Write-Host "  dbt-init       - Initialize dbt environment" -ForegroundColor Cyan
+Write-Host "  dbt-init              - Initialize dbt environment (dev target - local production)" -ForegroundColor Cyan
+Write-Host "  dbt-init -Target demo - Initialize dbt environment (demo target - demo EC2 database)" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
 Write-Host "  api-init       - Initialize API environment (interactive)" -ForegroundColor Blue
 Write-Host "  aws-ssm-init   - Initialize AWS SSM environment (loads credentials, checks plugin)" -ForegroundColor DarkCyan
-Write-Host "  frontend-dev   - Start frontend development server" -ForegroundColor Green
-Write-Host "  frontend-deploy - Deploy frontend to AWS S3/CloudFront" -ForegroundColor Green
+Write-Host "  frontend-dev   - Start frontend dev server (localhost:3000 → localhost:8000 API)" -ForegroundColor Green
+Write-Host "  frontend-deploy - Deploy demo frontend to AWS S3/CloudFront (public)" -ForegroundColor Green
+Write-Host "  clinic-frontend-deploy - Deploy clinic production frontend (IP-restricted)" -ForegroundColor Green
 Write-Host "  dbt-docs-deploy - Deploy dbt documentation to AWS S3/CloudFront" -ForegroundColor Cyan
 Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
@@ -2039,7 +2424,7 @@ if (Test-Path "$cwd\api\main.py") {
     Write-Host "🌐 API server detected (main.py in api/). Run 'api-init' to start (creates venv & installs deps)." -ForegroundColor Blue
 }
 if (Test-Path "$cwd\frontend\package.json") {
-    Write-Host "🎨 Frontend detected (package.json in frontend/). Run 'frontend-dev' to start dev server or 'frontend-deploy' to deploy." -ForegroundColor Green
+    Write-Host "🎨 Frontend detected (package.json in frontend/). Run 'frontend-dev' for localhost development (localhost:3000) or 'frontend-deploy' to deploy to AWS." -ForegroundColor Green
 }
 
 Write-Host ""
