@@ -33,6 +33,77 @@ exposures:
       - **Collection Rate**: Average collection rate across all providers
       - **Revenue Trend Chart**: 30-day revenue lost vs recovery potential trending
       - **Quick Statistics**: Total production, collection, and recovery rate summaries
+      - **Top 10 Patient Balances**: Highest outstanding patient balances with aging breakdown
+      
+      ## Quick Statistics Definitions:
+      
+      ### Total Production:
+      **Definition**: Total billed revenue for services provided (completed procedures) within the selected date range.
+      
+      **Calculation**: 
+      - **Source**: `mart_provider_performance.total_production`
+      - **Formula**: Sum of all `fact_procedure.actual_fee` values for completed procedures
+      - **Includes**: All procedure types (hygiene, restorative, surgical, etc.)
+      - **Includes**: Both insurance-billed and direct-pay procedures
+      - **Represents**: Total billed revenue for services provided
+      - **Time Period**: Filtered by selected date range (default: current week)
+      
+      **Business Context**: Production represents the total value of services delivered to patients. This is the primary revenue metric for dental practices.
+      
+      ---
+      
+      ### Total Collection:
+      **Definition**: Total cash received from all payment sources within the selected date range.
+      
+      **Calculation**:
+      - **Source**: `mart_provider_performance.total_collections`
+      - **Formula**: Sum of all `fact_payment.payment_amount` where `payment_direction = 'Income'`
+      - **Includes**: All payments received (patient direct payments and insurance carrier payments)
+      - **Excludes**: Refunds (payments where `payment_direction = 'Outcome'`)
+      - **Excludes**: Adjustments and write-offs (handled separately)
+      - **Represents**: Total cash received from all sources
+      - **Time Period**: Filtered by selected date range (default: current week)
+      
+      **Business Context**: Collections represent actual cash flow into the practice. The ratio of collections to production indicates collection efficiency.
+      
+      ---
+      
+      ### Recovery Rate:
+      **Definition**: Percentage of lost revenue that is estimated to be recoverable through follow-up actions.
+      
+      **Calculation**:
+      - **Formula**: `(Total Recovery Potential / Total Revenue Lost) × 100`
+      - **Source**: `mart_revenue_lost.total_recovery_potential` and `mart_revenue_lost.total_revenue_lost`
+      - **Recovery Potential**: Estimated recoverable amount based on opportunity type and recovery potential category
+        - High Recovery Potential: 80% of lost revenue
+        - Medium Recovery Potential: 50% of lost revenue
+        - Low Recovery Potential: 20% of lost revenue
+        - None Recovery Potential: 0% of lost revenue
+      - **Time Period**: Filtered by selected date range (default: current week)
+      
+      **Interpretation**:
+      - Higher recovery rate indicates more opportunities for revenue recovery
+      - Recovery rate helps prioritize recovery efforts and set realistic recovery goals
+      
+      **Business Context**: Recovery rate helps executives understand the potential for recovering lost revenue through systematic follow-up activities.
+      
+      ---
+      
+      ## Date Range Filtering:
+      - **Default View**: Current week (Sunday to today)
+      - **Quick Select Options**: This Week, Last 30 Days, Last 90 Days, Last Year
+      - **Custom Date Range**: Start and end date pickers for flexible analysis
+      - **Applies To**: All metrics displayed on the dashboard (Revenue Lost, Recovery Potential, Production, Collection, etc.)
+      
+      ## "What Happened This Week?" Section:
+      - **Purpose**: Primary focus area providing immediate visibility into weekly performance
+      - **Metrics Displayed**:
+        - Revenue Lost: Total revenue from missed opportunities this week
+        - Recovery Potential: Estimated recoverable revenue this week
+        - Recovery Rate: Percentage of lost revenue that can be recovered
+        - Active Providers: Count of providers with activity this week
+      - **Date Range Display**: Shows the selected date range prominently
+      - **Visual Design**: Highlighted card with primary color scheme for emphasis
       
       ## Data Sources:
       - `/reports/dashboard/kpis` - Aggregated KPIs from revenue and provider marts
@@ -100,11 +171,447 @@ exposures:
       - Filterable by: Provider, Opportunity Type, Minimum Priority Score
       - Supported Types: Missed Appointment, Claim Rejection, Treatment Plan Delay, Write Off
       
+      ## Opportunity Type Definitions:
+      
+      ### Missed Appointment:
+      **Definition**: Appointments that were scheduled but not completed, resulting in lost production and provider time.
+      
+      **Subtypes**:
+      - **No Show**: Patient did not arrive for scheduled appointment (`is_no_show = true`)
+      - **Cancellation**: Appointment was broken/cancelled before the scheduled time (`is_broken = true`)
+      - **Other**: Other types of missed appointments
+      
+      **Lost Revenue Calculation**:
+      - **Source**: `fact_appointment.scheduled_production_amount`
+      - Represents: Total production value that was scheduled for the appointment but not completed
+      - Includes: Sum of all procedure fees (`fact_procedure.actual_fee`) that were scheduled for the appointment
+      - Time Period: Last 1 year only
+      - Filter: Only includes appointments where `scheduled_production_amount > 0`
+      
+      **Recovery Potential**:
+      - **High**: No-shows (patient may still need treatment, easy to reschedule)
+      - **Medium**: Cancellations with <24 hour notice (short-term opportunity)
+      - **Low**: Cancellations with >24 hour notice (may have found alternative)
+      - **None**: Other types
+      
+      **Recovery Priority Score**:
+      - No-shows: 80 points (highest priority)
+      - Recent cancellations (<24 hours): 60 points
+      - Other cancellations: 40 points
+      
+      **Recovery Timeline**:
+      - No-shows: Immediate (within 24-48 hours)
+      - Cancellations: Short-term (within 1 week)
+      - Other: Medium-term (within 2-4 weeks)
+      
+      **Recommended Actions**:
+      - No Show: Call patient to reschedule, send follow-up reminder, update contact preferences
+      - Cancellation: Reschedule appointment, review cancellation policy, send confirmation reminder
+      
+      **Business Context**: Missed appointments represent direct revenue loss and provider inefficiency. Recovery focuses on rescheduling patients who still need treatment.
+      
+      ---
+      
+      ### Claim Rejection:
+      **Definition**: Insurance claims that were denied, rejected, or not fully paid, resulting in lost revenue from insurance reimbursements.
+      
+      **Subtypes**:
+      - **Insurance Denial**: Claim denied by insurance carrier (`claim_status = 'Denied'`)
+      - **Claim Rejection**: Claim rejected due to processing errors or format issues (`claim_status = 'Rejected'`)
+      - **Processing Issue**: Claims in pending status or other processing problems (`claim_status = 'Pending'`)
+      
+      **Lost Revenue Calculation**:
+      - **Formula**: `billed_amount - paid_amount` (unpaid portion of claim)
+      - **Source**: `fact_claim` table
+      - Represents: Amount billed to insurance minus amount actually paid
+      - Includes: All claim types (primary, secondary, tertiary)
+      - Time Period: Last 1 year only
+      - Filter: Only includes claims where `billed_amount > paid_amount` and `billed_amount > 0`
+      - Filter: Only includes claims with status: 'Denied', 'Rejected', or 'Pending'
+      
+      **Recovery Potential**:
+      - **High**: 
+        - Insurance denials with patient responsibility > 0 (can bill patient)
+        - Claim rejections (can be corrected and resubmitted)
+      - **Medium**: Processing issues that may resolve with follow-up
+      
+      **Recovery Priority Score**:
+      - Denials with patient responsibility: 85 points (can collect from patient)
+      - Claim rejections: 75 points (can resubmit)
+      - Processing issues: 60 points (needs investigation)
+      
+      **Recovery Timeline**:
+      - Claim rejections: Immediate (resubmit within 1-2 weeks)
+      - Insurance denials: Short-term (verify patient responsibility, bill patient within 30 days)
+      - Processing issues: Medium-term (follow up with insurance within 2-4 weeks)
+      
+      **Recommended Actions**:
+      - Review claim details for errors or missing information
+      - Resubmit claim with corrections
+      - Contact insurance company for clarification
+      - Bill patient directly if denial includes patient responsibility
+      
+      **Business Context**: Claim rejections represent insurance revenue leakage. Recovery requires identifying and correcting submission errors, appealing denials, or collecting patient-responsible portions.
+      
+      ---
+      
+      ### Treatment Plan Delay:
+      **Definition**: Treatment plans that were created but not started within expected timeframe, representing delayed or lost revenue opportunities.
+      
+      **Subtypes** (from `timeline_status` field in `int_treatment_plan`):
+      - **Very Delayed**: Treatment plan >180 days old with no activity
+      - **Delayed Start**: Treatment plan 90-180 days old with no activity
+      - **In Progress**: Treatment plan with some activity but not completed
+      - **Current**: Treatment plan within normal timeframe
+      
+      **Lost Revenue Calculation**:
+      - **Source**: `int_treatment_plan.remaining_amount`
+      - Represents: Total value of procedures in treatment plan that have not yet been completed or started
+      - Includes: Sum of all planned procedure fees minus completed procedures
+      - Time Period: Treatment plans from last 2 years
+      - Filter: Only includes active treatment plans (`treatment_plan_status = 0`)
+      - Filter: Only includes plans with >90 days since last activity (`days_since_last_activity > 90`)
+      
+      **Recovery Potential**:
+      - **High**: Recent treatment plans (90-180 days) with high-value procedures
+      - **Medium**: Delayed treatment plans (180+ days) that may still be viable
+      - **Low**: Very old treatment plans (>2 years) with low likelihood of acceptance
+      
+      **Recovery Priority Score**:
+      - Plans >180 days old: 75 points (urgent - patient may seek treatment elsewhere)
+      - Plans 90-180 days old: 60 points (moderate priority)
+      - Plans <90 days: 45 points (lower priority)
+      
+      **Recovery Timeline**:
+      - Very delayed (>180 days): Long-term (6+ months, may require re-consultation)
+      - Delayed (90-180 days): Medium-term (3-6 months, active follow-up needed)
+      - Recent delays (<90 days): Short-term (1-3 months, standard follow-up)
+      
+      **Recommended Actions**:
+      - Contact patient about treatment plan status
+      - Schedule consultation or re-evaluation appointment
+      - Review treatment options and patient concerns
+      - Update treatment plan with current pricing and procedures
+      
+      **Business Context**: Treatment plan delays represent deferred or potentially lost production. Recovery requires patient re-engagement and addressing barriers to treatment acceptance (financial, time, fear).
+      
+      ---
+      
+      ### Write Off:
+      **Definition**: Financial adjustments (credits or charges) that reduce practice revenue, including contractual write-offs, discounts, and adjustments.
+      
+      **Subtypes**:
+      - **Credit Adjustment**: Positive adjustment that credits the patient account (`adjustment_direction = 'positive'`)
+      - **Charge Adjustment**: Negative adjustment that charges additional amount (`adjustment_direction = 'negative'`)
+      - **Zero Adjustment**: Adjustment with zero amount (excluded from opportunities)
+      
+      **Lost Revenue Calculation**:
+      - **Formula**: `abs(adjustment_amount)` (absolute value of adjustment)
+      - **Source**: `int_adjustments` table
+      - Represents: Total dollar amount of adjustments applied to patient accounts
+      - Includes: All adjustment types (contractual write-offs, discounts, corrections, etc.)
+      - Time Period: Last 1 year only
+      - Filter: Only includes adjustments where `adjustment_amount > 0`
+      - Filter: Only includes adjustments with direction: 'positive' (credits) or 'negative' (charges)
+      
+      **Recovery Potential**:
+      - **Medium**: Credit adjustments (may be recoverable if due to error or if patient can pay)
+      - **Low**: Charge adjustments (less likely to be recoverable, may represent corrections)
+      - **None**: Zero adjustments or non-recoverable write-offs
+      
+      **Recovery Priority Score**:
+      - Credit adjustments: 50 points (may represent billing errors)
+      - Charge adjustments: 30 points (less likely recoverable)
+      
+      **Recovery Timeline**:
+      - Credit adjustments: Medium-term (review within 30-90 days)
+      - Charge adjustments: Long-term (review for policy improvements)
+      
+      **Recommended Actions**:
+      - Review adjustment reason and documentation
+      - Verify patient eligibility and insurance coverage
+      - Consider payment plan options for large adjustments
+      - Evaluate if adjustment represents billing error (may be reversible)
+      - Assess if adjustment is due to policy issue requiring process improvement
+      
+      **Business Context**: Write-offs represent revenue that has been formally removed from accounts receivable. Recovery is limited but review can identify billing errors, contractual issues, or process improvements to prevent future write-offs. Most write-offs are non-recoverable (contractual insurance adjustments), but some may represent correctable errors.
+      
+      ---
+      
+      ### Recovery Potential Categories:
+      **High Recovery Potential**:
+      - Recovery Rate: 80% of lost revenue potentially recoverable
+      - Examples: No-shows (can reschedule), claim rejections (can resubmit), recent treatment plans
+      - Action Required: Immediate follow-up within 24-48 hours
+      
+      **Medium Recovery Potential**:
+      - Recovery Rate: 50% of lost revenue potentially recoverable
+      - Examples: Cancellations with short notice, delayed treatment plans (90-180 days), credit adjustments
+      - Action Required: Follow-up within 1-2 weeks
+      
+      **Low Recovery Potential**:
+      - Recovery Rate: 20% of lost revenue potentially recoverable
+      - Examples: Cancellations with advance notice, very delayed treatment plans (180+ days), charge adjustments
+      - Action Required: Standard follow-up or process review
+      
+      **None Recovery Potential**:
+      - Recovery Rate: 0% (non-recoverable)
+      - Examples: Zero adjustments, expired opportunities, non-reversible write-offs
+      - Action Required: None or policy review only
+      
+      ---
+      
+      ### Recovery Priority Score Calculation:
+      **Algorithm**: Multi-factor scoring system (0-100 scale) that combines:
+      1. **Revenue Impact** (0-40 points): Based on lost revenue amount
+         - >$1000: 40 points
+         - $500-1000: 30 points
+         - $200-500: 20 points
+         - $100-200: 10 points
+         - <$100: 5 points
+      2. **Recovery Potential** (0-30 points): Based on recovery likelihood
+         - High: 30 points
+         - Medium: 20 points
+         - Low: 10 points
+         - None: 0 points
+      3. **Opportunity Type** (0-20 points): Based on type-specific recovery ease
+         - Missed Appointment: 20 points
+         - Claim Rejection: 15 points
+         - Treatment Plan Delay: 10 points
+         - Write Off: 5 points
+      4. **Recency** (0-10 points): Based on opportunity age
+         - Recent (≤30 days): 10 points
+         - Moderate (31-90 days): 5 points
+         - Old (>90 days): 0 points
+      
+      **Score Interpretation**:
+      - **76-100 (Critical)**: Highest priority, immediate action required
+      - **51-75 (High)**: High priority, aggressive follow-up needed
+      - **26-50 (Medium)**: Moderate priority, routine collection activities
+      - **0-25 (Low)**: Low priority, standard follow-up or monitoring
+      
       ### Recovery Plan Table:
       - Actionable recovery recommendations per opportunity
       - Provider assignments and patient identification
       - Recommended Actions as filterable chips (Reschedule, Contact Patient, Resubmit Claim, etc.)
       - Priority-sorted for workflow optimization
+      
+      ## Opportunity Type Definitions:
+      
+      ### Missed Appointment:
+      **Definition**: Revenue lost due to appointments where patients did not show up (no-shows) or cancelled appointments (broken appointments).
+      
+      **Subtypes**:
+      - **No Show**: Patient did not arrive for scheduled appointment (`is_no_show = true`)
+      - **Cancellation**: Patient cancelled the appointment (`is_broken = true`)
+      - **Other**: Other forms of missed appointments
+      
+      **Lost Revenue Calculation**:
+      - **Source**: `fact_appointment.scheduled_production_amount`
+      - **Calculation**: Sum of procedure fees (`procedure_fee`) for procedures linked to the appointment
+      - **Time Window**: Last 12 months (`appointment_date >= current_date - interval '1 year'`)
+      - **Filter**: Only includes appointments with `scheduled_production_amount > 0`
+      
+      **Recovery Potential**:
+      - **High**: No-shows (patients typically still need treatment, high reschedule probability)
+      - **Medium**: Cancellations with <24 hours notice (may indicate scheduling conflicts)
+      - **Low**: Cancellations with >24 hours notice (lower reschedule urgency)
+      
+      **Recovery Priority Score**:
+      - No-shows: 80 points (highest priority)
+      - Cancellations <24 hours: 60 points (medium priority)
+      - Other cancellations: 40 points (lower priority)
+      
+      **Recovery Timeline**:
+      - No-shows: **Immediate** (contact within 24-48 hours)
+      - Recent cancellations: **Short-term** (reschedule within 1 week)
+      - Older cancellations: **Medium-term** (follow-up within 1 month)
+      
+      **Recommended Actions**:
+      - No Show: Call patient to reschedule, Send follow-up reminder, Update patient contact preferences
+      - Cancellation: Reschedule appointment, Review cancellation policy, Send confirmation reminder
+      
+      **Data Source**: `fact_appointment` table joined with `int_procedure_complete` for procedure fees
+      
+      **Business Context**: Most common type of revenue loss in dental practices; proactive follow-up can recover 40-60% of no-show revenue
+      
+      ---
+      
+      ### Claim Rejection:
+      **Definition**: Revenue lost due to insurance claims that were denied, rejected, or stuck in pending status, resulting in unpaid or underpaid claims.
+      
+      **Subtypes**:
+      - **Insurance Denial**: Claim denied by insurance carrier (`claim_status = 'Denied'`)
+      - **Claim Rejection**: Claim rejected due to processing errors (`claim_status = 'Rejected'`)
+      - **Processing Issue**: Claim stuck in pending status or other processing problems (`claim_status = 'Pending'`)
+      
+      **Lost Revenue Calculation**:
+      - **Source**: `fact_claim` table
+      - **Calculation**: `billed_amount - paid_amount` (difference between what was billed and what was paid)
+      - **Time Window**: Last 12 months (`claim_date >= current_date - interval '1 year'`)
+      - **Filter**: Only includes claims where `billed_amount > paid_amount` and `billed_amount > 0`
+      - **Status Filter**: Claims with status in ('Denied', 'Rejected', 'Pending')
+      
+      **Recovery Potential**:
+      - **High**: 
+        - Denied claims with `patient_responsibility > 0` (can bill patient directly)
+        - Rejected claims (often fixable with resubmission)
+      - **Medium**: Pending claims or processing issues (may resolve automatically)
+      
+      **Recovery Priority Score**:
+      - Denied/Rejected with patient responsibility: 75-85 points (high priority)
+      - Rejected claims: 70-80 points (high priority - can resubmit)
+      - Pending/Processing issues: 50-60 points (medium priority)
+      
+      **Recovery Timeline**:
+      - Denied claims with patient responsibility: **Immediate** (bill patient, collect payment)
+      - Rejected claims: **Short-term** (resubmit within 7-14 days)
+      - Pending claims: **Medium-term** (follow up with insurance, 30-60 days)
+      
+      **Recommended Actions**:
+      - Review claim details for errors
+      - Resubmit with corrections if applicable
+      - Contact insurance company for clarification
+      - Bill patient directly if patient responsibility exists
+      
+      **Data Source**: `fact_claim` table
+      
+      **Business Context**: Insurance claims represent 50-70% of dental practice revenue; prompt resolution of rejections is critical for cash flow
+      
+      ---
+      
+      ### Treatment Plan Delay:
+      **Definition**: Revenue lost due to treatment plans that were approved but not started within a reasonable timeframe, indicating delayed patient acceptance or implementation.
+      
+      **Subtypes**:
+      - **Very Delayed**: Treatment plan delayed >180 days since last activity (`days_since_last_activity > 180`)
+      - **Delayed Start**: Treatment plan delayed 90-180 days (`days_since_last_activity BETWEEN 90 AND 180`)
+      - **In Progress**: Treatment plan with some activity but delays in completion
+      
+      **Lost Revenue Calculation**:
+      - **Source**: `int_treatment_plan` table
+      - **Calculation**: `remaining_amount` (outstanding balance on treatment plan not yet completed)
+      - **Time Window**: Treatment plans within last 2 years (`treatment_plan_date >= current_date - interval '2 years'`)
+      - **Filter**: 
+        - Only active treatment plans (`treatment_plan_status = 0`)
+        - Only delayed plans (`days_since_last_activity > 90`)
+      
+      **Recovery Potential**:
+      - **High**: Recent treatment plans (90-180 days old) with significant remaining amounts
+      - **Medium**: Moderately delayed plans (180-365 days) - patient may still be interested
+      - **Low**: Very delayed plans (>365 days) - patient interest may have waned
+      
+      **Recovery Priority Score**:
+      - Very Delayed (>180 days): 75 points (high priority - risk of complete loss)
+      - Delayed Start (90-180 days): 60 points (medium priority - still recoverable)
+      - Recent delays (<90 days): 45 points (lower priority - may start soon)
+      
+      **Recovery Timeline**:
+      - Very Delayed: **Long-term** (requires re-engagement, 2-3 months)
+      - Delayed Start: **Medium-term** (follow-up and re-education, 1-2 months)
+      - Recent delays: **Short-term** (scheduling conversation, 2-4 weeks)
+      
+      **Recommended Actions**:
+      - Contact patient about treatment plan
+      - Schedule consultation to review treatment options
+      - Provide patient education on treatment benefits
+      - Offer flexible payment or scheduling options
+      
+      **Data Source**: `int_treatment_plan` table (aggregated treatment plan data with business logic)
+      
+      **Business Context**: Treatment plans represent high-value procedures (crowns, implants, orthodontics); delayed starts reduce practice revenue and patient outcomes
+      
+      ---
+      
+      ### Write Off:
+      **Definition**: Revenue lost due to adjustments, credits, or charges applied to patient accounts, representing reductions in expected revenue.
+      
+      **Subtypes**:
+      - **Credit Adjustment**: Positive adjustment reducing amount owed (`adjustment_direction = 'positive'`) - patient credit
+      - **Charge Adjustment**: Negative adjustment reducing charges (`adjustment_direction = 'negative'`) - charge reduction
+      - **Zero Adjustment**: Adjustment with zero net effect
+      
+      **Lost Revenue Calculation**:
+      - **Source**: `int_adjustments` table
+      - **Calculation**: Absolute value of `adjustment_amount` (`abs(adjustment_amount)`)
+      - **Time Window**: Last 12 months (`adjustment_date >= current_date - interval '1 year'`)
+      - **Filter**: 
+        - Only adjustments with `adjustment_amount > 0`
+        - Only directional adjustments (`adjustment_direction IN ('positive', 'negative')`)
+      
+      **Recovery Potential**:
+      - **Medium**: Credit adjustments (may be refundable or applicable to future services)
+      - **Low**: Charge adjustments (typically final, less recoverable)
+      - **None**: Zero adjustments or write-offs that are final
+      
+      **Recovery Priority Score**:
+      - Credit adjustments: 40-50 points (medium priority - may be recoverable)
+      - Charge adjustments: 20-30 points (low priority - typically final)
+      
+      **Recovery Timeline**:
+      - Credit adjustments: **Medium-term** (review for refund eligibility or future application)
+      - Charge adjustments: **Long-term** (rarely recoverable, review for process improvement)
+      
+      **Recommended Actions**:
+      - Review adjustment reason and documentation
+      - Verify patient eligibility and account status
+      - Consider payment plan alternatives
+      - Document for process improvement analysis
+      
+      **Data Source**: `int_adjustments` table (processed adjustment data)
+      
+      **Business Context**: Write-offs should be monitored to identify patterns; excessive write-offs may indicate pricing, insurance verification, or collection process issues
+      
+      ---
+      
+      ## Recovery Metrics & Calculations:
+      
+      ### Recovery Potential:
+      **Definition**: Assessment of likelihood that lost revenue can be recovered through follow-up actions.
+      
+      **Categories**:
+      - **High**: 70-80% recovery rate expected (no-shows, recent claim rejections)
+      - **Medium**: 40-50% recovery rate expected (cancellations, delayed treatment plans)
+      - **Low**: 15-25% recovery rate expected (old cancellations, charge adjustments)
+      - **None**: 0% recovery rate (final write-offs, zero adjustments)
+      
+      **Usage**: Used to prioritize recovery efforts and estimate recoverable revenue amounts
+      
+      ### Recovery Priority Score:
+      **Definition**: Composite score (0-100) ranking opportunities by urgency and importance for recovery action.
+      
+      **Calculation Components** (varies by opportunity type):
+      - **Revenue Impact Factor** (0-40 points): Based on lost revenue amount
+      - **Recovery Potential Factor** (0-30 points): High=30, Medium=20, Low=10, None=0
+      - **Opportunity Type Factor** (0-20 points): Missed Appointment=20, Claim Rejection=15, Treatment Plan Delay=10, Write Off=5
+      - **Recency Factor** (0-10 points): Recent (30 days)=10, Moderate (90 days)=5, Old=0
+      
+      **Score Interpretation**:
+      - **80-100 (Critical)**: Highest priority, immediate action required
+      - **60-79 (High)**: High priority, aggressive follow-up needed
+      - **40-59 (Medium)**: Moderate priority, routine recovery activities
+      - **0-39 (Low)**: Low priority, standard follow-up sufficient
+      
+      ### Estimated Recoverable Amount:
+      **Definition**: Calculated estimate of revenue that can realistically be recovered through follow-up actions.
+      
+      **Calculation Formula**: 
+      ```
+      Estimated Recoverable Amount = Lost Revenue × Recovery Rate
+      ```
+      
+      **Recovery Rates by Potential**:
+      - High Recovery Potential: 80% of lost revenue
+      - Medium Recovery Potential: 50% of lost revenue
+      - Low Recovery Potential: 20% of lost revenue
+      - None Recovery Potential: 0% of lost revenue
+      
+      **Example**: 
+      - Lost Revenue: $500
+      - Recovery Potential: High (80%)
+      - Estimated Recoverable: $500 × 0.80 = $400
+      
+      **Business Context**: Helps set realistic recovery goals and allocate staff resources appropriately
       
       ## Data Sources:
       - `/revenue/kpi-summary` - Aggregated revenue metrics
@@ -404,7 +911,7 @@ exposures:
   - name: accounts_receivable_aging_dashboard
     label: "Accounts Receivable Aging - Collections Management"
     type: dashboard  
-    maturity: low
+    maturity: medium
     owner:
       name: Billing Team
       email: billing@dentalclinic.com
@@ -417,40 +924,298 @@ exposures:
     url: http://localhost:3000/ar-aging
     
     description: >
-      **[PLANNED] Accounts Receivable Aging Dashboard for Collection Management**
+      **Accounts Receivable Aging Dashboard - Comprehensive Collection Management & Analysis**
       
-      ⚠️ **STATUS: PLANNED - NOT YET IMPLEMENTED**
+      Operational dashboard for accounts receivable analysis, aging tracking, and collection
+      prioritization. Provides real-time visibility into outstanding balances, aging patterns,
+      risk categorization, and collection performance metrics to support proactive collection
+      activities and cash flow management.
       
-      This exposure documents a planned dashboard for detailed AR aging analysis with
-      drill-down capabilities by patient, insurance carrier, and aging bucket. Will
-      support proactive collection activities and bad debt management when implemented.
+      ## Key Features:
       
-      ## Planned Key Metrics:
-      - AR aging buckets: Current, 30-60, 61-90, 90+ days
-      - Collection trends and write-off analysis
-      - Insurance vs patient AR breakdowns  
-      - High-risk account identification
-      - Days Sales Outstanding (DSO) tracking
-      - Collection efficiency metrics
+      ### KPI Summary Cards:
+      - **Total AR Outstanding**: Complete outstanding balance with patient vs insurance breakdown
+      - **Current (0-30 days)**: Current AR amount and percentage of total
+      - **90 Day Overdue**: Seriously overdue balance (>90 days) with percentage indicator
+      - **AR Days (DSO)**: Days Sales Outstanding metric with collection rate display
+      - **AR Ratio**: Current month collections to production ratio
+      - **High Risk Count**: Number and dollar amount of high-risk accounts requiring immediate attention
       
-      ## Planned Users:
-      - Billing Team: Daily collection prioritization
-      - Finance Team: Cash flow forecasting
-      - Practice Manager: Financial health monitoring
+      ### AR Aging Summary Chart:
+      - **Stacked Bar Chart**: Visual distribution of AR balances across aging buckets
+      - Aging buckets: Current (0-30), 30 Day (31-60), 60 Day (61-90), 90 Day (90+)
+      - Interactive tooltips showing exact dollar amounts per bucket
+      - Color-coded visualization for quick aging assessment
       
-      ## Expected Data Sources:
-      - mart_ar_summary: Aggregated AR metrics by aging bucket
-      - dim_patient: Patient identification and contact information
-      - dim_insurance: Insurance carrier and plan details
+      ### Risk Distribution Analysis:
+      - **Pie Chart**: Distribution of AR by risk category
+      - Risk categories: High Risk, Medium Risk, Moderate Risk, Low Risk, Credit Balance
+      - Percentage breakdown showing proportion of AR in each risk tier
+      - Amount and percentage displayed in tooltips
+      - Color coding: Red (High Risk), Orange (Medium), Yellow (Moderate), Green (Low)
       
-      ## Implementation Priority:
-      - **HIGH** - Critical for billing team operations
-      - Required for optimal cash flow management
-      - Supports monthly financial close process
+      ### Collection Priority Queue:
+      - **Prioritized Account Table**: Patient-provider AR records sorted by collection priority score
+      - Columns: Patient ID, Provider ID, Total Balance, Aging buckets (Current, 30, 60, 90 Day),
+        Risk Category (color-coded chips), Priority Score (0-100 scale), Payment Recency
+      - **Pagination**: 20 records per page for large datasets
+      - **Color-coded indicators**:
+        - Risk Category: Error (High Risk), Warning (Medium), Info (Moderate), Success (Low)
+        - Priority Score: Error (≥80), Warning (60-79), Info (40-59), Default (<40)
+      - Real-time filtering and sorting capabilities
       
-      ## Business Impact (When Implemented):
-      - Reduces days sales outstanding (DSO)
-      - Improves cash flow predictability
-      - Minimizes bad debt write-offs
-      - Enables proactive collection workflows
+      ### AR Aging Trends Chart:
+      - **Line Chart**: Time-series trend analysis of AR aging distribution
+      - Multiple lines tracking: Current, Over 30 Days, Over 60 Days, 90 Day balances
+      - Temporal analysis supporting historical comparison and forecasting
+      - Interactive tooltips with date and amount details
+      
+      ### Date Range Filtering:
+      - **Toggle-based Date Range**: Optional date filtering for temporal analysis
+      - Quick select options: Last 30 Days, Last 90 Days, Last Year
+      - Custom date range selection with start/end date pickers
+      - Applies to KPI summaries, aging charts, and trend analysis
+      
+      ### Advanced Filters:
+      - **Risk Category Dropdown**: Filter by High Risk, Medium Risk, Moderate Risk, Low Risk
+      - **Priority Score Slider**: Filter accounts by minimum priority score (0-100)
+      - **Minimum Balance**: Filter by minimum outstanding balance threshold
+      - **Provider ID**: Filter by specific provider for provider-level AR analysis
+      - Filters apply to Priority Queue table and refresh data dynamically
+      
+      ## Metric Definitions & Calculations:
+      
+      ### Total AR Outstanding:
+      **Definition**: Complete sum of all outstanding accounts receivable balances from all patients and providers.
+      
+      **Calculation**: 
+      - Source: `mart_ar_summary.total_balance`
+      - Sum of all `total_balance` values where `total_balance > 0` (excludes zero balances and credits)
+      - Aggregated at patient-provider level, then summed across all accounts
+      
+      **Breakdown**:
+      - **Patient AR**: Sum of `patient_responsibility` field (patient's direct financial obligation)
+      - **Insurance AR**: Sum of `insurance_estimate` field (estimated amount expected from insurance carriers)
+      
+      **Data Source**: Latest snapshot from `mart_ar_summary` table per patient-provider combination
+      
+      ---
+      
+      ### AR Aging Buckets:
+      **Definition**: Distribution of outstanding balances by age (time since service was provided).
+      
+      **Bucket Definitions**:
+      - **Current (0-30 days)**: Balance aged 0-30 days (`balance_0_30_days`)
+      - **30 Day (31-60 days)**: Balance aged 31-60 days (`balance_31_60_days`)
+      - **60 Day (61-90 days)**: Balance aged 61-90 days (`balance_61_90_days`)
+      - **90 Day (90+ days)**: Balance aged over 90 days (`balance_over_90_days`)
+      
+      **Calculation**:
+      - Each bucket is calculated as a percentage: `(bucket_amount / total_balance) × 100`
+      - Buckets must sum to 100% of total balance (within rounding tolerance)
+      - Source: `mart_ar_summary` aging bucket fields, aggregated by patient-provider, then summed
+      
+      **Business Context**: Aging analysis helps identify collection risk and prioritize follow-up activities
+      
+      ---
+      
+      ### Days Sales Outstanding (DSO):
+      **Definition**: Simplified metric estimating average number of days it takes to collect payment on accounts receivable.
+      
+      **Calculation Formula**: 
+      ```
+      DSO = ((Balance Over 90 Days / Total AR) × 90) + 30
+      ```
+      
+      **Interpretation**:
+      - Higher DSO indicates slower collection cycles and potential cash flow issues
+      - Target DSO: < 45 days (industry benchmark for dental practices)
+      - This is a simplified calculation; standard DSO = (AR Balance / Average Daily Sales) × Days
+      
+      **Limitations**: This simplified formula provides a quick approximation; for precise DSO, use monthly production averages
+      
+      ---
+      
+      ### Collection Rate:
+      **Definition**: Percentage of production (billed procedures) that has been collected in payments.
+      
+      **Calculation Formula**: 
+      ```
+      Collection Rate = (Total Collections / Total Production) × 100
+      ```
+      
+      **Variable Definitions**:
+      - **Production (Revenue)**: Sum of all `fact_procedure.actual_fee` values
+        - Includes: All completed procedures from the last 365 days
+        - Includes: Both insurance-billed and direct-pay procedures
+        - Includes: All procedure types (hygiene, restorative, surgical, etc.)
+        - Represents: Total billed revenue for services provided
+      
+      - **Collections**: Sum of all `fact_payment.payment_amount` where `payment_direction = 'Income'`
+        - Includes: All payments received in the last 365 days
+        - Includes: Both patient direct payments and insurance carrier payments
+        - Excludes: Refunds (payments where `payment_direction = 'Outcome'`)
+        - Excludes: Adjustments and write-offs (handled separately)
+        - Represents: Total cash received from all sources
+      
+      **Time Period**: Rolling 365-day window (last year)
+      
+      **Target Benchmark**: 
+      - Excellent: >95%
+      - Good: 90-95% (industry standard for dental practices)
+      - Needs Attention: <90%
+      
+      **Business Context**: Measures practice efficiency in converting billed services to cash collections
+      
+      ---
+      
+      ### AR Ratio:
+      **Definition**: Current month collections compared to current month production (PBN-style metric).
+      
+      **Calculation Formula**: 
+      ```
+      AR Ratio = (Monthly Collections / Monthly Production) × 100
+      ```
+      
+      **Variable Definitions**:
+      - **Monthly Production**: Sum of `fact_procedure.actual_fee` for current calendar month
+      - **Monthly Collections**: Sum of `fact_payment.payment_amount` (where `payment_direction = 'Income'`) for current calendar month
+      
+      **Time Period**: Current calendar month only (from first day of month to today)
+      
+      **Interpretation**:
+      - >100%: Collecting more than current month production (collecting on past months' AR)
+      - 80-100%: Healthy collection pace relative to production
+      - <80%: Collections lagging behind current month production
+      
+      **Business Context**: Short-term indicator of collection efficiency for current period
+      
+      ---
+      
+      ### High Risk Accounts:
+      **Definition**: Accounts with significant portion of balance aged over 90 days, indicating collection risk.
+      
+      **Calculation**:
+      - **Risk Category**: Determined by percentage of balance over 90 days
+        - **High Risk**: >50% of balance is over 90 days old
+        - **Medium Risk**: 25-50% of balance is over 90 days old
+        - **Moderate Risk**: >50% of balance is 61-90 days old
+        - **Low Risk**: <25% of balance is over 90 days old
+      
+      - **High Risk Count**: Distinct count of patient-provider combinations where `aging_risk_category = 'High Risk'`
+      - **High Risk Amount**: Sum of `total_balance` for all accounts where `aging_risk_category = 'High Risk'`
+      
+      **Source**: `mart_ar_summary.aging_risk_category` field (calculated in mart model)
+      
+      **Business Context**: Identifies accounts requiring immediate collection attention and aggressive follow-up
+      
+      ---
+      
+      ### Collection Priority Score:
+      **Definition**: Composite score (0-100 scale) ranking accounts by collection urgency and importance.
+      
+      **Calculation Formula**: Multi-factor algorithm summing four components (each up to 25 points):
+      1. **Balance Factor** (25 points max):
+         - 25 points if `total_balance > $1,000`
+         - Otherwise: `balance / 40` (scaled to balance size)
+      2. **Aging Factor** (25 points max):
+         - 25 points if >50% of balance is over 90 days old
+         - Otherwise: 0 points
+      3. **Payment Recency Factor** (25 points max):
+         - 25 points if no payment in 90+ days (`days_since_last_payment > 90`)
+         - Otherwise: 0 points
+      4. **Insurance Factor** (25 points max):
+         - 25 points if no insurance coverage (`has_insurance = false`)
+         - Otherwise: 0 points
+      
+      **Score Interpretation**:
+      - **76-100 (Critical)**: Highest priority, immediate action required
+      - **51-75 (High)**: High priority, aggressive follow-up needed
+      - **26-50 (Medium)**: Moderate priority, routine collection activities
+      - **0-25 (Low)**: Low priority, standard follow-up sufficient
+      
+      **Source**: `mart_ar_summary.collection_priority_score` (pre-calculated in mart model)
+      
+      **Business Context**: Enables data-driven collection workflow prioritization and resource allocation
+      
+      ---
+      
+      ### Payment Recency:
+      **Definition**: Categorization of how recently a patient has made a payment, indicating payment behavior patterns.
+      
+      **Categories**:
+      - **Recent**: Last payment within 30 days
+      - **Moderate**: Last payment 31-90 days ago
+      - **Old**: Last payment 91-180 days ago
+      - **Very Old**: Last payment over 180 days ago (or no payment in last 365 days)
+      
+      **Calculation**:
+      - Based on `mart_ar_summary.days_since_last_payment` field
+      - Calculated from most recent payment date in `fact_payment` table (last 365 days)
+      
+      **Source**: `mart_ar_summary.payment_recency` (categorical field)
+      
+      **Business Context**: Informs collection strategy - recent payers may need gentle reminders, very old payers may require aggressive collection or write-off consideration
+      
+      ---
+      
+      ### Risk Categories:
+      **Definition**: Automated risk assessment based on AR aging patterns and balance distribution.
+      
+      **Category Definitions**:
+      - **High Risk**: >50% of balance is over 90 days old - requires immediate aggressive collection
+      - **Medium Risk**: 25-50% of balance is over 90 days old - requires focused follow-up
+      - **Moderate Risk**: >50% of balance is 61-90 days old - requires proactive attention
+      - **Low Risk**: <25% of balance is over 90 days old - routine collection activities sufficient
+      - **Credit Balance**: Total balance is negative (patient overpaid) - refund or credit application needed
+      - **No Balance**: Total balance is zero - no collection action needed
+      
+      **Calculation**: Determined in `mart_ar_summary` model based on aging bucket percentages
+      
+      **Source**: `mart_ar_summary.aging_risk_category` field
+      
+      **Business Context**: Enables risk-based collection workflow management and resource prioritization
+      
+      ## Data Sources:
+      - `/ar/kpi-summary` - Aggregated AR KPIs and summary metrics
+      - `/ar/aging-summary` - AR aging bucket distribution and amounts
+      - `/ar/priority-queue` - Prioritized collection queue with pagination and filtering
+      - `/ar/risk-distribution` - Risk category breakdown and distribution
+      - `/ar/aging-trends` - Historical AR aging trend analysis
+      - `/ar/snapshot-dates` - Available AR snapshot dates for point-in-time analysis
+      
+      ## Primary Users:
+      - **Billing Team**: Daily collection prioritization and account follow-up
+      - **Finance Team**: Cash flow forecasting, DSO tracking, and financial health monitoring
+      - **Practice Managers**: AR health oversight and collection workflow optimization
+      - **Collection Specialists**: High-priority account identification and action planning
+      - **Executive Leadership**: Financial performance and AR management oversight
+      
+      ## Data Refresh:
+      - **Current State**: Manual refresh (user-initiated dbt runs)
+      - **Planned**: Automated daily refresh at 6:00 AM via Airflow (project goal)
+      - Latency: T+1 day for complete AR aging calculations
+      - Real-time filtering: Dashboard updates immediately when filters are applied
+      - Snapshot support: Point-in-time AR analysis using historical snapshot dates
+      
+      ## Business Impact:
+      - **Reduces Days Sales Outstanding (DSO)**: Proactive collection prioritization improves cash flow
+      - **Improves Collection Efficiency**: Risk-based prioritization focuses efforts on high-value accounts
+      - **Minimizes Bad Debt Write-offs**: Early identification of aging accounts prevents write-off scenarios
+      - **Enables Proactive Collection Workflows**: Priority scoring guides daily collection activities
+      - **Supports Cash Flow Forecasting**: AR aging trends inform financial planning and cash projections
+      - **Optimizes Collection Resource Allocation**: Risk categorization directs staff to highest-impact accounts
+      - **Enhances Financial Health Monitoring**: Real-time visibility into AR metrics supports strategic decisions
+      
+      ## Technical Implementation:
+      - Frontend Route: `/ar-aging` (AR.tsx)
+      - API Endpoints: arApi (getKPISummary, getAgingSummary, getPriorityQueue, getRiskDistribution, getAgingTrends, getSnapshotDates)
+      - Components: Material-UI Cards, Tables, Charts (Recharts: BarChart, PieChart, LineChart)
+      - Features: 
+        - Server-side pagination (20 records per page)
+        - Real-time filtering and date range selection
+        - Color-coded risk and priority indicators
+        - Interactive chart tooltips and legends
+        - Responsive grid layout for multi-device access
+      - Performance: Parallel API calls for optimized loading, paginated table for large datasets
 
