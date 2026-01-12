@@ -1077,13 +1077,32 @@ class PostgresLoader:
                 self._ensure_tracking_record_exists(table_name)
             except Exception:
                 pass
+            
+            # Compute last primary value if we have a primary column and loaded rows
+            last_primary_value = None
+            if load_prep.primary_column and load_result.success and load_result.rows_loaded > 0:
+                try:
+                    with self.analytics_engine.connect() as conn:
+                        # Get the max primary value from the analytics table that was just loaded
+                        max_result = conn.execute(text(f"""
+                            SELECT MAX("{load_prep.primary_column}") 
+                            FROM {self.analytics_schema}.{table_name}
+                            WHERE "{load_prep.primary_column}" IS NOT NULL
+                        """)).scalar()
+                        if max_result is not None:
+                            last_primary_value = str(max_result)
+                            logger.debug(f"Computed last primary value for {table_name}: {last_primary_value} (column: {load_prep.primary_column})")
+                except Exception as e:
+                    logger.warning(f"Could not compute last primary value for {table_name}: {str(e)}")
+                    # Continue without primary value - timestamp tracking will be used as fallback
+            
             if load_prep.primary_column:
                 self._update_load_status_hybrid(
                     table_name=table_name,
                     rows_loaded=load_result.rows_loaded,
                     load_status='success' if load_result.success else 'failed',
                     last_timestamp=datetime.utcnow(),
-                    last_primary_value=None,
+                    last_primary_value=last_primary_value,
                     primary_column_name=load_prep.primary_column
                 )
             else:
@@ -1877,32 +1896,42 @@ class PostgresLoader:
                 return False, None, None, False
             
             # Check if analytics table is empty but has a non-initial load time
+            # This indicates data loss and requires a full reload
             force_full_load_recommended = False
             if analytics_row_count == 0 and analytics_load_time is not None:
                 logger.info(f"Analytics table {table_name} is empty but has load timestamp {analytics_load_time}, recommending full load")
                 force_full_load_recommended = True
             
             if analytics_load_time is None:
-                # Analytics has never been loaded, check if replication has data
-                logger.info(f"Analytics has never been loaded for {table_name}, checking if replication has data")
-                
-                # Check if replication has any data for this table
-                try:
-                    with self.replication_engine.connect() as conn:
-                        # Use the replication database name explicitly
-                        replication_db = self.replication_engine.url.database
-                        result = conn.execute(text(f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"))
-                        replication_row_count = result.scalar()
-                        
-                    if replication_row_count > 0:
-                        logger.info(f"Replication has {replication_row_count} rows for {table_name}, analytics needs full sync")
-                        return True, str(replication_copy_time), None, True
-                    else:
-                        logger.info(f"Replication has no data for {table_name}, nothing to load")
+                # Analytics has never been loaded, but check if table actually has data
+                # (in case load tracking was lost but data exists)
+                if analytics_row_count > 0:
+                    # Table has data but no load record - try incremental based on max primary key
+                    logger.info(f"Analytics table {table_name} has {analytics_row_count} rows but no load timestamp, will attempt incremental load")
+                    # Don't force full load - let _build_load_query handle it based on actual table state
+                    force_full_load_recommended = False
+                else:
+                    # Analytics has never been loaded and table is empty, check if replication has data
+                    logger.info(f"Analytics has never been loaded for {table_name} (table is empty), checking if replication has data")
+                    
+                    # Check if replication has any data for this table
+                    try:
+                        with self.replication_engine.connect() as conn:
+                            # Use the replication database name explicitly
+                            replication_db = self.replication_engine.url.database
+                            result = conn.execute(text(f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"))
+                            replication_row_count = result.scalar()
+                            
+                        if replication_row_count > 0:
+                            logger.info(f"Replication has {replication_row_count} rows for {table_name}, analytics needs full sync (initial load)")
+                            # First-time load: needs full load, this is expected
+                            return True, str(replication_copy_time), None, True
+                        else:
+                            logger.info(f"Replication has no data for {table_name}, nothing to load")
+                            return False, str(replication_copy_time), None, False
+                    except Exception as e:
+                        logger.error(f"Error checking replication data for {table_name}: {str(e)}")
                         return False, str(replication_copy_time), None, False
-                except Exception as e:
-                    logger.error(f"Error checking replication data for {table_name}: {str(e)}")
-                    return False, str(replication_copy_time), None, False
             
             # ENHANCED: Check if there's new data in replication since last analytics load
             # Instead of just comparing timestamps, check if there are actually new records
@@ -1933,7 +1962,13 @@ class PostgresLoader:
                         replication_count = conn.execute(text(replication_count_query)).scalar()
                     
                         if replication_count > analytics_row_count:
-                            logger.info(f"Replication has {replication_count} rows vs analytics {analytics_row_count} rows for {table_name}, analytics needs updating")
+                            # Replication has more rows - this is normal incremental scenario
+                            # Only force full load if table was empty (data loss scenario)
+                            # Otherwise, use incremental load to add new rows
+                            if force_full_load_recommended:
+                                logger.info(f"Replication has {replication_count} rows vs analytics {analytics_row_count} rows for {table_name}, but analytics table is empty with timestamp - forcing full load")
+                            else:
+                                logger.info(f"Replication has {replication_count} rows vs analytics {analytics_row_count} rows for {table_name}, will use incremental load")
                             return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
                         
                         # If row counts are the same, check for records with timestamps newer than analytics load time
@@ -2086,24 +2121,21 @@ class PostgresLoader:
                     })
                 else:
                     # Do not advance timestamp on 0-row loads
+                    # Preserve existing _loaded_at, last_primary_value, and primary_column_name when no rows were loaded
+                    # Only update load_status and rows_loaded to indicate the table was checked but had no new data
+                    # By omitting these fields from the UPDATE clause, PostgreSQL preserves their existing values
                     conn.execute(text(f"""
                         INSERT INTO {self.analytics_schema}.etl_load_status 
                         (table_name, rows_loaded, load_status, last_primary_value, primary_column_name, _loaded_at)
-                        VALUES (:table_name, :rows_loaded, :load_status, :last_primary_value, :primary_column_name, COALESCE(
-                            (SELECT _loaded_at FROM {self.analytics_schema}.etl_load_status WHERE table_name = :table_name),
-                            CURRENT_TIMESTAMP
-                        ))
+                        VALUES (:table_name, 0, :load_status, NULL, NULL, CURRENT_TIMESTAMP)
                         ON CONFLICT (table_name) DO UPDATE SET
-                            last_primary_value = :last_primary_value,
-                            primary_column_name = :primary_column_name,
-                            rows_loaded = :rows_loaded,
+                            rows_loaded = 0,
                             load_status = :load_status
+                            -- _loaded_at, last_primary_value, and primary_column_name are omitted to preserve existing values
+                            -- This prevents misleading timestamps when incremental loads find no new data
                     """), {
                         "table_name": table_name,
-                        "rows_loaded": rows_loaded,
-                        "load_status": load_status,
-                        "last_primary_value": stored_value,
-                        "primary_column_name": stored_column
+                        "load_status": load_status
                     })
                 conn.commit()
             logger.info(f"Updated hybrid load status for {table_name}")
