@@ -75,8 +75,10 @@ This generator creates **completely fake but realistic** dental practice data fo
 
 ### Phase-Based Generation
 
+The generator processes data in six sequential phases to maintain referential integrity:
+
 ```
-Phase 1: Foundation (Week 1)
+Phase 1: Foundation
 ├── Clinics (5)
 ├── Providers (12)
 ├── Operatories (20)
@@ -85,13 +87,13 @@ Phase 1: Foundation (Week 1)
 ├── Fee Schedules (3)
 └── Fees (600 fee amounts)
 
-Phase 2: Patients (Week 1-2)
+Phase 2: Patients
 ├── Patients (5,000)
 ├── Patient Notes (5,000 - 1:1 relationship)
 ├── Patient Links (1,000 family relationships)
 └── Zipcodes (100 reference)
 
-Phase 3: Insurance (Week 2)
+Phase 3: Insurance
 ├── Carriers (15)
 ├── Employers (50)
 ├── Insurance Plans (30)
@@ -99,14 +101,14 @@ Phase 3: Insurance (Week 2)
 ├── Patient Plans (3,500)
 └── Benefits (1,500)
 
-Phase 4: Clinical (Week 2-3)
+Phase 4: Clinical
 ├── Appointments (15,000)
 ├── Appointment Types (15)
 ├── Procedures (20,000)
 ├── Procedure Notes (10,000)
 └── Recalls (3,000)
 
-Phase 5: Financial (Week 3)
+Phase 5: Financial
 ├── Claims (8,000)
 ├── Claim Procedures (25,000)
 ├── Claim Payments (5,000)
@@ -114,7 +116,7 @@ Phase 5: Financial (Week 3)
 ├── Payment Splits (15,000)
 └── Adjustments (2,000)
 
-Phase 6: Supporting (Week 4)
+Phase 6: Supporting
 ├── Communication Logs (8,000)
 ├── Documents (5,000)
 ├── Referrals (20)
@@ -626,7 +628,7 @@ END
 
 ## ☁️ dbt Cloud Deployment
 
-### Phase 5: Cloud Deployment (Week 5)
+### Deploying to Cloud
 
 #### Step 1: Deploy Database to Cloud
 
@@ -892,12 +894,14 @@ MIT License - Free to use for portfolio and educational purposes.
 
 ---
 
-## 🎯 Next Steps
+## 🚀 Getting Started
 
-1. ✅ **Generate data locally** (this week)
-2. ✅ **Validate dbt models** (Week 4)
-3. ✅ **Deploy to cloud** (Week 5)
-4. ✅ **Configure dbt Cloud** (Week 5)
-5. ✅ **Share public docs** (Week 5)
+To use the synthetic data generator:
+
+1. **Install dependencies** - Follow the [Installation](#-installation) section
+2. **Generate data** - Run `python main.py` or use the PowerShell wrapper
+3. **Run dbt transforms** - Execute `dbt run` against the demo database
+4. **Validate data quality** - Run `dbt test` to verify all checks pass
+5. **Deploy to cloud** (optional) - Follow the [dbt Cloud Deployment](#-dbt-cloud-deployment) guide
 
 **Ready to showcase your professional data engineering skills!** 🚀
