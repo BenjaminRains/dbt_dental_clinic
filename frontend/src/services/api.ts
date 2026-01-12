@@ -30,7 +30,8 @@ import {
     TreatmentAcceptanceSummary,
     TreatmentAcceptanceTrend,
     TreatmentAcceptanceProviderPerformance,
-    HygieneRetentionSummary
+    HygieneRetentionSummary,
+    TopPatientBalance
 } from '../types/api';
 
 // Configure axios base URL
@@ -76,12 +77,14 @@ api.interceptors.response.use(
         // Log full error for debugging (only in development)
         if (import.meta.env.DEV) {
             console.error('API Response Error:', error.response?.data || error.message);
+            console.error('Full error object:', error);
         }
 
-        // Sanitize error messages for security - don't expose internal details
-        if (error.response?.data?.detail) {
+        // Don't sanitize in development - let the apiCall function handle it
+        // This allows us to see the actual error messages during debugging
+        if (!import.meta.env.DEV && error.response?.data?.detail) {
             const detail = error.response.data.detail;
-            // Only show generic messages to users
+            // Only show generic messages to users in production
             if (detail.includes('SQL') || detail.includes('database') || detail.includes('column') ||
                 detail.includes('psycopg2') || detail.includes('UndefinedColumn') ||
                 detail.includes('syntax error') || detail.includes('connection')) {
@@ -92,6 +95,39 @@ api.interceptors.response.use(
         return Promise.reject(error);
     }
 );
+
+// Helper function to convert error details to a string
+function errorDetailToString(detail: any): string {
+    if (typeof detail === 'string') {
+        return detail;
+    }
+    if (Array.isArray(detail)) {
+        // Handle FastAPI/Pydantic validation errors array
+        return detail.map((err: any) => {
+            if (typeof err === 'string') {
+                return err;
+            }
+            if (err && typeof err === 'object') {
+                const loc = err.loc ? err.loc.join('.') : '';
+                const msg = err.msg || err.message || 'Validation error';
+                return loc ? `${loc}: ${msg}` : msg;
+            }
+            return String(err);
+        }).join('; ');
+    }
+    if (detail && typeof detail === 'object') {
+        // Try to extract a message from the object
+        if (detail.message) {
+            return String(detail.message);
+        }
+        if (detail.msg) {
+            return String(detail.msg);
+        }
+        // Fallback to JSON string
+        return JSON.stringify(detail);
+    }
+    return String(detail);
+}
 
 // Generic API call wrapper with error handling
 async function apiCall<T>(
@@ -114,19 +150,40 @@ async function apiCall<T>(
             errorMessage = 'Access denied.';
         } else if (error.response?.status === 404) {
             errorMessage = 'Resource not found.';
+        } else if (error.response?.status === 422) {
+            // Handle validation errors (422)
+            if (error.response?.data?.detail) {
+                errorMessage = `Validation error: ${errorDetailToString(error.response.data.detail)}`;
+            } else {
+                errorMessage = 'Invalid request parameters.';
+            }
         } else if (error.response?.status === 429) {
             errorMessage = 'Too many requests. Please try again later.';
         } else if (error.response?.status >= 500) {
-            errorMessage = 'A server error occurred. Please try again later.';
+            // For 500 errors, always show the API's error message if available
+            // Don't sanitize 500 errors - they're already sanitized by the backend
+            if (error.response?.data?.detail) {
+                errorMessage = errorDetailToString(error.response.data.detail);
+            } else if (error.response?.data?.message) {
+                errorMessage = errorDetailToString(error.response.data.message);
+            } else {
+                errorMessage = 'A server error occurred. Please try again later.';
+            }
+            // Always log full error details for debugging
+            console.error('Server error details:', error.response?.data);
+            console.error('Error status:', error.response?.status);
+            console.error('Full error response:', error.response);
         } else if (error.response?.data?.detail) {
             // Use sanitized detail from API (already sanitized by backend)
-            const detail = error.response.data.detail;
+            const detailStr = errorDetailToString(error.response.data.detail);
             // Only use if it's a generic message (not technical details)
-            if (!detail.includes('SQL') && !detail.includes('database') &&
-                !detail.includes('column') && !detail.includes('psycopg2') &&
-                !detail.includes('UndefinedColumn') && !detail.includes('syntax error')) {
-                errorMessage = detail;
+            if (!detailStr.includes('SQL') && !detailStr.includes('database') &&
+                !detailStr.includes('column') && !detailStr.includes('psycopg2') &&
+                !detailStr.includes('UndefinedColumn') && !detailStr.includes('syntax error')) {
+                errorMessage = detailStr;
             }
+        } else if (error.response?.data?.message) {
+            errorMessage = errorDetailToString(error.response.data.message);
         } else if (error.code === 'ECONNABORTED' || error.message?.includes('timeout')) {
             errorMessage = 'Request timed out. Please try again.';
         } else if (error.message?.includes('Network Error') || !error.response) {
@@ -331,6 +388,10 @@ export const patientApi = {
     getPatientById: async (patientId: number): Promise<ApiResponse<Patient>> => {
         return apiCall(() => api.get(`/patients/${patientId}`));
     },
+
+    getTopBalances: async (limit: number = 10): Promise<ApiResponse<TopPatientBalance[]>> => {
+        return apiCall(() => api.get('/patients/top-balances', { params: { limit } }));
+    },
 };
 
 // Appointment API calls
@@ -388,6 +449,59 @@ export const dateUtils = {
     getLast30Days: (): DateRange => dateUtils.getDateRange(30),
     getLast90Days: (): DateRange => dateUtils.getDateRange(90),
     getLastYear: (): DateRange => dateUtils.getDateRange(365),
+    getThisWeek: (): DateRange => {
+        const today = new Date();
+        const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+        const startOfWeek = new Date(today);
+        startOfWeek.setDate(today.getDate() - dayOfWeek); // Go back to Sunday
+        startOfWeek.setHours(0, 0, 0, 0);
+
+        return {
+            start_date: dateUtils.formatDate(startOfWeek),
+            end_date: dateUtils.formatDate(today),
+        };
+    },
+
+    getPreviousBusinessWeek: (): DateRange => {
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+        const dayOfWeek = today.getDay(); // 0 = Sunday, 1 = Monday, etc.
+
+        // Find the most recent Friday (end of previous business week)
+        // Friday is day 5 (0=Sunday, 5=Friday)
+        let daysSinceFriday;
+        if (dayOfWeek === 0) {
+            // Sunday - go back 2 days to Friday
+            daysSinceFriday = 2;
+        } else if (dayOfWeek === 6) {
+            // Saturday - go back 1 day to Friday
+            daysSinceFriday = 1;
+        } else if (dayOfWeek <= 5) {
+            // Monday (1) through Friday (5)
+            // If it's Monday-Thursday, go back to last Friday
+            // If it's Friday, use today as the end date
+            if (dayOfWeek === 5) {
+                daysSinceFriday = 0; // Today is Friday, use it
+            } else {
+                // Monday (1) - Thursday (4): go back to last Friday
+                daysSinceFriday = dayOfWeek + 2; // e.g., Monday: 1+2=3 days back
+            }
+        } else {
+            daysSinceFriday = 1;
+        }
+
+        const endOfPreviousWeek = new Date(today);
+        endOfPreviousWeek.setDate(today.getDate() - daysSinceFriday);
+
+        // Monday is 4 days before Friday
+        const startOfPreviousWeek = new Date(endOfPreviousWeek);
+        startOfPreviousWeek.setDate(endOfPreviousWeek.getDate() - 4);
+
+        return {
+            start_date: dateUtils.formatDate(startOfPreviousWeek),
+            end_date: dateUtils.formatDate(endOfPreviousWeek),
+        };
+    },
 };
 
 // DBT Metadata API calls
