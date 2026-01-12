@@ -264,6 +264,18 @@ export interface ARSummary {
     patient_ar_balance: number;
 }
 
+export interface TopPatientBalance {
+    patient_id: number;
+    total_balance: number;
+    balance_0_30_days: number;
+    balance_31_60_days: number;
+    balance_61_90_days: number;
+    balance_over_90_days: number;
+    aging_risk_category?: string;
+    days_since_last_payment?: number | null;
+    payment_recency?: string;
+}
+
 // AR Aging Dashboard Types
 export interface ARKPISummary {
     total_ar_outstanding: number;
