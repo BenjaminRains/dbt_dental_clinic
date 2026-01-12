@@ -366,38 +366,108 @@ async def get_dashboard_kpis(
     """
     
     # Provider KPIs
-    provider_query = """
-    SELECT 
-        COUNT(DISTINCT mpp.provider_id) as active_providers,
-        SUM(mpp.total_production) as total_production,
-        SUM(mpp.total_collections) as total_collection,
-        AVG(mpp.collection_efficiency) as avg_collection_rate
-    FROM raw_marts.mart_provider_performance mpp
-    WHERE 1=1
-    """
-    
+    # Note: Collection rate must be calculated from aggregated totals, not averaged
+    # The correct formula: (Total Collections / Total Production) * 100
     params = {}
+    
+    # Build date filter conditions
+    date_filters = []
     if start_date:
         revenue_query += " AND mrl.appointment_date >= :start_date"
-        provider_query += " AND mpp.production_date >= :start_date"
+        date_filters.append("mpp.production_date >= :start_date")
         params['start_date'] = start_date
     if end_date:
         revenue_query += " AND mrl.appointment_date <= :end_date"
-        provider_query += " AND mpp.production_date <= :end_date"
+        date_filters.append("mpp.production_date <= :end_date")
         params['end_date'] = end_date
+    
+    # Build WHERE clause for provider query
+    where_clause = "WHERE 1=1"
+    if date_filters:
+        where_clause += " AND " + " AND ".join(date_filters)
+    
+    provider_query = f"""
+    WITH provider_agg AS (
+        SELECT 
+            COUNT(DISTINCT mpp.provider_id) as active_providers,
+            COALESCE(SUM(mpp.total_production), 0.0)::numeric as total_production,
+            COALESCE(SUM(mpp.total_collections), 0.0)::numeric as total_collection
+        FROM raw_marts.mart_provider_performance mpp
+        {where_clause}
+    )
+    SELECT 
+        active_providers,
+        total_production,
+        total_collection,
+        CASE 
+            WHEN total_production > 0 AND total_production IS NOT NULL
+            THEN ROUND((total_collection / total_production * 100)::numeric, 2)
+            ELSE 0.0
+        END::numeric as avg_collection_rate
+    FROM provider_agg
+    """
     
     revenue_result = db.execute(text(revenue_query), params).fetchone()
     provider_result = db.execute(text(provider_query), params).fetchone()
     
-    return {
-        "revenue": {
+    # Log query parameters for debugging
+    import logging
+    logger = logging.getLogger(__name__)
+    logger.info(f"Dashboard KPIs query params: start_date={params.get('start_date')}, end_date={params.get('end_date')}")
+    logger.info(f"Provider query SQL: {provider_query}")
+    
+    # Handle empty result sets safely
+    revenue_data = {
+        "total_revenue_lost": 0.0,
+        "total_recovery_potential": 0.0
+    }
+    if revenue_result:
+        revenue_data = {
             "total_revenue_lost": float(revenue_result.total_revenue_lost or 0),
             "total_recovery_potential": float(revenue_result.total_recovery_potential or 0)
-        },
-        "providers": {
-            "active_providers": provider_result.active_providers,
-            "total_production": float(provider_result.total_production or 0),
-            "total_collection": float(provider_result.total_collection or 0),
-            "avg_collection_rate": float(provider_result.avg_collection_rate or 0)
         }
+    
+    provider_data = {
+        "active_providers": 0,
+        "total_production": 0.0,
+        "total_collection": 0.0,
+        "avg_collection_rate": 0.0
+    }
+    if provider_result:
+        # Get raw values first
+        raw_prod = provider_result.total_production
+        raw_coll = provider_result.total_collection
+        raw_rate = provider_result.avg_collection_rate
+        
+        total_prod = float(raw_prod if raw_prod is not None else 0)
+        total_coll = float(raw_coll if raw_coll is not None else 0)
+        collection_rate = float(raw_rate if raw_rate is not None else 0)
+        
+        # Log for debugging with raw values
+        logger.warning(f"Provider KPIs RAW: production={raw_prod} ({type(raw_prod)}), collections={raw_coll} ({type(raw_coll)}), rate={raw_rate} ({type(raw_rate)}), providers={provider_result.active_providers}")
+        logger.warning(f"Provider KPIs CONVERTED: production={total_prod}, collections={total_coll}, rate={collection_rate}")
+        
+        # Manual calculation check
+        if total_prod > 0:
+            manual_rate = round((total_coll / total_prod) * 100, 2)
+            logger.warning(f"Manual collection rate calculation: ({total_coll} / {total_prod}) * 100 = {manual_rate}")
+            # If manual calculation differs from SQL result, use manual calculation
+            if abs(manual_rate - collection_rate) > 0.01:
+                logger.error(f"SQL calculation mismatch! SQL={collection_rate}, Manual={manual_rate}. Using manual calculation.")
+                collection_rate = manual_rate
+        elif total_prod == 0 and total_coll > 0:
+            logger.warning(f"WARNING: Production is 0 but collections is {total_coll} - data inconsistency!")
+        
+        provider_data = {
+            "active_providers": int(provider_result.active_providers or 0),
+            "total_production": total_prod,
+            "total_collection": total_coll,
+            "avg_collection_rate": collection_rate
+        }
+    else:
+        logger.warning("Provider result is None - query returned no rows")
+    
+    return {
+        "revenue": revenue_data,
+        "providers": provider_data
     }
