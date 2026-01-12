@@ -563,12 +563,27 @@ class TableProcessor:
             # Use the existing metrics instance that was properly initialized with settings
             rate = rows_processed / duration if duration > 0 else 0
             
+            # Fix: record_performance_metric expects (table_name, metric_name, value, category)
+            # Record duration as a metric
             self.metrics.record_performance_metric(
                 table_name=table_name,
-                category=performance_category,
-                duration=duration,
-                rows_processed=rows_processed,
-                rate_per_second=rate
+                metric_name='duration',
+                value=duration,
+                category=performance_category
+            )
+            # Record rows processed as a metric
+            self.metrics.record_performance_metric(
+                table_name=table_name,
+                metric_name='rows_processed',
+                value=float(rows_processed),
+                category=performance_category
+            )
+            # Record rate as a metric
+            self.metrics.record_performance_metric(
+                table_name=table_name,
+                metric_name='rate_per_second',
+                value=rate,
+                category=performance_category
             )
             
             logger.info(f"Performance: {table_name} ({performance_category}) - "
