@@ -350,6 +350,28 @@ class ClinicalGenerator:
             # Surface (for fillings)
             surf = random.choice(['', 'M', 'O', 'D', 'B', 'MOD', 'DO']) if 'D2' in code else ''
             
+            # Create realistic mix of procedure statuses for treatment acceptance metrics
+            # Business logic: 
+            # - Status 1 (Treatment Planned) = Presented but not accepted
+            # - Status 6 (Ordered/Planned) = Presented but not accepted  
+            # - Status 2 (Completed) = Accepted (but NOT counted as "presented")
+            # Target: ~70-80% acceptance rate means we need MORE "presented" than "accepted"
+            # Critical: Status 2 procedures are NOT counted as "presented", so we need enough status 1/6
+            # Distribution: 70% presented (status 1/6), 30% accepted (status 2) = 30/70 = 43% acceptance rate
+            # OR better: 75% presented, 25% accepted = 25/75 = 33% acceptance rate (too low)
+            # Best: 65% presented, 35% accepted = 35/65 = 54% acceptance rate
+            # OR: 60% presented, 40% accepted = 40/60 = 67% acceptance rate (realistic)
+            rand = random.random()
+            if rand < 0.40:
+                # 40% completed (accepted) - these show as accepted but NOT as presented
+                proc_status = PROCEDURE_STATUS['COMPLETED']
+            elif rand < 0.70:
+                # 30% treatment planned (presented, not accepted) - these are the denominator
+                proc_status = PROCEDURE_STATUS['TREATMENT_PLANNED']
+            else:
+                # 30% ordered/planned (presented, not accepted) - these are also the denominator
+                proc_status = PROCEDURE_STATUS['ORDERED']
+            
             procedures.append((
                 proc_id,  # ProcNum
                 patient_id,  # PatNum
@@ -358,7 +380,7 @@ class ClinicalGenerator:
                 proc_fee,  # ProcFee
                 tooth_num,  # ToothNum
                 0,  # Priority (0=normal)
-                PROCEDURE_STATUS['COMPLETED'],  # ProcStatus
+                proc_status,  # ProcStatus (mix of 1, 2, 6 for realistic acceptance rates)
                 provider_id,  # ProvNum
                 clinic_id,  # ClinicNum
                 code_num,  # CodeNum
@@ -367,7 +389,7 @@ class ClinicalGenerator:
                 0,  # BaseUnits
                 proc_date.date(),  # DateEntryC
                 datetime.now(),  # DateTStamp
-                proc_date.date(),  # DateComplete
+                proc_date.date() if proc_status == PROCEDURE_STATUS['COMPLETED'] else proc_date.date(),  # DateComplete (use proc_date for all, NULL handled by dbt)
                 proc_date,  # SecDateEntry (timestamp)
             ))
             proc_id += 1
