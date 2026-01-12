@@ -50,15 +50,14 @@ const TreatmentAcceptance: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     // Filter state
+    // Default to "Last 30 Days" to ensure data is available (synthetic data: 2023-01-01 to now)
     const [startDate, setStartDate] = useState<string>(() => {
-        // Default to current month start
-        const now = new Date();
-        return new Date(now.getFullYear(), now.getMonth(), 1).toISOString().split('T')[0];
+        const range = dateUtils.getLast30Days();
+        return range.start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
     });
     const [endDate, setEndDate] = useState<string>(() => {
-        // Default to current month end
-        const now = new Date();
-        return new Date(now.getFullYear(), now.getMonth() + 1, 0).toISOString().split('T')[0];
+        const range = dateUtils.getLast30Days();
+        return range.end_date || new Date().toISOString().split('T')[0];
     });
     const [providerId, setProviderId] = useState<number | ''>('');
     const [clinicId, setClinicId] = useState<number | ''>('');
