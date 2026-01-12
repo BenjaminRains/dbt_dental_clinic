@@ -1,8 +1,12 @@
 # api/services/provider_service.py
 from sqlalchemy.orm import Session
 from sqlalchemy import text
+from sqlalchemy.exc import SQLAlchemyError
 from typing import List, Optional
 from datetime import date
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _int_to_hex_color(color_int):
     """Convert integer color value to hex string format (#RRGGBB)"""
@@ -157,24 +161,59 @@ def get_provider_summary(
 ) -> List[dict]:
     """Get provider performance summary aggregated from appointment data"""
     
+    # First, verify table and column existence (for debugging)
+    try:
+        test_cols = db.execute(text("""
+            SELECT column_name, data_type 
+            FROM information_schema.columns 
+            WHERE table_schema = 'raw_marts' 
+            AND table_name = 'fact_appointment'
+            AND column_name IN ('provider_id', 'appointment_date', 'is_completed', 'is_no_show', 'is_broken', 'scheduled_production_amount', 'patient_id')
+            ORDER BY column_name
+        """)).fetchall()
+        logger.info(f"Verified {len(test_cols)} required columns in fact_appointment")
+        if len(test_cols) < 7:
+            missing = ['provider_id', 'appointment_date', 'is_completed', 'is_no_show', 'is_broken', 'scheduled_production_amount', 'patient_id']
+            found = [col.column_name for col in test_cols]
+            missing_cols = [c for c in missing if c not in found]
+            logger.error(f"Missing columns in fact_appointment: {missing_cols}")
+    except Exception as test_error:
+        logger.warning(f"Could not verify columns (non-fatal): {str(test_error)}")
+    
+    # Build query with proper parameter binding
     query = """
     SELECT 
-        dp.provider_id,
-        COUNT(*) as total_appointments,
-        SUM(CASE WHEN fa.is_completed THEN 1 ELSE 0 END) as completed_appointments,
-        SUM(CASE WHEN fa.is_no_show THEN 1 ELSE 0 END) as no_show_appointments,
-        SUM(CASE WHEN fa.is_broken THEN 1 ELSE 0 END) as broken_appointments,
-        COUNT(DISTINCT fa.patient_id) as unique_patients,
-        ROUND(SUM(CASE WHEN fa.is_completed THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 2) as completion_rate,
-        ROUND(SUM(CASE WHEN fa.is_no_show THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 2) as no_show_rate,
-        ROUND(SUM(CASE WHEN fa.is_broken THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 2) as cancellation_rate,
-        SUM(fa.scheduled_production_amount) as total_scheduled_production,
-        SUM(CASE WHEN fa.is_completed THEN fa.scheduled_production_amount ELSE 0 END) as completed_production,
-        ROUND(AVG(fa.scheduled_production_amount), 2) as avg_production_per_appointment
+        fa.provider_id,
+        COUNT(*)::int as total_appointments,
+        SUM(CASE WHEN COALESCE(fa.is_completed, false) = true THEN 1 ELSE 0 END)::int as completed_appointments,
+        SUM(CASE WHEN COALESCE(fa.is_no_show, false) = true THEN 1 ELSE 0 END)::int as no_show_appointments,
+        SUM(CASE WHEN COALESCE(fa.is_broken, false) = true THEN 1 ELSE 0 END)::int as broken_appointments,
+        COUNT(DISTINCT fa.patient_id)::int as unique_patients,
+        CASE 
+            WHEN COUNT(*) > 0 
+            THEN ROUND((SUM(CASE WHEN COALESCE(fa.is_completed, false) = true THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)::numeric * 100)::numeric, 2)
+            ELSE 0.0
+        END::numeric as completion_rate,
+        CASE 
+            WHEN COUNT(*) > 0 
+            THEN ROUND((SUM(CASE WHEN COALESCE(fa.is_no_show, false) = true THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)::numeric * 100)::numeric, 2)
+            ELSE 0.0
+        END::numeric as no_show_rate,
+        CASE 
+            WHEN COUNT(*) > 0 
+            THEN ROUND((SUM(CASE WHEN COALESCE(fa.is_broken, false) = true THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0)::numeric * 100)::numeric, 2)
+            ELSE 0.0
+        END::numeric as cancellation_rate,
+        COALESCE(SUM(fa.scheduled_production_amount), 0.0)::numeric as total_scheduled_production,
+        COALESCE(SUM(CASE WHEN COALESCE(fa.is_completed, false) = true THEN fa.scheduled_production_amount ELSE 0 END), 0.0)::numeric as completed_production,
+        CASE 
+            WHEN COUNT(*) > 0 
+            THEN ROUND(AVG(COALESCE(fa.scheduled_production_amount, 0.0)::numeric), 2)
+            ELSE 0.0
+        END::numeric as avg_production_per_appointment
     FROM raw_marts.fact_appointment fa
-    LEFT JOIN raw_marts.dim_provider dp ON fa.provider_id = dp.provider_id
     WHERE fa.appointment_date IS NOT NULL
-    AND dp.provider_id IS NOT NULL
+    AND fa.provider_id IS NOT NULL
     """
     
     params = {}
@@ -185,23 +224,77 @@ def get_provider_summary(
         query += " AND fa.appointment_date <= :end_date"
         params['end_date'] = end_date
     
-    query += " GROUP BY dp.provider_id ORDER BY total_appointments DESC"
+    query += " GROUP BY fa.provider_id ORDER BY total_appointments DESC"
     
-    result = db.execute(text(query), params).fetchall()
-    return [
-        {
-            "provider_id": int(row.provider_id or 0),
-            "total_appointments": int(row.total_appointments or 0),
-            "completed_appointments": int(row.completed_appointments or 0),
-            "no_show_appointments": int(row.no_show_appointments or 0),
-            "broken_appointments": int(row.broken_appointments or 0),
-            "unique_patients": int(row.unique_patients or 0),
-            "completion_rate": float(row.completion_rate or 0),
-            "no_show_rate": float(row.no_show_rate or 0),
-            "cancellation_rate": float(row.cancellation_rate or 0),
-            "total_scheduled_production": float(row.total_scheduled_production or 0),
-            "completed_production": float(row.completed_production or 0),
-            "avg_production_per_appointment": float(row.avg_production_per_appointment or 0)
-        }
-        for row in result
-    ]
+    try:
+        logger.info(f"Executing provider summary query")
+        logger.debug(f"Query: {query}")
+        logger.debug(f"Params: {params}")
+        
+        # Test if table exists first
+        test_query = "SELECT COUNT(*) FROM raw_marts.fact_appointment LIMIT 1"
+        try:
+            test_result = db.execute(text(test_query)).scalar()
+            logger.info(f"Table exists, row count check returned: {test_result}")
+        except Exception as test_error:
+            logger.error(f"Table access test failed: {str(test_error)}")
+            raise
+        
+        result = db.execute(text(query), params).fetchall()
+        logger.info(f"Provider summary query returned {len(result)} rows")
+        
+        if len(result) == 0:
+            logger.warning("Provider summary query returned no rows")
+            return []
+        
+        rows = []
+        for idx, row in enumerate(result):
+            try:
+                # Convert row to dict safely
+                if hasattr(row, '_mapping'):
+                    row_dict = dict(row._mapping)
+                else:
+                    row_dict = dict(row)
+                
+                # Ensure all required fields exist with defaults
+                provider_row = {
+                    "provider_id": int(row_dict.get('provider_id', 0) or 0),
+                    "total_appointments": int(row_dict.get('total_appointments', 0) or 0),
+                    "completed_appointments": int(row_dict.get('completed_appointments', 0) or 0),
+                    "no_show_appointments": int(row_dict.get('no_show_appointments', 0) or 0),
+                    "broken_appointments": int(row_dict.get('broken_appointments', 0) or 0),
+                    "unique_patients": int(row_dict.get('unique_patients', 0) or 0),
+                    "completion_rate": float(row_dict.get('completion_rate', 0) or 0),
+                    "no_show_rate": float(row_dict.get('no_show_rate', 0) or 0),
+                    "cancellation_rate": float(row_dict.get('cancellation_rate', 0) or 0),
+                    "total_scheduled_production": float(row_dict.get('total_scheduled_production', 0) or 0),
+                    "completed_production": float(row_dict.get('completed_production', 0) or 0),
+                    "avg_production_per_appointment": float(row_dict.get('avg_production_per_appointment', 0) or 0)
+                }
+                rows.append(provider_row)
+            except Exception as row_error:
+                logger.error(f"Error processing provider summary row {idx}: {str(row_error)}")
+                logger.error(f"Row type: {type(row)}")
+                logger.error(f"Row data: {row_dict if 'row_dict' in locals() else 'N/A'}")
+                import traceback
+                logger.error(f"Traceback: {traceback.format_exc()}")
+                # Continue processing other rows instead of failing completely
+                continue
+        
+        logger.info(f"Successfully processed {len(rows)} provider summary rows")
+        return rows
+        
+    except SQLAlchemyError as e:
+        error_msg = str(e)
+        logger.error(f"SQL error fetching provider summary: {error_msg}")
+        logger.error(f"Query: {query}")
+        logger.error(f"Params: {params}")
+        import traceback
+        logger.error(f"SQL Traceback: {traceback.format_exc()}")
+        raise
+    except Exception as e:
+        error_msg = str(e)
+        logger.error(f"Unexpected error fetching provider summary: {error_msg}", exc_info=True)
+        import traceback
+        logger.error(f"Full traceback: {traceback.format_exc()}")
+        raise
