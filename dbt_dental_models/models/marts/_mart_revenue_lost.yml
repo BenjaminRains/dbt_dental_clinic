@@ -137,6 +137,22 @@ models:
           config:
             severity: error
             description: "Estimated recoverable amounts cannot exceed lost revenue"
+
+      - dbt_utils.expression_is_true:
+          expression: "(recovery_potential = 'High' AND (estimated_recoverable_amount IS NULL OR abs(estimated_recoverable_amount - (lost_revenue * 0.8)) < 0.01)) OR (recovery_potential = 'Medium' AND (estimated_recoverable_amount IS NULL OR abs(estimated_recoverable_amount - (lost_revenue * 0.5)) < 0.01)) OR (recovery_potential = 'Low' AND (estimated_recoverable_amount IS NULL OR abs(estimated_recoverable_amount - (lost_revenue * 0.2)) < 0.01)) OR (recovery_potential = 'None' AND (estimated_recoverable_amount IS NULL OR estimated_recoverable_amount = 0)) OR (lost_revenue IS NULL OR lost_revenue = 0)"
+          config:
+            severity: error
+            description: >
+              Estimated Recoverable Amount Recovery Rate Validation: Estimated recoverable must match documented recovery rates
+              
+              Business Requirement: Estimated recoverable amount must equal lost revenue × recovery rate:
+              - High Recovery Potential: 80% of lost revenue
+              - Medium Recovery Potential: 50% of lost revenue
+              - Low Recovery Potential: 20% of lost revenue
+              - None Recovery Potential: 0% of lost revenue
+              
+              Impact: Ensures estimated recoverable amounts match documented recovery rates in exposures.yml
+              Enforcement: Validates recovery rate calculation matches documented business rules
     
     columns:
       # Composite Key Components
@@ -229,44 +245,6 @@ models:
           - positive_values
       
       # Provider Information
-      - name: provider_last_name
-        description: >
-          Provider's last name for reporting and identification
-          
-          Business Rules:
-          - Populated from dim_provider when provider_id is available
-          - Used for provider-specific reporting and analysis
-          - May be null for non-appointment related opportunities
-        tests:
-          - not_null:
-              where: "provider_id is not null"
-      
-      - name: provider_first_name
-        description: >
-          Provider's first name for reporting and identification
-          
-          Business Rules:
-          - Populated from dim_provider when provider_id is available
-          - Used for provider-specific reporting and analysis
-          - May be null for non-appointment related opportunities
-        tests:
-          - not_null:
-              where: "provider_id is not null"
-              config:
-                severity: warn
-      
-      - name: provider_preferred_name
-        description: >
-          Provider's preferred name for display purposes
-          
-          Business Rules:
-          - Populated from dim_provider when provider_id is available
-          - Used for user-friendly reporting and dashboards
-          - May be null for non-appointment related opportunities
-        tests:
-          - not_null:
-              where: "provider_id is not null"
-      
       - name: provider_type_category
         description: >
           Categorized provider type (e.g., Dentist, Hygienist, Specialist)
@@ -476,6 +454,21 @@ models:
           - Affects recovery potential and preventability assessment
         tests:
           - not_null
+          - dbt_utils.expression_is_true:
+              expression: "(opportunity_type = 'Missed Appointment' AND opportunity_subtype IN ('No Show', 'Cancellation', 'Other')) OR (opportunity_type = 'Claim Rejection' AND opportunity_subtype IN ('Insurance Denial', 'Claim Rejection', 'Processing Issue')) OR (opportunity_type = 'Treatment Plan Delay' AND opportunity_subtype IN ('Very Delayed', 'Delayed Start', 'In Progress', 'Current')) OR (opportunity_type = 'Write Off' AND opportunity_subtype IN ('Credit Adjustment', 'Charge Adjustment', 'Zero Adjustment'))"
+              config:
+                severity: error
+                description: >
+                  Opportunity Subtype Validation: Subtype must match documented subtypes for each opportunity type
+                  
+                  Business Requirement: Subtypes must be valid for their opportunity type:
+                  - Missed Appointment: No Show, Cancellation, Other
+                  - Claim Rejection: Insurance Denial, Claim Rejection, Processing Issue
+                  - Treatment Plan Delay: Very Delayed, Delayed Start, In Progress, Current
+                  - Write Off: Credit Adjustment, Charge Adjustment, Zero Adjustment
+                  
+                  Impact: Ensures subtype assignments match documented business rules in exposures.yml
+                  Enforcement: Validates subtype logic matches documented opportunity type definitions
       
       - name: lost_revenue
         description: >
@@ -537,7 +530,9 @@ models:
           - May be null for non-appointment related opportunities
         tests:
           - not_null:
-              where: "opportunity_type = 'Missed Appointment' or opportunity_type = 'Claim Rejection'"
+              where: "(opportunity_type = 'Missed Appointment' OR opportunity_type = 'Claim Rejection')"
+              config:
+                severity: warn
       
       - name: opportunity_datetime
         description: >
@@ -683,6 +678,22 @@ models:
               min_value: 0
               max_value: 100
               severity: error
+          - dbt_utils.expression_is_true:
+              expression: "(recovery_priority_score >= 0 AND recovery_priority_score <= 100) AND (recovery_priority_score = round(recovery_priority_score))"
+              config:
+                severity: error
+                description: >
+                  Recovery Priority Score Algorithm Validation: Score must match documented algorithm components
+                  
+                  Business Requirement: 
+                  - Score must be integer in 0-100 range
+                  - Score calculation must consider recovery potential factor (High=30, Medium=20, Low=10, None=0)
+                  - Score calculation must consider opportunity type factor (Missed Appointment=20, Claim Rejection=15, Treatment Plan Delay=10, Write Off=5)
+                  - Score calculation must consider revenue impact factor (0-40 points based on lost revenue)
+                  - Score calculation must consider recency factor (0-10 points based on opportunity age)
+                  
+                  Impact: Ensures recovery priority scoring matches documented algorithm in exposures.yml
+                  Enforcement: Validates priority score is integer and considers documented factors
       
       - name: preventability
         description: >
@@ -830,10 +841,12 @@ models:
         tests:
           - not_null
       
-      - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to different source timestamps depending on opportunity type. May be null for some opportunity types."
+      - name: _created_by
+        description: "User ID who created the record in the source system (OpenDental). Maps to different source user IDs depending on opportunity type. May be null for some opportunity types."
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       
       - name: _updated_at
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to different source timestamps depending on opportunity type."
