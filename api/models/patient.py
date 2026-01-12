@@ -83,3 +83,14 @@ class Patient(BaseModel):
 class PaginatedPatients(BaseModel):
     patients: List[Patient]
     total: int
+
+class TopPatientBalance(BaseModel):
+    patient_id: int
+    total_balance: float
+    balance_0_30_days: float
+    balance_31_60_days: float
+    balance_61_90_days: float
+    balance_over_90_days: float
+    aging_risk_category: Optional[str] = None
+    days_since_last_payment: Optional[int] = None
+    payment_recency: Optional[str] = None

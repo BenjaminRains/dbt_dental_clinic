@@ -147,3 +147,39 @@ def get_patient_by_id(db: Session, patient_id: int):
         # The _convert_patient_row function handles date conversions
         return _convert_patient_row(dict(row._mapping))
     return None
+
+def get_top_patient_balances(db: Session, limit: int = 10):
+    """Get top N patients by total balance from AR summary"""
+    query = text("""
+        WITH latest_snapshots AS (
+            SELECT DISTINCT ON (patient_id)
+                mas.patient_id,
+                mas.total_balance,
+                mas.balance_0_30_days,
+                mas.balance_31_60_days,
+                mas.balance_61_90_days,
+                mas.balance_over_90_days,
+                mas.aging_risk_category,
+                mas.days_since_last_payment,
+                mas.payment_recency,
+                mas.snapshot_date
+            FROM raw_marts.mart_ar_summary mas
+            WHERE mas.total_balance > 0
+            ORDER BY mas.patient_id, mas.snapshot_date DESC
+        )
+        SELECT 
+            ls.patient_id,
+            ls.total_balance,
+            ls.balance_0_30_days,
+            ls.balance_31_60_days,
+            ls.balance_61_90_days,
+            ls.balance_over_90_days,
+            ls.aging_risk_category,
+            ls.days_since_last_payment,
+            ls.payment_recency
+        FROM latest_snapshots ls
+        ORDER BY ls.total_balance DESC
+        LIMIT :limit
+    """)
+    result = db.execute(query, {"limit": limit})
+    return [dict(row._mapping) for row in result.fetchall()]
