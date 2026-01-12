@@ -23,37 +23,40 @@ def get_treatment_acceptance_kpi_summary(
     """
     query = """
     SELECT 
-        -- Volume Metrics
-        SUM(patients_seen) as patients_seen,
-        SUM(patients_with_exams) as patients_with_exams,
-        SUM(patients_with_exams_and_presented) as patients_with_exams_and_presented,
-        SUM(patients_presented) as patients_presented,
-        SUM(patients_accepted) as patients_accepted,
-        SUM(procedures_presented) as procedures_presented,
-        SUM(procedures_accepted) as procedures_accepted,
+        -- Volume Metrics (COALESCE to handle NULL from SUM when no rows)
+        COALESCE(SUM(patients_seen), 0)::int as patients_seen,
+        COALESCE(SUM(patients_with_exams), 0)::int as patients_with_exams,
+        COALESCE(SUM(patients_with_exams_and_presented), 0)::int as patients_with_exams_and_presented,
+        COALESCE(SUM(patients_presented), 0)::int as patients_presented,
+        COALESCE(SUM(patients_accepted), 0)::int as patients_accepted,
+        COALESCE(SUM(procedures_presented), 0)::int as procedures_presented,
+        COALESCE(SUM(procedures_accepted), 0)::int as procedures_accepted,
         
         -- Exam-specific metrics
-        SUM(patients_with_exams_presented) as patients_with_exams_presented,
-        SUM(patients_with_exams_accepted) as patients_with_exams_accepted,
-        SUM(patients_with_exams_completed) as patients_with_exams_completed,
+        COALESCE(SUM(patients_with_exams_presented), 0)::int as patients_with_exams_presented,
+        COALESCE(SUM(patients_with_exams_accepted), 0)::int as patients_with_exams_accepted,
+        COALESCE(SUM(patients_with_exams_completed), 0)::int as patients_with_exams_completed,
         
         -- Financial Metrics
-        SUM(tx_presented_amount) as tx_presented_amount,
-        SUM(tx_accepted_amount) as tx_accepted_amount,
-        SUM(same_day_treatment_amount) as same_day_treatment_amount,
+        COALESCE(SUM(tx_presented_amount), 0.0)::numeric as tx_presented_amount,
+        COALESCE(SUM(tx_accepted_amount), 0.0)::numeric as tx_accepted_amount,
+        COALESCE(SUM(same_day_treatment_amount), 0.0)::numeric as same_day_treatment_amount,
         
         -- Procedure Status Breakdown
-        SUM(procedures_planned) as procedures_planned,
-        SUM(procedures_ordered) as procedures_ordered,
-        SUM(procedures_completed) as procedures_completed,
-        SUM(procedures_scheduled) as procedures_scheduled,
+        COALESCE(SUM(procedures_planned), 0)::int as procedures_planned,
+        COALESCE(SUM(procedures_ordered), 0)::int as procedures_ordered,
+        COALESCE(SUM(procedures_completed), 0)::int as procedures_completed,
+        COALESCE(SUM(procedures_scheduled), 0)::int as procedures_scheduled,
         
         -- Percentage Metrics (calculated from aggregated totals)
+        -- If presented > 0: calculate normal rate
+        -- If presented = 0 but accepted > 0: return 100.0% (all accepted were accepted, even if not formally "presented")
+        -- This handles cases where procedures are completed directly (status 2) without going through status 1/6
         CASE 
             WHEN SUM(tx_presented_amount) > 0 
             THEN ROUND((SUM(tx_accepted_amount)::numeric / NULLIF(SUM(tx_presented_amount), 0) * 100)::numeric, 2)
             WHEN SUM(tx_accepted_amount) > 0 
-            THEN NULL
+            THEN 100.0  -- All accepted procedures were accepted (even if not formally "presented")
             ELSE 0
         END as tx_acceptance_rate,
         
@@ -61,7 +64,7 @@ def get_treatment_acceptance_kpi_summary(
             WHEN SUM(patients_presented) > 0 
             THEN ROUND((SUM(patients_accepted)::numeric / NULLIF(SUM(patients_presented), 0) * 100)::numeric, 2)
             WHEN SUM(patients_accepted) > 0 
-            THEN NULL
+            THEN 100.0  -- All accepted patients were accepted (even if not formally "presented")
             ELSE 0
         END as patient_acceptance_rate,
         
@@ -79,7 +82,7 @@ def get_treatment_acceptance_kpi_summary(
             WHEN SUM(tx_presented_amount) > 0 
             THEN ROUND((SUM(same_day_treatment_amount)::numeric / NULLIF(SUM(tx_presented_amount), 0) * 100)::numeric, 2)
             WHEN SUM(same_day_treatment_amount) > 0 
-            THEN NULL
+            THEN 100.0  -- All same-day treatment was completed (even if not formally "presented")
             ELSE 0
         END as same_day_treatment_rate,
         
@@ -87,7 +90,7 @@ def get_treatment_acceptance_kpi_summary(
             WHEN SUM(procedures_presented) > 0 
             THEN ROUND((SUM(procedures_accepted)::numeric / NULLIF(SUM(procedures_presented), 0) * 100)::numeric, 2)
             WHEN SUM(procedures_accepted) > 0 
-            THEN NULL
+            THEN 100.0  -- All accepted procedures were accepted (even if not formally "presented")
             ELSE 0
         END as procedure_acceptance_rate
         
@@ -112,11 +115,39 @@ def get_treatment_acceptance_kpi_summary(
     try:
         result = db.execute(text(query), params).fetchone()
         if result:
-            return dict(result._mapping)
+            # Convert NULL values to appropriate defaults for Pydantic validation
+            result_dict = dict(result._mapping)
+            # Convert NULL integers to 0, NULL floats to 0.0
+            for key, value in result_dict.items():
+                if value is None:
+                    if key in ['tx_acceptance_rate', 'patient_acceptance_rate', 'same_day_treatment_rate', 'procedure_acceptance_rate']:
+                        # For acceptance rates: if we have accepted but no presented, treat as 100.0%
+                        # This handles cases where procedures are completed directly (status 2) without going through status 1/6
+                        if key == 'tx_acceptance_rate' and result_dict.get('tx_accepted_amount', 0) > 0:
+                            result_dict[key] = 100.0
+                        elif key == 'patient_acceptance_rate' and result_dict.get('patients_accepted', 0) > 0:
+                            result_dict[key] = 100.0
+                        elif key == 'same_day_treatment_rate' and result_dict.get('same_day_treatment_amount', 0) > 0:
+                            result_dict[key] = 100.0
+                        elif key == 'procedure_acceptance_rate' and result_dict.get('procedures_accepted', 0) > 0:
+                            result_dict[key] = 100.0
+                        else:
+                            # Keep None only if there's no accepted data
+                            continue
+                    elif key == 'diagnosis_rate':
+                        # Diagnosis rate can legitimately be None if no patients with exams
+                        continue
+                    elif 'amount' in key.lower():
+                        result_dict[key] = 0.0
+                    else:
+                        result_dict[key] = 0
+            return result_dict
         else:
             # Return empty summary with zeros
             return {
                 'patients_seen': 0,
+                'patients_with_exams': 0,
+                'patients_with_exams_and_presented': 0,
                 'patients_presented': 0,
                 'patients_accepted': 0,
                 'procedures_presented': 0,
@@ -237,7 +268,7 @@ def get_treatment_acceptance_trends(
             WHEN SUM(tx_presented_amount) > 0 
             THEN ROUND((SUM(tx_accepted_amount)::numeric / NULLIF(SUM(tx_presented_amount), 0) * 100)::numeric, 2)
             WHEN SUM(tx_accepted_amount) > 0 
-            THEN NULL
+            THEN 100.0  -- All accepted procedures were accepted (even if not formally "presented")
             ELSE 0
         END as tx_acceptance_rate,
         
@@ -245,7 +276,7 @@ def get_treatment_acceptance_trends(
             WHEN SUM(patients_presented) > 0 
             THEN ROUND((SUM(patients_accepted)::numeric / NULLIF(SUM(patients_presented), 0) * 100)::numeric, 2)
             WHEN SUM(patients_accepted) > 0 
-            THEN NULL
+            THEN 100.0  -- All accepted patients were accepted (even if not formally "presented")
             ELSE 0
         END as patient_acceptance_rate,
         
@@ -310,7 +341,7 @@ def get_treatment_acceptance_provider_performance(
             WHEN SUM(mas.tx_presented_amount) > 0 
             THEN ROUND((SUM(mas.tx_accepted_amount)::numeric / NULLIF(SUM(mas.tx_presented_amount), 0) * 100)::numeric, 2)
             WHEN SUM(mas.tx_accepted_amount) > 0 
-            THEN NULL
+            THEN 100.0  -- All accepted procedures were accepted (even if not formally "presented")
             ELSE 0
         END as tx_acceptance_rate,
         
@@ -318,7 +349,7 @@ def get_treatment_acceptance_provider_performance(
             WHEN SUM(mas.patients_presented) > 0 
             THEN ROUND((SUM(mas.patients_accepted)::numeric / NULLIF(SUM(mas.patients_presented), 0) * 100)::numeric, 2)
             WHEN SUM(mas.patients_accepted) > 0 
-            THEN NULL
+            THEN 100.0  -- All accepted patients were accepted (even if not formally "presented")
             ELSE 0
         END as patient_acceptance_rate,
         
@@ -349,7 +380,7 @@ def get_treatment_acceptance_provider_performance(
             WHEN SUM(mas.tx_presented_amount) > 0 
             THEN ROUND((SUM(mas.same_day_treatment_amount)::numeric / NULLIF(SUM(mas.tx_presented_amount), 0) * 100)::numeric, 2)
             WHEN SUM(mas.same_day_treatment_amount) > 0 
-            THEN NULL
+            THEN 100.0  -- All same-day treatment was completed (even if not formally "presented")
             ELSE 0
         END as same_day_treatment_rate
         
