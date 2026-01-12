@@ -261,8 +261,8 @@ final as (
         -- Financial Performance
         ae.total_scheduled_production,
         ae.completed_production,
-        round(ae.completed_production::numeric / nullif(ae.total_scheduled_production, 0) * 100, 2) as production_efficiency,
-        round(ae.completed_production / nullif(ae.completed_appointments, 0), 2) as avg_production_per_completed_appointment,
+        round((ae.completed_production::numeric / nullif(ae.total_scheduled_production, 0) * 100)::numeric, 2) as production_efficiency,
+        round((ae.completed_production::numeric / nullif(ae.completed_appointments, 0))::numeric, 2) as avg_production_per_completed_appointment,
         
         -- Performance Categories (moved to enhanced CTE)
         ae.completion_performance,
