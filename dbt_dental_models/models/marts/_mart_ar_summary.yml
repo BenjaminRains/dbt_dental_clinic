@@ -519,6 +519,28 @@ models:
               Business Requirement: Risk categories must match defined business rules
               Impact: Ensures risk assessment drives correct collection strategies
               Enforcement: Validates risk categorization logic produces expected results
+
+      - dbt_utils.expression_is_true:
+          expression: |
+            (total_balance = 0 AND aging_risk_category = 'No Balance') OR
+            (total_balance < 0 AND aging_risk_category = 'Credit Balance') OR
+            (total_balance > 0 AND balance_over_90_days / nullif(total_balance, 0) >= 0.5 AND aging_risk_category = 'High Risk') OR
+            (total_balance > 0 AND balance_over_90_days / nullif(total_balance, 0) >= 0.25 AND balance_over_90_days / nullif(total_balance, 0) < 0.5 AND aging_risk_category = 'Medium Risk') OR
+            (total_balance > 0 AND balance_over_90_days / nullif(total_balance, 0) < 0.25 AND balance_61_90_days / nullif(total_balance, 0) >= 0.5 AND aging_risk_category = 'Moderate Risk') OR
+            (total_balance > 0 AND balance_over_90_days / nullif(total_balance, 0) < 0.25 AND balance_61_90_days / nullif(total_balance, 0) < 0.5 AND aging_risk_category = 'Low Risk')
+          config:
+            severity: error
+            description: >
+              Risk Category Assignment Logic: Risk category assignment must match documented business rules
+              
+              Business Requirement: Risk categories must be assigned based on documented thresholds:
+              - High Risk: >50% of balance is over 90 days old
+              - Medium Risk: 25-50% of balance is over 90 days old
+              - Moderate Risk: >50% of balance is 61-90 days old (and <25% over 90 days)
+              - Low Risk: <25% over 90 days and <50% is 61-90 days
+              
+              Impact: Ensures risk assessment logic matches documented business rules in exposures.yml
+              Enforcement: Validates risk categorization SQL matches exposure documentation
     
     meta:
       owner: "financial_management_team"
