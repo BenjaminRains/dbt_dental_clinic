@@ -134,10 +134,43 @@ appointment_calculated as (
             else null
         end as treatment_time_minutes,
 
-        -- Financial Information (not available at appointment level)
+        -- Financial Information
+        -- Calculate scheduled production from linked procedures, with fallback to appointment type estimates
+        -- Note: production_goal and total_scheduled_production are unused placeholder fields
+        -- - production_goal: Real goals come from dim_provider.hourly_production_goal_amount
+        -- - total_scheduled_production: Downstream models use scheduled_production_amount instead
         0.00 as production_goal,
         0.00 as total_scheduled_production,
-        0.00 as scheduled_production_amount,
+        coalesce(
+            -- PRIMARY: Get actual production from linked procedures (used for real clinic data)
+            -- Real clinic data: Broken appointments typically have procedures (Status 1: Treatment Planned) with fees
+            -- This subquery will find them and return the actual sum, so the fallback below is NOT used for real data
+            (select sum(pc.procedure_fee)
+             from {{ ref('int_procedure_complete') }} pc
+             where pc.appointment_id = ab.appointment_id
+               and pc.procedure_date = date(ab.appointment_datetime)),
+            -- FALLBACK: Estimate from appointment type (primarily for SYNTHETIC DATA)
+            -- Synthetic data: Broken appointments don't have procedures created, so this fallback provides realistic estimates
+            -- This fallback is rarely (if ever) used for real clinic data since procedures typically exist
+            case 
+                when ab.appointment_type_name = 'Comprehensive Exam' then 250.00
+                when ab.appointment_type_name = 'Periodic Exam' then 150.00
+                when ab.appointment_type_name = 'Emergency' then 200.00
+                when ab.appointment_type_name = 'Hygiene Adult' then 120.00
+                when ab.appointment_type_name = 'Hygiene Child' then 100.00
+                when ab.appointment_type_name = 'Crown Prep' then 1200.00
+                when ab.appointment_type_name = 'Crown Seat' then 800.00
+                when ab.appointment_type_name = 'Filling' then 300.00
+                when ab.appointment_type_name = 'Root Canal' then 1500.00
+                when ab.appointment_type_name = 'Extraction' then 250.00
+                when ab.appointment_type_name = 'Denture Delivery' then 600.00
+                when ab.appointment_type_name = 'Consultation' then 100.00
+                when ab.appointment_type_name = 'Follow-up' then 75.00
+                when ab.appointment_type_name = 'SRP Quad' then 400.00
+                when ab.appointment_type_name = 'Perio Maintenance' then 120.00
+                else 200.00  -- Default estimate for unknown appointment types
+            end
+        ) as scheduled_production_amount,
         
         -- Procedure Details (removed - no procedure data available)
         0 as procedure_count,
