@@ -153,21 +153,17 @@ appointment_calculated as (
             -- Synthetic data: Broken appointments don't have procedures created, so this fallback provides realistic estimates
             -- This fallback is rarely (if ever) used for real clinic data since procedures typically exist
             case 
-                when ab.appointment_type_name = 'Comprehensive Exam' then 250.00
-                when ab.appointment_type_name = 'Periodic Exam' then 150.00
-                when ab.appointment_type_name = 'Emergency' then 200.00
-                when ab.appointment_type_name = 'Hygiene Adult' then 120.00
-                when ab.appointment_type_name = 'Hygiene Child' then 100.00
-                when ab.appointment_type_name = 'Crown Prep' then 1200.00
-                when ab.appointment_type_name = 'Crown Seat' then 800.00
-                when ab.appointment_type_name = 'Filling' then 300.00
-                when ab.appointment_type_name = 'Root Canal' then 1500.00
-                when ab.appointment_type_name = 'Extraction' then 250.00
-                when ab.appointment_type_name = 'Denture Delivery' then 600.00
-                when ab.appointment_type_name = 'Consultation' then 100.00
-                when ab.appointment_type_name = 'Follow-up' then 75.00
-                when ab.appointment_type_name = 'SRP Quad' then 400.00
-                when ab.appointment_type_name = 'Perio Maintenance' then 120.00
+                when ab.appointment_type_name = 'NewPatient' then 250.00
+                when ab.appointment_type_name = 'Patient' then 150.00
+                when ab.appointment_type_name = 'Hygiene' then 120.00
+                when ab.appointment_type_name = 'Prophy' then 100.00
+                when ab.appointment_type_name = 'Crown' then 1200.00
+                when ab.appointment_type_name = 'Restorative' then 300.00
+                when ab.appointment_type_name = 'SRP' then 400.00
+                when ab.appointment_type_name = 'Perio' then 120.00
+                when ab.appointment_type_name = 'Denture' then 600.00
+                when ab.appointment_type_name = 'Other' then 200.00
+                when ab.appointment_type_name = 'Unknown' then 200.00
                 else 200.00  -- Default estimate for unknown appointment types
             end
         ) as scheduled_production_amount,
