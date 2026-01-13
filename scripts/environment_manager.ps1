@@ -528,6 +528,8 @@ function Initialize-APIEnvironment {
 
     $projectName = Split-Path -Leaf $ProjectPath
     Write-Host "`n🌐 Initializing API environment: $projectName" -ForegroundColor Blue
+    Write-Host "📍 This sets up LOCAL API development (runs API on your machine)" -ForegroundColor Cyan
+    Write-Host "   To connect to REMOTE EC2 instance, use 'aws-ssm-init' + 'ssm-connect-api'" -ForegroundColor Gray
 
     # Check for API project structure
     $apiPath = "$ProjectPath\api"
@@ -584,14 +586,24 @@ function Initialize-APIEnvironment {
     }
 
     # Interactive Environment Selection
-    Write-Host "`n🔧 API Environment Selection" -ForegroundColor Cyan
-    Write-Host "Which environment would you like to use?" -ForegroundColor White
-    Write-Host "  Type 'local' for Local Development (.env_api_local) - opendental_analytics on localhost (PHI)" -ForegroundColor Yellow
-    Write-Host "  Type 'production' for Demo API (.env_api_production) - opendental_demo (synthetic data)" -ForegroundColor Yellow
-    Write-Host "    - EC2 deployment: api.dbtdentalclinic.com" -ForegroundColor Gray
-    Write-Host "    - Local testing: Change POSTGRES_ANALYTICS_HOST to localhost" -ForegroundColor Gray
+    Write-Host "`n🔧 API Environment Selection (LOCAL Development)" -ForegroundColor Cyan
+    Write-Host "Which environment would you like to use for LOCAL API development?" -ForegroundColor White
+    Write-Host ""
+    Write-Host "  Type 'local' for Local Development (.env_api_local)" -ForegroundColor Yellow
+    Write-Host "    → opendental_analytics on localhost (PHI - real production data)" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Type 'production' for Demo API (.env_api_production)" -ForegroundColor Yellow
+    Write-Host "    → opendental_demo (synthetic data - safe for local testing)" -ForegroundColor Gray
+    Write-Host "    → Uses same config as deployed API at api.dbtdentalclinic.com" -ForegroundColor Gray
+    Write-Host "    → For localhost testing, ensure DEMO_POSTGRES_HOST=localhost in .env_api_production" -ForegroundColor Gray
+    Write-Host ""
     Write-Host "  Type 'test' for Test (.env_api_test)" -ForegroundColor Yellow
+    Write-Host "    → Test database configuration" -ForegroundColor Gray
+    Write-Host ""
     Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
+    Write-Host ""
+    Write-Host "💡 Note: This runs the API LOCALLY on your machine." -ForegroundColor Cyan
+    Write-Host "   To connect to the REMOTE EC2 instance, use 'aws-ssm-init' + 'ssm-connect-api'" -ForegroundColor Gray
     
     do {
         $choice = Read-Host "`nEnter environment (local/production/test/cancel)"
@@ -646,9 +658,13 @@ function Initialize-APIEnvironment {
     $script:IsAPIActive = $true
     $script:ActiveProject = $projectName
 
-    Write-Host "`n✅ API environment ready!" -ForegroundColor Green
+    Write-Host "`n✅ API environment ready (LOCAL development)!" -ForegroundColor Green
     Write-Host "Commands: api, api-test, api-docs, api-run" -ForegroundColor Cyan
-    Write-Host "To switch to other environments: run 'api-deactivate' first`n" -ForegroundColor Gray
+    Write-Host "  • api-run - Start API server locally on your machine" -ForegroundColor Gray
+    Write-Host "  • api-docs - Open API documentation (http://localhost:8000/docs)" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "To switch to other environments: run 'api-deactivate' first" -ForegroundColor Gray
+    Write-Host "To connect to REMOTE EC2 instance: use 'aws-ssm-init' + 'ssm-connect-api'`n" -ForegroundColor Gray
 }
 
 function Stop-APIEnvironment {
@@ -954,16 +970,36 @@ function Start-APIServer {
     if (-not $port) { $port = "8000" }
     if (-not $apiHost) { $apiHost = "0.0.0.0" }
     
-    # Set API_ENVIRONMENT=local for local development with opendental_analytics database
+    # Only set API_ENVIRONMENT=local as default if not already set by api-init
+    # (api-init loads it from .env_api_* files, so we should respect that)
     if (-not $env:API_ENVIRONMENT) {
         $env:API_ENVIRONMENT = "local"
-        Write-Host "🔧 Set API_ENVIRONMENT=local (for opendental_analytics database)" -ForegroundColor Cyan
+        Write-Host "🔧 Set API_ENVIRONMENT=local (default - for opendental_analytics database)" -ForegroundColor Cyan
     } else {
-        Write-Host "🔧 Using API_ENVIRONMENT=$env:API_ENVIRONMENT" -ForegroundColor Cyan
+        Write-Host "🔧 Using API_ENVIRONMENT=$env:API_ENVIRONMENT (from api-init)" -ForegroundColor Cyan
+    }
+    
+    # Determine database info based on environment
+    $dbInfo = switch ($env:API_ENVIRONMENT) {
+        "production" {
+            $dbName = $env:DEMO_POSTGRES_DB
+            if (-not $dbName) { $dbName = "opendental_demo" }
+            "opendental_demo (production/demo database - synthetic data)"
+        }
+        "test" {
+            $dbName = $env:TEST_POSTGRES_ANALYTICS_DB
+            if (-not $dbName) { $dbName = "opendental_analytics" }
+            "$dbName (test environment)"
+        }
+        default {
+            $dbName = $env:POSTGRES_ANALYTICS_DB
+            if (-not $dbName) { $dbName = "opendental_analytics" }
+            "$dbName (local development)"
+        }
     }
     
     Write-Host "🚀 Starting API server on $apiHost`:$port..." -ForegroundColor Blue
-    Write-Host "   Database: opendental_analytics (local development)" -ForegroundColor Gray
+    Write-Host "   Database: $dbInfo" -ForegroundColor Gray
     
     # Check if we're already in the api directory or need to change to it
     $currentLocation = Get-Location
@@ -1969,6 +2005,8 @@ function Initialize-AWSSSMEnvironment {
     param([string]$ProjectPath = (Get-Location))
 
     Write-Host "`n☁️  Initializing AWS SSM Environment" -ForegroundColor Cyan
+    Write-Host "📍 This sets up REMOTE access to EC2 instances (not local API development)" -ForegroundColor Cyan
+    Write-Host "   To run API LOCALLY, use 'api-init' instead" -ForegroundColor Gray
 
     # Check if Session Manager Plugin is installed
     Write-Host "🔍 Checking Session Manager Plugin..." -ForegroundColor Yellow
@@ -2107,12 +2145,15 @@ function Initialize-AWSSSMEnvironment {
     }
 
     Write-Host "`n✅ AWS SSM Environment ready!" -ForegroundColor Green
-    Write-Host "Commands:" -ForegroundColor Cyan
-    Write-Host "  ssm-connect-api        - Connect to API EC2 instance" -ForegroundColor White
-    Write-Host "  ssm-connect-demo-db    - Connect to Demo DB EC2 instance" -ForegroundColor White
-    Write-Host "  ssm-port-forward-rds   - Start port forwarding to RDS (production analytics DB)" -ForegroundColor White
-    Write-Host "  ssm-port-forward-demo-db - Start port forwarding to demo database" -ForegroundColor White
+    Write-Host "Commands (REMOTE EC2 access):" -ForegroundColor Cyan
+    Write-Host "  ssm-connect-api        - Connect to REMOTE API EC2 instance (SSH-like session)" -ForegroundColor White
+    Write-Host "  ssm-connect-demo-db    - Connect to REMOTE Demo DB EC2 instance" -ForegroundColor White
+    Write-Host "  ssm-port-forward-rds   - Port forward RDS to localhost (for local DB access)" -ForegroundColor White
+    Write-Host "  ssm-port-forward-demo-db - Port forward demo DB to localhost" -ForegroundColor White
     Write-Host "  ssm-status             - Check SSM plugin status" -ForegroundColor White
+    Write-Host ""
+    Write-Host "💡 These commands connect to REMOTE EC2 instances." -ForegroundColor Cyan
+    Write-Host "   To run the API LOCALLY, use 'api-init' instead." -ForegroundColor Gray
     Write-Host ""
 }
 
@@ -2122,7 +2163,10 @@ function Connect-SSMAPI {
         return
     }
     
-    Write-Host "🔌 Connecting to API EC2 instance: $script:APIInstanceId" -ForegroundColor Cyan
+    Write-Host "🔌 Connecting to REMOTE API EC2 instance: $script:APIInstanceId" -ForegroundColor Cyan
+    Write-Host "📍 This opens a shell session on the remote server (like SSH)" -ForegroundColor Gray
+    Write-Host "   To run API locally instead, use 'api-init' + 'api-run'" -ForegroundColor Gray
+    Write-Host ""
     aws ssm start-session --target $script:APIInstanceId
 }
 
@@ -2531,8 +2575,8 @@ Write-Host "`n🚀 Quick Start:" -ForegroundColor White
 Write-Host "  dbt-init              - Initialize dbt environment (dev target - local production)" -ForegroundColor Cyan
 Write-Host "  dbt-init -Target demo - Initialize dbt environment (demo target - demo EC2 database)" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
-Write-Host "  api-init       - Initialize API environment (interactive)" -ForegroundColor Blue
-Write-Host "  aws-ssm-init   - Initialize AWS SSM environment (loads credentials, checks plugin)" -ForegroundColor DarkCyan
+Write-Host "  api-init       - Initialize API environment (LOCAL - run API on your machine)" -ForegroundColor Blue
+Write-Host "  aws-ssm-init   - Initialize AWS SSM (REMOTE - connect to EC2 instances)" -ForegroundColor DarkCyan
 Write-Host "  frontend-dev   - Start frontend dev server (localhost:3000 → localhost:8000 API)" -ForegroundColor Green
 Write-Host "  frontend-deploy - Deploy demo frontend to AWS S3/CloudFront (public)" -ForegroundColor Green
 Write-Host "  clinic-frontend-deploy - Deploy clinic production frontend (IP-restricted)" -ForegroundColor Green
