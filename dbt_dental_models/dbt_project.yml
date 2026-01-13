@@ -48,17 +48,17 @@ models:
     # Configure materializations by folder
     staging:
       +materialized: view  # Default materialization, some models override this to be tables
-      +schema: staging  # Simplified schema name
+      +schema: staging
       +description: "Staging models for raw data transformation"
     
     intermediate:
       +materialized: table
-      +schema: intermediate  # Simplified schema name
+      +schema: intermediate
       +description: "Intermediate models for business logic implementation"
     
     marts:
       +materialized: table
-      +schema: marts  # Simplified schema name
+      +schema: marts
       +description: "Mart models for business reporting and analytics"
 
 # Package dependencies - temporarily disabled for debugging
