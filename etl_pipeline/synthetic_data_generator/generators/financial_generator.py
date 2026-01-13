@@ -84,7 +84,10 @@ class FinancialGenerator:
         # Phase 3: Adjustments
         self._generate_adjustments(db)
         
-        # Phase 4: Validate balancing
+        # Phase 4: Update patient balances
+        self._update_patient_balances(db)
+        
+        # Phase 5: Validate balancing
         self._validate_ar_balancing()
     
     def _generate_claims_and_claimprocs(self, db):
@@ -496,6 +499,86 @@ class FinancialGenerator:
         self.data_store['counts']['adjustment'] = len(adjustments)
         print(f"✓ Generated {len(adjustments)} adjustments")
     
+    def _update_patient_balances(self, db):
+        """Update patient.BalTotal from procedure balances"""
+        print("\n[Financial Generator] Updating patient balances...")
+        
+        # Check if we have procedure financials to work with
+        if not self.procedure_financials:
+            print("⚠ No procedure financials found - skipping balance update")
+            return
+        
+        # Create a lookup map: proc_num -> pat_num for efficient access
+        proc_to_patient = {proc[0]: proc[1] for proc in self.data_store['procedures']}
+        
+        print(f"  Processing {len(self.procedure_financials)} procedures...")
+        print(f"  Found {len(proc_to_patient)} procedures in data_store")
+        
+        # Calculate patient balances from procedures
+        patient_balances = {}
+        procedures_processed = 0
+        
+        for proc_num, fin_state in self.procedure_financials.items():
+            # Get patient ID from lookup map
+            pat_num = proc_to_patient.get(proc_num)
+            if not pat_num:
+                continue
+            
+            procedures_processed += 1
+            
+            # Calculate AR balance for this procedure
+            fee = fin_state['Fee']
+            ins_paid = fin_state['InsurancePaid']
+            pat_paid = fin_state['PatientPaid']
+            adjustments = fin_state['Adjustments']
+            writeoff = fin_state['WriteOff']
+            
+            ar_balance = fee - ins_paid - pat_paid - adjustments - writeoff
+            
+            # Sum balances per patient (only positive balances)
+            if ar_balance > 0.01:  # Use 0.01 threshold to avoid rounding issues
+                if pat_num not in patient_balances:
+                    patient_balances[pat_num] = 0.0
+                patient_balances[pat_num] += ar_balance
+        
+        print(f"  Processed {procedures_processed} procedures")
+        print(f"  Found {len(patient_balances)} patients with outstanding balances")
+        
+        # Update patient table with calculated balances
+        if patient_balances:
+            updates = []
+            for pat_num, balance in patient_balances.items():
+                updates.append((round(balance, 2), round(balance, 2), pat_num))
+            
+            sql = """
+                UPDATE raw.patient
+                SET "BalTotal" = %s,
+                    "EstBalance" = %s
+                WHERE "PatNum" = %s
+            """
+            
+            # Execute UPDATE statements directly (execute_batch may not work reliably for UPDATEs)
+            try:
+                # Use executemany which works reliably for UPDATE statements
+                db.cursor.executemany(sql, updates)
+                rows_updated = db.cursor.rowcount
+                
+                patients_with_balance = len([b for b in patient_balances.values() if b > 0])
+                total_balance = sum(patient_balances.values())
+                
+                print(f"✓ Updated balances for {patients_with_balance} patients (rows affected: {rows_updated})")
+                print(f"  Total AR balance: ${total_balance:,.2f}")
+                if patients_with_balance > 0:
+                    print(f"  Average balance per patient: ${total_balance/patients_with_balance:,.2f}")
+            except Exception as e:
+                print(f"❌ Error updating patient balances: {e}")
+                import traceback
+                traceback.print_exc()
+                raise
+        else:
+            print("⚠ No patient balances to update")
+            print("  This may indicate all procedures are fully paid or there's an issue with balance calculation")
+    
     def _validate_ar_balancing(self):
         """Validate that AR balancing equation holds for all procedures"""
         print("\n[Financial Validation] Checking AR balance equation...")
@@ -528,6 +611,7 @@ class FinancialGenerator:
         print(f"  With AR balance: {total_with_balance} ({total_with_balance/total_checked*100:.1f}%)")
         print(f"  Max imbalance: ${max_imbalance:.2f}")
         print("✓ Financial validation complete")
+    
     
     def _chunk_list(self, lst: List, chunk_size: int) -> List[List]:
         """Split list into chunks"""
