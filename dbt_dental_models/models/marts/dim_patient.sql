@@ -112,7 +112,7 @@ patient_enhanced as (
         
         -- Financial Information (from intermediate model)
         s.estimated_balance,  -- Estimated current balance
-        s.total_balance,  -- Total outstanding balance
+        s.total_balance,  -- Total outstanding balance (from source - may be 0 if not populated)
         0.00 as balance_0_30_days,  -- Not available in intermediate, default to 0
         0.00 as balance_31_60_days,  -- Not available in intermediate, default to 0
         0.00 as balance_61_90_days,  -- Not available in intermediate, default to 0
