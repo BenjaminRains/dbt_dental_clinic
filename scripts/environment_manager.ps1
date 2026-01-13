@@ -336,12 +336,14 @@ function Initialize-ETLEnvironment {
     # Interactive Environment Selection
     Write-Host "`n🔧 ETL Environment Selection" -ForegroundColor Cyan
     Write-Host "Which environment would you like to use?" -ForegroundColor White
-    Write-Host "  Type 'production' for Production (.env_production)" -ForegroundColor Yellow
-    Write-Host "  Type 'test' for Test (.env_test)" -ForegroundColor Yellow
+    Write-Host "  Type 'production' for Production (.env_production) - ETL pipeline operations" -ForegroundColor Yellow
+    Write-Host "  Type 'test' for Test (.env_test) - ETL pipeline operations" -ForegroundColor Yellow
+    Write-Host "  Type 'demo' for Demo (deployment_credentials.json) - Synthetic data generator ONLY" -ForegroundColor Cyan
+    Write-Host "    ⚠️  Note: Demo mode is for synthetic data generation only, not ETL operations" -ForegroundColor Gray
     Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
     
     do {
-        $choice = Read-Host "`nEnter environment (production/test/cancel)"
+        $choice = Read-Host "`nEnter environment (production/test/demo/cancel)"
         $choice = $choice.ToLower().Trim()
         
         switch ($choice) {
@@ -355,42 +357,122 @@ function Initialize-ETLEnvironment {
                 $envName = "Test"
                 break
             }
+            "demo" { 
+                $envFile = $null  # Demo doesn't use .env file
+                $envName = "Demo"
+                break
+            }
             "cancel" { 
                 Write-Host "❌ Environment setup cancelled" -ForegroundColor Red
                 return
             }
             default { 
-                Write-Host "❌ Invalid choice. Please enter 'production', 'test', or 'cancel'." -ForegroundColor Red
+                Write-Host "❌ Invalid choice. Please enter 'production', 'test', 'demo', or 'cancel'." -ForegroundColor Red
             }
         }
-    } while ($choice -notin @("production", "test", "cancel"))
+    } while ($choice -notin @("production", "test", "demo", "cancel"))
 
-    # Load only the selected environment file
+    # Load environment based on selection
     $etlPath = "$ProjectPath\etl_pipeline"
-    $envPath = "$etlPath\$envFile"
     
-    if (Test-Path $envPath) {
-        Write-Host "📄 Loading $envName environment from: $envFile" -ForegroundColor Green
-        Get-Content $envPath | ForEach-Object {
-            if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
-                $name = $matches[1].Trim()
-                $value = $matches[2].Trim()
-                [Environment]::SetEnvironmentVariable($name, $value, 'Process')
-                Write-Host "  Loaded: $name" -ForegroundColor Gray
+    if ($choice -eq "demo") {
+        # Demo environment: Load from deployment_credentials.json
+        Write-Host "📋 Loading Demo environment from deployment_credentials.json..." -ForegroundColor Green
+        $credentialsPath = "$ProjectPath\deployment_credentials.json"
+        
+        if (Test-Path $credentialsPath) {
+            try {
+                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
+                if ($credentials.demo_database.postgresql) {
+                    $demo = $credentials.demo_database
+                    
+                    # Check if we're running locally (need port forwarding) or on EC2 (direct connection)
+                    $isLocal = $true
+                    $demoHost = "localhost"
+                    $demoPort = "5434"  # Default forwarded port for demo DB
+                    
+                    # Check if we're on EC2
+                    try {
+                        $ec2Metadata = Invoke-WebRequest -Uri "http://169.254.169.254/latest/meta-data/instance-id" -TimeoutSec 1 -ErrorAction Stop
+                        if ($ec2Metadata.StatusCode -eq 200) {
+                            $isLocal = $false
+                            $demoHost = $demo.ec2.private_ip
+                            $demoPort = $demo.postgresql.port.ToString()
+                            Write-Host "🌐 Detected EC2 environment - using direct connection" -ForegroundColor Cyan
+                        }
+                    } catch {
+                        # Not on EC2, use port forwarding
+                        Write-Host "💻 Detected local environment - requires port forwarding" -ForegroundColor Cyan
+                        Write-Host "⚠️  IMPORTANT: Start port forwarding first!" -ForegroundColor Yellow
+                        Write-Host "   Run: aws-ssm-init" -ForegroundColor Gray
+                        Write-Host "   Then: ssm-port-forward-demo-db" -ForegroundColor Gray
+                        Write-Host "   (Keep that terminal open in the background)" -ForegroundColor Gray
+                        Write-Host ""
+                    }
+                    
+                    # Set DEMO_POSTGRES_* environment variables
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_HOST', $demoHost, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_PORT', $demoPort, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_DB', $demo.postgresql.database, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_USER', $demo.postgresql.user, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_PASSWORD', $demo.postgresql.password, 'Process')
+                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_SCHEMA', 'raw', 'Process')
+                    [Environment]::SetEnvironmentVariable('ETL_ENVIRONMENT', 'demo', 'Process')
+                    
+                    Write-Host "✅ Demo database credentials loaded:" -ForegroundColor Green
+                    Write-Host "   Host: $demoHost" -ForegroundColor Gray
+                    Write-Host "   Port: $demoPort" -ForegroundColor Gray
+                    Write-Host "   Database: $($demo.postgresql.database)" -ForegroundColor Gray
+                    Write-Host "   User: $($demo.postgresql.user)" -ForegroundColor Gray
+                    Write-Host "   Environment: demo" -ForegroundColor Gray
+                } else {
+                    Write-Host "❌ Demo database credentials not found in deployment_credentials.json" -ForegroundColor Red
+                    return
+                }
+            } catch {
+                Write-Host "❌ Failed to parse deployment_credentials.json: $_" -ForegroundColor Red
+                return
             }
+        } else {
+            Write-Host "❌ deployment_credentials.json not found: $credentialsPath" -ForegroundColor Red
+            Write-Host "Please create deployment_credentials.json from deployment_credentials.json.template" -ForegroundColor Yellow
+            return
         }
     } else {
-        Write-Host "❌ Environment file not found: $envPath" -ForegroundColor Red
-        Write-Host "Please create $envFile from the template" -ForegroundColor Yellow
-        Write-Host "Template location: $etlPath\docs\env_$($envFile.Replace('.env_', '')).template" -ForegroundColor Yellow
-        return
+        # Production or Test: Load from .env file
+        $envPath = "$etlPath\$envFile"
+        
+        if (Test-Path $envPath) {
+            Write-Host "📄 Loading $envName environment from: $envFile" -ForegroundColor Green
+            Get-Content $envPath | ForEach-Object {
+                if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
+                    $name = $matches[1].Trim()
+                    $value = $matches[2].Trim()
+                    [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+                    Write-Host "  Loaded: $name" -ForegroundColor Gray
+                }
+            }
+        } else {
+            Write-Host "❌ Environment file not found: $envPath" -ForegroundColor Red
+            Write-Host "Please create $envFile from the template" -ForegroundColor Yellow
+            Write-Host "Template location: $etlPath\docs\env_$($envFile.Replace('.env_', '')).template" -ForegroundColor Yellow
+            return
+        }
     }
 
     $script:IsETLActive = $true
     $script:ActiveProject = $projectName
 
     Write-Host "`n✅ ETL environment ready!" -ForegroundColor Green
-    Write-Host "Commands: etl, etl-status, etl-validate, etl-run, etl-test" -ForegroundColor Cyan
+    
+    if ($choice -eq "demo") {
+        Write-Host "Commands: python main.py (synthetic data generator)" -ForegroundColor Cyan
+        Write-Host "⚠️  ETL pipeline commands (etl-run, etl-validate) are not available in demo mode" -ForegroundColor Yellow
+        Write-Host "   Demo mode is for synthetic data generation only" -ForegroundColor Gray
+    } else {
+        Write-Host "Commands: etl, etl-status, etl-validate, etl-run, etl-test" -ForegroundColor Cyan
+    }
+    
     Write-Host "To switch to dbt: run 'etl-deactivate' first, then 'dbt-init'`n" -ForegroundColor Gray
 }
 
@@ -708,6 +790,19 @@ function Invoke-ETL {
         return
     }
     
+    # Safety check: Prevent ETL operations in demo mode (except help/status)
+    if ($env:ETL_ENVIRONMENT -eq "demo") {
+        $allowedCommands = @("help", "--help", "-h", "status")
+        $command = $args[0]
+        
+        if ($command -notin $allowedCommands) {
+            Write-Host "❌ ETL pipeline operations are not available in demo mode." -ForegroundColor Red
+            Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
+            Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'production' or 'test' for ETL operations." -ForegroundColor Yellow
+            return
+        }
+    }
+    
     if (-not $args -or $args.Count -eq 0) {
         Show-ETLHelp
         return
@@ -732,6 +827,15 @@ function Test-ETLValidation {
         Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
         return
     }
+    
+    # Safety check: Prevent ETL operations in demo mode
+    if ($env:ETL_ENVIRONMENT -eq "demo") {
+        Write-Host "❌ ETL validation is not available in demo mode." -ForegroundColor Red
+        Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
+        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'production' or 'test' for ETL operations." -ForegroundColor Yellow
+        return
+    }
+    
     # FIXED: Use python directly since we're already in pipenv environment
     python -m etl_pipeline.cli.main validate $args
 }
@@ -741,6 +845,15 @@ function Start-ETLPipeline {
         Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
         return
     }
+    
+    # Safety check: Prevent ETL operations in demo mode
+    if ($env:ETL_ENVIRONMENT -eq "demo") {
+        Write-Host "❌ ETL pipeline operations are not available in demo mode." -ForegroundColor Red
+        Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
+        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'production' or 'test' for ETL operations." -ForegroundColor Yellow
+        return
+    }
+    
     # FIXED: Use python directly since we're already in pipenv environment
     python -m etl_pipeline.cli.main run $args
 }
@@ -748,6 +861,14 @@ function Start-ETLPipeline {
 function Test-ETLConnections {
     if (-not $script:IsETLActive) {
         Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
+        return
+    }
+    
+    # Safety check: Prevent ETL operations in demo mode
+    if ($env:ETL_ENVIRONMENT -eq "demo") {
+        Write-Host "❌ ETL connection testing is not available in demo mode." -ForegroundColor Red
+        Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
+        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'production' or 'test' for ETL operations." -ForegroundColor Yellow
         return
     }
     
@@ -2266,9 +2387,15 @@ function Get-ETLEnvironmentStatus {
     if ($environment -eq "production") {
         Write-Host "  OPENDENTAL_SOURCE_DB: $($env:OPENDENTAL_SOURCE_DB)" -ForegroundColor Gray
         Write-Host "  OPENDENTAL_SOURCE_HOST: $($env:OPENDENTAL_SOURCE_HOST)" -ForegroundColor Gray
+        Write-Host "  POSTGRES_ANALYTICS_DB: $($env:POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
     } elseif ($environment -eq "test") {
         Write-Host "  TEST_OPENDENTAL_SOURCE_DB: $($env:TEST_OPENDENTAL_SOURCE_DB)" -ForegroundColor Gray
         Write-Host "  TEST_OPENDENTAL_SOURCE_HOST: $($env:TEST_OPENDENTAL_SOURCE_HOST)" -ForegroundColor Gray
+        Write-Host "  TEST_POSTGRES_ANALYTICS_DB: $($env:TEST_POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
+    } elseif ($environment -eq "demo") {
+        Write-Host "  DEMO_POSTGRES_DB: $($env:DEMO_POSTGRES_DB)" -ForegroundColor Gray
+        Write-Host "  DEMO_POSTGRES_HOST: $($env:DEMO_POSTGRES_HOST)" -ForegroundColor Gray
+        Write-Host "  ⚠️  Demo mode: Synthetic data generator only (ETL commands disabled)" -ForegroundColor Yellow
     }
     Write-Host ""
 }
