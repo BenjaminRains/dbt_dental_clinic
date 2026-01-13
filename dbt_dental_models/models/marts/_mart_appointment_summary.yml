@@ -169,10 +169,13 @@ models:
           Business Rules:
           - Standardized provider identification
           - Used for display and reporting purposes
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
           - not_null:
               config:
                 severity: warn
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: provider_last_name
         description: >
@@ -181,8 +184,12 @@ models:
           Business Rules:
           - Standardized provider identification
           - Used for display and reporting purposes
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: provider_preferred_name
         description: >
@@ -191,9 +198,12 @@ models:
           Business Rules:
           - Preferred name for reporting and display
           - May be different from first/last name combination
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
           - not_null:
-              where: "provider_preferred_name is not null"
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: provider_type
         description: >

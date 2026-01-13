@@ -261,8 +261,12 @@ models:
           - Concatenated from provider_first_name and provider_last_name
           - Used for provider identification in reports
           - May be null if provider information is incomplete
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
           - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
               where: "provider_name is not null"
       
       - name: provider_type_category
@@ -948,20 +952,35 @@ models:
       
       # Required Metadata Columns
       - name: _loaded_at
-        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        description: >
+          Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Maps to appointment creation timestamp. May be null for very old records."
+        description: >
+          Timestamp when the record was created in the source system (OpenDental). Maps to appointment creation timestamp. May be null for very old records.
+          
+          Note: This column does not exist in the demo environment.
         tests:
           - not_null:
               where: "_created_at is not null"
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to appointment last modified timestamp."
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental). Maps to appointment last modified timestamp.
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _transformed_at
         description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"

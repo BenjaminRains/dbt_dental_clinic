@@ -260,8 +260,12 @@ models:
           - Concatenated first and last name of primary provider
           - Used for provider identification in reports
           - Important for provider-specific analysis
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: primary_provider_type
         description: >
@@ -1233,8 +1237,12 @@ models:
           Source: ETL pipeline metadata (from dim_patient)
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _updated_at
         description: >
@@ -1242,9 +1250,13 @@ models:
           
           Source: dim_patient._updated_at (from OpenDental)
           Represents: When the patient record was last updated in OpenDental
+          
+          Note: This column does not exist in the demo environment.
           Purpose: Change tracking and incremental loading
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _transformed_at
         description: >

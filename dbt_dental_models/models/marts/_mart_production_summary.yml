@@ -287,8 +287,12 @@ models:
           Business Rules:
           - Must be present for all active providers
           - Used for human-readable reporting and sorting
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: provider_preferred_name
         description: >
@@ -297,9 +301,13 @@ models:
           Business Rules:
           - May be null if not specified
           - Used for patient-facing reporting
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
           - not_null:
               where: "provider_preferred_name is not null"
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: specialty_description
         description: >
@@ -773,22 +781,36 @@ models:
       
       # Required Metadata Columns
       - name: _loaded_at
-        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        description: >
+          Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). Derived from appointment creation dates. May be null for some historical records."
+        description: >
+          Timestamp when the record was created in the source system (OpenDental). Derived from appointment creation dates. May be null for some historical records.
+          
+          Note: This column does not exist in the demo environment.
         tests:
           - not_null:
               where: "production_date >= '2020-01-01'"
               config:
                 severity: warn
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental). Derived from appointment update dates."
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental). Derived from appointment update dates.
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _transformed_at
         description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"

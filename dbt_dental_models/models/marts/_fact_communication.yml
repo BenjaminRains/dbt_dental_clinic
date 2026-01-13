@@ -820,14 +820,19 @@ models:
           Source: ETL pipeline metadata (added during loading process)
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
+          
+          Note: This column does not exist in the demo environment.
         tests:
           - not_null:
               config:
                 severity: warn
                 description: "Created at timestamp may be null for some records"
+                enabled: "{{ target.name != 'demo' }}"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2020-01-01 00:00:00'::timestamp"
               max_value: "current_timestamp"
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       
       - name: _transformed_at

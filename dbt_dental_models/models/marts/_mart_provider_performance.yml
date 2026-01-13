@@ -155,8 +155,12 @@ models:
           Business Rules:
           - Used as primary display name for provider identification
           - Consistent with provider preference settings
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: provider_first_name
         description: >
@@ -165,8 +169,12 @@ models:
           Business Rules:
           - Used for formal reporting and documentation
           - Maintains consistency with HR records
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: provider_last_name
         description: >
@@ -175,8 +183,12 @@ models:
           Business Rules:
           - Used for formal reporting and documentation
           - Maintains consistency with HR records
+          
+          Note: This column does not exist in the demo environment (PII removed).
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: specialty_description
         description: >
@@ -1171,20 +1183,35 @@ models:
       
       # Required Metadata Columns
       - name: _loaded_at
-        description: "Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)"
+        description: >
+          Timestamp when the data was loaded into the data warehouse by the ETL pipeline (using current_timestamp)
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _created_at
-        description: "Timestamp when the record was created in the source system (OpenDental). DateCreated from provider and appointment tables. May be null for historical records."
+        description: >
+          Timestamp when the record was created in the source system (OpenDental). DateCreated from provider and appointment tables. May be null for historical records.
+          
+          Note: This column does not exist in the demo environment.
         tests:
           - not_null:
               where: "production_date >= '2023-01-01'"
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _updated_at
-        description: "Timestamp when the record was last updated in the source system (OpenDental). DateTStamp from provider and appointment tables."
+        description: >
+          Timestamp when the record was last updated in the source system (OpenDental). DateTStamp from provider and appointment tables.
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _transformed_at
         description: "Timestamp when the record was processed by the dbt mart model (using current_timestamp)"

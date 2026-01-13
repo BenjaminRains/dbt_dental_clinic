@@ -578,11 +578,17 @@ models:
           Source: ETL pipeline metadata (added during loading process)
           Purpose: Data lineage tracking and pipeline monitoring
           Usage: ETL debugging and data freshness validation
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2020-01-01 00:00:00'::timestamp"
               max_value: "current_timestamp"
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _created_at
         description: >
@@ -592,8 +598,12 @@ models:
           - OpenDental source: "DateEntry" (CamelCase as stored)
           - Represents: When the appointment was originally created in OpenDental
           - Usage: Business timeline analysis and appointment lifecycle tracking
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _updated_at
         description: >
@@ -603,8 +613,12 @@ models:
           - OpenDental source: COALESCE("DateTStamp", "DateEntry")
           - Logic: Uses DateTStamp if available, falls back to DateEntry
           - Purpose: Change tracking and incremental loading
+          
+          Note: This column does not exist in the demo environment.
         tests:
-          - not_null
+          - not_null:
+              config:
+                enabled: "{{ target.name != 'demo' }}"
       
       - name: _transformed_at
         description: >
