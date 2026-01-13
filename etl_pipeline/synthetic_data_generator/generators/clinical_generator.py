@@ -26,22 +26,24 @@ fake = Faker()
 
 
 # Appointment type definitions
+# IMPORTANT: Names must match expected values in fact_appointment accepted_values test:
+# ['Patient', 'NewPatient', 'Hygiene', 'Prophy', 'Perio', 'Restorative', 'Crown', 'SRP', 'Denture', 'Other', 'Unknown']
 APPOINTMENT_TYPES = [
-    {'name': 'Comprehensive Exam', 'pattern': 'XX', 'color': '0', 'duration': 60},
-    {'name': 'Periodic Exam', 'pattern': 'X', 'color': '0', 'duration': 30},
-    {'name': 'Emergency', 'pattern': 'E', 'color': '255', 'duration': 45},
-    {'name': 'Hygiene Adult', 'pattern': 'HH', 'color': '16711680', 'duration': 60},
-    {'name': 'Hygiene Child', 'pattern': 'H', 'color': '16711680', 'duration': 45},
-    {'name': 'Crown Prep', 'pattern': 'CCC', 'color': '65280', 'duration': 90},
-    {'name': 'Crown Seat', 'pattern': 'CS', 'color': '65280', 'duration': 60},
-    {'name': 'Filling', 'pattern': 'F', 'color': '8421504', 'duration': 45},
-    {'name': 'Root Canal', 'pattern': 'RRR', 'color': '255', 'duration': 120},
-    {'name': 'Extraction', 'pattern': 'EXT', 'color': '255', 'duration': 60},
-    {'name': 'Denture Delivery', 'pattern': 'DD', 'color': '16776960', 'duration': 60},
-    {'name': 'Consultation', 'pattern': 'CON', 'color': '0', 'duration': 30},
-    {'name': 'Follow-up', 'pattern': 'FU', 'color': '8421504', 'duration': 30},
-    {'name': 'SRP Quad', 'pattern': 'SRP', 'color': '16711680', 'duration': 60},
-    {'name': 'Perio Maintenance', 'pattern': 'PM', 'color': '16711680', 'duration': 60},
+    {'name': 'NewPatient', 'pattern': 'XX', 'color': '0', 'duration': 60},  # Comprehensive Exam -> NewPatient
+    {'name': 'Patient', 'pattern': 'X', 'color': '0', 'duration': 30},  # Periodic Exam -> Patient
+    {'name': 'Other', 'pattern': 'E', 'color': '255', 'duration': 45},  # Emergency -> Other
+    {'name': 'Hygiene', 'pattern': 'HH', 'color': '16711680', 'duration': 60},  # Hygiene Adult -> Hygiene
+    {'name': 'Prophy', 'pattern': 'H', 'color': '16711680', 'duration': 45},  # Hygiene Child -> Prophy
+    {'name': 'Crown', 'pattern': 'CCC', 'color': '65280', 'duration': 90},  # Crown Prep -> Crown
+    {'name': 'Crown', 'pattern': 'CS', 'color': '65280', 'duration': 60},  # Crown Seat -> Crown (duplicate name OK)
+    {'name': 'Restorative', 'pattern': 'F', 'color': '8421504', 'duration': 45},  # Filling -> Restorative
+    {'name': 'Restorative', 'pattern': 'RRR', 'color': '255', 'duration': 120},  # Root Canal -> Restorative (duplicate name OK)
+    {'name': 'Other', 'pattern': 'EXT', 'color': '255', 'duration': 60},  # Extraction -> Other
+    {'name': 'Denture', 'pattern': 'DD', 'color': '16776960', 'duration': 60},  # Denture Delivery -> Denture
+    {'name': 'Other', 'pattern': 'CON', 'color': '0', 'duration': 30},  # Consultation -> Other
+    {'name': 'Patient', 'pattern': 'FU', 'color': '8421504', 'duration': 30},  # Follow-up -> Patient (duplicate name OK)
+    {'name': 'SRP', 'pattern': 'SRP', 'color': '16711680', 'duration': 60},  # SRP Quad -> SRP
+    {'name': 'Perio', 'pattern': 'PM', 'color': '16711680', 'duration': 60},  # Perio Maintenance -> Perio
 ]
 
 
@@ -181,20 +183,20 @@ class ClinicalGenerator:
                 
                 # Select appointment type
                 if appt_idx == 0:
-                    # First visit - comprehensive exam
-                    appt_type_idx = 0  # Comprehensive Exam
+                    # First visit - new patient
+                    appt_type_idx = 0  # NewPatient
                 elif appt_idx % 2 == 0:
                     # Regular hygiene visit
-                    appt_type_idx = 3  # Hygiene Adult
+                    appt_type_idx = 3  # Hygiene
                 else:
                     # Restorative treatment
-                    appt_type_idx = random.choice([5, 7, 8])  # Crown/Filling/Root Canal
+                    appt_type_idx = random.choice([5, 7, 8])  # Crown/Restorative/Restorative
                 
                 appt_type = APPOINTMENT_TYPES[appt_type_idx]
                 appt_type_num = appt_type_idx + 1
                 
                 # Select provider and operatory
-                if appt_type['name'].startswith('Hygiene'):
+                if appt_type['name'] in ['Hygiene', 'Prophy', 'SRP', 'Perio']:
                     provider_id = random.choice(self.data_store['providers_hygienist'])
                 else:
                     provider_id = random.choice(self.data_store['providers_dentist'])
@@ -311,26 +313,41 @@ class ClinicalGenerator:
         procedures = []
         
         # Map appointment types to procedure codes
-        if appt_type_idx == 0:  # Comprehensive Exam
+        # Note: Appointment type names now match expected values (NewPatient, Patient, Hygiene, etc.)
+        if appt_type_idx == 0:  # NewPatient
             proc_codes = ['D0150', 'D0210', 'D0274']  # Exam, FMX, Bitewings
-        elif appt_type_idx == 1:  # Periodic Exam
+        elif appt_type_idx == 1:  # Patient
             proc_codes = ['D0120', 'D0274']  # Periodic exam, Bitewings
-        elif appt_type_idx == 2:  # Emergency
-            proc_codes = [random.choice(['D0140', 'D7140'])]  # Limited exam or extraction
-        elif appt_type_idx in [3, 4]:  # Hygiene
+        elif appt_type_idx == 2:  # Other (Emergency)
+            proc_codes = [random.choice(['D0140', 'D7140', 'D9110'])]  # Limited exam, extraction, or palliative
+        elif appt_type_idx == 3:  # Hygiene
             proc_codes = ['D1110', 'D0120']  # Cleaning, exam
             if random.random() < 0.3:
                 proc_codes.append('D1208')  # Fluoride
-        elif appt_type_idx == 5:  # Crown Prep
+        elif appt_type_idx == 4:  # Prophy
+            proc_codes = ['D1120', 'D0120']  # Child cleaning, exam
+            if random.random() < 0.3:
+                proc_codes.append('D1206')  # Child fluoride
+        elif appt_type_idx == 5:  # Crown
             proc_codes = ['D2750', 'D2950']  # Crown, core buildup
-        elif appt_type_idx == 6:  # Crown Seat
+        elif appt_type_idx == 6:  # Crown (duplicate)
             proc_codes = ['D2750']  # Crown delivery
-        elif appt_type_idx == 7:  # Filling
-            proc_codes = [random.choice(['D2140', 'D2150', 'D2391', 'D2392'])]
-        elif appt_type_idx == 8:  # Root Canal
-            proc_codes = [random.choice(['D3310', 'D3320', 'D3330'])]
-        elif appt_type_idx == 9:  # Extraction
+        elif appt_type_idx == 7:  # Restorative
+            proc_codes = [random.choice(['D2140', 'D2150', 'D2391', 'D2392'])]  # Fillings
+        elif appt_type_idx == 8:  # Restorative (Root Canal)
+            proc_codes = [random.choice(['D3310', 'D3320', 'D3330'])]  # Root canals
+        elif appt_type_idx == 9:  # Other (Extraction)
             proc_codes = ['D7140']
+        elif appt_type_idx == 10:  # Denture
+            proc_codes = [random.choice(['D5110', 'D5120', 'D5213', 'D5214'])]  # Dentures
+        elif appt_type_idx == 11:  # Other (Consultation)
+            proc_codes = ['D9310']  # Consultation
+        elif appt_type_idx == 12:  # Patient (Follow-up)
+            proc_codes = ['D0120']  # Periodic exam
+        elif appt_type_idx == 13:  # SRP
+            proc_codes = ['D4341']  # SRP per quadrant
+        elif appt_type_idx == 14:  # Perio
+            proc_codes = ['D4910']  # Perio maintenance
         else:
             proc_codes = ['D0120']  # Default
         
