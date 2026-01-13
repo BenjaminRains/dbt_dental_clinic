@@ -3,6 +3,9 @@ from sqlalchemy.orm import Session
 from sqlalchemy import text
 from datetime import datetime, date
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 def _convert_patient_row(row_dict):
     """Convert patient row data to match Pydantic model expectations"""
@@ -152,8 +155,8 @@ def get_top_patient_balances(db: Session, limit: int = 10):
     """Get top N patients by total balance from AR summary"""
     query = text("""
         WITH latest_snapshots AS (
-            SELECT DISTINCT ON (patient_id)
-                mas.patient_id,
+            SELECT DISTINCT ON (mas.patient_id::integer)
+                mas.patient_id::integer as patient_id,
                 mas.total_balance,
                 mas.balance_0_30_days,
                 mas.balance_31_60_days,
@@ -165,10 +168,10 @@ def get_top_patient_balances(db: Session, limit: int = 10):
                 mas.snapshot_date
             FROM raw_marts.mart_ar_summary mas
             WHERE mas.total_balance > 0
-            ORDER BY mas.patient_id, mas.snapshot_date DESC
+            ORDER BY mas.patient_id::integer, mas.snapshot_date DESC
         )
         SELECT 
-            ls.patient_id,
+            ls.patient_id::integer as patient_id,
             ls.total_balance,
             ls.balance_0_30_days,
             ls.balance_31_60_days,
@@ -182,4 +185,28 @@ def get_top_patient_balances(db: Session, limit: int = 10):
         LIMIT :limit
     """)
     result = db.execute(query, {"limit": limit})
-    return [dict(row._mapping) for row in result.fetchall()]
+    rows = result.fetchall()
+    
+    # Convert rows to dicts and ensure patient_id is integer (safety net for type issues)
+    converted_rows = []
+    for row in rows:
+        row_dict = dict(row._mapping)
+        # Ensure patient_id is integer (handle case where DB returns string)
+        if 'patient_id' in row_dict and row_dict['patient_id'] is not None:
+            # Log the type before conversion for debugging
+            original_type = type(row_dict['patient_id']).__name__
+            original_value = row_dict['patient_id']
+            
+            try:
+                row_dict['patient_id'] = int(row_dict['patient_id'])
+                # Log if conversion was needed
+                if original_type != 'int':
+                    logger.info(f"Converted patient_id from {original_type} to int: {original_value} -> {row_dict['patient_id']}")
+            except (ValueError, TypeError) as e:
+                # Log warning but skip invalid rows
+                logger.error(f"Could not convert patient_id to int: {original_value} (type: {original_type}), error: {e}")
+                continue
+        converted_rows.append(row_dict)
+    
+    logger.info(f"Returning {len(converted_rows)} patient balances")
+    return converted_rows

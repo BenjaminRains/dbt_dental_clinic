@@ -3,6 +3,7 @@ from fastapi import FastAPI, Request, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError, HTTPException
+from pydantic import ValidationError
 import logging
 import os
 import time
@@ -81,8 +82,8 @@ is_local_dev = is_running_locally()
 
 if is_local_dev and api_environment == "production":
     logger = logging.getLogger(__name__)
-    logger.warning("API_ENVIRONMENT=production detected but running locally - allowing localhost origins for development")
-    # Keep production mode but allow localhost origins
+    logger.info("API_ENVIRONMENT=production detected but running locally - allowing localhost origins for local testing")
+    # Keep production mode but allow localhost origins for local testing
 
 cors_origins_str = os.getenv("API_CORS_ORIGINS", None)
 
@@ -126,7 +127,7 @@ if api_environment == "production" and not is_local_dev:
 elif api_environment == "production" and is_local_dev:
     # Production mode but running locally - keep localhost origins for development
     logger = logging.getLogger(__name__)
-    logger.warning("API_ENVIRONMENT=production but running locally - keeping localhost origins for local development")
+    logger.info("API_ENVIRONMENT=production but running locally - keeping localhost origins for local testing")
 
 # Clean and deduplicate origins list (remove empty strings, trim whitespace, remove duplicates)
 cors_origins = sorted(list(set([origin.strip() for origin in cors_origins if origin and origin.strip()])))
@@ -134,8 +135,22 @@ cors_origins = sorted(list(set([origin.strip() for origin in cors_origins if ori
 # Log configured origins for debugging
 logger = logging.getLogger(__name__)
 logger.info(f"CORS allowed origins ({len(cors_origins)}): {cors_origins}")
+logger.info(f"API_ENVIRONMENT: {api_environment}")
+logger.info(f"API_CORS_ORIGINS env var: {os.getenv('API_CORS_ORIGINS', 'NOT SET')}")
+logger.info(f"Is running locally: {is_local_dev}")
 
-# Add CORS middleware
+# Ensure we have at least the production origins if in production
+if api_environment == "production" and not is_local_dev:
+    required_origins = ["https://dbtdentalclinic.com", "https://www.dbtdentalclinic.com"]
+    for origin in required_origins:
+        if origin not in cors_origins:
+            logger.warning(f"Adding missing production origin: {origin}")
+            cors_origins.append(origin)
+    cors_origins = sorted(list(set([origin.strip() for origin in cors_origins if origin and origin.strip()])))
+    logger.info(f"Final CORS allowed origins after production check: {cors_origins}")
+
+# Add CORS middleware - MUST be added before other middleware
+# In FastAPI, middleware is applied in reverse order, so CORS should be added first
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,  # Use environment-specific origins
@@ -254,6 +269,37 @@ def debug_rate_limit(request: Request):
         "newest_request_age": round(now - max(recent_minute), 2) if recent_minute else None,
     }
 
+# Exception handler for Pydantic ValidationError (response validation)
+@app.exception_handler(ValidationError)
+async def validation_exception_handler(request: Request, exc: ValidationError):
+    """Catch Pydantic validation errors during response serialization"""
+    logger = logging.getLogger(__name__)
+    
+    # Log detailed validation error information
+    logger.error(f"Pydantic ValidationError on {request.url.path}")
+    logger.error(f"Validation errors: {exc.errors()}")
+    logger.error(f"Error count: {len(exc.errors())}")
+    
+    # Log the first error in detail
+    if exc.errors():
+        first_error = exc.errors()[0]
+        logger.error(f"First error details:")
+        logger.error(f"  Location: {first_error.get('loc', 'unknown')}")
+        logger.error(f"  Message: {first_error.get('msg', 'unknown')}")
+        logger.error(f"  Type: {first_error.get('type', 'unknown')}")
+        if 'input' in first_error:
+            logger.error(f"  Input value: {first_error['input']} (type: {type(first_error['input']).__name__})")
+    
+    # Return detailed error response
+    return JSONResponse(
+        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+        content={
+            "detail": f"Validation error: {exc.errors()[0].get('msg', 'Unknown validation error')}",
+            "validation_errors": exc.errors(),
+            "path": str(request.url.path)
+        }
+    )
+
 # Global exception handler for unhandled exceptions (but NOT HTTPException)
 # FastAPI handles HTTPException automatically, so we don't need a custom handler
 @app.exception_handler(Exception)
@@ -262,6 +308,10 @@ async def global_exception_handler(request: Request, exc: Exception):
     # Skip HTTPException - it's handled above
     if isinstance(exc, HTTPException):
         raise  # Re-raise to let the HTTPException handler deal with it
+    
+    # Skip ValidationError - it's handled above
+    if isinstance(exc, ValidationError):
+        raise  # Re-raise to let the ValidationError handler deal with it
     
     logger = logging.getLogger(__name__)
     error_msg = str(exc)
