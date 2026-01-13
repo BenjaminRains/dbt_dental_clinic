@@ -138,16 +138,18 @@ procedure_categorized as (
         sp.*,
         
         -- Clinical categorization based on CDT codes
+        -- Note: D6% (Implants) mapped to 'Prosthodontics' to match accepted_values test
         case
             when sp.procedure_code like 'D1%' then 'Preventive'
             when sp.procedure_code like 'D2%' then 'Restorative'
             when sp.procedure_code like 'D3%' then 'Endodontics'
             when sp.procedure_code like 'D4%' then 'Periodontics'
             when sp.procedure_code like 'D5%' then 'Prosthodontics'
-            when sp.procedure_code like 'D6%' then 'Implants'
+            when sp.procedure_code like 'D6%' then 'Prosthodontics'  -- Implants mapped to Prosthodontics (matches accepted_values)
             when sp.procedure_code like 'D7%' then 'Oral Surgery'
             when sp.procedure_code like 'D8%' then 'Orthodontics'
             when sp.procedure_code like 'D9%' then 'Other'
+            when sp.procedure_code like 'D0%' then 'Diagnostic'  -- D0 codes are diagnostic
             when sp.is_hygiene = true then 'Preventive'
             when sp.is_prosthetic = true then 'Prosthodontics'
             when sp.is_radiology = true then 'Diagnostic'
