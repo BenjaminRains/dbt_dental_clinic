@@ -140,12 +140,15 @@ class InsuranceGenerator:
                 group_name = fake.company()
                 group_num = fake.bothify(text='GRP-####??')
                 
-                # Plan type
+                # Plan type - Source column is character(1), so use single-character codes
+                # These will be transformed to full names in dbt models (PPO, HMO, etc.)
                 plan_type = random.choice([
-                    '',  # Standard
-                    'p',  # PPO
-                    'c',  # Capitation
-                    'f',  # Flat Copay
+                    'P',  # PPO (Preferred Provider Organization)
+                    'H',  # HMO (Health Maintenance Organization)
+                    'I',  # Indemnity (Traditional indemnity)
+                    'D',  # DHMO (Dental HMO)
+                    'E',  # EPO (Exclusive Provider Organization)
+                    '',  # Empty (valid value - matches source system behavior where 99.68% are empty)
                 ])
                 
                 # Fee schedule (link to our fee schedules)
