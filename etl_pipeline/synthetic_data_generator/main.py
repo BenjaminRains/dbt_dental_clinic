@@ -163,16 +163,48 @@ class DatabaseConnection:
     
     def __enter__(self):
         """Context manager entry"""
-        self.conn = psycopg2.connect(
-            host=self.config.db_host,
-            port=self.config.db_port,
-            dbname=self.config.db_name,
-            user=self.config.db_user,
-            password=self.config.db_password
-        )
-        self.cursor = self.conn.cursor()
-        logger.info(f"Connected to database: {self.config.db_name}")
-        return self
+        try:
+            self.conn = psycopg2.connect(
+                host=self.config.db_host,
+                port=self.config.db_port,
+                dbname=self.config.db_name,
+                user=self.config.db_user,
+                password=self.config.db_password,
+                connect_timeout=5
+            )
+            self.cursor = self.conn.cursor()
+            logger.info(f"Connected to database: {self.config.db_name}")
+            return self
+        except psycopg2.OperationalError as e:
+            # Provide helpful error messages for common connection issues
+            error_str = str(e)
+            if "Connection refused" in error_str or "10061" in error_str:
+                logger.error("❌ Connection refused - Database server is not accessible")
+                if self.config.db_host == "localhost" and self.config.db_port in [5434, 5433]:
+                    logger.error("")
+                    logger.error("💡 This appears to be a port-forwarded connection.")
+                    logger.error("   You need to start port forwarding first:")
+                    logger.error("")
+                    logger.error("   1. Run: aws-ssm-init")
+                    logger.error("   2. Run: ssm-port-forward-demo-db")
+                    logger.error("   3. Keep that terminal open in the background")
+                    logger.error("   4. Then retry this command")
+                    logger.error("")
+                    logger.error(f"   Expected connection: {self.config.db_host}:{self.config.db_port}")
+                elif self.config.db_name == "opendental_demo":
+                    logger.error("")
+                    logger.error("💡 For demo database access, you have two options:")
+                    logger.error("")
+                    logger.error("   Option 1: Port Forwarding (Local Development)")
+                    logger.error("     1. Run: aws-ssm-init")
+                    logger.error("     2. Run: ssm-port-forward-demo-db")
+                    logger.error("     3. Keep that terminal open")
+                    logger.error("")
+                    logger.error("   Option 2: Direct Connection (EC2)")
+                    logger.error("     - Make sure you're running from the EC2 instance")
+                    logger.error("     - Or update DEMO_POSTGRES_HOST to the EC2 private IP")
+                    logger.error("")
+            raise
     
     def __exit__(self, exc_type, exc_val, exc_tb):
         """Context manager exit"""
@@ -364,33 +396,72 @@ class SyntheticDataGenerator:
 def main():
     """CLI entry point"""
     import argparse
+    import os
+    
+    # Get defaults from environment variables (if set)
+    # Priority: CLI args > Environment variables > Hardcoded defaults
+    # SAFETY: Only use DEMO_POSTGRES_* variables, NEVER use POSTGRES_ANALYTICS_* (production database)
+    default_db_host = os.environ.get('DEMO_POSTGRES_HOST', 'localhost')
+    default_db_port = int(os.environ.get('DEMO_POSTGRES_PORT', '5432'))
+    default_db_name = os.environ.get('DEMO_POSTGRES_DB', 'opendental_demo')
+    default_db_user = os.environ.get('DEMO_POSTGRES_USER', 'postgres')
+    default_db_password = os.environ.get('DEMO_POSTGRES_PASSWORD', 'postgres')
+    
+    # SAFETY CHECK: Warn if POSTGRES_ANALYTICS_* variables are set (production database)
+    # This indicates we're in ETL production environment, which should NOT be used for synthetic data
+    if os.environ.get('POSTGRES_ANALYTICS_DB'):
+        logger.warning("⚠️  WARNING: POSTGRES_ANALYTICS_* environment variables detected!")
+        logger.warning("   You appear to be in ETL production environment.")
+        logger.warning("   This script ONLY writes to opendental_demo (synthetic data).")
+        logger.warning("   Make sure you're not accidentally targeting production database.")
+        logger.warning("   Using DEMO_POSTGRES_* variables or command-line arguments.")
     
     parser = argparse.ArgumentParser(
-        description='Generate synthetic dental practice data'
+        description='Generate synthetic dental practice data',
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog=f'''
+Environment Variables (used as defaults if not specified):
+  DEMO_POSTGRES_HOST     - Database host (default: {default_db_host})
+  DEMO_POSTGRES_PORT     - Database port (default: {default_db_port})
+  DEMO_POSTGRES_DB       - Database name (default: {default_db_name})
+  DEMO_POSTGRES_USER     - Database user (default: {default_db_user})
+  DEMO_POSTGRES_PASSWORD - Database password (default: [from env or 'postgres'])
+
+Examples:
+  # Use environment variables (if dbt-init -Target demo was run)
+  python main.py --patients 5000
+  
+  # Override specific values
+  python main.py --patients 5000 --db-password "mypassword"
+  
+  # Full manual specification
+  python main.py --patients 5000 --db-host localhost --db-port 5432 \\
+                 --db-name opendental_demo --db-user postgres --db-password "mypassword"
+        '''
     )
     parser.add_argument(
         '--patients', type=int, default=10000,
         help='Number of patients to generate (default: 10000)'
     )
     parser.add_argument(
-        '--db-host', default='localhost',
-        help='Database host (default: localhost)'
+        '--db-host', default=default_db_host,
+        help=f'Database host (default: {default_db_host} from DEMO_POSTGRES_HOST env var or "localhost")'
     )
     parser.add_argument(
-        '--db-port', type=int, default=5432,
-        help='Database port (default: 5432)'
+        '--db-port', type=int, default=default_db_port,
+        help=f'Database port (default: {default_db_port} from DEMO_POSTGRES_PORT env var or 5432)'
     )
     parser.add_argument(
-        '--db-name', default='opendental_demo',
-        help='Database name (default: opendental_demo)'
+        '--db-name', default=default_db_name,
+        help=f'Database name (default: {default_db_name} from DEMO_POSTGRES_DB env var or "opendental_demo")'
     )
     parser.add_argument(
-        '--db-user', default='postgres',
-        help='Database user (default: postgres)'
+        '--db-user', default=default_db_user,
+        help=f'Database user (default: {default_db_user} from DEMO_POSTGRES_USER env var or "postgres")'
     )
     parser.add_argument(
-        '--db-password', default='postgres',
-        help='Database password (default: postgres)'
+        '--db-password', default=default_db_password,
+        help='Database password (default: from DEMO_POSTGRES_PASSWORD env var or "postgres")'
     )
     parser.add_argument(
         '--start-date', default='2023-01-01',
@@ -398,6 +469,22 @@ def main():
     )
     
     args = parser.parse_args()
+    
+    # Log which values are being used (for debugging)
+    logger.info(f"Using database connection:")
+    logger.info(f"  Host: {args.db_host}")
+    logger.info(f"  Port: {args.db_port}")
+    logger.info(f"  Database: {args.db_name}")
+    logger.info(f"  User: {args.db_user}")
+    logger.info(f"  Password: {'***' if args.db_password else '[not set]'}")
+    
+    # CRITICAL SAFETY CHECK: Always enforce opendental_demo
+    if args.db_name != 'opendental_demo':
+        logger.error(f"❌ ERROR: Target database is '{args.db_name}', not 'opendental_demo'!")
+        logger.error("   This script is designed for synthetic data generation ONLY.")
+        logger.error("   For safety, this script will NOT run against production/test databases.")
+        logger.error("   Please specify --db-name opendental_demo or set DEMO_POSTGRES_DB=opendental_demo")
+        raise ValueError(f"Cannot run against database '{args.db_name}'. Only 'opendental_demo' is allowed.")
     
     # Create configuration
     config = GeneratorConfig(
