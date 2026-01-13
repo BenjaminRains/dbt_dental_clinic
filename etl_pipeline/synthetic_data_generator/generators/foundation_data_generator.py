@@ -25,6 +25,9 @@ logger = logging.getLogger(__name__)
 
 
 # Procedure category IDs (must be numeric)
+# Note: These map to OpenDental definition categories, not the final procedure_category values
+# The dbt model maps CDT codes to procedure_category: D1=Preventive, D2=Restorative, D3=Endodontics,
+# D4=Periodontics, D5=Prosthodontics, D6=Implants, D7=Oral Surgery, D8=Orthodontics, D9=Other
 PROC_CATEGORY = {
     'Diagnostic': 1,
     'Preventive': 2,
@@ -33,6 +36,8 @@ PROC_CATEGORY = {
     'Periodontics': 5,
     'Prosthodontics': 6,
     'Oral Surgery': 7,
+    'Orthodontics': 8,  # Added for D8 codes
+    'Other': 9,  # Added for D9 codes
 }
 
 # CDT Procedure Codes (Common dental procedures)
@@ -95,6 +100,17 @@ CDT_CODES = [
     {'code': 'D7220', 'desc': 'Extraction - impacted tooth - partial bony', 'fee': 275, 'category': PROC_CATEGORY['Oral Surgery']},
     {'code': 'D7230', 'desc': 'Extraction - impacted tooth - complete bony', 'fee': 350, 'category': PROC_CATEGORY['Oral Surgery']},
     {'code': 'D7240', 'desc': 'Extraction - impacted tooth - unusual surgical', 'fee': 450, 'category': PROC_CATEGORY['Oral Surgery']},
+    
+    # Orthodontics (D8000-D8999) - Added to support 'Orthodontics' procedure category
+    {'code': 'D8010', 'desc': 'Limited orthodontic treatment', 'fee': 2000, 'category': 8},  # Orthodontics category
+    {'code': 'D8020', 'desc': 'Comprehensive orthodontic treatment', 'fee': 5000, 'category': 8},  # Orthodontics category
+    {'code': 'D8070', 'desc': 'Comprehensive orthodontic treatment - adolescent', 'fee': 5500, 'category': 8},  # Orthodontics category
+    {'code': 'D8080', 'desc': 'Comprehensive orthodontic treatment - adult', 'fee': 6000, 'category': 8},  # Orthodontics category
+    
+    # Other (D9000-D9999) - Added to support 'Other' procedure category
+    {'code': 'D9110', 'desc': 'Palliative treatment - emergency', 'fee': 75, 'category': 9},  # Other category
+    {'code': 'D9120', 'desc': 'Fixed partial denture repair', 'fee': 200, 'category': 9},  # Other category
+    {'code': 'D9310', 'desc': 'Consultation - diagnostic service', 'fee': 100, 'category': 9},  # Other category
 ]
 
 
