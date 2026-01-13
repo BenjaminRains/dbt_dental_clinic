@@ -26,7 +26,16 @@ renamed_columns as (
         "GroupName" as group_name,
         "GroupNum" as group_number,
         "PlanNote" as plan_note,
-        "PlanType" as plan_type,
+        -- Transform single-character PlanType codes to full names for business analysis
+        case 
+            when "PlanType" = 'P' then 'PPO'
+            when "PlanType" = 'H' then 'HMO'
+            when "PlanType" = 'I' then 'Indemnity'
+            when "PlanType" = 'D' then 'DHMO'
+            when "PlanType" = 'E' then 'EPO'
+            when "PlanType" = '' or "PlanType" is null then ''
+            else "PlanType"  -- Fallback for any unexpected values
+        end as plan_type,
         "DivisionNo" as division_number,
         "TrojanID" as trojan_id,
         
