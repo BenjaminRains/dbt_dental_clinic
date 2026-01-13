@@ -198,7 +198,7 @@ SELECT
     ab.appointment_datetime,
     ab.appointment_end_datetime,
     ab.appointment_type_id,
-    at.appointment_type_name,
+    coalesce(at.appointment_type_name, 'Unknown') as appointment_type_name,
     at.appointment_length,
     ab.appointment_status,
     CASE
