@@ -8083,7 +8083,7 @@ CREATE TABLE raw.task (
 	"SecDateTEdit" timestamp NULL,
 	"DescriptOverride" varchar(255) NULL,
 	"IsReadOnly" bool NULL,
-	"TriageCategory" int8 NULL,
+	"Category" int8 NULL,
 	CONSTRAINT task_pkey PRIMARY KEY ("TaskNum")
 );
 
@@ -8150,7 +8150,7 @@ CREATE TABLE raw.taskhist (
 	"SecDateTEdit" timestamp NULL,
 	"DescriptOverride" varchar(255) NULL,
 	"IsReadOnly" bool NULL,
-	"TriageCategory" int8 NULL,
+	"Category" int8 NULL,
 	CONSTRAINT taskhist_pkey PRIMARY KEY ("TaskHistNum")
 );
 
