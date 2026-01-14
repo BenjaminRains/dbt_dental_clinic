@@ -28,6 +28,7 @@ import {
     CheckCircle as TreatmentAcceptanceIcon,
     Spa as HygieneIcon,
     Close as CloseIcon,
+    HelpOutline as HelpIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 
@@ -40,6 +41,7 @@ interface LayoutProps {
 const menuItems = [
     { text: 'Portfolio', icon: <HomeIcon />, path: '/' },
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+    { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
     { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
     { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
     { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },

@@ -13,6 +13,7 @@ const Appointments = lazy(() => import('./pages/Appointments'));
 const AR = lazy(() => import('./pages/AR'));
 const TreatmentAcceptance = lazy(() => import('./pages/TreatmentAcceptance'));
 const HygieneRetention = lazy(() => import('./pages/HygieneRetention'));
+const KPIDefinitions = lazy(() => import('./pages/KPIDefinitions'));
 const EnvironmentManager = lazy(() => import('./pages/EnvironmentManager'));
 const SchemaDiscovery = lazy(() => import('./pages/SchemaDiscovery'));
 
@@ -98,6 +99,15 @@ function App() {
                     <Layout>
                         <Suspense fallback={<PageLoader />}>
                             <HygieneRetention />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/kpi-definitions" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <KPIDefinitions />
                         </Suspense>
                     </Layout>
                 </Box>
