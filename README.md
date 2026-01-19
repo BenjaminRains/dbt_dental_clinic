@@ -116,8 +116,8 @@ PostgreSQL Optimization: Resolved case sensitivity and column quoting issues
 - **Input Validation**: Pydantic models validate all request data
 - **SQL Injection Protection**: Parameterized queries via SQLAlchemy
 
-**Production Deployment:**
-- **Live API**: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com)
+**Demo Site Deployment:**
+- **Demo API**: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com) (serving sample data)
 - **Hosting**: AWS EC2 + Application Load Balancer (ALB)
 - **SSL/TLS**: HTTPS only with AWS Certificate Manager
 - **Network Security**: Security groups, private subnets for database, Systems Manager for access
@@ -133,12 +133,12 @@ PostgreSQL Optimization: Resolved case sensitivity and column quoting issues
 ### React TypeScript Dashboard
 **Modern Web Application** providing intuitive access to dental practice analytics:
 
-#### 🚀 Live Deployment
-- **Production URL**: [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
+#### 🚀 Demo Site Deployment
+- **Demo URL**: [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
 - **Hosting**: AWS S3 + CloudFront CDN
 - **SSL Certificate**: AWS Certificate Manager (ACM)
 - **DNS**: Route 53
-- **Status**: ✅ Live and accessible
+- **Status**: ✅ Demo site live and accessible (hosting sample platform data)
 
 #### Dashboard Features
 - **Executive Dashboard**: Real-time KPI overview with revenue trends and provider performance
@@ -245,11 +245,11 @@ dbt_dental_clinic/
 - **Data Quality**: Comprehensive testing and validation framework - All tests passing
 - **Monitoring**: End-to-end pipeline tracking and performance monitoring
 - **API Layer**: FastAPI backend with comprehensive reporting endpoints and patient management
-- **Frontend Dashboard**: ✅ **LIVE** - React TypeScript application deployed to [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
+- **Frontend Dashboard**: ✅ **DEMO SITE LIVE** - React TypeScript application deployed to [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
   - **Deployment**: AWS S3 + CloudFront CDN
   - **Security**: Error sanitization, PII removal, search engine blocking
   - **SSL**: HTTPS with AWS Certificate Manager
-  - **Status**: Production-ready and accessible
+  - **Status**: Demo site accessible (hosting sample platform data for showcase)
 
 ### Business Intelligence Ready
 - **Revenue Analytics**: Production tracking, AR analysis, revenue lost identification
@@ -287,10 +287,10 @@ dbt_dental_clinic/
 ### AWS Cloud Deployment
 **Production Frontend Infrastructure** - Live and accessible:
 
-#### Frontend Architecture (✅ Deployed)
+#### Frontend Architecture (✅ Demo Site Deployed)
 ```
 React Build → S3 Bucket → CloudFront CDN → Route 53 → https://dbtdentalclinic.com
-(Static Files)  (Storage)    (Global CDN)    (DNS)      (HTTPS)
+(Static Files)  (Storage)    (Global CDN)    (DNS)      (Demo Site - Sample Data)
 ```
 
 #### Frontend Infrastructure Components
@@ -302,7 +302,7 @@ React Build → S3 Bucket → CloudFront CDN → Route 53 → https://dbtdentalc
 - **SEO**: robots.txt (blocks search engines), meta tags (noindex)
 
 #### Frontend Features
-- **Live Dashboard**: Accessible at [https://dbtdentalclinic.com](https://dbtdentalclinic.com)
+- **Demo Dashboard**: Accessible at [https://dbtdentalclinic.com](https://dbtdentalclinic.com) (hosting sample platform data)
 - **Global CDN**: Fast content delivery via CloudFront edge locations
 - **HTTPS**: Secure SSL/TLS encryption
 - **Automated Deployment**: Use `frontend-deploy` command for one-command deployments
@@ -365,13 +365,13 @@ Synthetic Data → RDS PostgreSQL → DBT Models → EC2 + ALB → Public HTTPS
 - **AWS Secrets Manager**: Secure database credential storage and retrieval
 - **Systems Manager**: Secure instance access without SSH keys or open ports
 
-#### Backend Features (✅ Deployed)
-- **REST API**: ✅ **LIVE** - FastAPI endpoints for real-time analytics and KPI dashboards at [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com)
-- **Production Endpoints**: Patient management, revenue analytics, provider performance, dashboard KPIs, AR management
+#### Backend Features (✅ Demo Site Deployed)
+- **REST API**: ✅ **DEMO SITE LIVE** - FastAPI endpoints for analytics and KPI dashboards at [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com) (serving sample data)
+- **Demo Endpoints**: Patient management, revenue analytics, provider performance, dashboard KPIs, AR management
 - **Security Features**: API key authentication, rate limiting, request logging, CORS protection, error sanitization
 - **SSL/TLS**: HTTPS-only access with automatic HTTP→HTTPS redirect at ALB edge
 - **Health Monitoring**: ALB health checks with automatic traffic routing to healthy instances
-- **Portfolio Ready**: Professional showcase of full data engineering capabilities
+- **Portfolio Ready**: Professional showcase of full data engineering capabilities with demo data
 
 #### Data Isolation & Security
 - **No Production Connection**: Demo environment has zero access to real OpenDental data
@@ -382,8 +382,8 @@ Synthetic Data → RDS PostgreSQL → DBT Models → EC2 + ALB → Public HTTPS
 - **Cost Optimized**: ~$51/month (EC2 t3.small + ALB + RDS db.t3.micro, no NAT Gateway required)
 
 **Status**: 
-- ✅ **Frontend**: Live and deployed at https://dbtdentalclinic.com
-- ✅ **Backend**: Live and deployed at https://api.dbtdentalclinic.com
+- ✅ **Frontend Demo Site**: Live and deployed at https://dbtdentalclinic.com (hosting sample platform data)
+- ✅ **Backend API**: Live and deployed at https://api.dbtdentalclinic.com (serving demo data)
   - RDS PostgreSQL database deployed and secured
   - EC2 instance running FastAPI + Nginx
   - Application Load Balancer handling traffic and SSL termination
