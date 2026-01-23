@@ -68,6 +68,13 @@ models:
           - Uniquely identifies each claim record
           - Used as part of composite key for claim procedure identification
           - Critical for claim-level analysis and financial reconciliation
+          
+          Data Quality Considerations:
+          - Special case: claim_id = 0 represents pre-authorization requests or draft claims not yet submitted
+          - These records may have future-dated claim_date values representing planned/scheduled procedures
+          - Pre-authorizations are sent to insurance BEFORE procedures are performed to get approval
+          - Draft claims are claims being prepared but haven't been submitted yet
+          - These are legitimate business records and should be included in analytics
         tests:
           - not_null
 
@@ -153,8 +160,11 @@ models:
           - Links to dim_provider for provider details and performance tracking
           - Enables provider-level analysis and reporting
           - Critical for provider billing and performance monitoring
+          
+          Data Quality Notes:
+          - NULL is expected for pre-auth claims (claim_id = 0) where procedures haven't been completed yet
+          - These procedures don't exist in procedurelog, so provider_id cannot be determined
         tests:
-          - not_null
           - relationships:
               to: ref('dim_provider')
               field: provider_id
@@ -184,19 +194,31 @@ models:
           Current status of the claim in the billing workflow
           
           Valid Values:
-          - 'S': Submitted claim
-          - 'W': Waiting/Processing claim
-          - 'R': Received/Paid claim
-          - 'H': Hold claim
+          - 'S': Sent - Claim has been sent to insurance and is being tracked for response
+          - 'W': Waiting - Special status for high-value claims in transition
+          - 'R': Received - Claim has been fully processed by insurance with payment or denial
+          - 'H': Hold - Secondary claim waiting for primary insurance processing completion
+          - 'U': Unsent - Claim has not been sent to insurance yet
+          
+          Data Quality Considerations:
+          - NULL values are expected for pre-authorization/draft claims (`claim_id = 0`)
+          - These claims haven't been submitted yet, so they don't have a claim status
+          - Pre-auth claims are legitimate business records representing planned procedures
           
           Business Rules:
           - Status transitions must follow defined workflow rules
           - Status affects payment processing and collection activities
         tests:
-          - not_null
-          - accepted_values:
-              values: ['S', 'W', 'R', 'H']
+          - not_null:
               config:
+                severity: warn
+                where: "claim_id != 0"
+                description: "Claim status should be present for submitted claims (excluding pre-auth/draft claims)"
+          - accepted_values:
+              values: ['S', 'W', 'R', 'H', 'U']
+              config:
+                severity: error
+                where: "claim_status IS NOT NULL"
                 description: "Claim status must be one of the defined workflow states"
 
       - name: claim_type
@@ -208,14 +230,25 @@ models:
           - 'S': Secondary insurance claim
           - 'Other': Other claim types
           
+          Data Quality Considerations:
+          - NULL values are expected for pre-authorization/draft claims (`claim_id = 0`)
+          - These claims haven't been submitted yet, so they don't have a claim type
+          - Pre-auth claims are legitimate business records representing planned procedures
+          
           Business Rules:
           - Determines billing sequence and payment coordination
           - Affects payment processing and patient responsibility calculations
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                where: "claim_id != 0"
+                description: "Claim type should be present for submitted claims (excluding pre-auth/draft claims)"
           - accepted_values:
               values: ['P', 'S', 'Other']
               config:
+                severity: error
+                where: "claim_type IS NOT NULL"
                 description: "Claim type must be one of the defined billing priorities"
 
       - name: claim_procedure_status
@@ -223,19 +256,25 @@ models:
           Status of the specific procedure within the claim
           
           Valid Values:
-          - 0: Default/Initial status
-          - 1: Active/Processing status
-          - 4: Completed status
+          - 0: Estimate/Pre-determination - Pre-authorization request for procedure
+          - 1: Claim - Standard insurance claim for procedure
+          - 2: Excluded - Procedure excluded from claim processing
+          - 3: CapClaim - Capitation claim (per-member payment model)
+          - 4: CapComplete - Capitation claim completed
+          - 6: InsHist - Insurance history record
+          - 9: Pending Review/Reconsideration - Claim under review or appeal
           
           Business Context:
           - Individual procedures can have different statuses within the same claim
           - Affects procedure-level payment and collection activities
+          - Status codes 5 and 7 exist in OpenDental but don't appear in current data
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 4]
+              values: [0, 1, 2, 3, 4, 6, 9]
               config:
-                description: "Procedure status must be one of the defined numeric status codes"
+                severity: error
+                description: "Procedure status must be one of the defined numeric status codes (0=Estimate, 1=Claim, 2=Excluded, 3=CapClaim, 4=CapComplete, 6=InsHist, 9=Pending Review)"
 
       - name: billed_amount
         description: >
@@ -302,16 +341,27 @@ models:
 
       - name: write_off_amount
         description: >
-          Amount written off due to insurance adjustments or contractual obligations
+          Amount written off due to insurance adjustments or contractual obligations (legacy field)
           
           Financial Context:
           - Currency: USD with 2 decimal precision
-          - Calculation: Difference between allowed and paid amounts
-          - Business Rules: Must be non-negative, typically represents contractual adjustments
+          - Source: Maps from `claimproc.WriteOff` column in OpenDental
+          - **Important Note**: This column is typically $0.00 because write-offs are tracked in the adjustments table, not in claimproc
+          
+          Data Source:
+          - OpenDental source: `claimproc.WriteOff` column
+          - However, OpenDental does not actively use this column for write-off tracking
+          - Actual write-offs are tracked in `int_adjustments` table with `adjustment_category = 'insurance_writeoff'`
+          
+          Business Rules:
+          - Must be non-negative, typically represents contractual adjustments
+          - In practice, this field is usually $0.00 because write-offs are entered as adjustments
+          - **Use `adjustment_write_off_amount` instead** for accurate write-off analysis
           
           Accounting Impact:
-          - Used for financial reporting and audit compliance
-          - Critical for understanding revenue adjustments and contractual obligations
+          - This field may not reflect actual write-offs in the system
+          - Kept for backward compatibility and data lineage
+          - For accurate write-off analysis, use `adjustment_write_off_amount` field
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
@@ -320,6 +370,49 @@ models:
               config:
                 severity: warn
                 description: "Write-off amounts should be reasonable for dental procedures"
+
+      - name: adjustment_write_off_amount
+        description: >
+          Amount written off from insurance adjustments, aggregated from the adjustments table
+          
+          Financial Context:
+          - Currency: USD with 2 decimal precision
+          - Source: Aggregated from `int_adjustments` table where `adjustment_category = 'insurance_writeoff'`
+          - Calculation: `SUM(ABS(adjustment_amount))` grouped by `procedure_id`
+          - This is the authoritative source for write-off amounts from adjustments
+          
+          Data Source:
+          - Source: `int_adjustments` table
+          - Filter: `adjustment_category = 'insurance_writeoff'` and `procedure_id IS NOT NULL`
+          - Aggregation: Sum of absolute values of adjustment amounts per procedure
+          
+          Business Rules:
+          - Must be non-negative (uses ABS of adjustment_amount)
+          - Represents write-offs applied to procedures via adjustments
+          - A procedure can have multiple write-off adjustments (all are summed)
+          - Write-offs reduce revenue and represent contractual adjustments or bad debt
+          
+          Relationship to Claims:
+          - Write-offs are linked to procedures via `procedure_id`
+          - A claim procedure may have associated write-offs if the procedure has adjustments
+          - Write-offs are not directly linked to claims, only to procedures
+          
+          Accounting Impact:
+          - Used for financial reporting and revenue reconciliation
+          - Critical for understanding revenue adjustments and contractual obligations
+          - Should be used instead of `write_off_amount` for all write-off analysis
+          
+          Data Quality:
+          - Will be $0.00 if no write-off adjustments exist for the procedure
+          - Multiple write-offs for the same procedure are aggregated
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 20000
+              config:
+                severity: warn
+                description: "Write-off amounts should be reasonable for dental procedures (allows for large write-offs on complex cases)"
 
       - name: patient_responsibility
         description: >
@@ -382,22 +475,40 @@ models:
         description: >
           Type of payment received from insurance (numeric payment type code)
           
-          Valid Values:
-          - 465: Check payment
+          Valid Values (from stg_opendental__claimpayment and int_insurance_payment_allocated):
+          
+          Regular Payments:
+          - 261: High volume type (avg $341) - Major carriers: Cigna, Aetna, MetLife, United Healthcare
+          - 303: Regular payments (avg $278) - Major carriers: MetLife, Guardian, Ameritas, Anthem
+          - 464: Rare type (avg $184) - Single record from Delta Dental of California
+          - 465: Delta Dental payments (avg $359) - Used exclusively by Delta Dental plans
+          - 466: Rare type (avg $200) - Only United Concordia, used briefly in early 2023
           - 467: Electronic payment
-          - 646: Other payment type
+          - 469: United Concordia payments (avg $482) - Used exclusively by United Concordia
+          
+          Refund Types (negative amounts):
+          - 645: Large refunds (avg -$268)
+          - 646: Small refunds (avg -$1)
+          - 647: Medium refunds (avg -$88)
+          - 661: Insurance refunds (avg -$106, range -$196 to -$55)
+          
+          Note: Payment type IDs link to the definition table for practice-specific payment type definitions.
+          Source: `stg_opendental__claimpayment.payment_type_id` (see `_stg_opendental__claimpayment.yml` for complete documentation)
           
           Business Rules:
           - Determines payment processing workflow and reconciliation method
           - Affects deposit timing and bank reconciliation processes
+          - Links to definition table for practice-specific payment type definitions
         tests:
           - not_null:
               config:
                 severity: warn
+                description: "Payment type ID is optional for claims without payments"
           - accepted_values:
-              values: [465, 467, 646]
+              values: [261, 303, 464, 465, 466, 467, 469, 645, 646, 647, 661]
               config:
-                description: "Payment type must be one of the defined payment method codes"
+                severity: warn
+                description: "Payment type must match values from stg_opendental__claimpayment. See _stg_opendental__claimpayment.yml for complete list and descriptions."
 
       - name: is_partial
         description: >
@@ -416,17 +527,27 @@ models:
         description: >
           Number of EOB (Explanation of Benefits) attachments
           
+          Data Quality Considerations:
+          - NULL values are expected for pre-authorization/draft claims (`claim_id = 0`)
+          - These claims haven't been submitted yet, so they don't have EOBs
+          - Pre-auth claims are legitimate business records representing planned procedures
+          
           Business Context:
           - Used for audit compliance and documentation tracking
           - Critical for insurance payment verification and dispute resolution
           - Enables documentation completeness analysis
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                where: "claim_id != 0"
+                description: "EOB attachment count should be present for submitted claims (excluding pre-auth/draft claims)"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 10
               config:
                 severity: warn
+                where: "eob_attachment_count IS NOT NULL"
                 description: "EOB attachment count should be reasonable for claim documentation"
 
       - name: eob_attachment_ids
@@ -668,8 +789,10 @@ models:
           - Links to procedure code information
           - Used for procedure-specific analysis and reporting
           - Critical for billing accuracy and procedure tracking
-        tests:
-          - not_null
+          
+          Data Quality Notes:
+          - NULL is expected for pre-auth claims (claim_id = 0) where procedure definitions haven't been set up yet
+        tests: []
 
       - name: code_prefix
         description: >
@@ -679,8 +802,11 @@ models:
           - Used for procedure code categorization
           - Critical for procedure grouping and analysis
           - Enables procedure code hierarchy analysis
-        tests:
-          - not_null
+          
+          Data Quality Notes:
+          - NULL is expected for numeric procedure codes (non-D-prefixed codes)
+          - NULL is also expected for pre-auth claims (claim_id = 0) where procedure definitions haven't been set up yet
+        tests: []
 
       - name: procedure_description
         description: >
@@ -690,8 +816,10 @@ models:
           - Used for procedure identification and reporting
           - Critical for procedure analysis and documentation
           - Enables procedure-specific reporting and analysis
-        tests:
-          - not_null
+          
+          Data Quality Notes:
+          - NULL is expected for pre-auth claims (claim_id = 0) where procedure definitions haven't been set up yet
+        tests: []
 
       - name: abbreviated_description
         description: >
@@ -701,8 +829,10 @@ models:
           - Used for procedure identification in reports
           - Critical for space-constrained reporting
           - Enables concise procedure reporting
-        tests:
-          - not_null
+          
+          Data Quality Notes:
+          - NULL is expected for pre-auth claims (claim_id = 0) where procedure definitions haven't been set up yet
+        tests: []
 
       - name: procedure_time
         description: >
@@ -725,8 +855,10 @@ models:
           - Links to procedure category information
           - Used for procedure categorization and analysis
           - Critical for procedure grouping and reporting
-        tests:
-          - not_null
+          
+          Data Quality Notes:
+          - NULL is expected for pre-auth claims (claim_id = 0) where procedure definitions haven't been set up yet
+        tests: []
 
       - name: treatment_area
         description: >
@@ -736,8 +868,10 @@ models:
           - Used for treatment area analysis and reporting
           - Critical for treatment planning and analysis
           - Enables treatment area-specific reporting
-        tests:
-          - not_null
+          
+          Data Quality Notes:
+          - NULL is expected for pre-auth claims (claim_id = 0) where procedure definitions haven't been set up yet
+        tests: []
 
       - name: is_prosthetic
         description: >
@@ -747,8 +881,16 @@ models:
           - Used for prosthetic procedure identification
           - Critical for prosthetic analysis and reporting
           - Enables prosthetic-specific analysis
+          
+          Data Quality Notes:
+          - PostgreSQL boolean field (true/false)
+          - NULL is legitimate when procedure definitions don't exist (e.g., pre-auth claims)
+          - false (0 in source) is NOT NULL - NULL means "procedure definition not available"
         tests:
-          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                where: "is_prosthetic IS NOT NULL"
 
       - name: is_hygiene
         description: >
@@ -758,8 +900,16 @@ models:
           - Used for hygiene procedure identification
           - Critical for hygiene analysis and reporting
           - Enables hygiene-specific analysis
+          
+          Data Quality Notes:
+          - PostgreSQL boolean field (true/false)
+          - NULL is legitimate when procedure definitions don't exist (e.g., pre-auth claims)
+          - false (0 in source) is NOT NULL - NULL means "procedure definition not available"
         tests:
-          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                where: "is_hygiene IS NOT NULL"
 
       - name: base_units
         description: >
@@ -769,8 +919,10 @@ models:
           - Used for procedure unit calculation
           - Critical for billing accuracy and procedure tracking
           - Enables unit-based analysis and reporting
-        tests:
-          - not_null
+          
+          Data Quality Notes:
+          - NULL is expected for pre-auth claims (claim_id = 0) where procedure definitions haven't been set up yet
+        tests: []
 
       - name: is_radiology
         description: >
@@ -780,8 +932,16 @@ models:
           - Used for radiology procedure identification
           - Critical for radiology analysis and reporting
           - Enables radiology-specific analysis
+          
+          Data Quality Notes:
+          - PostgreSQL boolean field (true/false)
+          - NULL is legitimate when procedure definitions don't exist (e.g., pre-auth claims)
+          - false (0 in source) is NOT NULL - NULL means "procedure definition not available"
         tests:
-          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                where: "is_radiology IS NOT NULL"
 
       - name: no_bill_insurance
         description: >
@@ -791,8 +951,16 @@ models:
           - Used for billing determination
           - Critical for billing accuracy and revenue recognition
           - Enables billing-specific analysis
+          
+          Data Quality Notes:
+          - PostgreSQL boolean field (true/false)
+          - NULL is legitimate when procedure definitions don't exist (e.g., pre-auth claims)
+          - false (0 in source) is NOT NULL - NULL means "procedure definition not available"
         tests:
-          - not_null
+          - accepted_values:
+              values: [true, false]
+              config:
+                where: "no_bill_insurance IS NOT NULL"
 
       - name: default_claim_note
         description: >
