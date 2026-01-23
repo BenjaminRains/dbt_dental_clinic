@@ -23,6 +23,9 @@ models:
       
       Business Logic Features:
       - Appointment status categorization with business rule logic for operational outcomes
+        * All appointment_status values [1, 2, 3, 4, 5, 6, 7, 8] are now explicitly mapped
+        * Status 2 and 8 both map to 'Completed' (Complete and PtNoteCompleted)
+        * Status 1 and 6 both map to 'Scheduled' (Scheduled and Planned)
       - Timing calculations with data quality validation to handle illogical time sequences
       - Appointment duration categorization (Short, Standard, Long, Extended) based on business thresholds
       - No-show detection logic based on arrival status and appointment date comparison
@@ -467,21 +470,47 @@ models:
           - 'ASAP': Urgent appointment requiring immediate attention
           - 'No Show': Patient did not arrive for scheduled appointment
           - 'Scheduled': Appointment is scheduled but not yet completed
+          - 'Unscheduled': Appointment is on unscheduled list (status 3)
+          - 'PtNote': Patient note appointment (status 7)
+          
+          Calculation Logic (Priority Order):
+          - Priority 1: appointment_status = 2 OR appointment_status = 8 → 'Completed'
+            * Status 2 = Complete (standard completed appointment)
+            * Status 8 = PtNoteCompleted (patient note appointment completed)
+          - Priority 2: is_complete flag = TRUE → 'Completed' (fallback, should align with status 2)
+          - Priority 3: appointment_status = 5 → 'Cancelled' (Broken/Missed)
+          - Priority 4: appointment_status = 4 → 'ASAP' (urgent appointment)
+          - Priority 5: appointment_status = 3 → 'Unscheduled' (UnschedList)
+          - Priority 6: appointment_status = 7 → 'PtNote' (patient note appointment)
+          - Priority 7: appointment_status = 6 → 'Scheduled' (Planned)
+          - Priority 8: appointment_status = 1 → 'Scheduled' (Scheduled)
+          - Priority 9: Past appointment without check-in → 'No Show'
+          - Fallback: Any unmapped status → 'Scheduled'
           
           Business Rules:
-          - 'Completed' includes both 'Complete' and 'PtNoteCompleted' statuses
-          - 'No Show' determined by null arrival_datetime and past appointment date
-          - 'Cancelled' maps to 'Broken' appointment status
-          - 'ASAP' indicates urgent scheduling requirement
+          - 'Completed' includes both status 2 (Complete) and status 8 (PtNoteCompleted)
+          - 'No Show' determined by null check_in_time and past appointment date without completion
+          - 'Cancelled' maps to status 5 (Broken/Missed)
+          - 'ASAP' maps to status 4 (urgent scheduling requirement)
+          - 'Unscheduled' maps to status 3 (UnschedList - requires investigation in source)
+          - 'PtNote' maps to status 7 (patient note appointment - distinct from regular appointments)
+          - 'Scheduled' includes both status 1 (Scheduled) and status 6 (Planned)
+          
+          Data Quality Notes:
+          - Previously missing explicit mappings for status values 1, 2, 3, 6, 7, 8
+          - Logic now handles all documented appointment_status values [1, 2, 3, 4, 5, 6, 7, 8]
+          - Status 3 (UnschedList) should be investigated in source system if appearing frequently
+          - Status 7 and 8 (PtNote variants) are valid but may be rare in some practices
           
           Operational Impact:
           - Drives appointment outcome analytics and reporting
           - Affects no-show tracking and patient communication strategies
           - Critical for operational performance measurement
+          - Enables accurate categorization of all appointment types
         tests:
           - not_null
           - accepted_values:
-              values: ['Completed', 'Cancelled', 'ASAP', 'No Show', 'Scheduled']
+              values: ['Completed', 'Cancelled', 'ASAP', 'No Show', 'Scheduled', 'Unscheduled', 'PtNote']
               config:
                 description: "Appointment outcome status must be valid business outcome"
       
