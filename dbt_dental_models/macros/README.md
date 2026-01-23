@@ -28,12 +28,68 @@ macros/
   - Metadata standardization
   - ID transformations
   - Tracking and validation helpers
+  - Schema naming configuration
 
 ---
 
 ## Utility Macros (`utils/`)
 
 These macros implement improved naming conventions and standardize common transformation patterns across all dbt models.
+
+### Schema Configuration
+
+#### `generate_schema_name(custom_schema_name, node)`
+**Purpose:** Overrides dbt's default schema naming behavior to use custom schema names directly without prefixing.
+
+**How it works:**
+- By default, dbt prefixes custom schema names with the target schema from `profiles.yml`
+- Example: If `target.schema = 'raw'` and a model specifies `schema: 'staging'`, dbt would create `raw_staging`
+- This macro overrides that to create schemas named exactly `staging`, `int`, `marts`
+
+**Usage:**
+This macro is **automatically called by dbt** for all models. You don't need to explicitly call it.
+
+**Configuration:**
+Schema names are configured in `dbt_project.yml`:
+```yaml
+models:
+  dbt_dental_models:
+    staging:
+      +schema: staging    # Creates schema: staging (not raw_staging)
+    intermediate:
+      +schema: int        # Creates schema: int (not raw_int)
+    marts:
+      +schema: marts      # Creates schema: marts (not raw_marts)
+```
+
+**Result:**
+- Models in `models/staging/` → `staging` schema
+- Models in `models/intermediate/` → `int` schema
+- Models in `models/marts/` → `marts` schema
+
+**Why this matters:**
+- Keeps schema names clean and predictable
+- Matches intended architecture regardless of target schema in profiles.yml
+- Prevents schema name confusion (e.g., `raw_staging` vs `staging`)
+
+**When to keep this macro (current approach):**
+✅ **Single environment per database** - Each environment (dev, demo, clinic) uses its own database
+✅ **Schema-based multi-tenancy** - Tenants are handled via separate schemas (e.g., `mdc`, `glic`) within the same database, not via schema prefixes
+✅ **Consistent naming** - You want the same schema names (`staging`, `int`, `marts`) regardless of which target/profile is used
+✅ **Clean architecture** - Schema names reflect logical layers, not deployment environments
+
+**When to remove this macro (use default dbt behavior):**
+⚠️ **Multiple environments in same database** - If you need `dev_staging`, `prod_staging`, `demo_staging` in the same database
+⚠️ **Developer isolation** - Multiple developers working in the same database need separate schemas (e.g., `dev_alice_staging`, `dev_bob_staging`)
+⚠️ **Environment-based isolation** - When `target.schema` in profiles.yml represents a meaningful environment identifier that should prefix all schemas
+⚠️ **CI/CD parallel runs** - When running multiple dbt jobs in parallel against the same database and need automatic schema isolation
+
+**Current project approach:**
+This project uses **separate databases per environment** (dev, demo, clinic) with schema-based multi-tenancy for clinics (MDC, GLIC). Therefore, the macro is appropriate - we want clean schema names (`staging`, `int`, `marts`) that are consistent across environments, with tenant isolation handled at the schema level (`mdc`, `glic`) rather than via prefixes.
+
+**See also:** `dbt_project.yml` for schema configuration
+
+---
 
 ### Core Transformation Macros
 

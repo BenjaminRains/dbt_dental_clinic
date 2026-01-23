@@ -46,19 +46,22 @@ models:
       +enabled: true
     
     # Configure materializations by folder
+    # NOTE: Schema names are controlled by generate_schema_name() macro in macros/utils/
+    # This macro ensures schemas are named exactly 'staging', 'int', 'marts' (not prefixed with target schema)
+    # See: macros/utils/generate_schema_name.sql and macros/README.md for details
     staging:
       +materialized: view  # Default materialization, some models override this to be tables
-      +schema: staging
+      +schema: staging    # Creates schema: staging (not raw_staging, thanks to generate_schema_name macro)
       +description: "Staging models for raw data transformation"
     
     intermediate:
       +materialized: table
-      +schema: int
+      +schema: int        # Creates schema: int (not raw_int, thanks to generate_schema_name macro)
       +description: "Intermediate models for business logic implementation"
     
     marts:
       +materialized: table
-      +schema: marts
+      +schema: marts      # Creates schema: marts (not raw_marts, thanks to generate_schema_name macro)
       +description: "Mart models for business reporting and analytics"
 
 # Package dependencies - temporarily disabled for debugging
