@@ -176,9 +176,9 @@ function Initialize-DBTEnvironment {
             Write-Host "⚠️ deployment_credentials.json not found. Demo credentials not loaded." -ForegroundColor Yellow
         }
     } else {
-        # Dev target: Load from .env_production or existing environment variables
+        # Dev target: Load from .env_clinic or existing environment variables
         Write-Host "📋 Loading dev database credentials from environment files..." -ForegroundColor Yellow
-        @(".env_production", ".dbt-env") | ForEach-Object {
+        @(".env_clinic", ".dbt-env") | ForEach-Object {
             # Try dbt project directory first, then project root
             $envFile = "$dbtProjectPath\$_"
             if (-not (Test-Path $envFile)) {
@@ -204,7 +204,7 @@ function Initialize-DBTEnvironment {
         }
         if ($missingVars.Count -gt 0) {
             Write-Host "⚠️ Missing required environment variables: $($missingVars -join ', ')" -ForegroundColor Yellow
-            Write-Host "   Set these variables or add them to .env_production" -ForegroundColor Gray
+            Write-Host "   Set these variables or add them to .env_clinic" -ForegroundColor Gray
         } else {
             Write-Host "✅ Dev database credentials loaded" -ForegroundColor Green
         }
@@ -336,20 +336,24 @@ function Initialize-ETLEnvironment {
     # Interactive Environment Selection
     Write-Host "`n🔧 ETL Environment Selection" -ForegroundColor Cyan
     Write-Host "Which environment would you like to use?" -ForegroundColor White
-    Write-Host "  Type 'production' for Production (.env_production) - ETL pipeline operations" -ForegroundColor Yellow
-    Write-Host "  Type 'test' for Test (.env_test) - ETL pipeline operations" -ForegroundColor Yellow
+    Write-Host "  Type 'clinic' for Clinic ETL (.env_clinic) - Extracts from real clinic OpenDental databases (MDC/GLIC)" -ForegroundColor Yellow
+    Write-Host "    → Source: Real clinic OpenDental databases" -ForegroundColor Gray
+    Write-Host "    → Destination: opendental_analytics database" -ForegroundColor Gray
+    Write-Host "  Type 'test' for Test (.env_test) - ETL pipeline operations with test source" -ForegroundColor Yellow
+    Write-Host "    → Uses TEST_* databases: test_opendental (source), test_opendental_analytics (analytics)" -ForegroundColor Gray
+    Write-Host "    → Setup via: python -m etl_pipeline.scripts.setup_test_databases" -ForegroundColor Gray
     Write-Host "  Type 'demo' for Demo (deployment_credentials.json) - Synthetic data generator ONLY" -ForegroundColor Cyan
     Write-Host "    ⚠️  Note: Demo mode is for synthetic data generation only, not ETL operations" -ForegroundColor Gray
     Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
     
     do {
-        $choice = Read-Host "`nEnter environment (production/test/demo/cancel)"
+        $choice = Read-Host "`nEnter environment (clinic/test/demo/cancel)"
         $choice = $choice.ToLower().Trim()
         
         switch ($choice) {
-            "production" { 
-                $envFile = ".env_production"
-                $envName = "Production"
+            "clinic" { 
+                $envFile = ".env_clinic"
+                $envName = "Clinic"
                 break
             }
             "test" { 
@@ -367,10 +371,11 @@ function Initialize-ETLEnvironment {
                 return
             }
             default { 
-                Write-Host "❌ Invalid choice. Please enter 'production', 'test', 'demo', or 'cancel'." -ForegroundColor Red
+                Write-Host "❌ Invalid choice. Please enter 'clinic', 'test', 'demo', or 'cancel'." -ForegroundColor Red
+                Write-Host "   Note: 'production' has been renamed to 'clinic'" -ForegroundColor Gray
             }
         }
-    } while ($choice -notin @("production", "test", "demo", "cancel"))
+    } while ($choice -notin @("clinic", "test", "demo", "cancel"))
 
     # Load environment based on selection
     $etlPath = "$ProjectPath\etl_pipeline"
@@ -439,17 +444,36 @@ function Initialize-ETLEnvironment {
             return
         }
     } else {
-        # Production or Test: Load from .env file
+        # Clinic or Test: Load from .env file
         $envPath = "$etlPath\$envFile"
         
         if (Test-Path $envPath) {
             Write-Host "📄 Loading $envName environment from: $envFile" -ForegroundColor Green
+            $etlEnvSet = $false
             Get-Content $envPath | ForEach-Object {
                 if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
                     $name = $matches[1].Trim()
                     $value = $matches[2].Trim()
                     [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+                    if ($name -eq "ETL_ENVIRONMENT") {
+                        $etlEnvSet = $true
+                    }
                     Write-Host "  Loaded: $name" -ForegroundColor Gray
+                }
+            }
+            
+            # Ensure ETL_ENVIRONMENT is set correctly (override if file has old "production" value)
+            if ($choice -eq "clinic") {
+                [Environment]::SetEnvironmentVariable('ETL_ENVIRONMENT', 'clinic', 'Process')
+                if (-not $etlEnvSet) {
+                    Write-Host "  Set: ETL_ENVIRONMENT=clinic" -ForegroundColor Gray
+                } else {
+                    Write-Host "  Updated: ETL_ENVIRONMENT=clinic (was 'production')" -ForegroundColor Yellow
+                }
+            } elseif ($choice -eq "test") {
+                [Environment]::SetEnvironmentVariable('ETL_ENVIRONMENT', 'test', 'Process')
+                if (-not $etlEnvSet) {
+                    Write-Host "  Set: ETL_ENVIRONMENT=test" -ForegroundColor Gray
                 }
             }
         } else {
@@ -590,15 +614,16 @@ function Initialize-APIEnvironment {
     Write-Host "Which environment would you like to use for LOCAL API development?" -ForegroundColor White
     Write-Host ""
     Write-Host "  Type 'local' for Local Development (.env_api_local)" -ForegroundColor Yellow
-    Write-Host "    → opendental_analytics on localhost (PHI - real production data)" -ForegroundColor Gray
+    Write-Host "    → opendental_analytics on localhost (PHI - real clinic data)" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "  Type 'production' for Demo API (.env_api_production)" -ForegroundColor Yellow
+    Write-Host "  Type 'demo' for Demo API (.env_api_demo)" -ForegroundColor Yellow
     Write-Host "    → opendental_demo (synthetic data - safe for local testing)" -ForegroundColor Gray
     Write-Host "    → Uses same config as deployed API at api.dbtdentalclinic.com" -ForegroundColor Gray
-    Write-Host "    → For localhost testing, ensure DEMO_POSTGRES_HOST=localhost in .env_api_production" -ForegroundColor Gray
+    Write-Host "    → For localhost testing, ensure DEMO_POSTGRES_HOST=localhost in .env_api_demo" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Type 'test' for Test (.env_api_test)" -ForegroundColor Yellow
-    Write-Host "    → Test database configuration" -ForegroundColor Gray
+    Write-Host "    → Test database configuration (uses TEST_* databases)" -ForegroundColor Gray
+    Write-Host "    → Separate test databases: test_opendental (source), test_opendental_analytics (analytics)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
     Write-Host ""
@@ -606,7 +631,7 @@ function Initialize-APIEnvironment {
     Write-Host "   To connect to the REMOTE EC2 instance, use 'aws-ssm-init' + 'ssm-connect-api'" -ForegroundColor Gray
     
     do {
-        $choice = Read-Host "`nEnter environment (local/production/test/cancel)"
+        $choice = Read-Host "`nEnter environment (local/demo/clinic/test/cancel)"
         $choice = $choice.ToLower().Trim()
         
         switch ($choice) {
@@ -615,9 +640,14 @@ function Initialize-APIEnvironment {
                 $envName = "Local"
                 break
             }
-            "production" { 
-                $envFile = ".env_api_production"
-                $envName = "Production"
+            "demo" { 
+                $envFile = ".env_api_demo"
+                $envName = "Demo"
+                break
+            }
+            "clinic" { 
+                $envFile = ".env_api_clinic"
+                $envName = "Clinic"
                 break
             }
             "test" { 
@@ -630,10 +660,10 @@ function Initialize-APIEnvironment {
                 return
             }
             default { 
-                Write-Host "❌ Invalid choice. Please enter 'local', 'production', 'test', or 'cancel'." -ForegroundColor Red
+                Write-Host "❌ Invalid choice. Please enter 'local', 'demo', 'clinic', 'test', or 'cancel'." -ForegroundColor Red
             }
         }
-    } while ($choice -notin @("local", "production", "test", "cancel"))
+    } while ($choice -notin @("local", "demo", "clinic", "test", "cancel"))
 
     # Load the selected API environment file
     $apiPath = "$ProjectPath\api"
@@ -814,7 +844,7 @@ function Invoke-ETL {
         if ($command -notin $allowedCommands) {
             Write-Host "❌ ETL pipeline operations are not available in demo mode." -ForegroundColor Red
             Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
-            Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'production' or 'test' for ETL operations." -ForegroundColor Yellow
+            Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'clinic' or 'test' for ETL operations." -ForegroundColor Yellow
             return
         }
     }
@@ -848,7 +878,7 @@ function Test-ETLValidation {
     if ($env:ETL_ENVIRONMENT -eq "demo") {
         Write-Host "❌ ETL validation is not available in demo mode." -ForegroundColor Red
         Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
-        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'production' or 'test' for ETL operations." -ForegroundColor Yellow
+        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'clinic' or 'test' for ETL operations." -ForegroundColor Yellow
         return
     }
     
@@ -866,7 +896,7 @@ function Start-ETLPipeline {
     if ($env:ETL_ENVIRONMENT -eq "demo") {
         Write-Host "❌ ETL pipeline operations are not available in demo mode." -ForegroundColor Red
         Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
-        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'production' or 'test' for ETL operations." -ForegroundColor Yellow
+        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'clinic' or 'test' for ETL operations." -ForegroundColor Yellow
         return
     }
     
@@ -884,7 +914,7 @@ function Test-ETLConnections {
     if ($env:ETL_ENVIRONMENT -eq "demo") {
         Write-Host "❌ ETL connection testing is not available in demo mode." -ForegroundColor Red
         Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
-        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'production' or 'test' for ETL operations." -ForegroundColor Yellow
+        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'clinic' or 'test' for ETL operations." -ForegroundColor Yellow
         return
     }
     
@@ -981,15 +1011,22 @@ function Start-APIServer {
     
     # Determine database info based on environment
     $dbInfo = switch ($env:API_ENVIRONMENT) {
-        "production" {
+        "demo" {
             $dbName = $env:DEMO_POSTGRES_DB
             if (-not $dbName) { $dbName = "opendental_demo" }
-            "opendental_demo (production/demo database - synthetic data)"
+            "opendental_demo (demo database - synthetic data)"
+        }
+        "clinic" {
+            $dbName = $env:POSTGRES_ANALYTICS_DB
+            if (-not $dbName) { $dbName = "opendental_analytics" }
+            "opendental_analytics (clinic database - real PHI)"
         }
         "test" {
             $dbName = $env:TEST_POSTGRES_ANALYTICS_DB
-            if (-not $dbName) { $dbName = "opendental_analytics" }
-            "$dbName (test environment)"
+            if (-not $dbName) { $dbName = "test_opendental_analytics" }
+            $sourceDb = $env:TEST_OPENDENTAL_SOURCE_DB
+            if (-not $sourceDb) { $sourceDb = "test_opendental" }
+            "$dbName (test environment - uses TEST_* databases: $sourceDb source, $dbName analytics)"
         }
         default {
             $dbName = $env:POSTGRES_ANALYTICS_DB
@@ -1266,13 +1303,13 @@ function Deploy-Frontend {
         return
     }
     
-    # Load DEMO_API_KEY from .env_api_production for production build
-    Write-Host "`n🔑 Loading production API configuration..." -ForegroundColor Yellow
-    $apiProductionEnvFile = "$projectPath\api\.env_api_production"
+    # Load DEMO_API_KEY from .env_api_demo for demo build
+    Write-Host "`n🔑 Loading demo API configuration..." -ForegroundColor Yellow
+    $apiDemoEnvFile = "$projectPath\api\.env_api_demo"
     $demoApiKey = $null
     
-    if (Test-Path $apiProductionEnvFile) {
-        Get-Content $apiProductionEnvFile | ForEach-Object {
+    if (Test-Path $apiDemoEnvFile) {
+        Get-Content $apiDemoEnvFile | ForEach-Object {
             if ($_ -match '^DEMO_API_KEY\s*=\s*(.+)$' -and $_ -notmatch '^\s*#') {
                 $demoApiKey = $matches[1].Trim()
             }
@@ -1285,19 +1322,19 @@ function Deploy-Frontend {
     }
     
     if (-not $demoApiKey) {
-        Write-Host "❌ DEMO_API_KEY not found in .env_api_production or environment variables" -ForegroundColor Red
-        Write-Host "   Production build requires DEMO_API_KEY for API authentication" -ForegroundColor Yellow
+        Write-Host "❌ DEMO_API_KEY not found in .env_api_demo or environment variables" -ForegroundColor Red
+        Write-Host "   Demo build requires DEMO_API_KEY for API authentication" -ForegroundColor Yellow
         return
     }
     
-    Write-Host "✅ DEMO_API_KEY loaded for production build" -ForegroundColor Green
+    Write-Host "✅ DEMO_API_KEY loaded for demo build" -ForegroundColor Green
     
     # Build frontend
     Push-Location $frontendPath
     try {
-        Write-Host "`n📦 Building frontend with production configuration..." -ForegroundColor Yellow
+        Write-Host "`n📦 Building frontend with demo configuration..." -ForegroundColor Yellow
         Write-Host "   API URL: https://api.dbtdentalclinic.com" -ForegroundColor Gray
-        Write-Host "   Database: opendental_demo (production)" -ForegroundColor Gray
+        Write-Host "   Database: opendental_demo (demo - synthetic data)" -ForegroundColor Gray
         
         # Install dependencies if needed
         if (-not (Test-Path "node_modules")) {
@@ -1310,11 +1347,11 @@ function Deploy-Frontend {
             }
         }
         
-        # Set production environment variables for Vite build
+        # Set demo environment variables for Vite build
         $env:VITE_API_URL = "https://api.dbtdentalclinic.com"
         $env:VITE_API_KEY = $demoApiKey
         
-        Write-Host "🔧 Building with production environment variables..." -ForegroundColor Cyan
+        Write-Host "🔧 Building with demo environment variables..." -ForegroundColor Cyan
         
         # Build
         npm run build
@@ -1499,11 +1536,11 @@ function Get-FrontendStatus {
 function Deploy-ClinicFrontend {
     <#
     .SYNOPSIS
-    Deploy clinic production frontend to AWS S3/CloudFront with IP restrictions.
-    
+    Deploy clinic frontend to AWS S3/CloudFront with IP restrictions.
+
     .DESCRIPTION
-    Builds and deploys the clinic production frontend to clinic.dbtdentalclinic.com.
-    This frontend connects to the production API (api-clinic.dbtdentalclinic.com) 
+    Builds and deploys the clinic frontend to clinic.dbtdentalclinic.com.
+    This frontend connects to the clinic API (api-clinic.dbtdentalclinic.com)
     which accesses opendental_analytics database with real PHI.
     
     .EXAMPLE
@@ -1517,7 +1554,7 @@ function Deploy-ClinicFrontend {
         return
     }
     
-    Write-Host "`n🏥 Deploying Clinic Production Frontend" -ForegroundColor Cyan
+    Write-Host "`n🏥 Deploying Clinic Frontend" -ForegroundColor Cyan
     Write-Host "========================================" -ForegroundColor Cyan
     
     # Check AWS credentials
@@ -1654,9 +1691,9 @@ function Deploy-ClinicFrontend {
     # Build frontend
     Push-Location $frontendPath
     try {
-        Write-Host "`n📦 Building clinic frontend with production configuration..." -ForegroundColor Yellow
+        Write-Host "`n📦 Building clinic frontend with clinic configuration..." -ForegroundColor Yellow
         Write-Host "   API URL: $apiUrl" -ForegroundColor Gray
-        Write-Host "   Database: opendental_analytics (production - real PHI)" -ForegroundColor Gray
+        Write-Host "   Database: opendental_analytics (clinic - real PHI)" -ForegroundColor Gray
         Write-Host "   Access: IP-restricted (clinic only)" -ForegroundColor Gray
         
         # Install dependencies if needed
@@ -1670,7 +1707,7 @@ function Deploy-ClinicFrontend {
             }
         }
         
-        # Set production environment variables for Vite build
+        # Set clinic environment variables for Vite build
         $env:VITE_API_URL = $apiUrl
         $env:VITE_API_KEY = $apiKey
         $env:VITE_IS_DEMO = "false"
@@ -2085,7 +2122,11 @@ function Initialize-AWSSSMEnvironment {
             }
 
             # Load RDS endpoint for port forwarding
-            if ($credentials.backend_api.production_database_reference.rds.endpoint) {
+            # Try new name first (clinic_database_reference), fall back to old name for compatibility
+            if ($credentials.backend_api.clinic_database_reference -and $credentials.backend_api.clinic_database_reference.rds.endpoint) {
+                $script:RDSEndpoint = $credentials.backend_api.clinic_database_reference.rds.endpoint
+                Write-Host "  RDS Endpoint: $script:RDSEndpoint" -ForegroundColor Gray
+            } elseif ($credentials.backend_api.production_database_reference -and $credentials.backend_api.production_database_reference.rds.endpoint) {
                 $script:RDSEndpoint = $credentials.backend_api.production_database_reference.rds.endpoint
                 Write-Host "  RDS Endpoint: $script:RDSEndpoint" -ForegroundColor Gray
             }
@@ -2428,14 +2469,16 @@ function Get-ETLEnvironmentStatus {
     
     # Show some key environment variables
     Write-Host "`n🔧 Key Environment Variables:" -ForegroundColor White
-    if ($environment -eq "production") {
+    if ($environment -eq "clinic") {
         Write-Host "  OPENDENTAL_SOURCE_DB: $($env:OPENDENTAL_SOURCE_DB)" -ForegroundColor Gray
         Write-Host "  OPENDENTAL_SOURCE_HOST: $($env:OPENDENTAL_SOURCE_HOST)" -ForegroundColor Gray
         Write-Host "  POSTGRES_ANALYTICS_DB: $($env:POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
     } elseif ($environment -eq "test") {
         Write-Host "  TEST_OPENDENTAL_SOURCE_DB: $($env:TEST_OPENDENTAL_SOURCE_DB)" -ForegroundColor Gray
         Write-Host "  TEST_OPENDENTAL_SOURCE_HOST: $($env:TEST_OPENDENTAL_SOURCE_HOST)" -ForegroundColor Gray
+        Write-Host "  TEST_MYSQL_REPLICATION_DB: $($env:TEST_MYSQL_REPLICATION_DB)" -ForegroundColor Gray
         Write-Host "  TEST_POSTGRES_ANALYTICS_DB: $($env:TEST_POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
+        Write-Host "  ℹ️  Test databases are separate from clinic/demo (setup via setup_test_databases.py)" -ForegroundColor Cyan
     } elseif ($environment -eq "demo") {
         Write-Host "  DEMO_POSTGRES_DB: $($env:DEMO_POSTGRES_DB)" -ForegroundColor Gray
         Write-Host "  DEMO_POSTGRES_HOST: $($env:DEMO_POSTGRES_HOST)" -ForegroundColor Gray
@@ -2458,10 +2501,14 @@ function Get-APIEnvironmentStatus {
     
     # Show some key environment variables
     Write-Host "`n🔧 Key Environment Variables:" -ForegroundColor White
-    if ($environment -eq "production") {
+    if ($environment -eq "demo") {
         Write-Host "  DEMO_POSTGRES_DB: $($env:DEMO_POSTGRES_DB)" -ForegroundColor Gray
         Write-Host "  DEMO_POSTGRES_HOST: $($env:DEMO_POSTGRES_HOST)" -ForegroundColor Gray
         Write-Host "  DEMO_API_KEY: $(if ($env:DEMO_API_KEY) { '***configured***' } else { 'not set' })" -ForegroundColor Gray
+    } elseif ($environment -eq "clinic") {
+        Write-Host "  POSTGRES_ANALYTICS_DB: $($env:POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
+        Write-Host "  POSTGRES_ANALYTICS_HOST: $($env:POSTGRES_ANALYTICS_HOST)" -ForegroundColor Gray
+        Write-Host "  CLINIC_API_KEY: $(if ($env:CLINIC_API_KEY) { '***configured***' } else { 'not set' })" -ForegroundColor Gray
     } elseif ($environment -eq "local") {
         Write-Host "  POSTGRES_ANALYTICS_DB: $($env:POSTGRES_ANALYTICS_DB)" -ForegroundColor Gray
         Write-Host "  POSTGRES_ANALYTICS_HOST: $($env:POSTGRES_ANALYTICS_HOST)" -ForegroundColor Gray
@@ -2572,14 +2619,14 @@ Write-Host "║            Dental Clinic ETL & dbt Pipeline             ║" -Fo
 Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkBlue
 
 Write-Host "`n🚀 Quick Start:" -ForegroundColor White
-Write-Host "  dbt-init              - Initialize dbt environment (dev target - local production)" -ForegroundColor Cyan
+Write-Host "  dbt-init              - Initialize dbt environment (dev target - local clinic data)" -ForegroundColor Cyan
 Write-Host "  dbt-init -Target demo - Initialize dbt environment (demo target - demo EC2 database)" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
 Write-Host "  api-init       - Initialize API environment (LOCAL - run API on your machine)" -ForegroundColor Blue
 Write-Host "  aws-ssm-init   - Initialize AWS SSM (REMOTE - connect to EC2 instances)" -ForegroundColor DarkCyan
 Write-Host "  frontend-dev   - Start frontend dev server (localhost:3000 → localhost:8000 API)" -ForegroundColor Green
 Write-Host "  frontend-deploy - Deploy demo frontend to AWS S3/CloudFront (public)" -ForegroundColor Green
-Write-Host "  clinic-frontend-deploy - Deploy clinic production frontend (IP-restricted)" -ForegroundColor Green
+Write-Host "  clinic-frontend-deploy - Deploy clinic frontend (IP-restricted)" -ForegroundColor Green
 Write-Host "  dbt-docs-deploy - Deploy dbt documentation to AWS S3/CloudFront" -ForegroundColor Cyan
 Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
