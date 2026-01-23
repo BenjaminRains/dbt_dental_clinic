@@ -54,6 +54,32 @@ models:
     tests:
       - dbt_utils.unique_combination_of_columns:
           combination_of_columns: [claim_id, procedure_id, claim_procedure_id]
+      - dbt_utils.expression_is_true:
+          expression: |
+            CASE 
+              WHEN check_date IS NULL THEN payment_days_from_claim IS NULL
+              WHEN check_date IS NOT NULL THEN payment_days_from_claim = (check_date - claim_date)
+              ELSE true
+            END
+          config:
+            severity: error
+            description: "Payment days calculation should match check_date - claim_date"
+      - dbt_expectations.expect_column_pair_values_A_to_be_greater_than_B:
+          column_A: billed_amount
+          column_B: allowed_amount
+          or_equal: true
+          row_condition: "claim_id != 0 AND allowed_amount != -1.0 AND billed_amount > 0"
+          config:
+            severity: warn
+            description: "Allowed amount should not exceed billed amount (excluding pre-auth, placeholder, and zero-billed)"
+      - dbt_expectations.expect_column_pair_values_A_to_be_greater_than_B:
+          column_A: allowed_amount
+          column_B: paid_amount
+          or_equal: true
+          row_condition: "claim_id != 0 AND allowed_amount != -1.0"
+          config:
+            severity: warn
+            description: "Paid amount should not exceed allowed amount (excluding pre-auth and placeholder values)"
 
     columns:
       - name: claim_id
@@ -191,6 +217,13 @@ models:
               config:
                 severity: error
                 description: "All claims must have valid submission dates for financial reporting"
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: "'2020-01-01'"
+              max_value: "CURRENT_DATE + INTERVAL '1 year'"
+              row_condition: "claim_id != 0"
+              config:
+                severity: warn
+                description: "Claim dates should be within reasonable range (excluding pre-auth claims which may have future dates)"
 
       - name: claim_status
         description: >
@@ -584,33 +617,70 @@ models:
           Calculated payment status category for business analysis
           
           Valid Values:
-          - 'Paid': Payment has been received
-          - 'Denied': Claim was denied by insurance
-          - 'Pending': Claim is awaiting processing
-          - 'Rejected': Claim was rejected due to errors
-          - 'Unknown': Status cannot be determined
+          - 'Paid': Payment has been received (paid_amount > 0)
+          - 'Pre-auth': Pre-authorization claim (claim_id = 0) - claim sent to insurance before procedure is performed
+          - 'Denied': Claim was denied by insurance (claim_status = 'Denied')
+          - 'Rejected': Claim was rejected due to errors (claim_status = 'Rejected')
+          - 'Pending': Claim is awaiting processing - includes:
+            * Submitted claims (claim_status = 'Submitted')
+            * Received claims not yet paid (claim_status = 'R')
+            * Sent claims awaiting response (claim_status = 'S')
+            * Waiting claims in transition (claim_status = 'W')
+            * Hold claims waiting for primary insurance (claim_status = 'H')
+            * Regular claims with NULL status (should be rare)
+          - 'Unknown': Legitimate unknown status from source system (claim_status = 'U') - approximately 5 records
+          
+          Calculation Logic:
+          - Priority 1: paid_amount > 0 → 'Paid'
+          - Priority 2: claim_id = 0 → 'Pre-auth'
+          - Priority 3: Specific claim_status values → 'Denied', 'Rejected', 'Pending', 'Unknown'
+          - Priority 4: NULL claim_status → 'Pending' (for regular claims)
+          - Fallback: Any unmapped status → 'Unknown'
           
           Business Rules:
-          - Automatically calculated based on paid_amount and claim_status
+          - Pre-auth claims (claim_id = 0) are always 'Pre-auth' regardless of other fields
+          - Claims with paid_amount > 0 are always 'Paid' regardless of claim_status
+          - Most claim_status values ('R', 'S', 'W', 'H', 'Submitted') map to 'Pending' as they represent claims awaiting payment
+          - Only claim_status = 'U' legitimately maps to 'Unknown' (rare edge case from source system)
           - Used for payment analysis and collection activities
         tests:
           - not_null
           - accepted_values:
-              values: ['Paid', 'Denied', 'Pending', 'Rejected', 'Unknown']
+              values: ['Paid', 'Denied', 'Pending', 'Rejected', 'Unknown', 'Pre-auth']
               config:
-                description: "Payment status category must be one of the defined business states"
+                description: "Payment status category must be one of the defined business states (including Pre-auth for claim_id = 0)"
+          - dbt_utils.expression_is_true:
+              expression: "!= 'Unknown'"
+              config:
+                severity: warn
+                description: "Unknown payment status category should be rare (only claim_status = 'U'). If count increases, investigate data quality issues."
 
       - name: billing_status_category
         description: >
           Calculated billing status category for business analysis
           
           Valid Values:
-          - 'Billable': Procedure is billable to insurance
-          - 'Non-Billable': Procedure is not billable to insurance
-          - 'Unknown': Billing status cannot be determined
+          - 'Billable': Procedure is billable to insurance - includes:
+            * Procedures with billed_amount > 0
+            * Pre-auth claims with $0 billed_amount (will be billed when performed)
+            * Procedures with $0 billed_amount but no_bill_insurance = false (not explicitly non-billable)
+            * Procedures with $0 billed_amount and no_bill_insurance IS NULL (treat as billable)
+          - 'Non-Billable': Procedure is not billable to insurance (no_bill_insurance = true)
+          - 'Unknown': Billing status cannot be determined (fallback for edge cases)
+          
+          Calculation Logic:
+          - Priority 1: billed_amount > 0 → 'Billable'
+          - Priority 2: no_bill_insurance = true → 'Non-Billable'
+          - Priority 3: claim_id = 0 AND billed_amount = 0 → 'Billable' (pre-auth claims)
+          - Priority 4: billed_amount = 0 AND no_bill_insurance = false → 'Billable'
+          - Priority 5: billed_amount = 0 AND no_bill_insurance IS NULL → 'Billable'
+          - Fallback: Any edge cases → 'Unknown'
           
           Business Rules:
-          - Automatically calculated based on billed_amount and no_bill_insurance flag
+          - Pre-auth claims (claim_id = 0) with $0 billed_amount are considered 'Billable' because they represent procedures that will be billed when performed
+          - Procedures with $0 billed_amount but no_bill_insurance = false are treated as 'Billable' (not explicitly marked as non-billable)
+          - Procedures with $0 billed_amount and NULL no_bill_insurance flag are treated as 'Billable' (assume billable unless explicitly marked)
+          - Only procedures explicitly marked with no_bill_insurance = true are 'Non-Billable'
           - Used for billing analysis and revenue recognition
         tests:
           - not_null
@@ -618,6 +688,11 @@ models:
               values: ['Billable', 'Non-Billable', 'Unknown']
               config:
                 description: "Billing status category must be one of the defined business states"
+          - dbt_utils.expression_is_true:
+              expression: "!= 'Unknown'"
+              config:
+                severity: warn
+                description: "Unknown billing status category should be rare (edge cases only). If count increases, investigate data quality issues."
 
       - name: payment_days_from_claim
         description: >

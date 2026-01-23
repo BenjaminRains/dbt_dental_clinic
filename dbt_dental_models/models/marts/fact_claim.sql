@@ -165,16 +165,26 @@ claims_calculated as (
         -- Calculated Fields and Business Logic
         case 
             when sc.paid_amount > 0 then 'Paid'
+            when sc.claim_id = 0 then 'Pre-auth'  -- Pre-auth/draft claims (claim_id = 0)
             when sc.claim_status = 'Denied' then 'Denied'
-            when sc.claim_status = 'Submitted' then 'Pending'
             when sc.claim_status = 'Rejected' then 'Rejected'
-            else 'Unknown'
+            when sc.claim_status = 'Submitted' then 'Pending'
+            when sc.claim_status = 'R' then 'Pending'  -- Received but not paid
+            when sc.claim_status = 'S' then 'Pending'  -- Sent to insurance
+            when sc.claim_status = 'W' then 'Pending'  -- Waiting for processing
+            when sc.claim_status = 'H' then 'Pending'  -- Hold (secondary claim waiting for primary)
+            when sc.claim_status = 'U' then 'Unknown'  -- Legitimate unknown from source system
+            when sc.claim_status IS NULL then 'Pending'  -- NULL status for regular claims (should be rare)
+            else 'Unknown'  -- Fallback for any unmapped statuses
         end as payment_status_category,
 
         case 
             when sc.billed_amount > 0 then 'Billable'
             when sc.no_bill_insurance = true then 'Non-Billable'
-            else 'Unknown'
+            when sc.claim_id = 0 AND sc.billed_amount = 0 then 'Billable'  -- Pre-auth claims with $0 billed are billable (will be billed when performed)
+            when sc.billed_amount = 0 AND sc.no_bill_insurance = false then 'Billable'  -- $0 billed but not explicitly non-billable
+            when sc.billed_amount = 0 AND sc.no_bill_insurance IS NULL then 'Billable'  -- $0 billed with NULL flag (treat as billable)
+            else 'Unknown'  -- Fallback for edge cases
         end as billing_status_category,
 
         case 
