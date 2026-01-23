@@ -164,13 +164,16 @@ models:
           Data Quality Notes:
           - NULL is expected for pre-auth claims (claim_id = 0) where procedures haven't been completed yet
           - These procedures don't exist in procedurelog, so provider_id cannot be determined
+          - For pre-auth claims with scheduled appointments, provider_id can optionally be populated from appointment data (see PROVIDER_ID_NULL_ANALYSIS.md for implementation guide)
+          - Appointment provider may differ from actual performing provider - use with caution in provider performance analysis
         tests:
           - relationships:
               to: ref('dim_provider')
               field: provider_id
               config:
                 severity: error
-                description: "All claims must reference valid providers for billing integrity"
+                where: "provider_id IS NOT NULL"
+                description: "All claims with provider_id must reference valid providers (excluding pre-auth claims where NULL is expected)"
 
       - name: claim_date
         description: >
