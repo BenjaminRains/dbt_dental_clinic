@@ -137,7 +137,7 @@ selectors:
       value: "+marts.*"
   
   # ============================================================================
-  # SYSTEM-BASED SELECTIONS - Based on your documented system workflows
+  # SYSTEM-BASED SELECTIONS - Based on documented system workflows
   # ============================================================================
   
   - name: system_a_fee_processing
@@ -258,4 +258,14 @@ selectors:
     description: "Large tables requiring special handling"
     definition:
       tag: large_table
+
+  # ============================================================================
+  # FAILURE RECOVERY - Rerun failed models from previous run
+  # ============================================================================
+  
+  - name: failed_models
+    description: "Rerun only models that failed in the previous run (requires run_results.json in target/)"
+    definition:
+      method: result
+      value: fail
 
