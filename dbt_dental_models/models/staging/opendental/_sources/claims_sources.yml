@@ -56,7 +56,14 @@ sources:
             description: "Foreign key to the user who entered the claim"
           # Important dates
           - name: "DateService"
-            description: "Date when the dental service was performed"
+            description: >
+              Date when the dental service was performed.
+              
+              Note: OpenDental uses '0001-01-01' as a sentinel value when DateService is not provided.
+              The clean_opendental_date() macro converts this to NULL, and claims with NULL DateService
+              are filtered out in staging models that require date >= '2023-01-01'. This means claimprocs
+              associated with claims that have missing DateService values may be excluded from downstream
+              models even if the claimproc has a valid ProcDate.
           - name: "DateSent"
             description: "Date when the claim was sent to the insurance company"
           - name: "DateReceived"
