@@ -42,6 +42,11 @@
     - Time calculations include data quality validation to handle illogical time sequences
     - Negative time values are converted to NULL to prevent calculation errors in downstream models
     - Appointment duration calculations require dismissed_datetime >= appointment_datetime for validity
+    - Appointment status mapping: All appointment_status values [1, 2, 3, 4, 5, 6, 7, 8] are now explicitly mapped
+      * Status 2 (Complete) and 8 (PtNoteCompleted) both map to 'Completed'
+      * Status 1 (Scheduled) and 6 (Planned) both map to 'Scheduled'
+      * Status 3 (UnschedList) maps to 'Unscheduled'
+      * Status 7 (PtNote) maps to 'PtNote'
     
     Performance Considerations:
     - Indexed on appointment_id (unique), patient_id, provider_id, and appointment_date for query optimization
@@ -58,6 +63,15 @@ with source_appointment as (
     select * from {{ ref('int_appointment_details') }}
 ),
 
+-- Pre-aggregate procedure fees to avoid correlated subquery (performance optimization)
+procedure_fees as (
+    select
+        appointment_id,
+        procedure_date,
+        sum(procedure_fee) as total_procedure_fee
+    from {{ ref('int_procedure_complete') }}
+    group by appointment_id, procedure_date
+),
 
 -- 2. Business logic and calculations
 appointment_calculated as (
@@ -144,11 +158,8 @@ appointment_calculated as (
         coalesce(
             -- PRIMARY: Get actual production from linked procedures (used for real clinic data)
             -- Real clinic data: Broken appointments typically have procedures (Status 1: Treatment Planned) with fees
-            -- This subquery will find them and return the actual sum, so the fallback below is NOT used for real data
-            (select sum(pc.procedure_fee)
-             from {{ ref('int_procedure_complete') }} pc
-             where pc.appointment_id = ab.appointment_id
-               and pc.procedure_date = date(ab.appointment_datetime)),
+            -- Optimized: Using LEFT JOIN instead of correlated subquery for better performance
+            pf.total_procedure_fee,
             -- FALLBACK: Estimate from appointment type (primarily for SYNTHETIC DATA)
             -- Synthetic data: Broken appointments don't have procedures created, so this fallback provides realistic estimates
             -- This fallback is rarely (if ever) used for real clinic data since procedures typically exist
@@ -187,12 +198,19 @@ appointment_calculated as (
         case when date(ab.appointment_datetime) > current_date then true else false end as is_future_appointment,
 
         -- Business Logic Enhancement - Appointment Categorization
+        -- Maps all appointment_status values to business outcome categories
+        -- Based on validation investigation (see validation/README.md for process)
+        -- Optimized: Check status codes first (indexed), then fallback to derived flags
         case 
-            when ab.is_complete then 'Completed'
-            when ab.appointment_status = 5 then 'Cancelled'  -- 5 = Broken
-            when ab.appointment_status = 4 then 'ASAP'       -- 4 = ASAP
-            when ab.check_in_time is null and date(ab.appointment_datetime) < current_date and not ab.is_complete then 'No Show'
-            else 'Scheduled'
+            when ab.appointment_status IN (2, 8) then 'Completed'  -- 2 = Complete, 8 = PtNoteCompleted (combined for efficiency)
+            when ab.appointment_status = 5 then 'Cancelled'  -- 5 = Broken/Missed
+            when ab.appointment_status = 4 then 'ASAP'       -- 4 = ASAP (urgent appointment)
+            when ab.appointment_status = 3 then 'Unscheduled'  -- 3 = UnschedList
+            when ab.appointment_status = 7 then 'PtNote'  -- 7 = PtNote (patient note appointment)
+            when ab.appointment_status IN (1, 6) then 'Scheduled'  -- 1 = Scheduled, 6 = Planned (combined for efficiency)
+            when ab.is_complete then 'Completed'  -- Fallback for is_complete flag (covers status 2 if not caught above)
+            when ab.check_in_time is null and date(ab.appointment_datetime) < current_date and not ab.is_complete then 'No Show'  -- Past appointment without check-in
+            else 'Scheduled'  -- Fallback for any unmapped statuses
         end as appointment_outcome_status,
         
         case 
@@ -219,6 +237,9 @@ appointment_calculated as (
         ) }}
 
     from source_appointment ab
+    left join procedure_fees pf
+        on pf.appointment_id = ab.appointment_id
+        and pf.procedure_date = date(ab.appointment_datetime)
 ),
 
 -- 3. Final validation
