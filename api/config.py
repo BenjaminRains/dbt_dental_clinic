@@ -18,8 +18,9 @@ logger = logging.getLogger(__name__)
 class Environment(Enum):
     """Supported API environments."""
     TEST = "test"
-    PRODUCTION = "production"
-    LOCAL = "local"
+    DEMO = "demo"        # Portfolio/Demo deployment (public, AWS)
+    CLINIC = "clinic"     # Clinic deployment (private, IP-restricted, AWS)
+    LOCAL = "local"       # Local development (localhost)
 
 
 class DatabaseType(Enum):
@@ -41,13 +42,22 @@ class APIConfig:
                 'password': 'TEST_POSTGRES_ANALYTICS_PASSWORD'
             }
         },
-        Environment.PRODUCTION.value: {
+        Environment.DEMO.value: {
             DatabaseType.ANALYTICS.value: {
                 'host': 'DEMO_POSTGRES_HOST',
                 'port': 'DEMO_POSTGRES_PORT',
                 'database': 'DEMO_POSTGRES_DB',
                 'user': 'DEMO_POSTGRES_USER',
                 'password': 'DEMO_POSTGRES_PASSWORD'
+            }
+        },
+        Environment.CLINIC.value: {
+            DatabaseType.ANALYTICS.value: {
+                'host': 'POSTGRES_ANALYTICS_HOST',  # Same RDS, different schemas
+                'port': 'POSTGRES_ANALYTICS_PORT',
+                'database': 'POSTGRES_ANALYTICS_DB',
+                'user': 'POSTGRES_ANALYTICS_USER',
+                'password': 'POSTGRES_ANALYTICS_PASSWORD'
             }
         },
         Environment.LOCAL.value: {
@@ -79,11 +89,18 @@ class APIConfig:
         if not environment:
             raise ValueError(
                 "API_ENVIRONMENT environment variable is not set. "
-                "Must be one of: test, production, local"
+                "Must be one of: test, demo, clinic, local"
             )
         
         valid_environments = [e.value for e in Environment]
         if environment not in valid_environments:
+            # Special error message for deprecated "production" environment
+            if environment == "production":
+                raise ValueError(
+                    f"Invalid environment '{environment}'. "
+                    f"'production' has been removed. Use 'demo' for portfolio/demo deployment. "
+                    f"Valid environments: {valid_environments}"
+                )
             raise ValueError(
                 f"Invalid environment '{environment}'. "
                 f"Must be one of: {valid_environments}"

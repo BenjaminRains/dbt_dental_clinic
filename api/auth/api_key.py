@@ -16,14 +16,14 @@ api_key_header = APIKeyHeader(name=API_KEY_NAME, auto_error=False)
 def load_api_key() -> str:
     """
     Load API key with priority:
-    1. DEMO_API_KEY environment variable (when API_ENVIRONMENT=production - public portfolio site)
+    1. DEMO_API_KEY environment variable (when API_ENVIRONMENT=demo - public portfolio site)
     2. .ssh/dbt-dental-clinic-api-key.pem file (for test/demo environments - localhost only)
     
     Raises ValueError if no key is found (fail-fast).
     """
-    # Check if we're in production environment (public portfolio site) and DEMO_API_KEY is set
+    # Check if we're in demo environment (public portfolio site) and DEMO_API_KEY is set
     api_environment = os.getenv("API_ENVIRONMENT", "").lower()
-    if api_environment == "production":
+    if api_environment == "demo":
         demo_api_key = os.getenv("DEMO_API_KEY")
         if demo_api_key and demo_api_key.strip():
             return demo_api_key.strip()
@@ -87,7 +87,7 @@ def load_api_key() -> str:
             )
     
     # Fail fast if no key found
-    if api_environment == "production":
+    if api_environment == "demo":
         raise ValueError(
             f"DEMO_API_KEY not found. Set DEMO_API_KEY environment variable or create .ssh/api-key.pem file at: {pem_file}\n"
             "The API will not start without a valid API key."

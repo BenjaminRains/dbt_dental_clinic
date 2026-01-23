@@ -1,7 +1,7 @@
 """
-Verification script for PRODUCTION API Key Authentication
+Verification script for DEMO API Key Authentication
 
-⚠️  THIS SCRIPT TESTS THE PRODUCTION API (https://api.dbtdentalclinic.com) ⚠️
+⚠️  THIS SCRIPT TESTS THE DEMO API (https://api.dbtdentalclinic.com) ⚠️
 
 This script verifies:
 1. All business endpoints return 401 without API key
@@ -10,15 +10,18 @@ This script verifies:
 4. Invalid API keys are rejected
 
 Prerequisites:
-    - Production API must be running and accessible
+    - Demo API must be running and accessible
     - requests library must be installed (run: pip install requests)
-    - deployment_credentials.json must exist in project root with production API key
+    - deployment_credentials.json must exist in project root with demo API key
 
 Usage:
     python api/tests/verify_api_production_authentication.py
 
 For local API testing, use:
     python api/tests/verify_api_local_authentication.py
+
+Note: File name kept as verify_api_production_authentication.py for backward compatibility.
+The script now tests the demo API (previously called "production").
 """
 
 import requests
@@ -32,7 +35,7 @@ BASE_URL = "https://api.dbtdentalclinic.com"
 # Get API key from deployment_credentials.json
 def get_api_key():
     """
-    Get PRODUCTION API key from deployment_credentials.json file in project root.
+    Get DEMO API key from deployment_credentials.json file in project root.
     
     Returns None if not found (test will show appropriate error).
     """
@@ -173,7 +176,7 @@ def test_endpoint(
         return (True, f"Status {status_code}", status_code)
         
     except requests.exceptions.ConnectionError:
-        return (False, "Connection error - Production API not accessible", 0)
+        return (False, "Connection error - Demo API not accessible", 0)
     except requests.exceptions.Timeout:
         return (False, "Request timeout (30s)", 0)
     except requests.exceptions.SSLError as e:
@@ -223,10 +226,10 @@ def verify_business_endpoints_with_key():
     if test_status == 401:
         print(f"\n⚠️  WARNING: API key authentication failed!")
         print(f"   Status: {test_status}")
-        print(f"   The API key from deployment_credentials.json doesn't match production API_KEY")
+        print(f"   The API key from deployment_credentials.json doesn't match demo API_KEY")
         print(f"\n💡 To fix this:")
-        print(f"   1. Verify the API key in deployment_credentials.json matches production")
-        print(f"   2. Check production API logs or EC2 .env file for API_KEY")
+        print(f"   1. Verify the API key in deployment_credentials.json matches demo API key")
+        print(f"   2. Check demo API logs or EC2 .env file for DEMO_API_KEY")
         print(f"   3. Update deployment_credentials.json if needed")
         print(f"\n   Current test key: {API_KEY[:30]}...")
         print(f"   This test will likely fail - fix the API key first!")
@@ -345,7 +348,7 @@ def print_summary():
     print(f"OVERALL: {total_passed}/{total_tests} tests passed")
     
     if total_passed == total_tests:
-        print("🎉 ALL PRODUCTION VERIFICATION TESTS PASSED!")
+        print("🎉 ALL DEMO API VERIFICATION TESTS PASSED!")
         print("\n✅ Checklist Items Verified:")
         print("   [✓] All business endpoints return 401 without API key")
         print("   [✓] All business endpoints return 200 with valid API key")
@@ -360,21 +363,21 @@ def print_summary():
 def main():
     """Run all verification tests"""
     print("=" * 70)
-    print("PRODUCTION API KEY AUTHENTICATION VERIFICATION")
+    print("DEMO API KEY AUTHENTICATION VERIFICATION")
     print("Testing: https://api.dbtdentalclinic.com")
     print("=" * 70)
     
     # Check if API is running
-    print("\n🔍 Checking if PRODUCTION API server is accessible...")
+    print("\n🔍 Checking if DEMO API server is accessible...")
     try:
         response = requests.get(f"{BASE_URL}/health", timeout=10)
         if response.status_code == 200:
-            print(f"✅ PRODUCTION API server is accessible at {BASE_URL}")
+            print(f"✅ DEMO API server is accessible at {BASE_URL}")
         else:
             print(f"⚠️  API returned status {response.status_code}")
     except requests.exceptions.ConnectionError:
         print(f"❌ Cannot connect to {BASE_URL}")
-        print("   Check your internet connection and verify the production API is running")
+        print("   Check your internet connection and verify the demo API is running")
         sys.exit(1)
     except requests.exceptions.SSLError as e:
         print(f"❌ SSL error connecting to {BASE_URL}: {e}")
@@ -386,14 +389,14 @@ def main():
     
     # Check API key
     if API_KEY is None:
-        print(f"\n❌ ERROR: PRODUCTION API key not found!")
+        print(f"\n❌ ERROR: DEMO API key not found!")
         print("   💡 To fix:")
         print("      Ensure deployment_credentials.json exists in project root")
         print("      and contains 'backend_api.api_key' property")
         print("   The test cannot proceed without an API key.")
         sys.exit(1)
     
-    print(f"\n🔑 Using PRODUCTION API Key: {API_KEY[:20]}...")
+    print(f"\n🔑 Using DEMO API Key: {API_KEY[:20]}...")
     print("   ✅ API key loaded from deployment_credentials.json")
     
     # Run all tests

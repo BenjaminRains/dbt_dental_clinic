@@ -17,7 +17,7 @@ Prerequisites:
 Usage:
     python api/tests/verify_api_local_authentication.py
 
-For production API testing, use:
+For demo API testing, use:
     python api/tests/verify_api_production_authentication.py
 """
 

@@ -80,10 +80,10 @@ def is_running_locally() -> bool:
 
 is_local_dev = is_running_locally()
 
-if is_local_dev and api_environment == "production":
+if is_local_dev and api_environment == "demo":
     logger = logging.getLogger(__name__)
-    logger.info("API_ENVIRONMENT=production detected but running locally - allowing localhost origins for local testing")
-    # Keep production mode but allow localhost origins for local testing
+    logger.info("API_ENVIRONMENT=demo detected but running locally - allowing localhost origins for local testing")
+    # Keep demo mode but allow localhost origins for local testing
 
 cors_origins_str = os.getenv("API_CORS_ORIGINS", None)
 
@@ -110,24 +110,30 @@ elif config and hasattr(config, 'environment'):
         logger = logging.getLogger(__name__)
         logger.warning(f"Could not load CORS origins from config: {e}")
 
-# In production, remove localhost origins UNLESS we're running locally
-# (This allows local testing even if API_ENVIRONMENT=production is set)
+# In demo/clinic deployments, remove localhost origins UNLESS we're running locally
+# (This allows local testing even if API_ENVIRONMENT=demo is set)
 # Use the same detection function we defined above
-if api_environment == "production" and not is_local_dev:
-    # Remove localhost origins for production (but only if not running locally)
+if api_environment in ("demo", "clinic") and not is_local_dev:
+    # Remove localhost origins for demo/clinic deployments (but only if not running locally)
     cors_origins = [origin for origin in cors_origins if not origin.startswith("http://localhost") and not origin.startswith("http://127.0.0.1")]
     
-    # If no origins left, use safe defaults
+    # If no origins left, use safe defaults based on environment
     if not cors_origins:
-        cors_origins = ["https://dbtdentalclinic.com", "https://www.dbtdentalclinic.com"]
-        logging.warning("WARNING: No CORS origins configured in production! Using safe defaults.")
+        if api_environment == "demo":
+            cors_origins = ["https://dbtdentalclinic.com", "https://www.dbtdentalclinic.com"]
+        elif api_environment == "clinic":
+            cors_origins = ["https://clinic.dbtdentalclinic.com"]
+        logging.warning(f"WARNING: No CORS origins configured in {api_environment}! Using safe defaults.")
     elif "*" in cors_origins:
-        logging.warning("WARNING: CORS wildcard (*) detected in production! Using safe defaults.")
-        cors_origins = ["https://dbtdentalclinic.com", "https://www.dbtdentalclinic.com"]
-elif api_environment == "production" and is_local_dev:
-    # Production mode but running locally - keep localhost origins for development
+        if api_environment == "demo":
+            cors_origins = ["https://dbtdentalclinic.com", "https://www.dbtdentalclinic.com"]
+        elif api_environment == "clinic":
+            cors_origins = ["https://clinic.dbtdentalclinic.com"]
+        logging.warning(f"WARNING: CORS wildcard (*) detected in {api_environment}! Using safe defaults.")
+elif api_environment in ("demo", "clinic") and is_local_dev:
+    # Demo/clinic mode but running locally - keep localhost origins for development
     logger = logging.getLogger(__name__)
-    logger.info("API_ENVIRONMENT=production but running locally - keeping localhost origins for local testing")
+    logger.info(f"API_ENVIRONMENT={api_environment} but running locally - keeping localhost origins for local testing")
 
 # Clean and deduplicate origins list (remove empty strings, trim whitespace, remove duplicates)
 cors_origins = sorted(list(set([origin.strip() for origin in cors_origins if origin and origin.strip()])))
@@ -139,15 +145,23 @@ logger.info(f"API_ENVIRONMENT: {api_environment}")
 logger.info(f"API_CORS_ORIGINS env var: {os.getenv('API_CORS_ORIGINS', 'NOT SET')}")
 logger.info(f"Is running locally: {is_local_dev}")
 
-# Ensure we have at least the production origins if in production
-if api_environment == "production" and not is_local_dev:
+# Ensure we have at least the required origins if in demo/clinic deployment
+if api_environment == "demo" and not is_local_dev:
     required_origins = ["https://dbtdentalclinic.com", "https://www.dbtdentalclinic.com"]
     for origin in required_origins:
         if origin not in cors_origins:
-            logger.warning(f"Adding missing production origin: {origin}")
+            logger.warning(f"Adding missing demo origin: {origin}")
             cors_origins.append(origin)
     cors_origins = sorted(list(set([origin.strip() for origin in cors_origins if origin and origin.strip()])))
-    logger.info(f"Final CORS allowed origins after production check: {cors_origins}")
+    logger.info(f"Final CORS allowed origins after demo check: {cors_origins}")
+elif api_environment == "clinic" and not is_local_dev:
+    required_origins = ["https://clinic.dbtdentalclinic.com"]
+    for origin in required_origins:
+        if origin not in cors_origins:
+            logger.warning(f"Adding missing clinic origin: {origin}")
+            cors_origins.append(origin)
+    cors_origins = sorted(list(set([origin.strip() for origin in cors_origins if origin and origin.strip()])))
+    logger.info(f"Final CORS allowed origins after clinic check: {cors_origins}")
 
 # Add CORS middleware - MUST be added before other middleware
 # In FastAPI, middleware is applied in reverse order, so CORS should be added first
@@ -225,8 +239,8 @@ def debug_cors(request: Request):
     """Debug endpoint to check CORS configuration (development only)"""
     # Allow in test environment or when API_ENVIRONMENT is not set (local dev)
     current_env = os.getenv("API_ENVIRONMENT", "test")
-    if current_env == "production":
-        return {"error": "Debug endpoint disabled in production"}
+    if current_env in ("demo", "clinic"):
+        return {"error": f"Debug endpoint disabled in {current_env} deployment"}
     
     origin = request.headers.get("Origin", "No Origin header")
     return {
