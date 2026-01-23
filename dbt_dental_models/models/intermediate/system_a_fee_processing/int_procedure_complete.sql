@@ -1,6 +1,6 @@
 {{ config(
     materialized='incremental',
-    schema='intermediate',
+    schema='int',
     unique_key='procedure_id',
     on_schema_change='sync_all_columns',
     incremental_strategy='merge',

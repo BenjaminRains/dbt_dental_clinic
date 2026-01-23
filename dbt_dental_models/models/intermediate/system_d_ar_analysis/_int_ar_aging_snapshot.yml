@@ -34,7 +34,7 @@ models:
       
        config:
         materialized: table
-        schema: intermediate
+        schema: int
     
        columns:
         - name: snapshot_date

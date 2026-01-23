@@ -52,7 +52,7 @@ models:
     
     config:
       materialized: table
-      schema: intermediate
+      schema: int
       unique_key: claim_payment_detail_id
     
     columns:

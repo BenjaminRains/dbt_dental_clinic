@@ -24,7 +24,7 @@ models:
     
     config:
       materialized: table
-      schema: intermediate
+      schema: int
       unique_key: [claim_tracking_id, claim_id, date_time_entry]
     
     columns:

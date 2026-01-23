@@ -68,7 +68,7 @@ models:
       
     config:
       materialized: incremental
-      schema: intermediate
+      schema: int
       unique_key: task_id
 
     columns:

@@ -32,7 +32,7 @@ models:
     config:
       materialized: incremental
       unique_key: ar_transaction_id
-      schema: intermediate
+      schema: int
     
     columns:
       - name: ar_transaction_id

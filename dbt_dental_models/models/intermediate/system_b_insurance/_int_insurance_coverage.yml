@@ -43,7 +43,7 @@ models:
     
     config:
       materialized: table
-      schema: intermediate
+      schema: int
       unique_key: insurance_plan_id
     
     columns:

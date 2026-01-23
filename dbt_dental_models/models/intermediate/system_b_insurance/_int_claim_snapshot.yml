@@ -409,7 +409,7 @@ models:
     
     config:
       materialized: table
-      schema: intermediate
+      schema: int
       unique_key: [claim_snapshot_id, claim_procedure_id, entry_timestamp]
     
     tests:

@@ -53,7 +53,7 @@ models:
     
     intermediate:
       +materialized: table
-      +schema: intermediate
+      +schema: int
       +description: "Intermediate models for business logic implementation"
     
     marts:

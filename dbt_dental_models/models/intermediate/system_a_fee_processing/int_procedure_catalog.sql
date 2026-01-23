@@ -1,6 +1,6 @@
 {{ config(
     materialized='table',
-    schema='intermediate',
+    schema='int',
     unique_key='procedure_code_id',
     on_schema_change='fail',
     indexes=[

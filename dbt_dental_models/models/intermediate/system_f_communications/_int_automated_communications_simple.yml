@@ -69,7 +69,7 @@ models:
     
     config:
       materialized: incremental
-      schema: intermediate
+      schema: int
       unique_key: automated_communication_id
     
     columns:

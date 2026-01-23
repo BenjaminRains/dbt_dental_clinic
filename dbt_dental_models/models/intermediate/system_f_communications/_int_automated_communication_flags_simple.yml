@@ -29,7 +29,7 @@ models:
 
     config:
       materialized: incremental
-      schema: intermediate
+      schema: int
       unique_key: communication_id
       indexes:
         - columns: ['communication_datetime']

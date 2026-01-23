@@ -95,7 +95,7 @@ models:
     config:
       materialized: incremental
       unique_key: paysplit_id
-      schema: intermediate
+      schema: int
     
     meta:
       owner: "billing-team@mdc-analytics.com"

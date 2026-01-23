@@ -47,7 +47,7 @@ models:
       
     config:
       materialized: incremental
-      schema: intermediate
+      schema: int
       unique_key: ['provider_schedule_id']
 
     tests:

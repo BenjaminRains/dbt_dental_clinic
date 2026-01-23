@@ -37,7 +37,7 @@ models:
     config:
       materialized: incremental
       unique_key: ar_balance_id
-      schema: intermediate
+      schema: int
     
     columns:
       - name: ar_balance_id

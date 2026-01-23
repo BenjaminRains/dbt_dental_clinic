@@ -46,7 +46,7 @@ models:
       
     config:
       materialized: incremental
-      schema: intermediate
+      schema: int
       unique_key: ['metric_id']
 
     columns:

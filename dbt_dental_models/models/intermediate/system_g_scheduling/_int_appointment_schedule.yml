@@ -54,7 +54,7 @@ models:
       
     config:
       materialized: incremental
-      schema: intermediate
+      schema: int
       unique_key: ['schedule_id']
 
     columns:

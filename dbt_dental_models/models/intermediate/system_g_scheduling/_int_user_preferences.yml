@@ -48,7 +48,7 @@ models:
       
     config:
       materialized: incremental
-      schema: intermediate
+      schema: int
       unique_key: ['user_od_pref_id']
 
     columns:

@@ -39,7 +39,7 @@ models:
       
     config:
       materialized: table
-      schema: intermediate
+      schema: int
     
     columns:
       - name: patient_id

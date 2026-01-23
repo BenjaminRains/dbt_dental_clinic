@@ -102,7 +102,7 @@ models:
     config:
       materialized: incremental
       unique_key: payment_allocation_id
-      schema: intermediate
+      schema: int
     
     columns:
       - name: payment_allocation_id

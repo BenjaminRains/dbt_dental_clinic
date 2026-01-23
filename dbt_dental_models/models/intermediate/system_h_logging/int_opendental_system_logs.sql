@@ -1,4 +1,4 @@
-{{ config(materialized='table', tags=['intermediate', 'system_logging']) }}
+{{ config(materialized='table', tags=['int', 'system_logging']) }}
 
 with entry_logs as (
     select

@@ -53,7 +53,7 @@ models:
     config:
       materialized: incremental
       unique_key: procedure_id
-      schema: intermediate
+      schema: int
       on_schema_change: fail
       incremental_strategy: merge
     

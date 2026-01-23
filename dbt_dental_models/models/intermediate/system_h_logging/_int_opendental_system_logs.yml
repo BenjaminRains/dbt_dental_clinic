@@ -93,7 +93,7 @@ models:
               severity: warn
               name: fk_system_logs_user_valid
               config:
-                schema: intermediate
+                schema: int
                 description: >
                   Warning expected for user_id = 0 (system-generated entries) 
                   and excluded inactive/system users.
@@ -159,7 +159,7 @@ models:
               severity: warn
               config:
                 # database: omitted - uses target database from profiles.yml
-                schema: intermediate
+                schema: int
                 description: >
                   Warning expected for user_group_id = 0 (system or unassigned entries).
 

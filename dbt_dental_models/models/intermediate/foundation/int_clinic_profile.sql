@@ -1,6 +1,6 @@
 {{ config(
     materialized='table',
-    schema='intermediate',
+    schema='int',
     unique_key='clinic_id',
     indexes=[
         {'columns': ['clinic_id'], 'unique': true},
