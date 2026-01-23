@@ -50,6 +50,7 @@
     - int_claim_payments: Payment processing information
     - int_claim_snapshot: Historical claim status snapshots
     - int_claim_tracking: Claim processing workflow tracking
+    - int_adjustments: Write-off and adjustment data (for adjustment_write_off_amount field)
     - int_insurance_eob_attachments: EOB documentation metadata
 */
 
@@ -69,6 +70,21 @@ claim_snapshots as (
 
 claim_tracking as (
     select * from {{ ref('int_claim_tracking') }}
+),
+
+-- Aggregate write-offs from adjustments table by procedure_id
+-- Write-offs are tracked in int_adjustments, not in claimproc.WriteOff
+procedure_write_offs as (
+    select
+        procedure_id,
+        -- Sum all insurance write-off adjustments for this procedure
+        -- adjustment_amount is negative for write-offs, so we use ABS to get positive amount
+        coalesce(sum(abs(adjustment_amount)), 0.0) as adjustment_write_off_amount,
+        count(*) as write_off_count
+    from {{ ref('int_adjustments') }}
+    where adjustment_category = 'insurance_writeoff'
+        and procedure_id is not null
+    group by procedure_id
 ),
 
 -- 3. Business logic and calculations
@@ -124,7 +140,8 @@ claims_calculated as (
         sc.billed_amount,
         sc.allowed_amount,
         sc.paid_amount,
-        sc.write_off_amount,
+        sc.write_off_amount,  -- Legacy field from claimproc.WriteOff (typically $0.00)
+        coalesce(pwo.adjustment_write_off_amount, 0.0) as adjustment_write_off_amount,  -- Write-offs from adjustments table
         sc.patient_responsibility,
         cp.check_amount,
         cp.payment_type_id,
@@ -167,7 +184,7 @@ claims_calculated as (
         end as payment_days_from_claim,
 
         case 
-            when sc.write_off_amount > 0 then 'Write-off'
+            when coalesce(pwo.adjustment_write_off_amount, 0.0) > 0 then 'Write-off'
             when sc.patient_responsibility > 0 then 'Patient Balance'
             when sc.paid_amount = sc.billed_amount then 'Fully Paid'
             else 'Partial Payment'
@@ -196,6 +213,8 @@ claims_calculated as (
         and sc.claim_procedure_id = cs.claim_procedure_id
     left join claim_tracking ct
         on sc.claim_id = ct.claim_id
+    left join procedure_write_offs pwo
+        on sc.procedure_id = pwo.procedure_id
     -- EOB attachment data is now included in claim_payments CTE
 ),
 
