@@ -31,11 +31,12 @@ models:
           identified_date: "2025-01-01"
           jira_ticket: "DQ-123"
           test: "appt_past_scheduled"
-        - description: "131 broken/missed appointments missing procedure descriptions affecting workflow analysis"
+        - description: "Broken/missed appointments missing procedure descriptions - Test updated to exclude consultation appointments (appointments without linked procedures). See validation/staging/appointment/BROKEN_APPOINTMENTS_FINDINGS.md for investigation details."
           severity: "warn"
           identified_date: "2025-01-01"
-          jira_ticket: "DQ-124"
+          updated_date: "2026-01-23"
           test: "appt_broken_wo_procs"
+          resolution: "Test logic updated to only flag broken appointments that have linked procedures but missing descriptions. Consultation-type appointments (no procedures) are now excluded as they legitimately don't require procedure descriptions."
       
       business_rules:
         - rule: "Completed appointments (status = 2) must be in the past with dismissed_datetime populated"
@@ -177,13 +178,32 @@ models:
           Status code for the appointment workflow:
           1 = Scheduled (includes future appointments for treatment planning)
           2 = Completed (appointment finished, must be in past)
-          3 = Unknown (requires investigation and status correction)
+          3 = Unknown/UnschedList (requires investigation and status correction)
+          4 = ASAP (urgent appointment requiring immediate attention) - Note: May appear in intermediate models
           5 = Broken/Missed (patient did not attend scheduled appointment)
-          6 = Unscheduled (appointment removed from schedule)
+          6 = Unscheduled/Planned (appointment removed from schedule or planned but not scheduled)
+          7 = PtNote (patient note appointment) - Note: May appear in intermediate models
+          8 = PtNoteCompleted (patient note appointment completed) - Note: May appear in intermediate models
+          
+          Data Quality Notes:
+          - Staging model contains values [1, 2, 3, 5, 6] as documented
+          - Intermediate models may include additional values [4, 7, 8] from source system variations
+          - Status 3 (Unknown) should be investigated and corrected in source system
+          - Status 4 (ASAP) is valid but may not appear in all staging extracts
+          - Status 7 and 8 (PtNote variants) are valid but may not appear in all staging extracts
+          
+          Mapping Considerations:
+          - Downstream mart models should handle all possible values [1, 2, 3, 4, 5, 6, 7, 8]
+          - Status 2 and 8 both represent completed appointments
+          - Status 1 and 6 both represent scheduled/planned appointments
+          - Status 3 should map to 'Unscheduled' or 'Unknown' depending on business rules
+          - See fact_appointment model for complete mapping logic
         tests:
           - not_null
           - accepted_values:
               values: [1, 2, 3, 5, 6]
+              config:
+                description: "Appointment status must be one of the documented workflow states. Note: Values 4, 7, 8 may appear in intermediate models."
 
       - name: confirmation_status
         description: >
@@ -237,7 +257,16 @@ models:
       - name: procedure_description
         description: >
           Text description of procedures associated with this appointment.
-          May be NULL for hygiene appointments (is_hygiene = true) as procedures are often not pre-specified.
+          
+          Data Quality Notes:
+          - May be NULL for hygiene appointments (is_hygiene = true) as procedures are often not pre-specified
+          - May be NULL for consultation-type appointments that don't have linked procedures in procedurelog
+          - Consultation appointments (e.g., implant consults, AOX consults, new patient intakes) may legitimately have NULL procedure_description
+          - Broken appointments without linked procedures are expected to have NULL procedure_description (see BROKEN_APPOINTMENTS_FINDINGS.md)
+          
+          Business Rules:
+          - Procedure descriptions are required for broken/missed non-hygiene appointments that have linked procedures
+          - Consultation appointments that are broken before procedures are created may have NULL procedure_description
 
       - name: procedures_colored
         description: "Text describing procedures with color coding information for scheduler display."
