@@ -178,6 +178,7 @@ function Initialize-DBTEnvironment {
     } else {
         # Dev target: Load from .env_clinic or existing environment variables
         Write-Host "📋 Loading dev database credentials from environment files..." -ForegroundColor Yellow
+        $filesLoaded = $false
         @(".env_clinic", ".dbt-env") | ForEach-Object {
             # Try dbt project directory first, then project root
             $envFile = "$dbtProjectPath\$_"
@@ -185,13 +186,25 @@ function Initialize-DBTEnvironment {
                 $envFile = "$ProjectPath\$_"
             }
             if (Test-Path $envFile) {
-                Write-Host "   Loading from: $_" -ForegroundColor Gray
+                Write-Host "   ✓ Found: $envFile" -ForegroundColor Green
+                $filesLoaded = $true
+                $loadedCount = 0
                 Get-Content $envFile | ForEach-Object {
                     if ($_ -match '^([^#][^=]+)=(.*)$') {
-                        [Environment]::SetEnvironmentVariable($matches[1].Trim(), $matches[2].Trim(), 'Process')
+                        $key = $matches[1].Trim()
+                        $value = $matches[2].Trim()
+                        [Environment]::SetEnvironmentVariable($key, $value, 'Process')
+                        $loadedCount++
                     }
                 }
+                Write-Host "   Loaded $loadedCount environment variables from $_" -ForegroundColor Gray
+            } else {
+                Write-Host "   ✗ Not found: $envFile" -ForegroundColor DarkGray
             }
+        }
+        
+        if (-not $filesLoaded) {
+            Write-Host "   ⚠️ No environment files found in dbt project or project root" -ForegroundColor Yellow
         }
         
         # Verify required variables are set
