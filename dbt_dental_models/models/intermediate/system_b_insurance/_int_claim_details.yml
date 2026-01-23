@@ -15,11 +15,18 @@ models:
       - Procedure Classification: Includes comprehensive procedure codes, categories, treatment areas, and clinical flags
       
       Data Sources:
-      - stg_opendental__claim: Base insurance claim information and status tracking
-      - stg_opendental__claimproc: Claim procedure details and financial amounts
+      - stg_opendental__claim: Base insurance claim information and status tracking (primary source - model starts here)
+      - stg_opendental__claimproc: Claim procedure details and financial amounts (LEFT JOINed to claims)
       - stg_opendental__procedurelog: Procedure execution and provider information
       - stg_opendental__procedurecode: ADA/CDT procedure codes and classification details
       - int_insurance_coverage: Insurance plan details, benefits, and coverage verification
+      
+      Join Structure:
+      - Model starts with source_claim_proc (from stg_opendental__claimproc) as the primary source
+      - LEFT JOINs source_claim to include claim context when available
+      - Benefit: Includes all valid claimprocs with valid ProcDate values, even when claims have missing DateService values (0001-01-01)
+      - Date Handling: Uses procedure_date as effective claim_date when claim_date is NULL, ensuring all valid procedures are included
+      - Patient/Plan Handling: Uses patient_id and plan_id from claimproc as primary source, with fallback to claim values when available
       
       Insurance Logic Features:
       - Claims Processing: Workflow management from submission through payment with status tracking
@@ -38,6 +45,7 @@ models:
       - Financial Completeness: Some financial amounts may be null for pending, rejected, or incomplete claims requiring business rule handling
       - Coverage Dependencies: Insurance plan associations depend on effective dates and verification status affecting data completeness
       - Multi-Procedure Claims: Complex claims with multiple procedures require composite key handling and careful aggregation logic
+      - Missing Claim Dates: Claims with DateService = '0001-01-01' (OpenDental's default for missing dates) are filtered out in stg_opendental__claim. This model now starts with claimprocs and LEFT JOINs to claims, ensuring all valid claimprocs are included. When claim_date is NULL, the model uses procedure_date as the effective date, preserving all valid procedure data.
       
       Procedure Code Standards:
       - CDT Format: D-prefixed codes (e.g., D1110, D2920) follow ADA Current Dental Terminology with extracted prefixes
@@ -53,7 +61,7 @@ models:
     
     config:
       materialized: table
-      schema: intermediate
+      schema: int
       unique_key: claim_detail_id
     
     columns:
@@ -182,7 +190,13 @@ models:
           - not_null
 
       - name: claim_date
-        description: Date when the claim was created
+        description: >
+          Effective date for the claim procedure (service date from claim or procedure date from claimproc).
+          
+          Source: COALESCE(service_date from stg_opendental__claim, procedure_date from stg_opendental__claimproc)
+          Business Logic: Uses claim service_date when available, falls back to claimproc procedure_date when claim is missing
+          Note: This ensures all valid claimprocs are included even when claims have missing DateService values (0001-01-01).
+          The procedure_date serves as the primary business date for procedure-level analytics.
         tests:
           - not_null
 

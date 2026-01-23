@@ -32,6 +32,8 @@
     - Insurance coverage data depends on verification status and effective dates
     - Financial amounts may be null for pending or rejected claims
     - Claim form templates may be null for claims without specified forms
+    - Model starts with claimprocs to include all valid procedures, even when claims have missing dates
+    - Uses procedure_date as effective date when claim_date is NULL (for claims with DateService = '0001-01-01')
     
     Performance Considerations:
     - Uses table materialization due to complex joins across multiple large tables
@@ -39,7 +41,24 @@
     - Consider incremental materialization if volume becomes problematic
 */
 
-with source_claim as (
+with source_claim_proc as (
+    select
+        claim_id,
+        procedure_id,
+        claim_procedure_id,
+        patient_id,
+        plan_id,
+        status as claim_procedure_status,
+        fee_billed as billed_amount,
+        allowed_override as allowed_amount,
+        insurance_payment_amount as paid_amount,
+        write_off,
+        copay_amount as patient_responsibility,
+        procedure_date
+    from {{ ref('stg_opendental__claimproc') }}
+),
+
+source_claim as (
     select
         claim_id,
         patient_id,
@@ -50,20 +69,6 @@ with source_claim as (
         service_date as claim_date,
         sec_date_t_edit as last_tracking_date
     from {{ ref('stg_opendental__claim') }}
-),
-
-source_claim_proc as (
-    select
-        claim_id,
-        procedure_id,
-        claim_procedure_id,
-        status as claim_procedure_status,
-        fee_billed as billed_amount,
-        allowed_override as allowed_amount,
-        insurance_payment_amount as paid_amount,
-        write_off,
-        copay_amount as patient_responsibility
-    from {{ ref('stg_opendental__claimproc') }}
 ),
 
 procedure_lookup as (
@@ -133,12 +138,13 @@ claim_form_templates as (
 claim_details_integrated as (
     select
         -- Primary Key
-        {{ dbt_utils.generate_surrogate_key(['c.claim_id', 'cp.procedure_id', 'cp.claim_procedure_id']) }} as claim_detail_id,
-        c.claim_id,
+        {{ dbt_utils.generate_surrogate_key(['cp.claim_id', 'cp.procedure_id', 'cp.claim_procedure_id']) }} as claim_detail_id,
+        cp.claim_id,
         cp.claim_procedure_id,
 
         -- Foreign Keys
-        c.patient_id,
+        -- Use patient_id and plan_id from claimproc (primary source), fallback to claim if available
+        coalesce(cp.patient_id, c.patient_id) as patient_id,
         c.claim_form_id,
         ic.insurance_plan_id,
         ic.carrier_id,
@@ -149,7 +155,8 @@ claim_details_integrated as (
         -- Claim Status and Type
         c.claim_status,
         c.claim_type,
-        c.claim_date,
+        -- Use claim_date from claim if available, otherwise use procedure_date from claimproc
+        coalesce(c.claim_date, cp.procedure_date) as claim_date,
         cp.claim_procedure_status,
 
         -- Procedure Details
@@ -200,20 +207,22 @@ claim_details_integrated as (
 
         -- Generate metadata for this intermediate model
         current_timestamp as _loaded_at,
-        c.claim_date as _created_at,
-        coalesce(c.last_tracking_date, c.claim_date) as _updated_at,
+        -- Use effective claim_date (which may be procedure_date) for _created_at
+        coalesce(c.claim_date, cp.procedure_date) as _created_at,
+        -- Use claim's last_tracking_date if available, otherwise use effective claim_date
+        coalesce(c.last_tracking_date, c.claim_date, cp.procedure_date) as _updated_at,
         0 as _created_by
 
-    from source_claim c
-    left join source_claim_proc cp
-        on c.claim_id = cp.claim_id
+    from source_claim_proc cp
+    left join source_claim c
+        on cp.claim_id = c.claim_id
     left join procedure_lookup pl
         on cp.procedure_id = pl.procedure_id
     left join procedure_definitions pc
         on pl.procedure_code_id = pc.procedure_code_id
     left join insurance_coverage ic
-        on c.patient_id = ic.patient_id
-        and c.plan_id = ic.insurance_plan_id
+        on coalesce(cp.patient_id, c.patient_id) = ic.patient_id
+        and coalesce(cp.plan_id, c.plan_id) = ic.insurance_plan_id
     left join claim_form_templates cft
         on c.claim_form_id = cft.claim_form_id
 ),
