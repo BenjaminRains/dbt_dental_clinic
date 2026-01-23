@@ -2478,6 +2478,447 @@ LIMIT 20;
 
 ---
 
+## Phase 11: Investigation Findings
+
+This section documents ongoing investigations into data quality issues identified through automated tests and validation queries.
+
+### 11.1 Unknown Status Categories Investigation
+
+**Date**: 2026-01-23  
+**Status**: 🔍 **IN PROGRESS**  
+**Investigation File**: `investigate_unknown_status_categories.sql`
+
+#### Issue Summary
+
+Automated dbt tests are failing due to "Unknown" values in calculated status categories:
+
+- **payment_status_category = 'Unknown'**: 62,289 records (66.8% of total)
+- **billing_status_category = 'Unknown'**: 50,680 records (54.3% of total)
+
+#### Current Calculation Logic
+
+**Payment Status Category** (from `fact_claim.sql` lines 166-172):
+```sql
+case 
+    when sc.paid_amount > 0 then 'Paid'
+    when sc.claim_status = 'Denied' then 'Denied'
+    when sc.claim_status = 'Submitted' then 'Pending'
+    when sc.claim_status = 'Rejected' then 'Rejected'
+    else 'Unknown'
+end as payment_status_category
+```
+
+**Billing Status Category** (from `fact_claim.sql` lines 174-178):
+```sql
+case 
+    when sc.billed_amount > 0 then 'Billable'
+    when sc.no_bill_insurance = true then 'Non-Billable'
+    else 'Unknown'
+end as billing_status_category
+```
+
+#### Investigation Queries
+
+Run the following investigation queries to understand root causes:
+
+**Location**: `validation/marts/fact_claim/investigate_unknown_status_categories.sql`
+
+**Key Queries**:
+1. **Query 1**: Payment Status Category - Unknown Analysis
+   - Total unknown records and breakdown by claim_status
+   - Sample records for each claim_status value
+
+2. **Query 2**: Billing Status Category - Unknown Analysis
+   - Total unknown records and breakdown by billed_amount and no_bill_insurance conditions
+   - Sample records showing conditions leading to Unknown
+
+3. **Query 3**: Combined Analysis
+   - Records with BOTH statuses unknown
+   - Breakdown of overlapping conditions
+
+4. **Query 4**: Payment Status - Claim Status Distribution
+   - Comparison of claim_status distribution for Unknown vs Known payment statuses
+   - Identifies unmapped claim_status values
+
+5. **Query 5**: Billing Status - Condition Analysis
+   - Comparison of conditions for Unknown vs Known billing statuses
+   - Identifies edge cases in billing logic
+
+6. **Query 6**: Pre-auth Claims Analysis
+   - Check if pre-auth claims (claim_id = 0) contribute to Unknown values
+
+7. **Query 7**: Summary Statistics
+   - Overall percentages and overlap analysis
+
+#### Expected Findings
+
+Based on the calculation logic, "Unknown" values likely occur when:
+
+**Payment Status Category**:
+- `paid_amount = 0` AND `claim_status` is NOT one of: 'Denied', 'Submitted', 'Rejected'
+- This likely includes claim_status values: 'R' (Received), 'S' (Sent), 'W' (Waiting), 'H' (Hold), 'U' (Unknown), NULL, or other unmapped values
+- Pre-auth claims (claim_id = 0) may also fall into Unknown category
+
+**Billing Status Category**:
+- `billed_amount = 0` AND `no_bill_insurance` is NOT `true` (could be `false`, `NULL`, or missing)
+- This represents procedures with $0 billed amount that aren't explicitly marked as non-billable
+
+#### Investigation Results Summary
+
+**Root Causes Identified**:
+
+1. **Payment Status Category**: Missing mappings for 5 valid claim_status values ('R', 'S', 'W', 'H', 'U') and doesn't properly handle NULL claim_status for pre-auth claims
+2. **Billing Status Category**: Doesn't handle `billed_amount = 0` with `no_bill_insurance = false` or NULL (all pre-auth claims)
+
+**Impact**: 
+- **Payment Status**: 62,289 records (66.8% of total) incorrectly categorized as 'Unknown'
+  - 75.7% are pre-auth claims (47,170 records)
+  - 24.3% are regular claims with unmapped statuses (15,119 records)
+  - Only 5 records should legitimately be 'Unknown' (claim_status = 'U')
+  - **Fix will reduce Unknown count by 99.99%**
+
+- **Billing Status**: 50,680 records (54.4% of total) incorrectly categorized as 'Unknown'
+  - 100% have `billed_amount = 0`
+  - 90.87% are pre-auth claims with `no_bill_insurance = false`
+  - 9.13% have NULL `no_bill_insurance` flag
+  - **Fix will reduce Unknown count by 100%** (if treating NULL as Billable) or **90.9%** (if keeping NULL as Unknown)
+
+- **Overlap**: 47,942 records (51.4% of total) have BOTH statuses unknown
+  - 94.6% of billing Unknown also have payment Unknown
+  - 76.9% of payment Unknown also have billing Unknown
+
+**Primary Issues**:
+1. **NULL claim_status (75.88% of Unknowns)**: Pre-auth claims with NULL status not mapped to 'Pre-auth'
+2. **Unmapped claim_status values (24.12% of Unknowns)**: 'R', 'S', 'W', 'H' not handled in CASE statement
+
+---
+
+#### Investigation Results
+
+**Query 1.1 - Payment Status Category Unknown Count**:
+- **Total Unknown Records**: 62,289
+- **Distinct Claims**: 7,134
+- **Distinct Patients**: 4,225
+
+**Query 1.2 - Payment Status Breakdown by claim_status**:
+
+| claim_status | Record Count | % of Unknowns | Pre-auth Claims | Regular Claims | Records with Payment |
+|--------------|--------------|----------------|-----------------|----------------|----------------------|
+| NULL         | 47,263       | 75.88%         | 47,170          | 93              | 0                    |
+| R (Received) | 13,290       | 21.34%         | 0               | 13,290          | 0                    |
+| S (Sent)     | 1,404        | 2.25%          | 0               | 1,404           | 0                    |
+| W (Waiting)  | 209          | 0.34%          | 0               | 209             | 0                    |
+| H (Hold)     | 118          | 0.19%          | 0               | 118             | 0                    |
+| U (Unknown)  | 5            | 0.01%          | 0               | 5               | 0                    |
+
+**Key Findings from Query 1.2**:
+1. **NULL claim_status (75.88%)**: The majority of Unknown payment statuses come from NULL claim_status values, which are primarily pre-auth claims (47,170 out of 47,263 records)
+2. **Unmapped claim_status values (24.12%)**: The remaining Unknown statuses come from claim_status values that aren't handled in the current CASE statement:
+   - **'R' (Received)**: 13,290 records (21.34%) - Claims that have been received by insurance but not yet paid
+   - **'S' (Sent)**: 1,404 records (2.25%) - Claims that have been sent to insurance
+   - **'W' (Waiting)**: 209 records (0.34%) - Claims in waiting status
+   - **'H' (Hold)**: 118 records (0.19%) - Claims on hold (secondary claims waiting for primary)
+   - **'U' (Unknown)**: 5 records (0.01%) - Legitimate unknown status from source system
+3. **No payments**: All Unknown payment status records have `paid_amount = 0`, confirming they haven't been paid yet
+
+**Query 1.3 - Sample Records**:
+- Sample records show all 'H' (Hold) status claims
+- All have `paid_amount = 0` and `claim_type = 'S'` (Secondary)
+- All are regular claims (claim_id != 0)
+- Recent dates (2025-12-22 to 2026-01-14) indicate active workflow
+
+**Root Cause Identified** ✅:
+
+The `payment_status_category` calculation logic is **missing mappings** for several valid claim_status values:
+- **NULL claim_status**: Should map to 'Pre-auth' for pre-auth claims (claim_id = 0)
+- **'R' (Received)**: Should map to 'Pending' (claim received but not paid)
+- **'S' (Sent)**: Should map to 'Pending' (claim sent but not yet processed)
+- **'W' (Waiting)**: Should map to 'Pending' (claim waiting for processing)
+- **'H' (Hold)**: Should map to 'Pending' (secondary claim on hold)
+- **'U' (Unknown)**: Can remain as 'Unknown' (legitimate unknown from source)
+
+**Query 2.1 - Billing Status Category Unknown Count**:
+- **Total Unknown Records**: 50,680
+- **Distinct Claims**: 809
+- **Distinct Patients**: 4,112
+
+**Query 2.2 - Billing Status Breakdown by Conditions**:
+
+| billed_amount | no_bill_insurance | Record Count | % of Unknowns | Distinct Claims |
+|---------------|-------------------|--------------|----------------|-----------------|
+| = 0           | false             | 46,053       | 90.87%         | 809             |
+| = 0           | IS NULL           | 4,627        | 9.13%          | 1               |
+
+**Key Findings from Query 2.2**:
+1. **All Unknown billing statuses have `billed_amount = 0`** (100% of Unknown records)
+2. **90.87% have `no_bill_insurance = false`**: These are procedures with $0 billed amount that are NOT explicitly marked as non-billable
+3. **9.13% have `no_bill_insurance IS NULL`**: These have NULL for the no_bill_insurance flag (likely data quality issue or missing data)
+
+**Query 2.3 - Sample Records**:
+- **All sample records are pre-auth claims** (`claim_id = 0`)
+- **All have `billed_amount = 0.0`** and `no_bill_insurance = false`
+- **All have valid procedure codes** (D0120, D1110, D1206, D0230, D0220, D0274, D4910, D6180, D0330)
+- **All have NULL claim_status** (consistent with pre-auth claims)
+- **Future-dated claim_date values** (2026-06-22 to 2026-12-08) indicate these are planned/scheduled procedures
+
+**Root Cause Identified for Billing Status** ✅:
+
+The `billing_status_category` calculation logic doesn't handle the case where:
+- `billed_amount = 0` AND `no_bill_insurance = false` (or NULL)
+
+**Business Logic Question**: Should pre-auth claims with $0 billed_amount be considered 'Billable' or 'Non-Billable'?
+
+**Analysis**:
+- These are pre-auth claims (claim_id = 0) with valid procedure codes
+- They represent procedures that will be billed but haven't been billed yet
+- The $0 billed_amount is expected for pre-auth claims (procedures not yet performed)
+- Since they have procedure codes and are part of the billing workflow, they should likely be 'Billable'
+
+**Query 3.1 - Both Statuses Unknown Count**:
+- **Total Records with Both Unknown**: 47,942
+- **Distinct Claims**: 393
+- **Distinct Patients**: 4,049
+- **Percentage of Total**: 51.43% of all records have both statuses unknown
+
+**Query 3.2 - Both Unknown Breakdown**:
+
+| claim_status | billed_amount | no_bill_insurance | Record Count | % of Both Unknown |
+|--------------|---------------|-------------------|--------------|-------------------|
+| NULL         | = 0          | false             | 43,515       | 90.77%            |
+| NULL         | = 0          | IS NULL           | 3,564        | 7.43%             |
+| R (Received) | = 0          | false             | 859          | 1.79%             |
+| S (Sent)     | = 0          | false             | 4             | 0.01%             |
+
+**Key Findings from Query 3**:
+- **90.77% of records with both Unknown** are pre-auth claims (NULL claim_status) with $0 billed_amount and `no_bill_insurance = false`
+- **7.43%** have NULL claim_status, $0 billed_amount, and NULL `no_bill_insurance` flag
+- **1.79%** are regular claims with 'R' (Received) status, $0 billed_amount, and `no_bill_insurance = false`
+- This confirms that the same root causes affect both status categories
+
+**Query 4 - Payment Status Claim Status Comparison**:
+
+| claim_status | Unknown Count | Known Count | Total | % Unknown |
+|--------------|---------------|-------------|-------|-----------|
+| NULL         | 47,263        | 1,063       | 48,326| 97.80%     |
+| R (Received) | 13,290        | 29,806      | 43,096| 30.84%     |
+| S (Sent)     | 1,404         | 57          | 1,461 | 96.10%     |
+| W (Waiting)  | 209           | 0           | 209   | 100.00%    |
+| H (Hold)     | 118           | 0           | 118   | 100.00%    |
+| U (Unknown)  | 5             | 0           | 5     | 100.00%    |
+
+**Key Findings from Query 4**:
+1. **NULL claim_status**: 97.80% are Unknown (47,263 out of 48,326) - primarily pre-auth claims
+2. **'R' (Received)**: 30.84% are Unknown (13,290 out of 43,096) - significant portion not mapped
+3. **'S' (Sent)**: 96.10% are Unknown (1,404 out of 1,461) - almost all unmapped
+4. **'W', 'H', 'U'**: 100% are Unknown - completely unmapped
+5. **'R' has known values**: 29,806 records with 'R' status have known payment status (likely 'Paid' when paid_amount > 0)
+
+**Query 5 - Billing Status Condition Comparison**:
+
+| billed_amount | no_bill_insurance | Unknown Count | Known Count | Total | % Unknown |
+|---------------|-------------------|---------------|-------------|-------|-----------|
+| = 0           | false             | 46,053        | 0            | 46,053| 100.00%   |
+| > 0           | false             | 0             | 42,535       | 42,535| 0.00%      |
+| = 0           | IS NULL           | 4,627         | 0            | 4,627 | 100.00%   |
+
+**Key Findings from Query 5**:
+1. **100% of records with `billed_amount = 0`** result in Unknown billing status, regardless of `no_bill_insurance` value
+2. **All records with `billed_amount > 0`** correctly map to 'Billable' (0% Unknown)
+3. **No records with `billed_amount = 0` and `no_bill_insurance = true`** exist in Unknown category (they correctly map to 'Non-Billable')
+4. This confirms the logic gap: `billed_amount = 0` with `no_bill_insurance = false` or NULL falls through to 'Unknown'
+
+**Query 6 - Pre-auth Claims Analysis**:
+
+| Claim Type | payment_status_category | Record Count | Distinct Claims |
+|------------|------------------------|--------------|-----------------|
+| Pre-auth (claim_id = 0) | Unknown | 47,170 | 1 |
+| Regular Claim (claim_id != 0) | Unknown | 15,119 | 7,133 |
+
+**Key Findings from Query 6**:
+1. **75.7% of Unknown payment statuses** (47,170 out of 62,289) are pre-auth claims
+2. **24.3% of Unknown payment statuses** (15,119 out of 62,289) are regular claims with unmapped claim_status values
+3. **Pre-auth claims**: All 47,170 have NULL claim_status, which isn't handled in current logic
+4. **Regular claims**: 15,119 records have claim_status values ('R', 'S', 'W', 'H', 'U') that aren't mapped
+
+**Query 7 - Summary Statistics**:
+
+| Metric | Count | Percentage |
+|--------|-------|------------|
+| Total Records | 93,215 | 100.00% |
+| Payment Status Unknown | 62,289 | 66.82% |
+| Billing Status Unknown | 50,680 | 54.37% |
+| Both Statuses Unknown | 47,942 | 51.43% |
+
+**Key Findings from Query 7**:
+1. **66.82% of all records** have Unknown payment status
+2. **54.37% of all records** have Unknown billing status
+3. **51.43% of all records** have BOTH statuses unknown (overlap)
+4. **Overlap Analysis**: 47,942 out of 50,680 billing Unknown (94.6%) also have payment Unknown
+5. **Overlap Analysis**: 47,942 out of 62,289 payment Unknown (76.9%) also have billing Unknown
+
+**Status**: 
+- [x] Query 1 results documented
+- [x] Query 2 results documented
+- [x] Query 3 results documented
+- [x] Query 4 results documented
+- [x] Query 5 results documented
+- [x] Query 6 results documented
+- [x] Query 7 results documented
+- [x] Root cause identified
+- [x] Recommended fixes documented
+- [x] Implementation plan created
+
+#### Recommended Actions
+
+**1. Update payment_status_category Logic** (Priority: HIGH)
+
+The current logic only handles 4 claim_status values but the data contains 6+ values. Update `fact_claim.sql` to:
+
+```sql
+case 
+    when sc.paid_amount > 0 then 'Paid'
+    when sc.claim_id = 0 then 'Pre-auth'  -- Handle pre-auth/draft claims
+    when sc.claim_status = 'Denied' then 'Denied'
+    when sc.claim_status = 'Rejected' then 'Rejected'
+    when sc.claim_status = 'Submitted' then 'Pending'
+    when sc.claim_status = 'R' then 'Pending'  -- Received but not paid
+    when sc.claim_status = 'S' then 'Pending'  -- Sent to insurance
+    when sc.claim_status = 'W' then 'Pending'  -- Waiting for processing
+    when sc.claim_status = 'H' then 'Pending'  -- Hold (secondary claim)
+    when sc.claim_status = 'U' then 'Unknown'  -- Legitimate unknown from source
+    when sc.claim_status IS NULL AND sc.claim_id = 0 then 'Pre-auth'  -- Pre-auth with NULL status
+    when sc.claim_status IS NULL then 'Pending'  -- NULL status for regular claims
+    else 'Unknown'  -- Fallback for any unmapped statuses
+end as payment_status_category
+```
+
+**Expected Impact**: This should reduce Unknown payment status from 62,289 to approximately 5 records (only legitimate 'U' status values).
+
+**2. Update billing_status_category Logic** (Priority: MEDIUM)
+
+Based on Query 2 results, all Unknown billing statuses are pre-auth claims with $0 billed_amount. Update `fact_claim.sql` to:
+
+```sql
+case 
+    when sc.billed_amount > 0 then 'Billable'
+    when sc.no_bill_insurance = true then 'Non-Billable'
+    when sc.claim_id = 0 AND sc.billed_amount = 0 then 'Billable'  -- Pre-auth claims with $0 billed are billable (will be billed when performed)
+    when sc.billed_amount = 0 AND sc.no_bill_insurance = false then 'Billable'  -- $0 billed but not explicitly non-billable
+    when sc.billed_amount = 0 AND sc.no_bill_insurance IS NULL then 'Billable'  -- $0 billed with NULL flag (treat as billable)
+    else 'Unknown'  -- Fallback for edge cases
+end as billing_status_category
+```
+
+**Alternative (More Conservative)**: If business rules require explicit confirmation:
+```sql
+case 
+    when sc.billed_amount > 0 then 'Billable'
+    when sc.no_bill_insurance = true then 'Non-Billable'
+    when sc.claim_id = 0 AND sc.billed_amount = 0 then 'Billable'  -- Pre-auth claims are billable
+    when sc.billed_amount = 0 AND sc.no_bill_insurance = false then 'Billable'  -- $0 but not non-billable
+    else 'Unknown'  -- Only NULL no_bill_insurance with $0 billed remains Unknown
+end as billing_status_category
+```
+
+**Expected Impact**: This should reduce Unknown billing status from 50,680 to approximately 0-4,627 records (depending on which logic is used - the 4,627 with NULL no_bill_insurance could remain Unknown if using the conservative approach).
+
+**Business Rule Decision Needed**: 
+- Should procedures with `billed_amount = 0` and `no_bill_insurance IS NULL` be considered 'Billable' or 'Unknown'?
+- Recommendation: Treat as 'Billable' since they're pre-auth claims with valid procedure codes
+
+**3. Update Test Expectations**:
+- After implementing both fixes, re-run dbt tests
+- Expected: payment_status_category Unknown test should pass (only 5 legitimate Unknown values from 'U' status)
+- Expected: billing_status_category Unknown test should pass (0 Unknown if treating NULL as Billable, or 4,627 if conservative)
+- Update test descriptions to reflect legitimate Unknown cases if any remain
+
+#### Implementation Plan
+
+**Step 1: Update fact_claim.sql Model** (Priority: HIGH)
+
+1. **Update payment_status_category calculation** (lines 166-172):
+   - Add mappings for 'R', 'S', 'W', 'H' → 'Pending'
+   - Add handling for NULL claim_status → 'Pre-auth' for claim_id = 0, 'Pending' for others
+   - Keep 'U' → 'Unknown' (legitimate)
+   - Add claim_id = 0 check early in CASE statement
+
+2. **Update billing_status_category calculation** (lines 174-178):
+   - Add handling for `billed_amount = 0` with `no_bill_insurance = false` → 'Billable'
+   - Add handling for `billed_amount = 0` with `no_bill_insurance IS NULL` → 'Billable' (recommended) or 'Unknown' (conservative)
+   - Add explicit check for pre-auth claims with $0 billed → 'Billable'
+
+**Step 2: Test the Changes**
+
+1. Run `dbt run --select fact_claim` to rebuild the model
+2. Run `dbt test --select fact_claim` to verify tests pass
+3. Run Query 7 (Summary Statistics) to verify Unknown counts decreased:
+   - Expected: payment_unknown_count ≈ 5 (only 'U' status)
+   - Expected: billing_unknown_count ≈ 0 (if treating NULL as Billable) or ≈ 4,627 (if conservative)
+
+**Step 3: Update Documentation**
+
+1. Update `_fact_claim.yml` to document:
+   - Valid claim_status values and their mappings
+   - Business rules for pre-auth claims
+   - Legitimate Unknown cases (if any remain)
+
+2. Update test descriptions to reflect:
+   - Expected Unknown counts after fixes
+   - Legitimate Unknown cases (claim_status = 'U' for payment, if any for billing)
+
+**Step 4: Validation**
+
+1. Re-run all investigation queries (1-7) to verify fixes
+2. Compare before/after Unknown counts
+3. Document final Unknown counts in this investigation report
+4. Update investigation status to ✅ COMPLETE
+
+**Estimated Impact After Fixes**:
+- **Payment Status Unknown**: 62,289 → ~5 records (99.99% reduction)
+- **Billing Status Unknown**: 50,680 → 0-4,627 records (90.9-100% reduction)
+- **Both Unknown**: 47,942 → 0-4,627 records (90.3-100% reduction)
+
+#### Related Documentation
+
+- **Investigation SQL**: `validation/marts/fact_claim/investigate_unknown_status_categories.sql`
+- **Test Definitions**: `models/marts/_fact_claim.yml` (lines 636-640, 660-664)
+- **Model Logic**: `models/marts/fact_claim.sql` (lines 166-178)
+- **Business Rules**: `validation/marts/fact_claim/fact_claim_business_rules_to_dbt_tests.md`
+- **Validation Framework**: `validation/README.md` - How validation works, includes process for status mapping validation
+- **Validation Template**: `validation/VALIDATION_TEMPLATE.md` - Template for future validation work
+
+---
+
+### 11.2 Future Investigations
+
+Additional investigation findings will be documented here as they are identified through automated tests and validation queries.
+
+**Template for Future Investigations**:
+```markdown
+### 11.X [Investigation Name]
+
+**Date**: YYYY-MM-DD  
+**Status**: 🔍 IN PROGRESS / ✅ COMPLETE / ⚠️ DEFERRED  
+**Investigation File**: `[filename].sql`
+
+#### Issue Summary
+[Brief description of the issue]
+
+#### Investigation Queries
+[Links to investigation SQL files]
+
+#### Investigation Results
+[Findings from running investigation queries]
+
+#### Recommended Actions
+[Actions to resolve the issue]
+
+#### Related Documentation
+[Links to related files]
+```
+
+---
+
 ## Validation Execution Plan
 
 ### Step 1: Pre-Validation Setup
