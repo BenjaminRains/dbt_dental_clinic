@@ -158,7 +158,7 @@ Run the following investigation queries to understand the data:
   - **Location**: `tests/{layer}/{model_name}/test_{rule_name}.sql`
   - **Purpose**: [Why a data test is needed]
 
-**Reference**: See `validation/marts/fact_claim/BUSINESS_RULES_TO_DBT_TESTS.md` for complete mapping example
+**Reference**: See `validation/marts/fact_claim/fact_claim_business_rules_to_dbt_tests.md` for complete mapping example
 
 ---
 
