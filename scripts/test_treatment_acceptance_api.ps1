@@ -23,16 +23,16 @@ if (-not $ApiKey) {
             Write-Host "`n✅ Using DEMO_API_KEY from environment variable" -ForegroundColor Green
             $ApiKey = $envKey
         } else {
-            # Try loading from .env_api_production file
+            # Try loading from .env_api_demo file (previously .env_api_production)
             $projectRoot = Split-Path -Parent $PSScriptRoot
-            $envFile = Join-Path $projectRoot "api" ".env_api_production"
+            $envFile = Join-Path $projectRoot "api" ".env_api_demo"
             if (Test-Path $envFile) {
                 Write-Host "`n📄 Loading DEMO_API_KEY from: $envFile" -ForegroundColor Gray
                 try {
                     Get-Content $envFile | ForEach-Object {
                         if ($_ -match '^DEMO_API_KEY\s*=\s*(.+)$' -and $_ -notmatch '^\s*#') {
                             $ApiKey = $matches[1].Trim()
-                            Write-Host "✅ DEMO_API_KEY loaded from .env_api_production" -ForegroundColor Green
+                            Write-Host "✅ DEMO_API_KEY loaded from .env_api_demo" -ForegroundColor Green
                         }
                     }
                 } catch {
