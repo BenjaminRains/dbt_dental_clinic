@@ -22,10 +22,14 @@ def main() -> int:
     parser.add_argument("--force-full", action="store_true", help="Force full load (truncate then load)")
     args = parser.parse_args()
 
-    # Ensure environment is set to test unless explicitly production
+    # Ensure environment is set to test unless explicitly clinic
     etl_env = os.environ.get("ETL_ENVIRONMENT", "test").lower()
-    if etl_env not in ("test", "production"):
-        print("ETL_ENVIRONMENT must be 'test' or 'production'")
+    if etl_env not in ("test", "clinic"):
+        # Special error message for deprecated "production" environment
+        if etl_env == "production":
+            print("❌ ETL_ENVIRONMENT='production' has been removed. Use 'clinic' for clinic deployment.")
+        else:
+            print("ETL_ENVIRONMENT must be 'test' or 'clinic'")
         return 2
 
     settings = get_settings()

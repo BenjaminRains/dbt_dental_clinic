@@ -231,7 +231,7 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 - **Incremental Loading**: Smart detection of changes for efficient processing
 
 ### **Explicit Environment Separation**
-- **Production/Test**: Clear separation between production and test environments
+- **Clinic/Test**: Clear separation between clinic and test environments
 - **Connection Management**: Explicit connection handling for each environment
 - **Test Automation**: Automated test database setup and sample data loading
 - **Configuration Validation**: Comprehensive validation for both environments
@@ -291,16 +291,16 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 
 Copy the template and configure your environment:
 ```bash
-cp .env_production.template .env_production
+cp .env_clinic.template .env_clinic
 cp .env_test.template .env_test
 ```
 
 Required environment variables:
 ```bash
 # Environment Selection
-ETL_ENVIRONMENT=production  # or 'test'
+ETL_ENVIRONMENT=clinic  # or 'test'
 
-# Source Database (OpenDental Production)
+# Source Database (OpenDental Clinic)
 OPENDENTAL_SOURCE_HOST=client-server
 OPENDENTAL_SOURCE_PORT=3306
 OPENDENTAL_SOURCE_DB=opendental
@@ -551,7 +551,7 @@ etl_pipeline/
 
 ### **Provider Pattern Benefits**
 - **Flexible Configuration**: Easy testing with `DictConfigProvider`
-- **Environment Separation**: Clear production/test configuration
+- **Environment Separation**: Clear clinic/test configuration
 - **Dependency Injection**: Clean architecture for testing and flexibility
 - **Fail-Fast Validation**: Comprehensive validation with detailed errors
 
@@ -569,7 +569,7 @@ etl_pipeline/
 - Connection pooling for efficient resource usage
 - Automatic cleanup and resource management
 - Context manager support for safe resource handling
-- Explicit environment separation for production/test
+- Explicit environment separation for clinic/test
 
 ## Troubleshooting
 

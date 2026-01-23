@@ -9,10 +9,10 @@ and the PostgreSQL analytics database.
 Usage:
     python scripts/initialize_etl_tracking_tables.py [environment]
     
-    environment: 'test' or 'production' (default: 'production')
+    environment: 'test' or 'clinic' (default: 'clinic')
     
 Examples:
-    python scripts/initialize_etl_tracking_tables.py production
+    python scripts/initialize_etl_tracking_tables.py clinic
     python scripts/initialize_etl_tracking_tables.py test
 """
 
@@ -40,9 +40,9 @@ def parse_arguments():
     parser.add_argument(
         'environment', 
         nargs='?', 
-        default='production',
-        choices=['test', 'production'],
-        help='Environment to initialize tracking tables for (default: production)'
+        default='clinic',
+        choices=['test', 'clinic'],
+        help='Environment to initialize tracking tables for (default: clinic)'
     )
     return parser.parse_args()
 

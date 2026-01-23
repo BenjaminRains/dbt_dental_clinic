@@ -166,8 +166,11 @@ def setup_environment():
     if not environment:
         raise ValueError("ETL_ENVIRONMENT environment variable is not set")
     
-    if environment not in ['production', 'test']:
-        raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. Must be 'production' or 'test'")
+    if environment not in ['clinic', 'test']:
+        # Special error message for deprecated "production" environment
+        if environment == "production":
+            raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. 'production' has been removed. Use 'clinic' for clinic deployment.")
+        raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. Must be 'clinic' or 'test'")
     
     logger.info(f"Using environment: {environment}")
     return environment

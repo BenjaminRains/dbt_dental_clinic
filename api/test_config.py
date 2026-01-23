@@ -61,8 +61,8 @@ def test_api_config():
     except Exception as e:
         print(f"\n❌ API CONFIGURATION TEST FAILED: {e}")
         print("\nTroubleshooting:")
-        print("1. Ensure API_ENVIRONMENT is set to 'test' or 'production'")
-        print("2. Ensure the appropriate .env file exists (.env_test or .env_production)")
+        print("1. Ensure API_ENVIRONMENT is set to 'test', 'demo', 'clinic', or 'local'")
+        print("2. Ensure the appropriate .env file exists (.env_api_test, .env_api_demo, .env_api_clinic, or .env_api_local)")
         print("3. Ensure all required environment variables are set in the .env file")
         print("4. Check the environment file is in the project root directory")
         return False
@@ -74,7 +74,7 @@ def test_environment_files():
     print("=" * 60)
     
     project_root = Path(__file__).parent.parent
-    env_files = ['.env_api_test', '.env_api_production']
+    env_files = ['.env_api_test', '.env_api_demo']
     
     for env_file in env_files:
         env_path = project_root / env_file

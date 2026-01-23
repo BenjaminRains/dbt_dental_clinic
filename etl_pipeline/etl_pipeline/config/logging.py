@@ -367,7 +367,7 @@ def init_default_logger():
         project_root = current_file.parent.parent.parent
         
         # Detect test environment and set appropriate log directory
-        etl_environment = os.getenv("ETL_ENVIRONMENT", "production")
+        etl_environment = os.getenv("ETL_ENVIRONMENT", "clinic")
         if etl_environment == "test":
             default_log_dir = project_root / "logs" / "tests"
         else:

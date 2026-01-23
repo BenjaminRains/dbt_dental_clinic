@@ -38,7 +38,7 @@ class Settings:
     # Environment variable mappings for each database type and environment
     # These map to the actual variable names in the .env files
     ENV_MAPPINGS = {
-        'production': {
+        'clinic': {
             DatabaseType.SOURCE: {
                 'host': 'OPENDENTAL_SOURCE_HOST',
                 'port': 'OPENDENTAL_SOURCE_PORT',
@@ -140,8 +140,17 @@ class Settings:
                 missing_variables=["ETL_ENVIRONMENT"],
                 details={"critical": True}
             )
-        valid_environments = ['production', 'test']
+        valid_environments = ['clinic', 'test']
         if environment not in valid_environments:
+            # Special error message for deprecated "production" environment
+            if environment == "production":
+                raise ConfigurationError(
+                    message=f"Invalid environment '{environment}'. "
+                    f"'production' has been removed. Use 'clinic' for clinic deployment. "
+                    f"Valid environments: {valid_environments}",
+                    invalid_values={"ETL_ENVIRONMENT": environment},
+                    details={"valid_environments": valid_environments}
+                )
             raise ConfigurationError(
                 message=f"Invalid environment '{environment}'. Must be one of: {valid_environments}",
                 invalid_values={"ETL_ENVIRONMENT": environment},

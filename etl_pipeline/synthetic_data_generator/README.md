@@ -397,8 +397,8 @@ Open browser to `http://localhost:5173` and explore:
 | Variable | Production | Demo (Test) |
 |----------|-----------|-------------|
 | `POSTGRES_ANALYTICS_DB` | `opendental_analytics` | `opendental_demo` |
-| `API_ENVIRONMENT` | `production` | `test` |
-| Environment File | `.env_api_production` | `.env_api_test` |
+| `API_ENVIRONMENT` | `clinic` | `demo` / `test` |
+| Environment File | `.env_api_clinic` | `.env_api_demo` / `.env_api_test` |
 
 ### Switching Between Environments
 

@@ -42,11 +42,18 @@ class FileConfigProvider(ConfigProvider):
             raise ValueError(
                 "ETL_ENVIRONMENT environment variable is not set. "
                 "This is a critical security requirement. "
-                "Please set ETL_ENVIRONMENT to either 'production' or 'test'. "
-                "No defaulting to production is allowed for security reasons."
+                "Please set ETL_ENVIRONMENT to 'clinic' or 'test'. "
+                "No defaulting to clinic is allowed for security reasons."
             )
-        valid_environments = ['production', 'test']
+        valid_environments = ['clinic', 'test']
         if environment not in valid_environments:
+            # Special error message for deprecated "production" environment
+            if environment == "production":
+                raise ValueError(
+                    f"Invalid environment '{environment}'. "
+                    f"'production' has been removed. Use 'clinic' for clinic deployment. "
+                    f"Valid environments: {valid_environments}"
+                )
             raise ValueError(f"Invalid environment '{environment}'. Must be one of: {valid_environments}")
         return environment
     
@@ -70,7 +77,7 @@ class FileConfigProvider(ConfigProvider):
                 
                 # Define the environment variable prefixes we care about
                 env_prefixes = {
-                    'production': ['OPENDENTAL_SOURCE_', 'MYSQL_REPLICATION_', 'POSTGRES_ANALYTICS_'],
+                    'clinic': ['OPENDENTAL_SOURCE_', 'MYSQL_REPLICATION_', 'POSTGRES_ANALYTICS_'],
                     'test': ['TEST_OPENDENTAL_SOURCE_', 'TEST_MYSQL_REPLICATION_', 'TEST_POSTGRES_ANALYTICS_']
                 }
                 
