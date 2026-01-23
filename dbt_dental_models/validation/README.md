@@ -226,7 +226,7 @@ Update YAML schema files (e.g., `models/marts/_fact_claim.yml`):
             'Unknown' values indicate unmapped claim_status values that need investigation.
 ```
 
-**Reference**: See `validation/marts/fact_claim/BUSINESS_RULES_TO_DBT_TESTS.md` for complete example of mapping validation findings to dbt tests.
+**Reference**: See `validation/marts/fact_claim/fact_claim_business_rules_to_dbt_tests.md` for complete example of mapping validation findings to dbt tests.
 
 ---
 
@@ -350,12 +350,12 @@ After implementation:
    - Document known exceptions
 
 **Files Created**:
-- `{MODEL}_BUSINESS_RULES_TO_DBT_TESTS.md` - Mapping document
+- `{model_name}_business_rules_to_dbt_tests.md` - Mapping document
 - Updates to `models/{layer}/_{model_name}.yml` - Test definitions
 - `macros/tests/domain/test_{rule_name}.sql` - Custom test macros (if needed)
 - `tests/{layer}/{model_name}/test_{rule_name}.sql` - Data tests (if needed)
 
-**Example**: See `validation/marts/fact_claim/BUSINESS_RULES_TO_DBT_TESTS.md` for complete example
+**Example**: See `validation/marts/fact_claim/fact_claim_business_rules_to_dbt_tests.md` for complete example
 
 ---
 
@@ -413,7 +413,7 @@ After implementation:
 - Document rules clearly in analysis document
 - Identify which rules can be automated as dbt tests
 - Create test definitions in YAML schema files
-- Reference `BUSINESS_RULES_TO_DBT_TESTS.md` for mapping examples
+- Reference `{model_name}_business_rules_to_dbt_tests.md` for mapping examples
 
 ### 6. **Actionable Recommendations**
 - Prioritize fixes (immediate vs long-term)
@@ -449,7 +449,7 @@ After implementation:
 ## Related Documentation
 
 - **Validation Template**: `validation/VALIDATION_TEMPLATE.md` - Starting point for new validations
-- **Business Rules Mapping Example**: `validation/marts/fact_claim/BUSINESS_RULES_TO_DBT_TESTS.md` - Example of mapping validation findings to dbt tests
+- **Business Rules Mapping Example**: `validation/marts/fact_claim/fact_claim_business_rules_to_dbt_tests.md` - Example of mapping validation findings to dbt tests
 - **dbt Tests**: `tests/` - Automated dbt tests
 - **Analysis Queries**: `analysis/` - Exploratory analysis queries
 - **Model Documentation**: `models/{layer}/_{model_name}.yml` - Schema and test definitions
@@ -463,7 +463,7 @@ After implementation:
 **Key Files**:
 - `investigate_unknown_status_categories.sql` - Investigation queries
 - `fact_claim_validation_plan.md` - Comprehensive validation plan
-- `BUSINESS_RULES_TO_DBT_TESTS.md` - Mapping validation findings to dbt tests
+- `fact_claim_business_rules_to_dbt_tests.md` - Mapping validation findings to dbt tests
 - See `VALIDATION_TEMPLATE.md` for template used for similar validations
 
 **Process Applied**:
