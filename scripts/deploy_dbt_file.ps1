@@ -147,19 +147,95 @@ foreach ($file in $filesToDeploy) {
     
     # Encode file content as base64 for safe transfer
     $base64Content = [Convert]::ToBase64String([System.Text.Encoding]::UTF8.GetBytes($fileContent))
+    $base64Length = $base64Content.Length
+    
+    # Windows command-line limit is ~8191 characters, AWS SSM has similar limits
+    # Use S3 as intermediary for files larger than 15KB
+    $useS3 = $fileSize -gt 15360  # 15KB threshold
     
     try {
-        # Create deployment commands using base64 encoding
-        $commands = @(
-            "REMOTE_FILE='$($file.Remote)'",
-            "REMOTE_DIR=`$(dirname `"`$REMOTE_FILE`")",
-            "if [ -f `"`$REMOTE_FILE`" ]; then BACKUP=`"`${REMOTE_FILE}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$REMOTE_FILE`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
-            "sudo mkdir -p `"`$REMOTE_DIR`"",
-            "echo '$base64Content' | base64 -d | sudo tee `"`$REMOTE_FILE`" > /dev/null",
-            "sudo chown ec2-user:ec2-user `"`$REMOTE_FILE`"",
-            "sudo chmod 644 `"`$REMOTE_FILE`"",
-            "if [ -f `"`$REMOTE_FILE`" ]; then SIZE=`$(stat -c%s `"`$REMOTE_FILE`" 2>/dev/null || stat -f%z `"`$REMOTE_FILE`" 2>/dev/null); echo `"Deployed: `$SIZE bytes`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
-        )
+        if ($useS3) {
+            Write-Host "   Using S3 transfer (file > 15KB)..." -ForegroundColor Gray
+            
+            # Get S3 bucket from deployment credentials or environment
+            $s3Bucket = $null
+            $credentialsFile = Join-Path $ProjectRoot "deployment_credentials.json"
+            if (Test-Path $credentialsFile) {
+                $credentials = Get-Content $credentialsFile | ConvertFrom-Json
+                # Try to get bucket from frontend config (nested structure)
+                if ($credentials.frontend -and $credentials.frontend.s3_buckets -and $credentials.frontend.s3_buckets.frontend -and $credentials.frontend.s3_buckets.frontend.bucket_name) {
+                    $s3Bucket = $credentials.frontend.s3_buckets.frontend.bucket_name
+                } elseif ($env:FRONTEND_BUCKET_NAME) {
+                    $s3Bucket = $env:FRONTEND_BUCKET_NAME
+                }
+            }
+            
+            if (-not $s3Bucket) {
+                Write-Host "   ❌ S3 bucket not found in deployment_credentials.json" -ForegroundColor Red
+                Write-Host "   Large files (>15KB) require S3 for deployment" -ForegroundColor Yellow
+                Write-Host "   Please configure frontend.s3_buckets.frontend.bucket_name in deployment_credentials.json" -ForegroundColor Yellow
+                Write-Host "   Or set FRONTEND_BUCKET_NAME environment variable" -ForegroundColor Yellow
+                throw "S3 bucket required for large file deployment"
+            } else {
+                Write-Host "   Using S3 bucket: $s3Bucket" -ForegroundColor Gray
+                # Generate unique S3 key for temp file
+                $fileName = Split-Path $file.Remote -Leaf
+                $s3Key = "dbt-deploy-temp/$(Get-Random)_$fileName"
+                $s3Path = "s3://$s3Bucket/$s3Key"
+                
+                Write-Host "   Uploading to S3: $s3Path" -ForegroundColor Gray
+                
+                # Upload file to S3
+                $tempFile = [System.IO.Path]::GetTempFileName()
+                try {
+                    Set-Content -Path $tempFile -Value $fileContent -Encoding UTF8 -NoNewline
+                    $uploadOutput = aws s3 cp $tempFile $s3Path 2>&1
+                    if ($LASTEXITCODE -ne 0) {
+                        Write-Host "   ❌ Failed to upload to S3: $uploadOutput" -ForegroundColor Red
+                        throw "S3 upload failed"
+                    }
+                    Write-Host "   ✅ Uploaded to S3" -ForegroundColor Green
+                } finally {
+                    if (Test-Path $tempFile) {
+                        Remove-Item $tempFile -Force
+                    }
+                }
+                
+                # Create deployment commands to download from S3
+                $commands = @(
+                    "REMOTE_FILE='$($file.Remote)'",
+                    "REMOTE_DIR=`$(dirname `"`$REMOTE_FILE`")",
+                    "S3_PATH='$s3Path'",
+                    "if [ -f `"`$REMOTE_FILE`" ]; then BACKUP=`"`${REMOTE_FILE}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$REMOTE_FILE`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
+                    "sudo mkdir -p `"`$REMOTE_DIR`"",
+                    "aws s3 cp `"`$S3_PATH`" - | sudo tee `"`$REMOTE_FILE`" > /dev/null",
+                    "if [ `$? -ne 0 ]; then echo `"ERROR: S3 download failed`"; exit 1; fi",
+                    "sudo chown ec2-user:ec2-user `"`$REMOTE_FILE`"",
+                    "sudo chmod 644 `"`$REMOTE_FILE`"",
+                    "aws s3 rm `"`$S3_PATH`" 2>/dev/null || true",
+                    "if [ -f `"`$REMOTE_FILE`" ]; then SIZE=`$(stat -c%s `"`$REMOTE_FILE`" 2>/dev/null || stat -f%z `"`$REMOTE_FILE`" 2>/dev/null); echo `"Deployed: `$SIZE bytes`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
+                )
+            }
+        }
+        
+        if (-not $useS3) {
+            # For smaller files, use the original direct approach
+            # Escape single quotes in base64 content
+            $escapedBase64 = $base64Content -replace "'", "'\''"
+            
+            $commands = @(
+                "REMOTE_FILE='$($file.Remote)'",
+                "REMOTE_DIR=`$(dirname `"`$REMOTE_FILE`")",
+                "if [ -f `"`$REMOTE_FILE`" ]; then BACKUP=`"`${REMOTE_FILE}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$REMOTE_FILE`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
+                "sudo mkdir -p `"`$REMOTE_DIR`"",
+                "echo '$escapedBase64' | base64 -d | sudo tee `"`$REMOTE_FILE`" > /dev/null",
+                "sudo chown ec2-user:ec2-user `"`$REMOTE_FILE`"",
+                "sudo chmod 644 `"`$REMOTE_FILE`"",
+                "if [ -f `"`$REMOTE_FILE`" ]; then SIZE=`$(stat -c%s `"`$REMOTE_FILE`" 2>/dev/null || stat -f%z `"`$REMOTE_FILE`" 2>/dev/null); echo `"Deployed: `$SIZE bytes`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
+            )
+        }
+        
+        # Execute the deployment command
         
         # AWS SSM requires parameters as JSON object: {"commands": [...]}
         $parameters = @{
