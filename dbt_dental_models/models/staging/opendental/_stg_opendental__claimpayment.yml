@@ -63,7 +63,7 @@ models:
             severity: error
       
       - dbt_utils.expression_is_true:
-          expression: "case when payment_type_id in (72, 645, 646, 647) then check_amount < 0 else true end"
+          expression: "case when payment_type_id in (72, 645, 646, 647, 661) then check_amount < 0 else true end"
           config:
             severity: warn
     
@@ -178,6 +178,7 @@ models:
           - 645: Large refunds (avg -$268)
           - 646: Small refunds (avg -$1)
           - 647: Medium refunds (avg -$88)
+          - 661: Insurance refunds (avg -$106, range -$196 to -$55) - All 12 records are negative amounts
         tests:
           - not_null
           - accepted_values:
