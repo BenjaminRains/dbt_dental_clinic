@@ -132,6 +132,8 @@ temp/
 *.tar.gz
 *.zip
 !*.zip.template
+lambda_package/
+lambda_package.zip
 
 # Deployment notes (contains deployment-specific info)
 DEPLOYMENT_NOTES.md
