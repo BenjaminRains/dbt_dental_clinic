@@ -218,7 +218,7 @@ ar_balance = procedure_fee - insurance_payment - patient_payment - adjustments
 4. **Validate dbt models**
    ```bash
    cd ../../dbt_dental_models
-   dbt run --select stg_opendental__* --target dev_demo
+   dbt run --select stg_opendental__* --target demo
    ```
 
 ### This Week
