@@ -297,7 +297,7 @@ cd dbt_dental_models
 $env:POSTGRES_ANALYTICS_DB = "opendental_demo"
 
 # Run dbt to create staging, intermediate, and marts schemas
-dbt run --target dev
+dbt run --target local
 
 # Run tests to validate data quality
 dbt test
