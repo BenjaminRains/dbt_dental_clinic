@@ -87,7 +87,7 @@ dbt run --selector production_critical
 
 ### Environment and paths
 - Mount `dbt_dental_models` under `/opt/airflow/dbt_dental_models` in the Airflow runtime.
-- Place `profiles.yml` under `/opt/airflow/.dbt/profiles.yml` (or confirm existing path) and set the appropriate `target` (prod/dev).
+- Place `profiles.yml` under `/opt/airflow/.dbt/profiles.yml` (or confirm existing path) and set the appropriate `target` (local/demo/clinic).
 - Ensure dbt is installed in the Airflow environment, or run via containerized operator.
 
 ### Questions to confirm before implementation
