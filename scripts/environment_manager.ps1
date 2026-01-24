@@ -22,8 +22,8 @@ $script:DemoDBPort = $null
 function Initialize-DBTEnvironment {
     param(
         [string]$ProjectPath = (Get-Location),
-        [ValidateSet('dev', 'demo')]
-        [string]$Target = 'dev'
+        [ValidateSet('local', 'demo', 'clinic')]
+        [string]$Target = 'local'
     )
 
     if ($script:IsDBTActive) {
@@ -175,9 +175,86 @@ function Initialize-DBTEnvironment {
         } else {
             Write-Host "⚠️ deployment_credentials.json not found. Demo credentials not loaded." -ForegroundColor Yellow
         }
+    } elseif ($Target -eq 'clinic') {
+        # Clinic target: Load from deployment_credentials.json or environment variables (AWS production)
+        Write-Host "📋 Loading clinic database credentials (AWS production)..." -ForegroundColor Yellow
+        $credentialsPath = "$ProjectPath\deployment_credentials.json"
+        $filesLoaded = $false
+        
+        # Try loading from deployment_credentials.json first
+        if (Test-Path $credentialsPath) {
+            try {
+                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
+                if ($credentials.clinic_database -and $credentials.clinic_database.postgresql) {
+                    $clinic = $credentials.clinic_database.postgresql
+                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_HOST', $clinic.host, 'Process')
+                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_PORT', $clinic.port.ToString(), 'Process')
+                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_DB', $clinic.database, 'Process')
+                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_USER', $clinic.user, 'Process')
+                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_PASSWORD', $clinic.password, 'Process')
+                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_SCHEMA', 'dbt', 'Process')
+                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_SSLMODE', 'require', 'Process')
+                    Write-Host "✅ Clinic database credentials loaded from deployment_credentials.json:" -ForegroundColor Green
+                    Write-Host "   Host: $($clinic.host)" -ForegroundColor Gray
+                    Write-Host "   Port: $($clinic.port)" -ForegroundColor Gray
+                    Write-Host "   Database: $($clinic.database)" -ForegroundColor Gray
+                    Write-Host "   User: $($clinic.user)" -ForegroundColor Gray
+                    Write-Host "   Target: clinic (AWS production)" -ForegroundColor Gray
+                    $filesLoaded = $true
+                }
+            } catch {
+                Write-Host "⚠️ Failed to load clinic credentials from deployment_credentials.json: $_" -ForegroundColor Yellow
+            }
+        }
+        
+        # Fallback to environment files if deployment_credentials.json doesn't have clinic config
+        if (-not $filesLoaded) {
+            @(".env_clinic", ".dbt-env") | ForEach-Object {
+                # Try dbt project directory first, then project root
+                $envFile = "$dbtProjectPath\$_"
+                if (-not (Test-Path $envFile)) {
+                    $envFile = "$ProjectPath\$_"
+                }
+                if (Test-Path $envFile) {
+                    Write-Host "   ✓ Found: $envFile" -ForegroundColor Green
+                    $filesLoaded = $true
+                    $loadedCount = 0
+                    Get-Content $envFile | ForEach-Object {
+                        if ($_ -match '^([^#][^=]+)=(.*)$') {
+                            $key = $matches[1].Trim()
+                            $value = $matches[2].Trim()
+                            [Environment]::SetEnvironmentVariable($key, $value, 'Process')
+                            $loadedCount++
+                        }
+                    }
+                    Write-Host "   Loaded $loadedCount environment variables from $_" -ForegroundColor Gray
+                } else {
+                    Write-Host "   ✗ Not found: $envFile" -ForegroundColor DarkGray
+                }
+            }
+        }
+        
+        if (-not $filesLoaded) {
+            Write-Host "   ⚠️ No environment files found in dbt project or project root" -ForegroundColor Yellow
+        }
+        
+        # Verify required variables are set
+        $requiredVars = @('POSTGRES_ANALYTICS_HOST', 'POSTGRES_ANALYTICS_PORT', 'POSTGRES_ANALYTICS_DB', 'POSTGRES_ANALYTICS_USER', 'POSTGRES_ANALYTICS_PASSWORD')
+        $missingVars = @()
+        foreach ($var in $requiredVars) {
+            if (-not [Environment]::GetEnvironmentVariable($var, 'Process')) {
+                $missingVars += $var
+            }
+        }
+        if ($missingVars.Count -gt 0) {
+            Write-Host "⚠️ Missing required environment variables: $($missingVars -join ', ')" -ForegroundColor Yellow
+            Write-Host "   Set these variables or add them to .env_clinic or deployment_credentials.json" -ForegroundColor Gray
+        } else {
+            Write-Host "✅ Clinic database credentials loaded" -ForegroundColor Green
+        }
     } else {
-        # Dev target: Load from .env_clinic or existing environment variables
-        Write-Host "📋 Loading dev database credentials from environment files..." -ForegroundColor Yellow
+        # Local target: Load from .env_clinic or existing environment variables (localhost)
+        Write-Host "📋 Loading local database credentials from environment files..." -ForegroundColor Yellow
         $filesLoaded = $false
         @(".env_clinic", ".dbt-env") | ForEach-Object {
             # Try dbt project directory first, then project root
@@ -219,7 +296,7 @@ function Initialize-DBTEnvironment {
             Write-Host "⚠️ Missing required environment variables: $($missingVars -join ', ')" -ForegroundColor Yellow
             Write-Host "   Set these variables or add them to .env_clinic" -ForegroundColor Gray
         } else {
-            Write-Host "✅ Dev database credentials loaded" -ForegroundColor Green
+            Write-Host "✅ Local database credentials loaded" -ForegroundColor Green
         }
     }
 
@@ -228,7 +305,7 @@ function Initialize-DBTEnvironment {
 
     Write-Host "`n✅ dbt environment ready! (target: $Target)" -ForegroundColor Green
     Write-Host "Commands: dbt, notebook, format, lint, test" -ForegroundColor Cyan
-    Write-Host "To switch targets: run 'dbt-deactivate', then 'dbt-init -Target dev' or 'dbt-init -Target demo'" -ForegroundColor Gray
+    Write-Host "To switch targets: run 'dbt-deactivate', then 'dbt-init -Target local', 'dbt-init -Target demo', or 'dbt-init -Target clinic'" -ForegroundColor Gray
     Write-Host "To switch to ETL: run 'dbt-deactivate' first, then 'etl-init'`n" -ForegroundColor Gray
 }
 
@@ -2632,8 +2709,9 @@ Write-Host "║            Dental Clinic ETL & dbt Pipeline             ║" -Fo
 Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkBlue
 
 Write-Host "`n🚀 Quick Start:" -ForegroundColor White
-Write-Host "  dbt-init              - Initialize dbt environment (dev target - local clinic data)" -ForegroundColor Cyan
+Write-Host "  dbt-init              - Initialize dbt environment (local target - local development)" -ForegroundColor Cyan
 Write-Host "  dbt-init -Target demo - Initialize dbt environment (demo target - demo EC2 database)" -ForegroundColor Cyan
+  Write-Host "  dbt-init -Target clinic - Initialize dbt environment (clinic target - AWS production/clinic database)" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
 Write-Host "  api-init       - Initialize API environment (LOCAL - run API on your machine)" -ForegroundColor Blue
 Write-Host "  aws-ssm-init   - Initialize AWS SSM (REMOTE - connect to EC2 instances)" -ForegroundColor DarkCyan
