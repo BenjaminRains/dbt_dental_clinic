@@ -124,7 +124,7 @@ Update `profiles.yml` with your PostgreSQL credentials:
 ```yaml
 dbt_dental_models:
   outputs:
-    dev:
+    local:
       type: postgres
       host: localhost
       user: your_user
@@ -132,7 +132,7 @@ dbt_dental_models:
       port: 5432
       dbname: your_database
       schema: analytics
-  target: dev
+  target: local
 ```
 
 ### Running Models
