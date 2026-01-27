@@ -162,49 +162,6 @@ models:
         tests:
           - not_null
       
-      - name: provider_first_name
-        description: >
-          Provider's first name from dim_provider
-          
-          Business Rules:
-          - Standardized provider identification
-          - Used for display and reporting purposes
-          
-          Note: This column does not exist in the demo environment (PII removed).
-        tests:
-          - not_null:
-              config:
-                severity: warn
-                enabled: "{{ target.name != 'demo' }}"
-      
-      - name: provider_last_name
-        description: >
-          Provider's last name from dim_provider
-          
-          Business Rules:
-          - Standardized provider identification
-          - Used for display and reporting purposes
-          
-          Note: This column does not exist in the demo environment (PII removed).
-        tests:
-          - not_null:
-              config:
-                enabled: "{{ target.name != 'demo' }}"
-      
-      - name: provider_preferred_name
-        description: >
-          Provider's preferred display name from dim_provider
-          
-          Business Rules:
-          - Preferred name for reporting and display
-          - May be different from first/last name combination
-          
-          Note: This column does not exist in the demo environment (PII removed).
-        tests:
-          - not_null:
-              config:
-                enabled: "{{ target.name != 'demo' }}"
-      
       - name: provider_type
         description: >
           Provider type category (e.g., Dentist, Hygienist, Assistant, Primary)
