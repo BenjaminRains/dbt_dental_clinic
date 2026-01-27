@@ -253,22 +253,6 @@ models:
               where: "first_visit_date is not null"
       
       # Provider Information
-      - name: provider_name
-        description: >
-          Full name of the primary provider (concatenated first and last name)
-          
-          Business Rules:
-          - Concatenated from provider_first_name and provider_last_name
-          - Used for provider identification in reports
-          - May be null if provider information is incomplete
-          
-          Note: This column does not exist in the demo environment (PII removed).
-        tests:
-          - not_null:
-              config:
-                enabled: "{{ target.name != 'demo' }}"
-              where: "provider_name is not null"
-      
       - name: provider_type_category
         description: >
           Category of provider type for analysis grouping
@@ -293,18 +277,6 @@ models:
         tests:
           - not_null:
               where: "provider_type_category = 'Specialist'"
-      
-      - name: hygienist_name
-        description: >
-          Full name of the hygienist (concatenated first and last name)
-          
-          Business Rules:
-          - Concatenated from hygienist provider information
-          - Used for hygienist identification in reports
-          - May be null if hygienist information is not available
-        tests:
-          - not_null:
-              where: "hygienist_id is not null"
       
       # Date Information
       - name: year
@@ -744,12 +716,13 @@ models:
           
           Business Rules:
           - Decoded from OpenDental's encoded interval values
-          - Typical values: 3, 4, 5, 6, 8, 12, 18 months
+          - Typical values: 3, 4, 5, 6, 8, 12, 18, 24 months
+          - 24 months (2 years) is common for full mouth X-rays and panoramic X-rays
           - Used for recall scheduling analysis
           - May be null if no recall data
         tests:
           - accepted_values:
-              values: [3, 4, 5, 6, 8, 12, 18]
+              values: [3, 4, 5, 6, 8, 12, 18, 24]
               where: "recommended_recall_interval is not null"
       
       # Business Categorization
