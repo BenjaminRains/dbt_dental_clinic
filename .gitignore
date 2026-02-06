@@ -88,7 +88,8 @@ connection.json
 !.sqlfluffignore
 tables.yml
 
-# SSH keys and certificates
+# SSH keys and certificates (project .ssh used by generate_api_key.ps1)
+.ssh/
 *.pem
 *.key
 *.crt
