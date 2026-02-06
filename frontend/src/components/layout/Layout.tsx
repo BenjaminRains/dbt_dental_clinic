@@ -34,32 +34,45 @@ import { useNavigate, useLocation } from 'react-router-dom';
 
 const drawerWidth = 240;
 
+// Clinic build (VITE_IS_DEMO=false): "/" is ClinicHome. Demo: "/" is Portfolio, then Dashboard at /dashboard.
+const isDemoBuild = import.meta.env.VITE_IS_DEMO === 'true';
+
 interface LayoutProps {
     children: React.ReactNode;
 }
 
-const menuItems = [
-    { text: 'Portfolio', icon: <HomeIcon />, path: '/' },
-    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-    { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
-    { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
-    { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
-    { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
-    { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
-    { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
-    { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
-    { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
-];
+const menuItems = isDemoBuild
+    ? [
+          { text: 'Portfolio', icon: <HomeIcon />, path: '/' },
+          { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+          { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
+          { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
+          { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
+          { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
+          { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
+          { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
+          { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
+          { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
+      ]
+    : [
+          { text: 'Home', icon: <HomeIcon />, path: '/' },
+          { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+          { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
+          { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
+          { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
+          { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
+          { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
+          { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
+          { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
+          { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
+      ];
 
-// Helper function to determine if we're in demo mode
+// Helper: demo/portfolio mode = show portfolio at / and "synthetic data" banner. Clinic = dashboard at /, no banner.
 const isDemoMode = (): boolean => {
-    // Check environment variable first (explicit control)
     const envIsDemo = import.meta.env.VITE_IS_DEMO === 'true';
-
-    // Fallback: check hostname for portfolio site
     const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-    const isPortfolioSite = hostname === 'dbtdentalclinic.com' || hostname.includes('dbtdentalclinic');
-
+    // Only main and www are portfolio/demo; clinic.dbtdentalclinic.com is clinic (not demo)
+    const isPortfolioSite = hostname === 'dbtdentalclinic.com' || hostname === 'www.dbtdentalclinic.com';
     return envIsDemo || isPortfolioSite;
 };
 
@@ -97,11 +110,21 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
         localStorage.setItem('syntheticDataBannerDismissed', 'true');
     };
 
+    const appTitle = isDemoBuild ? '🦷 Dental Analytics' : 'MDC & GLIC Analytics';
+    const headerTitle = isDemoBuild ? 'Dental Practice Analytics Dashboard' : 'MDC & GLIC Analytics';
+
     const drawer = (
         <div>
             <Toolbar>
-                <Typography variant="h6" noWrap component="div" sx={{ fontWeight: 'bold' }}>
-                    🦷 Dental Analytics
+                <Typography
+                    variant={isDemoBuild ? 'h6' : 'subtitle1'}
+                    component="div"
+                    sx={{
+                        fontWeight: 'bold',
+                        ...(isDemoBuild ? { noWrap: true } : { lineHeight: 1.3, whiteSpace: 'normal', wordBreak: 'break-word' }),
+                    }}
+                >
+                    {appTitle}
                 </Typography>
             </Toolbar>
             <List>
@@ -164,7 +187,7 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                             },
                         }}
                     >
-                        Dental Practice Analytics Dashboard
+                        {headerTitle}
                     </Typography>
                 </Toolbar>
             </AppBar>
