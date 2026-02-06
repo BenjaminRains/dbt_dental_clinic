@@ -1456,7 +1456,7 @@ class OpenDentalSchemaAnalyzer:
             if os.path.exists(tables_yml_path):
                 backup_path = schema_backups / f'tables.yml.backup.{timestamp}'
                 shutil.copy2(tables_yml_path, backup_path)
-                logger.info(f"📦 Backed up existing configuration to: {backup_path}")
+                logger.info(f"Backed up existing configuration to: {backup_path}")
             
             # Stage 1: Generate complete configuration
             logger.info("Stage 1/4: Generating table configuration...")
@@ -1472,32 +1472,32 @@ class OpenDentalSchemaAnalyzer:
                 
                 # Log schema changes
                 if schema_changes['schema_hash_changed']:
-                    logger.warning("🔄 SCHEMA CHANGES DETECTED!")
+                    logger.warning("SCHEMA CHANGES DETECTED!")
                     
                     if schema_changes['added_tables']:
-                        logger.info(f"  ✅ Added tables ({len(schema_changes['added_tables'])}): {', '.join(schema_changes['added_tables'][:10])}")
+                        logger.info(f"  Added tables ({len(schema_changes['added_tables'])}): {', '.join(schema_changes['added_tables'][:10])}")
                     
                     if schema_changes['removed_tables']:
-                        logger.warning(f"  ❌ Removed tables ({len(schema_changes['removed_tables'])}): {', '.join(schema_changes['removed_tables'])}")
+                        logger.warning(f"  Removed tables ({len(schema_changes['removed_tables'])}): {', '.join(schema_changes['removed_tables'])}")
                     
                     if schema_changes['added_columns']:
-                        logger.info(f"  ✅ Added columns in {len(schema_changes['added_columns'])} tables")
+                        logger.info(f"  Added columns in {len(schema_changes['added_columns'])} tables")
                         for table, cols in list(schema_changes['added_columns'].items())[:5]:
                             logger.info(f"     - {table}: {', '.join(cols)}")
                     
                     if schema_changes['removed_columns']:
-                        logger.warning(f"  ❌ Removed columns in {len(schema_changes['removed_columns'])} tables")
+                        logger.warning(f"  Removed columns in {len(schema_changes['removed_columns'])} tables")
                         for table, cols in schema_changes['removed_columns'].items():
                             logger.warning(f"     - {table}: {', '.join(cols)}")
                     
                     if schema_changes['breaking_changes']:
-                        logger.error(f"  ⚠️  BREAKING CHANGES DETECTED ({len(schema_changes['breaking_changes'])})")
+                        logger.error(f"  BREAKING CHANGES DETECTED ({len(schema_changes['breaking_changes'])})")
                         for change in schema_changes['breaking_changes']:
                             logger.error(f"     - {change['type']}: {change.get('table', change.get('tables', 'multiple'))}")
                             logger.error(f"       Impact: {change['impact']}")
                 
                 else:
-                    logger.info("✅ No schema changes detected")
+                    logger.info("No schema changes detected")
             
             stage2_time = time.time() - start_time
             logger.info(f"Stage 2 completed in {stage2_time - stage1_time:.1f}s")
