@@ -3,6 +3,7 @@ import { Suspense, lazy } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import Layout from './components/layout/Layout';
 import Portfolio from './pages/Portfolio_v2';
+import ClinicHome from './pages/ClinicHome';
 
 // Lazy load dashboard pages for code splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -24,11 +25,20 @@ const PageLoader = () => (
     </Box>
 );
 
+// Clinic build (VITE_IS_DEMO=false): "/" is ClinicHome (clinic-only page). Demo/portfolio: "/" is Portfolio.
+const isDemoBuild = import.meta.env.VITE_IS_DEMO === 'true';
+
 function App() {
     return (
         <Routes>
-            {/* Portfolio page without Layout (standalone landing page) */}
-            <Route path="/" element={<Portfolio />} />
+            {/* Root: Portfolio for demo/portfolio site; ClinicHome for clinic site (no Portfolio_v2) */}
+            <Route path="/" element={isDemoBuild ? <Portfolio /> : (
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <ClinicHome />
+                    </Layout>
+                </Box>
+            )} />
 
             {/* All other pages with Layout (sidebar navigation) - lazy loaded for code splitting */}
             <Route path="/dashboard" element={
