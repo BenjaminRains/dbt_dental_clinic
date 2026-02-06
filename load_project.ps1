@@ -1,9 +1,16 @@
-# Load Project Profile
-# This script loads the project-specific environment manager
+# Load Project (Environment Manager)
+# Dot-sources scripts\environment_manager.ps1 to register project commands and aliases.
+# Run from project root: .\load_project.ps1
 
-Write-Host "🔄 Loading project profile..." -ForegroundColor Cyan
+Write-Host "Loading environment manager..." -ForegroundColor Cyan
 
-# Load the project profile
-. .\scripts\project_profile.ps1
+$scriptPath = Join-Path (Get-Location) "scripts\environment_manager.ps1"
+if (-not (Test-Path $scriptPath)) {
+    Write-Host "Environment manager not found: $scriptPath" -ForegroundColor Red
+    Write-Host "Run this script from the project root (dbt_dental_clinic)." -ForegroundColor Yellow
+    return
+}
 
-Write-Host "✅ Project profile loaded!" -ForegroundColor Green 
+. $scriptPath
+
+Write-Host "Environment manager loaded." -ForegroundColor Green
