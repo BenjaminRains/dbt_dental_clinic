@@ -24,8 +24,8 @@ if (-not $mysqlCmd) {
     exit 1
 }
 
-# Load configuration from .env_production file
-$envFile = Join-Path $PSScriptRoot "..\etl_pipeline\.env_production"
+# Load configuration from .env_clinic file (clinic GLIC source)
+$envFile = Join-Path $PSScriptRoot "..\etl_pipeline\.env_clinic"
 $glicHost = $null
 $glicPassword = $null
 $mdcPassword = $null
@@ -80,15 +80,15 @@ if (-not $glicPassword -and $env:GLIC_OPENDENTAL_SOURCE_PASSWORD) {
 
 # Validate required configuration
 if (-not $glicHost) {
-    Write-Host "ERROR: GLIC_OPENDENTAL_SOURCE_HOST not found in .env_production or environment variable" -ForegroundColor Red
-    Write-Host "Please set it in etl_pipeline\.env_production" -ForegroundColor Yellow
+    Write-Host "ERROR: GLIC_OPENDENTAL_SOURCE_HOST not found in .env_clinic or environment variable" -ForegroundColor Red
+    Write-Host "Please set it in etl_pipeline\.env_clinic" -ForegroundColor Yellow
     exit 1
 }
 
 # Final fallback: exit if no password found
 if (-not $glicPassword) {
     Write-Host "ERROR: GLIC password not found in .env file or environment variable" -ForegroundColor Red
-    Write-Host "Please add it to etl_pipeline\.env_production or set `$env:GLIC_OPENDENTAL_SOURCE_PASSWORD" -ForegroundColor Yellow
+    Write-Host "Please add it to etl_pipeline\.env_clinic or set `$env:GLIC_OPENDENTAL_SOURCE_PASSWORD" -ForegroundColor Yellow
     exit 1
 }
 
