@@ -1,12 +1,10 @@
 # dbt Dental Models
 
-A comprehensive dbt project transforming OpenDental practice management data into an analytics-ready data warehouse with 157+ models across staging, intermediate, and mart layers.
+dbt models that transform OpenDental practice management data into an analytics-ready data warehouse. Includes 157+ models across staging, intermediate, and mart layers.
 
 ## 📊 Overview
 
-This dbt project implements a modern analytics engineering approach for dental practice data, transforming raw OpenDental source tables into business-ready analytical models. The project follows a three-layer architecture pattern with standardized data transformations, comprehensive testing, and complete documentation.
-
-**Status**: ✅ **157 models - All Passing** (PASS=157, WARN=0, ERROR=0, SKIP=0)
+These models implement a modern analytics engineering approach for dental practice data, transforming raw OpenDental source tables into business-ready analytical assets. The three-layer architecture provides standardized data transformations, comprehensive testing, and complete documentation.
 
 ## 🏗️ Architecture
 
@@ -99,108 +97,9 @@ OpenDental (MySQL) → ETL Pipeline → PostgreSQL Raw → dbt Transformations �
 - Business-friendly column names
 - Optimized for dashboard queries
 
-## 🚀 Quick Start
-
-### Prerequisites
-
-- Python 3.8+
-- PostgreSQL database with raw OpenDental data
-- dbt-core installed
-
-### Installation
-
-1. **Install dependencies**:
-```bash
-pip install dbt-postgres
-```
-
-2. **Install dbt packages**:
-```bash
-dbt deps
-```
-
-3. **Configure database connection**:
-Update `profiles.yml` with your PostgreSQL credentials:
-```yaml
-dbt_dental_models:
-  outputs:
-    local:
-      type: postgres
-      host: localhost
-      user: your_user
-      password: your_password
-      port: 5432
-      dbname: your_database
-      schema: analytics
-  target: local
-```
-
-### Running Models
-
-**Run all models**:
-```bash
-dbt run
-```
-
-**Run specific layer**:
-```bash
-# Staging only
-dbt run --select staging.*
-
-# Intermediate only
-dbt run --select intermediate.*
-
-# Marts only
-dbt run --select marts.*
-```
-
-**Run specific model**:
-```bash
-dbt run --select dim_patient
-```
-
-**Full refresh (rebuild tables)**:
-```bash
-dbt run --full-refresh
-```
-
-### Testing
-
-**Run all tests**:
-```bash
-dbt test
-```
-
-**Test specific layer**:
-```bash
-dbt test --select staging.*
-dbt test --select intermediate.*
-dbt test --select marts.*
-```
-
-**Test with severity levels**:
-```bash
-dbt test --severity warn  # Continue on test failures
-dbt test --severity error # Fail build on test failures
-```
-
-### Documentation
-
-**Generate and serve documentation**:
-```bash
-dbt docs generate
-dbt docs serve
-```
-
-This will open interactive documentation in your browser showing:
-- Model lineage graphs
-- Column-level documentation
-- Data source definitions
-- Test results
-
 ## 📦 Package Dependencies
 
-The project uses the following dbt packages:
+Required dbt packages:
 
 - **dbt-labs/dbt_utils** (v1.3.0) - Utility macros for common transformations
 - **metaplane/dbt_expectations** (v0.10.8) - Advanced data quality testing
@@ -229,20 +128,6 @@ All models include comprehensive data quality tests:
 - **Macros/tests/domain/**: Dental domain-specific validations
 - **Macros/tests/fee/**: Fee calculation validations
 
-### Running Tests
-
-Tests are automatically executed during CI/CD and can be run manually:
-
-```bash
-# Run all tests
-dbt test
-
-# Run tests for a specific model
-dbt test --select dim_patient
-
-# Run tests and continue on failures (warnings)
-dbt test --severity warn
-```
 
 ## 📚 Documentation
 
@@ -294,38 +179,11 @@ All models include comprehensive YAML documentation:
 
 - **`hipaa_compliance()`**: HIPAA compliance checks
 
-## 📈 Model Statistics
-
-### Current Status
-
-- **Total Models**: 157
-- **Staging Models**: 88+ views
-- **Intermediate Models**: 50+ tables
-- **Mart Models**: 21 tables
-- **Test Coverage**: 100% (all models tested)
-- **Success Rate**: 100% (all tests passing)
-
-### Performance
-
-- **Average Run Time**: ~15-20 minutes (full refresh)
-- **Incremental Runs**: ~5-10 minutes (incremental only)
-- **Test Execution**: ~2-3 minutes
-
-## 🏥 Healthcare Domain Knowledge
-
-This project implements dental practice analytics with deep understanding of:
-
-- **Clinical Workflows**: Appointments → Procedures → Claims → Payments
-- **Financial Cycles**: Production → Insurance Claims → AR → Collections
-- **Patient Management**: Family structures, guarantors, insurance coverage
-- **Provider Operations**: Schedules, production tracking, performance metrics
-- **Compliance**: HIPAA considerations in data transformations
-
 ## 🔗 Integration Points
 
 ### ETL Pipeline Integration
 
-The dbt project integrates with the upstream ETL pipeline:
+Models integrate with the upstream ETL pipeline:
 
 - **Tracking**: Reads ETL run status from `raw.etl_tracking_summary`
 - **Hooks**: Updates transform status in `on-run-start` and `on-run-end`
@@ -367,7 +225,7 @@ React dashboard consumes mart layer data:
 
 ## 📝 Configuration
 
-### Project Configuration
+### dbt Configuration
 
 Key settings in `dbt_project.yml`:
 
@@ -385,34 +243,10 @@ marts: +materialized: table
 
 ### Variables
 
-Project variables in `dbt_project.yml`:
+Configuration variables in `dbt_project.yml`:
 
 - `max_valid_date`: Maximum date for date filtering
 - `schedule_window_days`: Appointment scheduling window (default: 30)
-
-## 🚨 Troubleshooting
-
-### Common Issues
-
-**Case Sensitivity Errors**:
-- Ensure `profiles.yml` uses correct case for schema/database names
-- Check that quoting is enabled in `dbt_project.yml`
-
-**Test Failures**:
-- Review test results: `dbt test --select <model>`
-- Check source data quality
-- Adjust test thresholds if needed
-
-**Performance Issues**:
-- Use incremental materialization for large tables
-- Add indexes on join keys
-- Review query plans in PostgreSQL
-
-### Getting Help
-
-- Check model documentation: `dbt docs serve`
-- Review test output for specific error messages
-- Examine source data quality
 
 ## 📊 Business Impact
 
@@ -432,29 +266,13 @@ Project variables in `dbt_project.yml`:
 - Treatment acceptance rates
 - Appointment utilization and no-show rates
 
-## 🔗 Related Projects
+## 🔗 Related Components
 
-- **ETL Pipeline**: [`../etl_pipeline`](../etl_pipeline) - Source data replication
-- **API Backend**: [`../api`](../api) - REST API serving mart data
-- **Frontend Dashboard**: [`../frontend`](../frontend) - React analytics dashboard
-- **Consult Audio Pipeline**: [`../consult_audio_pipe`](../consult_audio_pipe) - ML transcription pipeline
+- **ETL Pipeline**: [`../etl_pipeline`](../etl_pipeline) — source data replication
+- **API Backend**: [`../api`](../api) — REST API serving mart data
+- **Frontend Dashboard**: [`../frontend`](../frontend) — React analytics dashboard
+- **Consult Audio Pipeline**: [`../consult_audio_pipe`](../consult_audio_pipe) — ML transcription pipeline
 
 ## 📄 License
 
 Part of the dbt Dental Clinic Analytics Platform. See main repository README for license information.
-
-## 👥 Contributing
-
-This is a production analytics project. All changes should:
-1. Include comprehensive tests
-2. Update documentation
-3. Follow naming conventions
-4. Be reviewed before merging
-
----
-
-**Last Updated**: 2025-01-27  
-**dbt Version**: Compatible with dbt-core 1.3.0+  
-**PostgreSQL Version**: 12+  
-**Status**: ✅ Production Ready
-
