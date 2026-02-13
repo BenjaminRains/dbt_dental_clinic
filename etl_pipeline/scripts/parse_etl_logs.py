@@ -531,6 +531,83 @@ class ETLLogParser:
                 # If we have start time but no end time, we can't calculate duration
                 pass
     
+    def _build_summary_lines(self) -> List[str]:
+        """Build summary block lines: category counts, status, time window, slowest tables."""
+        lines = []
+        lines.append("=" * 80)
+        lines.append("ETL PIPELINE RUN SUMMARY")
+        lines.append("=" * 80)
+        lines.append("")
+
+        n = len(self.tables)
+        lines.append(f"Tables processed: {n}")
+        completed = sum(1 for info in self.tables.values() if info.status == "completed")
+        failed = sum(1 for info in self.tables.values() if info.status == "failed")
+        incomplete = sum(1 for info in self.tables.values() if info.status == "incomplete")
+        if failed == 0 and incomplete == 0:
+            lines.append("Status: All completed")
+        else:
+            parts = []
+            if completed:
+                parts.append(f"{completed} completed")
+            if failed:
+                parts.append(f"{failed} failed")
+            if incomplete:
+                parts.append(f"{incomplete} incomplete")
+            lines.append(f"Status: {', '.join(parts)}")
+        lines.append("")
+
+        # Time window
+        start_times = [info.start_time for info in self.tables.values() if info.start_time]
+        end_times = [info.end_time for info in self.tables.values() if info.end_time]
+        if start_times and end_times:
+            first_ts = min(start_times)
+            last_ts = max(end_times)
+            total_mins = (last_ts - first_ts).total_seconds() / 60.0
+            lines.append(f"Time window: {first_ts.strftime('%Y-%m-%d %H:%M:%S')} -> {last_ts.strftime('%Y-%m-%d %H:%M:%S')} ({total_mins:.1f} minutes)")
+        else:
+            lines.append("Time window: (could not determine from log)")
+        lines.append("")
+
+        # Category breakdown
+        by_cat = defaultdict(int)
+        for info in self.tables.values():
+            cat = (info.category or "unknown").lower()
+            by_cat[cat] += 1
+        lines.append("Category breakdown:")
+        for cat in ("large", "medium", "small", "tiny"):
+            count = by_cat.get(cat, 0)
+            notes = ""
+            if cat == "large":
+                notes = " (highest volume tables)"
+            elif cat == "tiny":
+                notes = " (fast, small datasets)"
+            lines.append(f"  {cat:8} {count:4}  {notes}")
+        if by_cat.get("unknown", 0):
+            lines.append(f"  {'unknown':8} {by_cat['unknown']:4}")
+        lines.append("")
+
+        # Slowest tables (top 10 by duration_minutes)
+        with_duration = [(info.table_name, info.duration_minutes, info.category) for info in self.tables.values() if info.duration_minutes]
+        with_duration.sort(key=lambda x: x[1], reverse=True)
+        top = with_duration[:10]
+        if top:
+            lines.append("Slowest tables (by duration):")
+            for name, mins, cat in top:
+                cat_str = cat or "?"
+                lines.append(f"  {name:25} {mins:.2f} min  ({cat_str})")
+        lines.append("")
+
+        # Note about load metrics gap if many tables lack load metrics
+        no_load_metrics = sum(1 for info in self.tables.values() if info.load_rows is None)
+        if no_load_metrics > 0:
+            lines.append(f"Note: {no_load_metrics} table(s) have 'Load: No metrics available' (load completed; parser did not capture load line).")
+            lines.append("")
+
+        lines.append("=" * 80)
+        lines.append("")
+        return lines
+
     def output_grouped(self, output_path: Optional[str] = None) -> str:
         """
         Output logs grouped by table (Format 1).
@@ -553,6 +630,10 @@ class ETLLogParser:
         print(f"Writing grouped output to: {output_path}")
         
         with open(output_path, 'w', encoding='utf-8') as f:
+            # Write summary block at top
+            for line in self._build_summary_lines():
+                f.write(line + "\n")
+
             # Sort tables by start time (or table name if no start time)
             sorted_tables = sorted(
                 self.tables.items(),
