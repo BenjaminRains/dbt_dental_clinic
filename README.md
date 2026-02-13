@@ -99,3 +99,5 @@ Deployment is optional; the app can run locally against a PostgreSQL warehouse.
 
 **Backend (EC2 + ALB):** API can be run on EC2 behind an ALB with RDS PostgreSQL; see `docs/DEPLOYMENT_WORKFLOW.md` and deployment scripts in `scripts/deployment/`. Hosted sample API: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com); frontend: [https://dbtdentalclinic.com](https://dbtdentalclinic.com). Demo uses synthetic data only; no production OpenDental connection.
 
+**Environment files:** The repo uses many `.env` and `.env_*` files (API, ETL, dbt, frontend, Docker). For a single reference and inventory script, see [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md). Run `.\scripts\list_env_files.ps1` to see which env files exist.
+
