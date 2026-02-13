@@ -24,8 +24,8 @@ if (-not $mysqlCmd) {
     exit 1
 }
 
-# Load configuration from .env_production file
-$envFilePath = Join-Path $PSScriptRoot "..\etl_pipeline\.env_production"
+# Load configuration from .env_clinic file (clinic MDC source)
+$envFilePath = Join-Path $PSScriptRoot "..\etl_pipeline\.env_clinic"
 $mdcHost = $null
 $mdcPassword = $null
 
@@ -67,8 +67,8 @@ if (-not $mdcPassword -and $env:OPENDENTAL_SOURCE_PASSWORD) {
 
 # Validate required configuration
 if (-not $mdcHost) {
-    Write-Host "ERROR: OPENDENTAL_SOURCE_HOST not found in .env_production or environment variable" -ForegroundColor Red
-    Write-Host "Please set it in etl_pipeline\.env_production" -ForegroundColor Yellow
+    Write-Host "ERROR: OPENDENTAL_SOURCE_HOST not found in .env_clinic or environment variable" -ForegroundColor Red
+    Write-Host "Please set it in etl_pipeline\.env_clinic" -ForegroundColor Yellow
     exit 1
 }
 
