@@ -14,7 +14,8 @@ param(
     
     [string]$InstanceId = "",
     [string]$RemotePath = "/opt/dbt_dental_clinic/dbt_dental_models",
-    [string]$ProjectRoot = ""
+    [string]$ProjectRoot = "",
+    [switch]$Clinic = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -32,8 +33,13 @@ if (-not $InstanceId) {
     $credentialsFile = Join-Path $ProjectRoot "deployment_credentials.json"
     if (Test-Path $credentialsFile) {
         $credentials = Get-Content $credentialsFile | ConvertFrom-Json
-        $InstanceId = $credentials.backend_api.ec2.instance_id
-        Write-Host "✅ Loaded instance ID from deployment_credentials.json: $InstanceId" -ForegroundColor Green
+        if ($Clinic -and $credentials.backend_api.clinic_api.ec2.instance_id) {
+            $InstanceId = $credentials.backend_api.clinic_api.ec2.instance_id
+            Write-Host "✅ Loaded clinic instance ID: $InstanceId" -ForegroundColor Green
+        } else {
+            $InstanceId = $credentials.backend_api.ec2.instance_id
+            Write-Host "✅ Loaded instance ID from deployment_credentials.json: $InstanceId" -ForegroundColor Green
+        }
     } else {
         Write-Host "❌ deployment_credentials.json not found and InstanceId not provided" -ForegroundColor Red
         Write-Host "   Please provide -InstanceId parameter or ensure deployment_credentials.json exists" -ForegroundColor Yellow
