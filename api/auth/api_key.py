@@ -17,18 +17,23 @@ def load_api_key() -> str:
     """
     Load API key with priority:
     1. DEMO_API_KEY environment variable (when API_ENVIRONMENT=demo - public portfolio site)
-    2. .ssh/dbt-dental-clinic-api-key.pem file (for test/demo environments - localhost only)
+    2. CLINIC_API_KEY environment variable (when API_ENVIRONMENT=clinic - clinic deployment)
+    3. .ssh/dbt-dental-clinic-api-key.pem file (for test/demo environments - localhost only)
     
     Raises ValueError if no key is found (fail-fast).
     """
-    # Check if we're in demo environment (public portfolio site) and DEMO_API_KEY is set
     api_environment = os.getenv("API_ENVIRONMENT", "").lower()
     if api_environment == "demo":
         demo_api_key = os.getenv("DEMO_API_KEY")
         if demo_api_key and demo_api_key.strip():
             return demo_api_key.strip()
         # If DEMO_API_KEY not set, fall through to file-based loading
-    
+    if api_environment == "clinic":
+        clinic_api_key = os.getenv("CLINIC_API_KEY")
+        if clinic_api_key and clinic_api_key.strip():
+            return clinic_api_key.strip()
+        # If CLINIC_API_KEY not set, fall through to file-based loading
+
     # Read from .ssh/dbt-dental-clinic-api-key.pem file
     # Find project root (go up from api/auth/ directory)
     # __file__ is at api/auth/api_key.py
@@ -90,6 +95,11 @@ def load_api_key() -> str:
     if api_environment == "demo":
         raise ValueError(
             f"DEMO_API_KEY not found. Set DEMO_API_KEY environment variable or create .ssh/api-key.pem file at: {pem_file}\n"
+            "The API will not start without a valid API key."
+        )
+    if api_environment == "clinic":
+        raise ValueError(
+            f"CLINIC_API_KEY not found. Set CLINIC_API_KEY in api/.env (or .env_api_clinic) on the clinic instance.\n"
             "The API will not start without a valid API key."
         )
     else:
