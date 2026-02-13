@@ -42,6 +42,13 @@ from datetime import datetime
 # Import specific exception classes for structured error handling
 from ..exceptions import ConfigurationError, EnvironmentError
 
+# Method usage tracking (optional - no-op if not on path)
+try:
+    from method_tracker import track_method  # type: ignore
+except ImportError:
+    def track_method(func):
+        return func  # No-op when method_tracker not available
+
 logger = logging.getLogger(__name__)
 
 class ConfigReader:
@@ -171,6 +178,36 @@ class ConfigReader:
                 original_exception=e
             )
     
+    @track_method
+    def get_tables_by_importance(self, importance_level: str) -> List[str]:
+        """
+        Get tables by importance level.
+        
+        Filters by table_importance in config. Returns empty list if no tables
+        have table_importance (current tables.yml uses performance_category/processing_priority).
+        
+        Args:
+            importance_level: Importance level ('critical', 'important', 'audit', 'reference', 'standard')
+            
+        Returns:
+            List of table names with the specified importance level
+        """
+        try:
+            tables = [
+                table_name for table_name, config in self.config.get('tables', {}).items()
+                if config.get('table_importance') == importance_level
+            ]
+            return tables
+        except Exception as e:
+            logger.error(f"Error retrieving tables by importance {importance_level}: {e}")
+            raise ConfigurationError(
+                message=f"Failed to retrieve tables by importance {importance_level}",
+                config_file=self.config_path,
+                details={'operation': 'importance_filtering', 'importance_level': importance_level},
+                original_exception=e
+            )
+    
+    @track_method
     def get_tables_by_strategy(self, strategy: str) -> List[str]:
         """
         Get tables by extraction strategy.
@@ -198,6 +235,7 @@ class ConfigReader:
                 original_exception=e
             )
     
+    @track_method
     def get_large_tables(self, size_threshold_mb: float = 100.0) -> List[str]:
         """
         Get tables larger than the specified threshold.
@@ -225,6 +263,7 @@ class ConfigReader:
                 original_exception=e
             )
     
+    @track_method
     def get_monitored_tables(self) -> List[str]:
         """
         Get tables that have monitoring enabled.
@@ -249,6 +288,7 @@ class ConfigReader:
                 original_exception=e
             )
     
+    @track_method
     def get_table_dependencies(self, table_name: str) -> List[str]:
         """
         Get dependencies for a specific table.
