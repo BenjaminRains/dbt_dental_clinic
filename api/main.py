@@ -48,34 +48,56 @@ app = FastAPI(
 # But we want to ensure localhost origins are always available for local development
 api_environment = os.getenv("API_ENVIRONMENT", "test")  # Default to test if not set
 
-# Detect if we're running locally (not on EC2/production server)
-# Check multiple indicators: hostname, computer name, API host, or database host
 def is_running_locally() -> bool:
-    """Detect if API is running on local development machine (not production server)."""
-    # Check hostname
+    """
+    Detect if the API is running on a local development machine vs. deployed (EC2).
+
+    Used to decide CORS behavior: locally we allow localhost origins for dev;
+    on EC2 we restrict to production domains only.
+
+    Detection order:
+      1. Explicit override (RUNNING_LOCALLY=1 or 0) - for tests or edge cases
+      2. EC2 hostname pattern - positive signal we're deployed (NOT local)
+      3. Local indicators - hostname, database host, or missing API_ENVIRONMENT
+    """
+    # 1. Explicit override - clearest for devs who need to force behavior
+    running_locally = os.getenv("RUNNING_LOCALLY", "").strip().lower()
+    if running_locally in ("1", "true", "yes"):
+        return True
+    if running_locally in ("0", "false", "no"):
+        return False
+
+    # 2. EC2 hostname: ip-172-31-x-x.ec2.internal (or similar)
+    #    This is unambiguous - we're on AWS, so we're NOT local.
     hostname = os.getenv("HOSTNAME", "").lower()
-    if hostname.startswith("localhost") or "localhost" in hostname:
+    if ".ec2.internal" in hostname:
+        return False
+
+    # 3. Local development indicators
+    # Hostname is localhost (typical on Mac/Linux dev machines)
+    if "localhost" in hostname:
         return True
-    
-    # Check computer name (Windows)
+
+    # Windows COMPUTERNAME when running locally
     computername = os.getenv("COMPUTERNAME", "").lower()
-    if computername in ["localhost", "127.0.0.1"]:
+    if computername in ("localhost", "127.0.0.1"):
         return True
-    
-    # Check API host - if it's 0.0.0.0 or localhost, we're likely running locally
-    api_host = os.getenv("API_HOST", "0.0.0.0").lower()
-    if "localhost" in api_host or api_host in ["0.0.0.0", "127.0.0.1"]:
+
+    # Database is localhost - devs typically run Postgres locally
+    db_host = (
+        os.getenv("POSTGRES_ANALYTICS_HOST") or
+        os.getenv("DEMO_POSTGRES_HOST") or
+        os.getenv("TEST_POSTGRES_ANALYTICS_HOST") or
+        ""
+    ).lower()
+    if db_host in ("localhost", "127.0.0.1"):
         return True
-    
-    # Check database host - if connecting to localhost, we're running locally
-    db_host = os.getenv("POSTGRES_ANALYTICS_HOST") or os.getenv("TEST_POSTGRES_ANALYTICS_HOST", "")
-    if db_host.lower() in ["localhost", "127.0.0.1", "0.0.0.0"]:
-        return True
-    
-    # If no environment is set, assume local dev
+
+    # API_ENVIRONMENT not set - typical for local dev (demo/clinic set it in .env on EC2)
     if os.getenv("API_ENVIRONMENT") is None:
         return True
-    
+
+    # Default: assume deployed (safer for production if detection is uncertain)
     return False
 
 is_local_dev = is_running_locally()
