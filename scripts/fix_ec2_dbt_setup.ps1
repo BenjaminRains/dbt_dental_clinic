@@ -1,15 +1,18 @@
 # PowerShell script to fix all EC2 dbt setup issues
 # Usage: .\scripts\fix_ec2_dbt_setup.ps1
-# 
+#        .\scripts\fix_ec2_dbt_setup.ps1 -Clinic   # target clinic instance
+#
 # This script will:
 # 1. Deploy setup_ec2_dbt_env.sh script
 # 2. Deploy deployment_credentials.json
 # 3. Fix dbt PATH issue
+# 4. Fix dbt directory permissions
 
 param(
     [string]$InstanceId = "",
     [string]$ProjectRoot = "",
-    [switch]$SkipCredentials = $false
+    [switch]$SkipCredentials = $false,
+    [switch]$Clinic = $false
 )
 
 $ErrorActionPreference = "Stop"
@@ -27,8 +30,14 @@ if (-not $InstanceId) {
     $credentialsFile = Join-Path $ProjectRoot "deployment_credentials.json"
     if (Test-Path $credentialsFile) {
         $credentials = Get-Content $credentialsFile | ConvertFrom-Json
-        $InstanceId = $credentials.backend_api.ec2.instance_id
-        Write-Host "✅ Loaded instance ID: $InstanceId" -ForegroundColor Green
+        if ($Clinic -and $credentials.backend_api.clinic_api.ec2.instance_id) {
+            $InstanceId = $credentials.backend_api.clinic_api.ec2.instance_id
+            Write-Host "✅ Loaded clinic instance ID: $InstanceId" -ForegroundColor Green
+        } else {
+            $InstanceId = $credentials.backend_api.ec2.instance_id
+            Write-Host "✅ Loaded instance ID (demo): $InstanceId" -ForegroundColor Green
+            Write-Host "   (Use -Clinic to target clinic instance i-0d17b38e2e68137ec)" -ForegroundColor Gray
+        }
     } else {
         Write-Host "❌ deployment_credentials.json not found" -ForegroundColor Red
         exit 1
