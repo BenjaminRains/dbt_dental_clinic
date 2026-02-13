@@ -1,12 +1,16 @@
 # PowerShell script to deploy a single API file to EC2 using AWS Systems Manager
 # Usage: .\scripts\deploy_api_file.ps1 -FilePath "api\services\treatment_acceptance_service.py"
+#        .\scripts\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env_api_clinic"
+#        .\scripts\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -InstanceId i-xxxxx -RemoteFileName ".env_api_clinic"
 
 param(
     [Parameter(Mandatory=$true)]
     [string]$FilePath,
     
     [string]$InstanceId = "",
-    [string]$RemotePath = "/opt/dbt_dental_clinic/api"
+    [string]$RemotePath = "/opt/dbt_dental_clinic/api",
+    [switch]$Clinic,
+    [string]$RemoteFileName = ""
 )
 
 $ErrorActionPreference = "Stop"
@@ -19,8 +23,13 @@ if (-not $InstanceId) {
     $credentialsFile = Join-Path $PSScriptRoot ".." "deployment_credentials.json"
     if (Test-Path $credentialsFile) {
         $credentials = Get-Content $credentialsFile | ConvertFrom-Json
-        $InstanceId = $credentials.backend_api.ec2.instance_id
-        Write-Host "✅ Loaded instance ID from deployment_credentials.json: $InstanceId" -ForegroundColor Green
+        if ($Clinic -and $credentials.backend_api.clinic_api.ec2.instance_id) {
+            $InstanceId = $credentials.backend_api.clinic_api.ec2.instance_id
+            Write-Host "✅ Loaded clinic instance ID from deployment_credentials.json: $InstanceId" -ForegroundColor Green
+        } else {
+            $InstanceId = $credentials.backend_api.ec2.instance_id
+            Write-Host "✅ Loaded instance ID from deployment_credentials.json: $InstanceId" -ForegroundColor Green
+        }
     } else {
         Write-Host "❌ deployment_credentials.json not found and InstanceId not provided" -ForegroundColor Red
         Write-Host "   Please provide -InstanceId parameter or ensure deployment_credentials.json exists" -ForegroundColor Yellow
@@ -37,7 +46,11 @@ if (-not (Test-Path $localFile)) {
 
 # Determine the remote file path
 $relativePath = $FilePath -replace "^api\\", "" -replace "^api/", ""
-$remoteFilePath = "$RemotePath/$relativePath"
+if ($RemoteFileName) {
+    $remoteFilePath = "$RemotePath/$RemoteFileName"
+} else {
+    $remoteFilePath = "$RemotePath/$relativePath"
+}
 
 Write-Host "`n📄 File to deploy:" -ForegroundColor Cyan
 Write-Host "   Local: $localFile" -ForegroundColor Gray
@@ -67,6 +80,7 @@ try {
         "if [ -f `"`$REMOTE_FILE`" ]; then BACKUP=`"`${REMOTE_FILE}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$REMOTE_FILE`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
         "sudo mkdir -p `"`$REMOTE_DIR`"",
         "echo '$base64Content' | base64 -d | sudo tee `"`$REMOTE_FILE`" > /dev/null",
+        "sudo chown ec2-user:ec2-user `"`$REMOTE_FILE`"",
         "sudo chmod 644 `"`$REMOTE_FILE`"",
         "if [ -f `"`$REMOTE_FILE`" ]; then SIZE=`$(stat -c%s `"`$REMOTE_FILE`" 2>/dev/null || stat -f%z `"`$REMOTE_FILE`" 2>/dev/null); echo `"Deployed: `$SIZE bytes`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
     )
