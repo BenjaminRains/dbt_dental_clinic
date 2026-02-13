@@ -12,6 +12,8 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      # Nightly DAG at 9 PM Central (cron "0 21 * * *" interpreted in this timezone)
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
       # ETL Connection Environment Variables
       - OPENDENTAL_SOURCE_USER=${OPENDENTAL_SOURCE_USER}
       - OPENDENTAL_SOURCE_PW=${OPENDENTAL_SOURCE_PW}
@@ -20,9 +22,16 @@ services:
       - OPENDENTAL_SOURCE_DB=${OPENDENTAL_SOURCE_DB}
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=postgres # Use Docker service name
+      - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DATABASE=${POSTGRES_DATABASE}
+      # dbt analytics DB (same postgres for local; set POSTGRES_ANALYTICS_* in .env for EC2)
+      - POSTGRES_ANALYTICS_HOST=${POSTGRES_ANALYTICS_HOST:-postgres}
+      - POSTGRES_ANALYTICS_PORT=${POSTGRES_ANALYTICS_PORT:-5432}
+      - POSTGRES_ANALYTICS_DB=${POSTGRES_ANALYTICS_DB:-${POSTGRES_DATABASE}}
+      - POSTGRES_ANALYTICS_USER=${POSTGRES_ANALYTICS_USER:-${POSTGRES_USER}}
+      - POSTGRES_ANALYTICS_PASSWORD=${POSTGRES_ANALYTICS_PASSWORD:-${POSTGRES_PASSWORD}}
+      - POSTGRES_ANALYTICS_SCHEMA=${POSTGRES_ANALYTICS_SCHEMA:-public}
       # Email Configuration for Monitoring
       - SMTP_SERVER=${SMTP_SERVER:-localhost}
       - SMTP_PORT=${SMTP_PORT:-587}
@@ -35,7 +44,10 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
       - ./airflow/scripts:/opt/airflow/scripts
       - ./config:/opt/airflow/config
-      - ./etl_job:/opt/airflow/dags/etl_job # Mount ETL scripts
+      - ./etl_job:/opt/airflow/dags/etl_job
+      # Project root for ETL + dbt (nightly DAG)
+      - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
+      - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
     ports:
       - "8080:8080"
     command: webserver
@@ -57,6 +69,7 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
       # ETL Connection Environment Variables (same as webserver)
       - OPENDENTAL_SOURCE_USER=${OPENDENTAL_SOURCE_USER}
       - OPENDENTAL_SOURCE_PW=${OPENDENTAL_SOURCE_PW}
@@ -68,6 +81,12 @@ services:
       - POSTGRES_HOST=postgres
       - POSTGRES_PORT=5432
       - POSTGRES_DATABASE=${POSTGRES_DATABASE}
+      - POSTGRES_ANALYTICS_HOST=${POSTGRES_ANALYTICS_HOST:-postgres}
+      - POSTGRES_ANALYTICS_PORT=${POSTGRES_ANALYTICS_PORT:-5432}
+      - POSTGRES_ANALYTICS_DB=${POSTGRES_ANALYTICS_DB:-${POSTGRES_DATABASE}}
+      - POSTGRES_ANALYTICS_USER=${POSTGRES_ANALYTICS_USER:-${POSTGRES_USER}}
+      - POSTGRES_ANALYTICS_PASSWORD=${POSTGRES_ANALYTICS_PASSWORD:-${POSTGRES_PASSWORD}}
+      - POSTGRES_ANALYTICS_SCHEMA=${POSTGRES_ANALYTICS_SCHEMA:-public}
       # Email Configuration for Monitoring
       - SMTP_SERVER=${SMTP_SERVER:-localhost}
       - SMTP_PORT=${SMTP_PORT:-587}
@@ -80,7 +99,9 @@ services:
       - ./airflow/plugins:/opt/airflow/plugins
       - ./airflow/scripts:/opt/airflow/scripts
       - ./config:/opt/airflow/config
-      - ./etl_job:/opt/airflow/dags/etl_job # Mount ETL scripts
+      - ./etl_job:/opt/airflow/dags/etl_job
+      - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
+      - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
     command: scheduler
 
   # Airflow Init (run once to initialize database)

@@ -51,8 +51,8 @@ dag = DAG(
 # Configuration
 # ============================================================================
 
-# Project paths (adjust if Airflow is containerized)
-PROJECT_ROOT = Path('/opt/airflow/dbt_dental_clinic')  # TODO: Adjust for your environment
+# Project root: override via Airflow Variable "project_root" for EC2 vs local
+PROJECT_ROOT = Path(Variable.get('project_root', default_var='/opt/airflow/dbt_dental_clinic'))
 ETL_PIPELINE_DIR = PROJECT_ROOT / 'etl_pipeline'
 TABLES_YML_PATH = ETL_PIPELINE_DIR / 'etl_pipeline' / 'config' / 'tables.yml'
 BACKUP_DIR = PROJECT_ROOT / 'logs' / 'schema_analysis' / 'backups'

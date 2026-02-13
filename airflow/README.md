@@ -7,12 +7,17 @@ This directory contains Airflow DAG definitions for orchestrating the complete O
 ```
 airflow/
 ├── README.md                    # This file
+├── DEPLOYMENT_STRATEGY.md      # How we deploy Airflow; how Docker fits in
 ├── DBT_DAG_PLAN.md             # dbt DAG implementation plan
 ├── dags/
 │   ├── schema_analysis_dag.py  # Schema analyzer orchestration ✅
 │   ├── etl_pipeline_dag.py     # ETL pipeline orchestration ✅
-│   └── dbt_build_dag.py        # dbt transformation orchestration [TO BE CREATED]
-└── plugins/                     # Custom Airflow plugins (future)
+│   # dbt runs inside etl_pipeline_dag (task group dbt_build)
+├── tests/                      # DAG parse/import and structure tests
+│   ├── README.md
+│   ├── conftest.py
+│   └── test_dags.py
+└── plugins/                    # Custom Airflow plugins (future)
 ```
 
 ## DAG Overview
@@ -48,7 +53,7 @@ airflow/
 
 **Purpose**: Extracts data from OpenDental to PostgreSQL analytics.
 
-**Schedule**: Daily at 3 AM (production) - configurable to hourly
+**Schedule**: **Nightly Mon–Sun at 9 PM Central** (requires `AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago`). See `NIGHTLY_RUN.md` for what a run is (incremental ETL + dbt on success).
 
 **Task Groups**:
 
@@ -68,9 +73,13 @@ airflow/
    - Generate execution report
    - Send completion notification
 
+4. **dbt** (only when ETL succeeded)
+   - Short-circuit skips dbt if `pipeline_success` is False
+   - `dbt deps` then `dbt build` (target from Variable `dbt_target`, default `local`)
+
 **Integration**:
 - **Upstream**: Depends on valid `tables.yml` from Schema Analysis DAG
-- **Downstream**: Triggers dbt DAG after successful completion
+- **dbt**: Same DAG; runs after reporting only when ETL succeeded
 - **Components**: Uses `pipeline_orchestrator.py` from etl_pipeline
 
 **Parameters** (override when triggering):
@@ -89,17 +98,15 @@ airflow/
 
 ---
 
-### 3. dbt Build DAG (Planned)
+### 3. dbt (inside ETL Pipeline DAG)
 
-See `DBT_DAG_PLAN.md` for implementation details.
+**Purpose**: Transforms raw data (staging → intermediate → marts).
 
-**Purpose**: Transforms raw data into analytics-ready models.
+**Schedule**: Same DAG; runs after ETL only when `pipeline_success` is True.
 
-**Schedule**: After ETL pipeline completion
+**Tasks**: `dbt_deps` → `dbt_build` (target from Variable `dbt_target`).
 
-**Integration**:
-- Triggered by ETL Pipeline DAG success
-- Uses PostgreSQL analytics database (raw schema as source)
+**Integration**: Same run as ETL; no separate dbt DAG. See `NIGHTLY_RUN.md` for local vs EC2.
 
 ## DAG Relationships
 
