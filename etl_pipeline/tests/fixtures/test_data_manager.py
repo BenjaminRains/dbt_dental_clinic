@@ -16,7 +16,7 @@ Connection Architecture Compliance:
 - ✅ Uses unified ConnectionFactory API with Settings injection
 - ✅ Uses enum-based database type specification
 - ✅ Supports provider pattern for dependency injection
-- ✅ Environment-agnostic (works for both production and test)
+- ✅ Environment-agnostic (works for both clinic and test)
 """
 
 import logging
@@ -50,7 +50,7 @@ class IntegrationTestDataManager:
     - ✅ Uses unified ConnectionFactory API with Settings injection
     - ✅ Uses enum-based database type specification
     - ✅ Supports provider pattern for dependency injection
-    - ✅ Environment-agnostic (works for both production and test)
+    - ✅ Environment-agnostic (works for both clinic and test)
     """
     
     def __init__(self, settings: Settings):
@@ -60,7 +60,7 @@ class IntegrationTestDataManager:
         Connection Architecture:
         - Uses Settings injection for environment-agnostic database connections
         - Uses unified ConnectionFactory API with Settings injection
-        - Automatically uses correct environment (production/test) based on Settings
+        - Automatically uses correct environment (clinic/test) based on Settings
         - Uses Settings-based configuration methods for database info
         
         Args:

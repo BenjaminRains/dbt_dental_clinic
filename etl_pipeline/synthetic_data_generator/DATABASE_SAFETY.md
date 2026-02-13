@@ -6,7 +6,7 @@ Your environment has **three separate databases** with different purposes:
 
 | Database | Purpose | Access Via | Risk Level |
 |----------|---------|------------|------------|
-| **Production** | Real patient data (HIPAA) | ETL environment (production) | 🔴 CRITICAL - Never modify |
+| **Clinic** | Real patient data (HIPAA) | ETL environment (clinic) | 🔴 CRITICAL - Never modify |
 | **Test** | Testing/development | ETL environment (test) | 🟡 CAUTION - Used for testing |
 | **opendental_demo** | Synthetic data only | Synthetic generator | 🟢 SAFE - Fake data only |
 
@@ -15,7 +15,7 @@ Your environment has **three separate databases** with different purposes:
 ## ⚠️ The Challenge
 
 When you run `etl-init`:
-- Choose **production** → Sets environment vars for production database
+- Choose **clinic** → Sets environment vars for clinic database
 - Choose **test** → Sets environment vars for test database
 
 **BUT** the synthetic data generator needs to write to `opendental_demo` (neither of those!)
@@ -41,7 +41,7 @@ copy .env_demo.template .env_demo
 - ✅ Database name is hardcoded to `opendental_demo` in the script
 - ✅ Credentials stored securely in .env_demo (gitignored)
 - ✅ Shows confirmation before running
-- ✅ Cannot accidentally write to production/test
+- ✅ Cannot accidentally write to clinic/test
 - ✅ Clear output showing target database
 - ✅ CLI args override .env_demo settings if needed
 
@@ -69,7 +69,7 @@ python main.py \
 Before running the generator:
 
 ### ✅ Environment Setup
-- [ ] Run `etl-init` (choose either production or test for package installation)
+- [ ] Run `etl-init` (choose either clinic or test for package installation)
 - [ ] Navigate to `cd etl_pipeline/synthetic_data_generator`
 - [ ] Confirm `opendental_demo` database exists: `psql -l | grep opendental_demo`
 
@@ -92,7 +92,7 @@ Before running the generator:
 # BAD - Uses whatever database is in environment variables
 python main.py --patients 5000
 ```
-**Risk:** Could write to production or test database!
+**Risk:** Could write to clinic or test database!
 
 ### ❌ DANGER: Don't do this!
 ```bash
@@ -214,7 +214,7 @@ SELECT MAX("SecDateEntry") FROM raw.patient;
 
 1. ✅ **Always use the wrapper script**: `.\generate.ps1`
 2. ✅ **Verify target database**: Should always show `opendental_demo`
-3. ✅ **ETL environment is for packages only**: production/test choice doesn't affect target DB
+3. ✅ **ETL environment is for packages only**: clinic/test choice doesn't affect target DB
 4. ✅ **CLI args override everything**: `--db-name` is your safety net
 5. ✅ **When in doubt, check twice**: Better safe than sorry with production data!
 

@@ -130,9 +130,9 @@ def production_connection_config():
     """Production connection configuration following connection architecture naming convention.
     
     This fixture provides production connection configuration that conforms to the connection architecture:
-    - Uses non-prefixed variables for production environment
+    - Uses non-prefixed variables for clinic environment
     - Follows the environment-specific variable naming convention
-    - Matches the .env_production file structure
+    - Matches the .env_clinic file structure
     - Supports the provider pattern for dependency injection
     """
     return {
@@ -190,7 +190,7 @@ def test_connection_provider(test_connection_config):
 def production_connection_provider(production_connection_config):
     """Production connection configuration provider following the provider pattern.
     
-    This fixture implements the DictConfigProvider pattern for production-like connection testing:
+    This fixture implements the DictConfigProvider pattern for clinic-like connection testing:
     - Uses DictConfigProvider with production-like configuration
     - Provides injected configuration for integration testing
     - Supports dependency injection for configuration swapping
@@ -198,7 +198,7 @@ def production_connection_provider(production_connection_config):
     return DictConfigProvider(
         pipeline={'connections': production_connection_config},
         tables={'tables': {}},
-        env={'ETL_ENVIRONMENT': 'production'}
+        env={'ETL_ENVIRONMENT': 'clinic'}
     )
 
 
@@ -219,12 +219,12 @@ def test_connection_settings(test_connection_provider):
 def production_connection_settings(production_connection_provider):
     """Production connection settings with provider injection following connection architecture.
     
-    This fixture implements the Settings injection pattern for production-like connection testing:
+    This fixture implements the Settings injection pattern for clinic-like connection testing:
     - Uses Settings with provider injection for environment-agnostic operation
     - Uses DictConfigProvider with production-like configuration
     - Supports dependency injection for integration testing
     """
-    return Settings(environment='production', provider=production_connection_provider)
+    return Settings(environment='clinic', provider=production_connection_provider)
 
 
 @pytest.fixture

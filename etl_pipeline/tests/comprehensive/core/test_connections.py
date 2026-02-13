@@ -157,11 +157,11 @@ class TestConnectionFactoryComprehensive:
                 assert call_kwargs['connect_args']['options'] == f'-csearch_path={expected_schema.value}'
 
     def test_environment_separation_with_provider_pattern(self):
-        """Test that production and test environments use different configurations."""
+        """Test that clinic and test environments use different configurations."""
         # Production environment provider (no TEST_ prefix)
         prod_provider = DictConfigProvider(
             env={
-                'ETL_ENVIRONMENT': 'production',
+                'ETL_ENVIRONMENT': 'clinic',
                 'OPENDENTAL_SOURCE_HOST': 'prod-host',
                 'OPENDENTAL_SOURCE_PORT': '3306',
                 'OPENDENTAL_SOURCE_DB': 'opendental',
@@ -184,7 +184,7 @@ class TestConnectionFactoryComprehensive:
         
         # Create settings for both environments with explicit environment setting
         from etl_pipeline.config.settings import Settings
-        prod_settings = Settings(environment='production', provider=prod_provider)
+        prod_settings = Settings(environment='clinic', provider=prod_provider)
         test_settings = Settings(environment='test', provider=test_provider)
         
         with patch('etl_pipeline.core.connections.create_engine') as mock_create_engine:
@@ -649,11 +649,11 @@ class TestConnectionFactoryComprehensive:
                 Settings()
 
     def test_environment_detection_with_provider_pattern(self):
-        """Test proper environment detection (production vs test) with provider pattern."""
-        # Test production environment detection
+        """Test proper environment detection (clinic vs test) with provider pattern."""
+        # Test clinic environment detection
         prod_provider = DictConfigProvider(
             env={
-                'ETL_ENVIRONMENT': 'production',
+                'ETL_ENVIRONMENT': 'clinic',
                 'OPENDENTAL_SOURCE_HOST': 'prod-host',
                 'OPENDENTAL_SOURCE_PORT': '3306',
                 'OPENDENTAL_SOURCE_DB': 'opendental',
@@ -676,11 +676,11 @@ class TestConnectionFactoryComprehensive:
         
         # Create settings for both environments with explicit environment setting
         from etl_pipeline.config.settings import Settings
-        prod_settings = Settings(environment='production', provider=prod_provider)
+        prod_settings = Settings(environment='clinic', provider=prod_provider)
         test_settings = Settings(environment='test', provider=test_provider)
         
         # Verify environment detection
-        assert prod_settings.environment == 'production'
+        assert prod_settings.environment == 'clinic'
         assert test_settings.environment == 'test'
         
         # Test that different configurations are used

@@ -1021,7 +1021,7 @@ class TestConfigReaderETLIntegration:
             - ConfigReader works with provider pattern dependency injection
             - Test isolation through provider pattern configuration
             - ETL pipeline components can use different configuration providers
-            - Provider pattern supports both production and test environments
+            - Provider pattern supports both clinic and test environments
             
         ETL Pipeline Context:
             - ConfigReader supports provider pattern for configuration management

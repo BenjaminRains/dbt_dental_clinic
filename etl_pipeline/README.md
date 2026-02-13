@@ -214,7 +214,7 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 
 ### **Modern Provider Pattern Configuration**
 - **Provider Pattern**: `FileConfigProvider` and `DictConfigProvider` for flexible configuration injection
-- **Environment-Specific Files**: `.env_production` and `.env_test` for environment separation
+- **Environment-Specific Files**: `.env_local`, `.env_clinic`, and `.env_test` for environment separation
 - **Fail-Fast Validation**: Comprehensive validation with detailed error reporting
 - **Testing Support**: `DictConfigProvider` enables easy testing with injected configurations
 
@@ -576,7 +576,7 @@ etl_pipeline/
 ### **Common Issues**
 
 1. **Connection Problems**
-   - Verify environment variables in `.env_production` or `.env_test`
+   - Verify environment variables in `.env_clinic` or `.env_test`
    - Check database permissions
    - Validate network connectivity
    - Use `python -m etl_pipeline test-connections`

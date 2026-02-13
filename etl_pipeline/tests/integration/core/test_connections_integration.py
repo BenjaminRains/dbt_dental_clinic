@@ -805,7 +805,7 @@ class TestConnectionArchitectureIntegration:
             - Unified interface methods work for all environments
             - Settings injection enables environment-agnostic code
             - Single method per database type (no proliferation)
-            - Consistent API across production and test environments
+            - Consistent API across clinic and test environments
             - Real database connection creation with unified interface
             - Provider pattern integration with unified interface
             

@@ -139,12 +139,11 @@ def setup_environment():
     if not os.getenv('ETL_ENVIRONMENT'):
         logger.info("ETL_ENVIRONMENT not set, attempting to detect environment...")
         
-        # Try to load from environment files
+        # Try to load from environment files in etl_pipeline/ only (no project-root fallback)
         env_files = [
-            etl_pipeline_dir / '.env_production',
+            etl_pipeline_dir / '.env_local',
+            etl_pipeline_dir / '.env_clinic',
             etl_pipeline_dir / '.env_test',
-            project_root / '.env_production',
-            project_root / '.env_test'
         ]
         
         loaded = False
@@ -166,11 +165,11 @@ def setup_environment():
     if not environment:
         raise ValueError("ETL_ENVIRONMENT environment variable is not set")
     
-    if environment not in ['clinic', 'test']:
+    if environment not in ['local', 'clinic', 'test']:
         # Special error message for deprecated "production" environment
         if environment == "production":
-            raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. 'production' has been removed. Use 'clinic' for clinic deployment.")
-        raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. Must be 'clinic' or 'test'")
+            raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. 'production' has been removed. Use 'local' or 'clinic'.")
+        raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. Must be 'local', 'clinic', or 'test'")
     
     logger.info(f"Using environment: {environment}")
     return environment
@@ -1417,9 +1416,14 @@ class OpenDentalSchemaAnalyzer:
         
         return config
     
-    def analyze_complete_schema(self, output_dir: str = 'etl_pipeline/config') -> Dict:
+    def analyze_complete_schema(self, output_dir: Optional[str] = None) -> Dict:
         """Perform complete schema analysis and generate all outputs."""
         logger.info("Starting complete OpenDental schema analysis...")
+        
+        # Default: write to ETL config path (same file the ETL reads) - CWD-independent
+        if output_dir is None:
+            _script_dir = Path(__file__).resolve().parent
+            output_dir = str(_script_dir.parent / 'etl_pipeline' / 'config')
         
         try:
             # Ensure output directories exist
@@ -1440,7 +1444,7 @@ class OpenDentalSchemaAnalyzer:
             log_file = schema_analysis_logs / f'schema_analysis_{timestamp}.log'
             
             # Add file handler to logger for this analysis session
-            file_handler = logging.FileHandler(log_file)
+            file_handler = logging.FileHandler(log_file, encoding='utf-8')
             file_handler.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s - %(message)s'))
             logger.addHandler(file_handler)
             
@@ -1498,13 +1502,18 @@ class OpenDentalSchemaAnalyzer:
                 
                 else:
                     logger.info("No schema changes detected")
+                
+                # Write schema changelog immediately while we have schema_changes (before long Stage 4)
+                if schema_changes['schema_hash_changed']:
+                    changelog_path = schema_analysis_reports / f'schema_changelog_{timestamp}.md'
+                    self._generate_schema_changelog(schema_changes, changelog_path, timestamp)
             
             stage2_time = time.time() - start_time
             logger.info(f"Stage 2 completed in {stage2_time - stage1_time:.1f}s")
             
             # Stage 3: Save configuration
             logger.info("Stage 3/4: Saving configuration files...")
-            with open(tables_yml_path, 'w') as f:
+            with open(tables_yml_path, 'w', encoding='utf-8') as f:
                 yaml.dump(config, f, default_flow_style=False, sort_keys=False)
             logger.info(f"Configuration saved to: {tables_yml_path}")
             
@@ -1518,13 +1527,10 @@ class OpenDentalSchemaAnalyzer:
             
             # Save detailed analysis in organized reports directory
             analysis_path = schema_analysis_reports / f'schema_analysis_{timestamp}.json'
-            with open(analysis_path, 'w') as f:
+            with open(analysis_path, 'w', encoding='utf-8') as f:
                 json.dump(analysis_report, f, indent=2, default=str)
             
-            # Save schema changelog (human-readable)
-            if schema_changes and schema_changes['schema_hash_changed']:
-                changelog_path = schema_analysis_reports / f'schema_changelog_{timestamp}.md'
-                self._generate_schema_changelog(schema_changes, changelog_path, timestamp)
+            # Changelog already written in Stage 2 when schema changes detected
             
             # Generate enhanced performance summary
             self._generate_performance_summary(config, tables_yml_path, timestamp)
@@ -1695,7 +1701,7 @@ Ready to run ETL pipeline!
         schema_analysis_reports = logs_base / 'schema_analysis' / 'reports'
         report_path = schema_analysis_reports / f'schema_analysis_{timestamp}_summary.txt'
         
-        with open(report_path, 'w') as f:
+        with open(report_path, 'w', encoding='utf-8') as f:
             f.write(report)
         
         logger.info(f"Summary report saved to: {report_path}")
@@ -1796,7 +1802,7 @@ Ready for OptimizedSimpleMySQLReplicator!
         # Save summary report
         logs_base = Path('logs/schema_analysis')
         report_path = logs_base / f'performance_summary_{timestamp}.txt'
-        with open(report_path, 'w') as f:
+        with open(report_path, 'w', encoding='utf-8') as f:
             f.write(report)
         
         logger.info(f"Performance summary saved to: {report_path}")
@@ -1831,12 +1837,12 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         )
         
         changelog += f"- **Total Changes**: {total_changes}\n"
-        changelog += f"- **Schema Hash Changed**: {'Yes ⚠️' if changes['schema_hash_changed'] else 'No ✅'}\n"
+        changelog += f"- **Schema Hash Changed**: {'Yes' if changes['schema_hash_changed'] else 'No'}\n"
         changelog += f"- **Breaking Changes**: {len(changes.get('breaking_changes', []))}\n\n"
         
         # Breaking changes (critical section)
         if changes.get('breaking_changes'):
-            changelog += "## ⚠️ BREAKING CHANGES (Action Required)\n\n"
+            changelog += "## BREAKING CHANGES (Action Required)\n\n"
             
             for i, change in enumerate(changes['breaking_changes'], 1):
                 changelog += f"### {i}. {change['type'].replace('_', ' ').title()}\n\n"
@@ -1857,7 +1863,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         # Added tables
         if changes.get('added_tables'):
-            changelog += f"## ✅ Added Tables ({len(changes['added_tables'])})\n\n"
+            changelog += f"## Added Tables ({len(changes['added_tables'])})\n\n"
             changelog += "New tables detected in OpenDental source database:\n\n"
             for table in sorted(changes['added_tables']):
                 changelog += f"- `{table}`\n"
@@ -1865,7 +1871,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         # Removed tables
         if changes.get('removed_tables'):
-            changelog += f"## ❌ Removed Tables ({len(changes['removed_tables'])})\n\n"
+            changelog += f"## Removed Tables ({len(changes['removed_tables'])})\n\n"
             changelog += "Tables that existed in previous config but not in current schema:\n\n"
             for table in sorted(changes['removed_tables']):
                 changelog += f"- `{table}`\n"
@@ -1873,7 +1879,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         # Added columns
         if changes.get('added_columns'):
-            changelog += f"## ✅ Added Columns ({len(changes['added_columns'])} tables)\n\n"
+            changelog += f"## Added Columns ({len(changes['added_columns'])} tables)\n\n"
             changelog += "New columns detected in existing tables:\n\n"
             for table in sorted(changes['added_columns'].keys()):
                 cols = changes['added_columns'][table]
@@ -1884,17 +1890,17 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         # Removed columns
         if changes.get('removed_columns'):
-            changelog += f"## ❌ Removed Columns ({len(changes['removed_columns'])} tables)\n\n"
+            changelog += f"## Removed Columns ({len(changes['removed_columns'])} tables)\n\n"
             changelog += "Columns that existed in previous config but not in current schema:\n\n"
             for table in sorted(changes['removed_columns'].keys()):
                 cols = changes['removed_columns'][table]
-                changelog += f"### `{table}` ⚠️\n"
+                changelog += f"### `{table}`\n"
                 for col in sorted(cols):
                     changelog += f"- `{col}` (will cause extraction errors if referenced)\n"
                 changelog += "\n"
         
         # Recommendations
-        changelog += "## 📋 Recommended Actions\n\n"
+        changelog += "## Recommended Actions\n\n"
         
         if changes.get('breaking_changes'):
             changelog += "### Immediate (Critical)\n\n"
@@ -1921,7 +1927,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         changelog += f"*Backup configuration: `logs/schema_analysis/backups/tables.yml.backup.{timestamp}`*\n"
         
         # Write changelog
-        with open(output_path, 'w') as f:
+        with open(output_path, 'w', encoding='utf-8') as f:
             f.write(changelog)
         
         logger.info(f"Schema changelog saved to: {output_path}")
@@ -1929,7 +1935,7 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         # Also print critical changes to console
         if changes.get('breaking_changes'):
             print("\n" + "=" * 60)
-            print("⚠️  BREAKING SCHEMA CHANGES DETECTED")
+            print("BREAKING SCHEMA CHANGES DETECTED")
             print("=" * 60)
             for change in changes['breaking_changes']:
                 print(f"\n{change['type'].upper()}: {change.get('table', change.get('tables', 'multiple'))}")
@@ -1957,19 +1963,19 @@ def main():
         # Show schema changes if detected
         schema_changes = results.get('schema_changes')
         if schema_changes and schema_changes.get('schema_hash_changed'):
-            print(f"\n🔄 SCHEMA CHANGES DETECTED:")
+            print(f"\nSCHEMA CHANGES DETECTED:")
             if schema_changes.get('added_tables'):
-                print(f"   ✅ {len(schema_changes['added_tables'])} new tables")
+                print(f"   {len(schema_changes['added_tables'])} new tables")
             if schema_changes.get('removed_tables'):
-                print(f"   ❌ {len(schema_changes['removed_tables'])} removed tables")
+                print(f"   {len(schema_changes['removed_tables'])} removed tables")
             if schema_changes.get('added_columns'):
-                print(f"   ✅ {len(schema_changes['added_columns'])} tables with new columns")
+                print(f"   {len(schema_changes['added_columns'])} tables with new columns")
             if schema_changes.get('removed_columns'):
-                print(f"   ❌ {len(schema_changes['removed_columns'])} tables with removed columns")
+                print(f"   {len(schema_changes['removed_columns'])} tables with removed columns")
             if schema_changes.get('breaking_changes'):
-                print(f"   ⚠️  {len(schema_changes['breaking_changes'])} BREAKING CHANGES")
+                print(f"   {len(schema_changes['breaking_changes'])} BREAKING CHANGES")
         else:
-            print(f"\n✅ No schema changes detected")
+            print(f"\nNo schema changes detected")
         
         print(f"\nFiles generated:")
         for name, path in results.items():

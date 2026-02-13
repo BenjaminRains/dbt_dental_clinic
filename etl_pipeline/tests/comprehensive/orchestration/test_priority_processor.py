@@ -869,7 +869,7 @@ class TestPriorityProcessorComprehensive:
             - Settings injection for environment-agnostic operation
             - Provider pattern for clean dependency injection
             - Environment-agnostic connections using Settings objects
-            - Unified interface for production and test environments
+            - Unified interface for clinic and test environments
         """
         # Arrange: Set up DictConfigProvider with injected configuration
         from etl_pipeline.config import Settings
@@ -898,7 +898,7 @@ class TestPriorityProcessorComprehensive:
             - Provider pattern for clean dependency injection
             - DictConfigProvider for test isolation
             - Configuration injection without environment pollution
-            - Consistent API for production and test configuration
+            - Consistent API for clinic and test configuration
         """
         # Arrange: Set up DictConfigProvider with injected configuration
         from etl_pipeline.config import Settings

@@ -96,8 +96,8 @@ def test_env_provider(test_env_vars):
 def production_env_provider(production_env_vars):
     """Production environment provider following the provider pattern.
     
-    This fixture implements the DictConfigProvider pattern for production environment:
-    - Uses DictConfigProvider with production environment variables
+    This fixture implements the DictConfigProvider pattern for clinic environment:
+    - Uses DictConfigProvider with clinic environment variables
     - Provides injected environment variables for integration testing
     - Supports dependency injection for environment swapping
     """
@@ -125,12 +125,12 @@ def test_settings(test_env_provider):
 def production_settings(production_env_provider):
     """Production settings with provider injection following connection architecture.
     
-    This fixture implements the Settings injection pattern for production environment:
+    This fixture implements the Settings injection pattern for clinic environment:
     - Uses Settings with provider injection for environment-agnostic operation
-    - Uses DictConfigProvider with production environment variables
+    - Uses DictConfigProvider with clinic environment variables
     - Supports dependency injection for integration testing
     """
-    return Settings(environment='production', provider=production_env_provider)
+    return Settings(environment='clinic', provider=production_env_provider)
 
 
 @pytest.fixture
@@ -177,16 +177,16 @@ def production_settings_with_config(production_env_vars, valid_pipeline_config, 
         tables=complete_tables_config,
         env=production_env_vars
     )
-    return Settings(environment='production', provider=production_provider)
+    return Settings(environment='clinic', provider=production_provider)
 
 
 @pytest.fixture
 def production_settings_with_file_provider(load_production_environment_file):
-    """Production settings with FileConfigProvider using loaded .env_production file.
+    """Production-like settings with FileConfigProvider using loaded .env_clinic file.
     
-    This fixture creates production settings using FileConfigProvider with the actual
-    .env_production file, which is what integration tests need for real production
-    database connections.
+    This fixture creates settings using FileConfigProvider with the actual
+    .env_clinic file, which is what integration tests need for real clinic
+    database connections (replaces legacy .env_production).
     
     This is different from the production_settings fixture which uses DictConfigProvider
     with hardcoded values for unit testing.
@@ -198,11 +198,11 @@ def production_settings_with_file_provider(load_production_environment_file):
     # Get the etl_pipeline root directory
     config_dir = Path(__file__).parent.parent.parent  # etl_pipeline directory
     
-    # Create FileConfigProvider that will load from .env_production
-    provider = FileConfigProvider(config_dir, environment='production')
+    # Create FileConfigProvider that will load from .env_clinic
+    provider = FileConfigProvider(config_dir, environment='clinic')
     
-    # Create Settings with FileConfigProvider for real production connections
-    settings = Settings(environment='production', provider=provider)
+    # Create Settings with FileConfigProvider for real clinic connections
+    settings = Settings(environment='clinic', provider=provider)
     
     return settings
 
@@ -282,37 +282,38 @@ def load_test_environment_file():
 
 @pytest.fixture
 def load_production_environment_file():
-    """Load environment variables from .env_production file for production integration tests.
+    """Load environment variables from .env_clinic file for clinic integration tests.
     
-    This fixture loads the actual .env_production file and sets the environment variables
-    in os.environ for integration tests that need real production database connections.
+    This fixture loads the actual .env_clinic file and sets the environment variables
+    in os.environ for integration tests that need real clinic database connections
+    (replaces legacy .env_production). Fixture name kept for backward compatibility.
     """
     from pathlib import Path
     from dotenv import load_dotenv
     import os
     
-    # Find the .env_production file
+    # Find the .env_clinic file
     etl_pipeline_dir = Path(__file__).parent.parent.parent  # Go to etl_pipeline root
-    env_production_path = etl_pipeline_dir / '.env_production'
+    env_clinic_path = etl_pipeline_dir / '.env_clinic'
     
-    if env_production_path.exists():
-        # Load environment variables from .env_production file
-        load_dotenv(env_production_path, override=True)
-        print(f"Loaded production environment variables from: {env_production_path}")
-        # Debug print for production variables
+    if env_clinic_path.exists():
+        # Load environment variables from .env_clinic file
+        load_dotenv(env_clinic_path, override=True)
+        print(f"Loaded clinic environment variables from: {env_clinic_path}")
+        # Debug print for clinic variables
         print("DEBUG: OPENDENTAL_SOURCE_HOST =", os.environ.get("OPENDENTAL_SOURCE_HOST"))
         print("DEBUG: OPENDENTAL_SOURCE_PORT =", os.environ.get("OPENDENTAL_SOURCE_PORT"))
         print("DEBUG: OPENDENTAL_SOURCE_DB =", os.environ.get("OPENDENTAL_SOURCE_DB"))
         print("DEBUG: OPENDENTAL_SOURCE_USER =", os.environ.get("OPENDENTAL_SOURCE_USER"))
         print("DEBUG: OPENDENTAL_SOURCE_PASSWORD =", os.environ.get("OPENDENTAL_SOURCE_PASSWORD"))
-        # Verify that ETL_ENVIRONMENT is set to 'production'
-        if os.environ.get('ETL_ENVIRONMENT') != 'production':
-            os.environ['ETL_ENVIRONMENT'] = 'production'
-            print("Set ETL_ENVIRONMENT=production for production integration tests")
+        # Verify that ETL_ENVIRONMENT is set to 'clinic'
+        if os.environ.get('ETL_ENVIRONMENT') != 'clinic':
+            os.environ['ETL_ENVIRONMENT'] = 'clinic'
+            print("Set ETL_ENVIRONMENT=clinic for clinic integration tests")
     else:
-        print(f"Warning: .env_production file not found at {env_production_path}")
-        print("Production integration tests may fail due to missing environment variables")
-        print("Please copy .env_production.template to .env_production and configure it")
+        print(f"Warning: .env_clinic file not found at {env_clinic_path}")
+        print("Clinic integration tests may fail due to missing environment variables")
+        print("Please copy etl_pipeline/.env_clinic.template to etl_pipeline/.env_clinic and configure it")
     
     yield
     
@@ -411,7 +412,7 @@ def environment_detection_test_cases():
     return [
         # Valid environment detection cases
         ({'ETL_ENVIRONMENT': 'test'}, 'test', 'ETL_ENVIRONMENT=test'),
-        ({'ETL_ENVIRONMENT': 'production'}, 'production', 'ETL_ENVIRONMENT=production'),
+        ({'ETL_ENVIRONMENT': 'clinic'}, 'clinic', 'ETL_ENVIRONMENT=clinic'),
         
         # Invalid environment detection cases (should fail fast)
         ({}, None, 'Missing ETL_ENVIRONMENT should fail fast'),
@@ -430,12 +431,12 @@ def test_environment_prefixes():
     
     This fixture provides environment prefixes that follow the architecture:
     - Uses TEST_ prefix for test environment variables
-    - Uses non-prefixed variables for production environment
+    - Uses non-prefixed variables for clinic environment
     - Supports provider pattern for configuration loading
     """
     return {
         'test': 'TEST_',
-        'production': '',
+        'clinic': '',
         'development': 'DEV_'
     }
 

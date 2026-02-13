@@ -370,7 +370,7 @@ class TestTableProcessorComprehensive:
             - FAIL FAST behavior when ETL_ENVIRONMENT not set
             - Critical security requirement for ETL pipeline
             - Clear error messages for missing environment
-            - Prevents accidental production environment usage
+            - Prevents accidental clinic environment usage
         """
         # Act: Attempt to initialize TableProcessor without environment
         with pytest.raises(EnvironmentError, match="ETL_ENVIRONMENT environment variable is not set"):

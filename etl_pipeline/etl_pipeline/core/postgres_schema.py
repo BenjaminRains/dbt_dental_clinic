@@ -27,7 +27,7 @@ class PostgresSchema:
     PURE TRANSFORMATION LAYER for schema and data conversion from MySQL to PostgreSQL.
     
     This class works with the new Settings-centric architecture and automatically
-    uses the correct environment (production/test) based on Settings detection.
+    uses the correct environment (clinic/test) based on Settings detection.
     
     ARCHITECTURAL ROLE: PURE TRANSFORMATION LAYER
     - Focuses exclusively on schema conversion and data transformation

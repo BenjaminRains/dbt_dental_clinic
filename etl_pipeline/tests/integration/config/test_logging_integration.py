@@ -6,7 +6,7 @@ This module follows the connection architecture patterns:
 - Uses provider pattern for dependency injection (DictConfigProvider for testing)
 - Uses Settings injection for environment-agnostic connections
 - Uses unified interface with ConnectionFactory
-- Uses proper environment variable handling with .env_test/.env_production
+- Uses proper environment variable handling with .env_test/.env_clinic
 - Uses DatabaseType and PostgresSchema enums for type safety
 - Follows the three-tier ETL testing strategy
 - Uses FileConfigProvider for integration tests with real configuration

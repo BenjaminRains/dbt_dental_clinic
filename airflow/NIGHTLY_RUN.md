@@ -56,7 +56,7 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
 
 2. **Config**
    - Ensure `etl_pipeline/etl_pipeline/config/tables.yml` exists (run Schema Analysis DAG or copy from repo).
-   - Airflow Variables (optional): `etl_environment` = `test` or `production`, `project_root` = `/opt/airflow/dbt_dental_clinic`, `dbt_target` = `local`.
+   - Airflow Variables (optional): `etl_environment` = `test` or `clinic`, `project_root` = `/opt/airflow/dbt_dental_clinic`, `dbt_target` = `local`.
 
 3. **Run**
    - Start: `docker-compose up -d airflow-webserver airflow-scheduler` (and `postgres`, `mysql` if used as source/replication).

@@ -40,7 +40,7 @@ class TestSettingsValidation:
         - Comprehensive tests with DictConfigProvider dependency injection
         - Validates environment variable validation and provider pattern
         - Tests FAIL FAST behavior when ETL_ENVIRONMENT not set
-        - Tests environment separation (production vs test)
+        - Tests environment separation (clinic vs test)
         - Validates enum usage for type safety
         - Tests provider pattern for clean dependency injection
     
@@ -204,7 +204,7 @@ class TestSettingsValidation:
         
         Validates:
             - Test environment variable prefixing (TEST_ prefix)
-            - Environment separation between production and test
+            - Environment separation between clinic and test
             - Provider pattern dependency injection for environment isolation
             - Settings injection for environment-agnostic connections
             

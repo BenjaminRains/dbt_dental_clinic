@@ -112,7 +112,7 @@ volumes:
 
 ```bash
 # Required
-airflow variables set etl_environment production
+airflow variables set etl_environment clinic
 
 # Optional (for notifications)
 airflow variables set slack_webhook_url https://hooks.slack.com/services/...
@@ -149,9 +149,9 @@ etl_environment = 'test'
 
 ```python
 # Set in Airflow Variables
-etl_environment = 'production'
+etl_environment = 'clinic'
 
-# Points to production databases (.env_production)
+# Points to clinic databases (.env_clinic)
 ```
 
 ## Monitoring

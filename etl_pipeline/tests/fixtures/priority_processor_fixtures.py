@@ -247,7 +247,7 @@ def priority_processor(priority_processor_settings):
     This fixture creates a priority processor using the unified interface:
     - Uses Settings injection for environment-agnostic operation
     - Follows the provider pattern for configuration
-    - Supports both production and test environments
+    - Supports both clinic and test environments
     - Includes proper error handling and validation
     """
     # Create mock processor with Settings injection until PriorityProcessor is implemented

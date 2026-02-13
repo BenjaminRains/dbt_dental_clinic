@@ -662,7 +662,7 @@ class SimpleMySQLReplicator:
     - Uses unified ConnectionFactory API with Settings injection
     - Uses Settings-based configuration methods
     - No direct environment variable access
-    - Environment-agnostic (works for both production and test)
+    - Environment-agnostic (works for both clinic and test)
     
     Copy Methods (HOW to copy - performance-based):
     - SMALL (< 1MB): Direct cross-server copy with retry logic
@@ -682,7 +682,7 @@ class SimpleMySQLReplicator:
         Connection Architecture:
         - Uses Settings injection for environment-agnostic database connections
         - Uses unified ConnectionFactory API with Settings injection
-        - Automatically uses correct environment (production/test) based on Settings
+        - Automatically uses correct environment (clinic/test) based on Settings
         - Uses Settings-based configuration methods for database info
         
         Args:

@@ -408,10 +408,10 @@ def main():
     default_db_password = os.environ.get('DEMO_POSTGRES_PASSWORD', 'postgres')
     
     # SAFETY CHECK: Warn if POSTGRES_ANALYTICS_* variables are set (production database)
-    # This indicates we're in ETL production environment, which should NOT be used for synthetic data
+    # This indicates we're in ETL clinic environment, which should NOT be used for synthetic data
     if os.environ.get('POSTGRES_ANALYTICS_DB'):
         logger.warning("⚠️  WARNING: POSTGRES_ANALYTICS_* environment variables detected!")
-        logger.warning("   You appear to be in ETL production environment.")
+        logger.warning("   You appear to be in ETL clinic environment.")
         logger.warning("   This script ONLY writes to opendental_demo (synthetic data).")
         logger.warning("   Make sure you're not accidentally targeting production database.")
         logger.warning("   Using DEMO_POSTGRES_* variables or command-line arguments.")
@@ -482,7 +482,7 @@ Examples:
     if args.db_name != 'opendental_demo':
         logger.error(f"❌ ERROR: Target database is '{args.db_name}', not 'opendental_demo'!")
         logger.error("   This script is designed for synthetic data generation ONLY.")
-        logger.error("   For safety, this script will NOT run against production/test databases.")
+        logger.error("   For safety, this script will NOT run against clinic/test databases.")
         logger.error("   Please specify --db-name opendental_demo or set DEMO_POSTGRES_DB=opendental_demo")
         raise ValueError(f"Cannot run against database '{args.db_name}'. Only 'opendental_demo' is allowed.")
     

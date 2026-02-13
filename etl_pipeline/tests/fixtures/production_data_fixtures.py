@@ -1,8 +1,8 @@
 """
 Production Data Fixtures for E2E Testing
 
-This module provides fixtures for safely working with production data in E2E tests.
-All fixtures ensure readonly access to production and complete isolation of test data.
+This module provides fixtures for safely working with clinic data in E2E tests.
+All fixtures ensure readonly access to clinic and complete isolation of test data.
 
 Features:
 - Safe production data sampling with readonly access
@@ -27,10 +27,10 @@ def production_settings():
     """
     Production settings for readonly access to source database.
     
-    Uses .env_production file with non-prefixed environment variables.
+    Uses .env_clinic file with non-prefixed environment variables (replaces legacy .env_production).
     Provides readonly access to production OpenDental database.
     """
-    return Settings(environment='production')
+    return Settings(environment='clinic')
 
 
 @pytest.fixture(scope="session")

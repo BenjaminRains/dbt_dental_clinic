@@ -1,32 +1,32 @@
 # tests/integration/scripts/analyze_opendental_schema/test_size_analysis_integration.py
 
 """
-Integration tests for table size analysis with real production database connections.
+Integration tests for table size analysis with real clinic database connections.
 
 This module tests table size analysis against the actual production OpenDental database
 to validate real table size estimation, row counting, and size information extraction.
 
 Production Test Strategy:
-- Uses production database connections with readonly access
-- Tests real size analysis with actual production database data
-- Validates row count calculation from real production data
-- Tests table size estimation from real production database
-- Uses Settings injection for production environment-agnostic connections
+- Uses clinic database connections with readonly access
+- Tests real size analysis with actual clinic database data
+- Validates row count calculation from real clinic data
+- Tests table size estimation from real clinic database
+- Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
 - Real production size analysis from actual database
-- Row count calculation from real production data
-- Table size estimation from real production database
-- Error handling for real production database operations
-- Settings injection with real production database connections
-- Size information validation with real production data
-- Information schema queries with real production database
+- Row count calculation from real clinic data
+- Table size estimation from real clinic database
+- Error handling for real clinic database operations
+- Settings injection with real clinic database connections
+- Size information validation with real clinic data
+- Information schema queries with real clinic database
 
 ETL Context:
 - Critical for production ETL pipeline configuration generation
 - Tests with real production dental clinic database schemas
-- Uses Settings injection with FileConfigProvider for production environment
-- Validates actual production database connections and size analysis
+- Uses Settings injection with FileConfigProvider for clinic environment
+- Validates actual clinic database connections and size analysis
 """
 
 import pytest
@@ -49,34 +49,34 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.settings_injection
 @pytest.mark.production
 class TestSizeAnalysisIntegration:
-    """Integration tests for table size analysis with real production database connections."""
+    """Integration tests for table size analysis with real clinic database connections."""
     
 
 
     def test_production_table_size_analysis(self, production_settings_with_file_provider):
         """
-        Test production table size analysis with actual production database data.
+        Test clinic table size analysis with actual clinic database data.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and discover tables
-            Act: Call get_table_size_info() method for production tables
+            Arrange: Set up real clinic database connection and discover tables
+            Act: Call get_table_size_info() method for clinic tables
             Assert: Verify real production size information is correctly extracted
             
         Validates:
             - Real production size analysis from actual database
-            - Row count calculation from real production data
-            - Table size estimation from real production database
-            - Error handling for real production database operations
-            - Settings injection with real production database connections
+            - Row count calculation from real clinic data
+            - Table size estimation from real clinic database
+            - Error handling for real clinic database operations
+            - Settings injection with real clinic database connections
         """
-        # Arrange: Set up real production database connection and discover tables
+        # Arrange: Set up real clinic database connection and discover tables
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
         # Find a table to test (prefer patient table as it's likely to exist in production)
         test_table = 'patient' if 'patient' in tables else tables[0]
         
-        # Act: Call get_table_size_info() method for production tables
+        # Act: Call get_table_size_info() method for clinic tables
         size_info = analyzer.get_table_size_info(test_table)
         
         # Assert: Verify real production size information is correctly extracted

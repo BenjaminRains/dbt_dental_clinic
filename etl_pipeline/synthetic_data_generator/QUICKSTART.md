@@ -139,7 +139,7 @@ cd etl_pipeline/synthetic_data_generator
 ### Method 2: Direct Python (Alternative)
 
 ```bash
-# IMPORTANT: Always specify --db-name opendental_demo (separate from production/test databases)
+# IMPORTANT: Always specify --db-name opendental_demo (separate from clinic/test databases)
 
 # Small test dataset
 python main.py \
@@ -159,8 +159,8 @@ python main.py \
 ```
 
 **⚠️ Critical Safety Notes**:
-- Make sure the ETL environment is active (`etl-init`, choose either production or test)
-- **Always target `opendental_demo` database** (never production/test!)
+- Make sure the ETL environment is active (`etl-init`, choose either clinic or test)
+- **Always target `opendental_demo` database** (never clinic/test!)
 - The wrapper script (`generate.ps1`) enforces this automatically
 - The ETL environment choice only affects which packages are installed, not the target database
 - The generator uses CLI arguments to override any environment database settings

@@ -11,7 +11,7 @@ Production Test Strategy:
 - Tests real incremental column discovery with actual production database data
 - Validates data-driven timestamp discovery approach vs hardcoded patterns
 - Tests incremental strategy determination with real production data
-- Uses Settings injection for production environment-agnostic connections
+- Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
 - Real production incremental column discovery from actual database schema
@@ -28,7 +28,7 @@ Coverage Areas:
 ETL Context:
 - Critical for production ETL pipeline configuration generation
 - Tests with real production dental clinic database schemas
-- Uses Settings injection with FileConfigProvider for production environment
+- Uses Settings injection with FileConfigProvider for clinic environment
 - Validates actual production database connections and incremental strategy determination
 """
 
@@ -55,14 +55,14 @@ class TestIncrementalStrategyIntegration:
     
     @classmethod
     def setup_class(cls):
-        """Set up test class with production environment validation."""
+        """Set up test class with clinic environment validation."""
         # Store original environment for cleanup
         cls.original_etl_env = os.environ.get('ETL_ENVIRONMENT')
         
-        # Set production environment for this test class
-        os.environ['ETL_ENVIRONMENT'] = 'production'
+        # Set clinic environment for this test class
+        os.environ['ETL_ENVIRONMENT'] = 'clinic'
         
-        # Validate production environment is available
+        # Validate clinic environment is available
         try:
             config_dir = Path(__file__).parent.parent.parent.parent.parent
             from etl_pipeline.config.providers import FileConfigProvider
@@ -70,8 +70,8 @@ class TestIncrementalStrategyIntegration:
             from etl_pipeline.core.connections import ConnectionFactory
             from sqlalchemy import text
             
-            provider = FileConfigProvider(config_dir, environment='production')
-            settings = Settings(environment='production', provider=provider)
+            provider = FileConfigProvider(config_dir, environment='clinic')
+            settings = Settings(environment='clinic', provider=provider)
             
             # Test connection
             source_engine = ConnectionFactory.get_source_connection(settings)
@@ -335,8 +335,8 @@ class TestIncrementalStrategyIntegration:
 
     def setup_method(self, method):
         """Set up each test method with proper isolation."""
-        # Ensure we're in production environment for each test
-        os.environ['ETL_ENVIRONMENT'] = 'production'
+        # Ensure we're in clinic environment for each test
+        os.environ['ETL_ENVIRONMENT'] = 'clinic'
     
     def teardown_method(self, method):
         """Clean up after each test method."""

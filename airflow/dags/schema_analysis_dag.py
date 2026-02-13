@@ -58,8 +58,8 @@ TABLES_YML_PATH = ETL_PIPELINE_DIR / 'etl_pipeline' / 'config' / 'tables.yml'
 BACKUP_DIR = PROJECT_ROOT / 'logs' / 'schema_analysis' / 'backups'
 CHANGELOG_DIR = PROJECT_ROOT / 'logs' / 'schema_analysis' / 'reports'
 
-# Environment (from Airflow Variable or default to production)
-ENVIRONMENT = Variable.get('etl_environment', default_var='production')
+# Environment (from Airflow Variable or default to clinic)
+ENVIRONMENT = Variable.get('etl_environment', default_var='clinic')
 
 # ============================================================================
 # Task Functions
@@ -636,7 +636,7 @@ After this DAG completes successfully:
 ## Configuration
 
 Set these Airflow Variables:
-- `etl_environment`: 'production' or 'test' (default: 'production')
+- `etl_environment`: 'clinic' or 'test' (default: 'clinic')
 - `slack_webhook_url`: Slack webhook for notifications (optional)
 
 ## Dependencies
@@ -644,7 +644,7 @@ Set these Airflow Variables:
 Requires:
 - Access to OpenDental source database
 - ETL pipeline Python package installed
-- Proper environment variables set (.env_production or .env_test)
+- Proper environment variables set (.env_clinic or .env_test)
 
 ## Troubleshooting
 

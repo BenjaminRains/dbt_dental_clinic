@@ -80,8 +80,8 @@ DBT_PROJECT_DIR = PROJECT_ROOT / 'dbt_dental_models'
 DBT_PROFILES_DIR = DBT_PROJECT_DIR  # profiles.yml in project; or use Variable for .dbt path
 TABLES_YML_PATH = ETL_PIPELINE_DIR / 'etl_pipeline' / 'config' / 'tables.yml'
 
-# Environment (from Airflow Variable or default to production)
-ENVIRONMENT = Variable.get('etl_environment', default_var='production')
+# Environment (from Airflow Variable or default to clinic)
+ENVIRONMENT = Variable.get('etl_environment', default_var='clinic')
 
 # Configuration thresholds
 CONFIG_STALENESS_WARNING_DAYS = 30  # Warn if config older than 30 days
@@ -1070,7 +1070,7 @@ Override when triggering manually:
 
 ### Airflow Variables
 
-- `etl_environment`: 'production' or 'test' (required)
+- `etl_environment`: 'clinic' or 'test' (required)
 - `project_root`: Path to repo root (default `/opt/airflow/dbt_dental_clinic`); override for EC2
 - `dbt_target`: dbt profile target, e.g. `local` (localhost) or `clinic` (EC2)
 - `slack_webhook_url`: Slack webhook for notifications (optional)

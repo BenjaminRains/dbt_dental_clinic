@@ -124,7 +124,7 @@ The Python script (`create_missing_tracking_records.py`) includes:
 - **Table Validation**: Checks if tracking tables exist
 - **Idempotent Operation**: Only creates missing records
 - **Verification**: Shows created records with details
-- **Environment Support**: Works with test/production environments
+- **Environment Support**: Works with test/clinic environments
 
 ## Notes
 

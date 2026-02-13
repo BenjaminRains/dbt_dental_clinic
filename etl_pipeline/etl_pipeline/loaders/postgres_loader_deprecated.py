@@ -318,7 +318,7 @@ class PostgresLoader:
             replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
             analytics_config = self.settings.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
             
-            # Use actual database names from settings (supports both production and test environments)
+            # Use actual database names from settings (supports both clinic and test environments)
             self.replication_db = replication_config.get('database', 'opendental_replication')
             self.analytics_db = analytics_config.get('database', 'opendental_analytics')
             self.analytics_schema = analytics_config.get('schema', 'raw')
@@ -358,7 +358,7 @@ class PostgresLoader:
                 if use_test_environment:
                     logger.info("PostgreSQL tracking tables validated in test environment")
                 else:
-                    logger.info("PostgreSQL tracking tables validated in production environment")
+                    logger.info("PostgreSQL tracking tables validated in clinic environment")
             
             logger.info(f"PostgresLoader initialized with {len(self.table_configs)} table configurations")
             

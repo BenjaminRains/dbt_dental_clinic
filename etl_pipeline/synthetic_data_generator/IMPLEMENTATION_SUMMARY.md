@@ -236,12 +236,12 @@ ar_balance = procedure_fee - insurance_payment - patient_payment - adjustments
 ## ⚠️ Known Considerations
 
 ### Database Connection (IMPORTANT!)
-**⚠️ CRITICAL**: The synthetic generator targets `opendental_demo` database, which is **separate** from your production/test databases.
+**⚠️ CRITICAL**: The synthetic generator targets `opendental_demo` database, which is **separate** from your clinic/test databases.
 
 When using the ETL environment:
-- `etl-init` → Choose 'production' or 'test' (for package installation only)
+- `etl-init` → Choose 'clinic' or 'test' (for package installation only)
 - Generator connects to `opendental_demo` (always specify via CLI args)
-- **Never** let the generator use production/test database credentials automatically
+- **Never** let the generator use clinic/test database credentials automatically
 
 **Always run with explicit database args**:
 ```bash

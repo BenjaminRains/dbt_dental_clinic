@@ -10,7 +10,7 @@ Test Strategy:
     - Validates provider pattern dependency injection and Settings injection
     - Tests FAIL FAST behavior when ETL_ENVIRONMENT not set
     - Ensures type safety with DatabaseType and PostgresSchema enums
-    - Tests environment separation (production vs test) with provider pattern
+    - Tests environment separation (clinic vs test) with provider pattern
     - Validates connection pooling and retry logic for ETL pipeline performance
 
 Coverage Areas:
@@ -57,13 +57,13 @@ class TestFailFastSecurity:
         
         Validates:
             - System fails immediately when ETL_ENVIRONMENT not explicitly set
-            - No dangerous defaults to production environment
+            - No dangerous defaults to clinic environment
             - Clear error messages for security requirements
             - Provider pattern doesn't bypass FAIL FAST requirements
             
         ETL Pipeline Context:
             - Critical security requirement for dental clinic ETL pipeline
-            - Prevents accidental production database access during testing
+            - Prevents accidental clinic database access during testing
             - Enforces explicit environment declaration for safety
         """
         # Remove ETL_ENVIRONMENT to test FAIL FAST
@@ -367,7 +367,7 @@ class TestConnectionFactoryUnit:
 
     def test_connection_methods_use_correct_environment_variables_with_provider(self):
         """
-        Test that production and test methods use different environment variables with provider pattern.
+        Test that clinic and test methods use different environment variables with provider pattern.
         
         Validates:
             - Provider pattern handles environment-specific variable names
@@ -393,7 +393,7 @@ class TestConnectionFactoryUnit:
                     'OPENDENTAL_SOURCE_DB': 'opendental',
                     'OPENDENTAL_SOURCE_USER': 'readonly_user',
                     'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass',
-                    'ETL_ENVIRONMENT': 'production'
+                    'ETL_ENVIRONMENT': 'clinic'
                 }
             )
             
@@ -410,7 +410,7 @@ class TestConnectionFactoryUnit:
             )
             
             # Test production method with provider pattern
-            prod_settings = Settings(environment='production', provider=prod_provider)
+            prod_settings = Settings(environment='clinic', provider=prod_provider)
             ConnectionFactory.get_source_connection(prod_settings)
             prod_call_args = mock_create_engine.call_args[0][0]
             assert 'prod-host' in prod_call_args

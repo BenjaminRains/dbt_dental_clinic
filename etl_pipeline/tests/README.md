@@ -31,7 +31,7 @@ The ETL pipeline uses a **modern static configuration approach** with **provider
 - **Test Isolation**: Tests use completely isolated configuration (no environment pollution)
 - **Settings Injection**: Environment-agnostic connections using `Settings` objects
 - **FAIL FAST**: System fails immediately if `ETL_ENVIRONMENT` not explicitly set
-- **Environment Separation**: Clear production/test environment handling
+- **Environment Separation**: Clear clinic/test environment handling
 
 ### Test Directory Structure
 
@@ -125,7 +125,7 @@ The ETL pipeline follows a **modern static configuration approach**:
 - **Transformations**: Handled by dbt (raw → staging → intermediate → marts)
 
 ### Provider Pattern Usage
-- **Production**: `FileConfigProvider` with `.env_production` and `tables.yml`
+- **Clinic**: `FileConfigProvider` with `.env_clinic` and `tables.yml`
 - **Testing**: `DictConfigProvider` with injected test configuration
 - **Integration**: `FileConfigProvider` with `.env_test` file
 

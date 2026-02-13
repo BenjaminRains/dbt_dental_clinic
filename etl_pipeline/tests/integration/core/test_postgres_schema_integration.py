@@ -140,7 +140,7 @@ class TestPostgresSchemaIntegration:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Order markers for proper ETL data flow validation
     """
@@ -449,14 +449,14 @@ class TestPostgresSchemaIntegration:
         
         Validates:
             - System fails immediately if ETL_ENVIRONMENT not set
-            - No defaulting to production environment
+            - No defaulting to clinic environment
             - Clear error messages for missing environment
             - EnvironmentError exception for environment issues
             - Critical security requirement compliance
             
         ETL Pipeline Context:
             - Critical security requirement
-            - Prevents accidental production usage
+            - Prevents accidental clinic usage
             - Clear error messages for debugging
             - Environment separation enforcement
         """
@@ -488,18 +488,18 @@ class TestPostgresSchemaIntegration:
 
     def test_real_environment_separation(self, postgres_schema_instance, populated_test_databases):
         """
-        Test environment separation between production and test.
+        Test environment separation between clinic and test.
         
         Validates:
             - Test environment uses test databases
-            - Production environment uses production databases
+            - Clinic environment uses clinic databases
             - No cross-environment contamination
             - Settings injection works for both environments
             - Provider pattern supports environment separation
             
         ETL Pipeline Context:
             - Test: Uses test_opendental_replication and test_opendental_analytics
-            - Production: Uses opendental_replication and opendental_analytics
+            - Clinic: Uses opendental_replication and opendental_analytics
             - Critical for data isolation
             - Uses FileConfigProvider for real test environment
         """
@@ -586,7 +586,7 @@ class TestPostgresSchemaIntegration:
             - Environment-agnostic connection creation
             - Unified interface with ConnectionFactory
             - Type safety with DatabaseType and PostgresSchema enums
-            - Settings injection supports both production and test environments
+            - Settings injection supports both clinic and test environments
             
         ETL Pipeline Context:
             - Settings: Environment-agnostic configuration management
@@ -935,7 +935,7 @@ class TestPostgresSchemaErrorHandlingIntegration:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Structured error handling with custom exceptions
     """
@@ -1039,7 +1039,7 @@ class TestPostgresSchemaErrorHandlingIntegration:
             - EnvironmentError for environment configuration failures
             - FAIL FAST behavior for missing environment variables
             - Clear error messages for environment issues
-            - No defaulting to production environment
+            - No defaulting to clinic environment
             - Critical security requirement compliance
         """
         # Store original environment

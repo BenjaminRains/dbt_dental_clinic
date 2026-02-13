@@ -11,7 +11,7 @@ Production Test Strategy:
 - Tests real configuration generation with actual production database data
 - Validates metadata generation with real production database information
 - Tests table configuration with real production schema and size data
-- Uses Settings injection for production environment-agnostic connections
+- Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
 - Real production configuration generation with actual database data
@@ -27,7 +27,7 @@ Coverage Areas:
 ETL Context:
 - Critical for production ETL pipeline configuration generation
 - Tests with real production dental clinic database schemas
-- Uses Settings injection with FileConfigProvider for production environment
+- Uses Settings injection with FileConfigProvider for clinic environment
 - Validates actual production database connections and configuration generation
 """
 
@@ -57,15 +57,15 @@ class TestConfigurationGenerationIntegration:
     
     @classmethod
     def setup_class(cls):
-        """Set up test class for production environment validation."""
+        """Set up test class for clinic environment validation."""
         # Store original environment for cleanup
         cls.original_etl_env = os.environ.get('ETL_ENVIRONMENT')
         cls.original_source_db = os.environ.get('OPENDENTAL_SOURCE_DB')
         
-        # Set environment to production for these tests
-        os.environ['ETL_ENVIRONMENT'] = 'production'
+        # Set environment to clinic for these tests
+        os.environ['ETL_ENVIRONMENT'] = 'clinic'
         
-        # Validate production environment is available
+        # Validate clinic environment is available
         try:
             config_dir = Path(__file__).parent.parent.parent.parent.parent
             from etl_pipeline.config.providers import FileConfigProvider
@@ -74,7 +74,7 @@ class TestConfigurationGenerationIntegration:
             from sqlalchemy import text
             
             provider = FileConfigProvider(config_dir)
-            settings = Settings(environment='production', provider=provider)
+            settings = Settings(environment='clinic', provider=provider)
             
             # Test connection
             source_engine = ConnectionFactory.get_source_connection(settings)
@@ -155,7 +155,7 @@ class TestConfigurationGenerationIntegration:
                 assert isinstance(metadata['environment'], str)
                 assert len(metadata['schema_hash']) > 0  # Should be a valid hash
                 assert len(metadata['analysis_timestamp']) > 0  # Should be a timestamp string
-                assert metadata['environment'] in ['production', 'test', 'unknown']  # Should be valid environment
+                assert metadata['environment'] in ['clinic', 'test', 'unknown']  # Should be valid environment
                 
                 # Verify table configurations
                 for table_name, table_config in config['tables'].items():
@@ -364,7 +364,7 @@ class TestConfigurationGenerationIntegration:
             
         Validates:
             - tables.yml includes incremental_strategy field
-            - Strategy determination works in production environment
+            - Strategy determination works in clinic environment
             - Configuration file generation includes new field
             - Integration of incremental strategy in production tables.yml
         """

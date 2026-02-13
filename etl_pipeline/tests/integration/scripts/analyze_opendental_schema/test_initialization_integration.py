@@ -8,25 +8,25 @@ to validate real database connection establishment, Settings injection, and envi
 
 Production Test Strategy:
 - Uses production database connections with readonly access
-- Tests real database connection establishment with actual production environment
-- Validates Settings injection with FileConfigProvider for production environment
-- Tests FAIL FAST behavior with production environment validation
-- Uses Settings injection for production environment-agnostic connections
+- Tests real database connection establishment with actual clinic environment
+- Validates Settings injection with FileConfigProvider for clinic environment
+- Tests FAIL FAST behavior with clinic environment validation
+- Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
 - Real production database connection establishment
 - Settings injection with FileConfigProvider for production
-- Environment validation with real .env_production file
+- Environment validation with real .env_clinic file
 - Configuration validation with real production configuration files
 - Provider pattern works with real FileConfigProvider
-- FAIL FAST behavior works with production environment validation
+- FAIL FAST behavior works with clinic environment validation
 - Inspector initialization with real production database connection
 - Error handling works for real production database connection failures
 
 ETL Context:
 - Critical for production ETL pipeline configuration generation
 - Tests with real production dental clinic database schemas
-- Uses Settings injection with FileConfigProvider for production environment
+- Uses Settings injection with FileConfigProvider for clinic environment
 - Validates actual production database connections and schema analysis
 """
 
@@ -77,17 +77,17 @@ class TestOpenDentalSchemaAnalyzerInitializationIntegration:
         Test production schema analyzer initialization with actual production database connection.
         
         AAA Pattern:
-            Arrange: Set up real production environment with FileConfigProvider
+            Arrange: Set up real clinic environment with FileConfigProvider
             Act: Create OpenDentalSchemaAnalyzer instance with production connection
             Assert: Verify analyzer is properly initialized with production database
             
         Validates:
             - Real production database connection establishment
             - Settings injection with FileConfigProvider for production
-            - Environment validation with real .env_production file
+            - Environment validation with real .env_clinic file
             - Configuration validation with real production configuration files
             - Provider pattern works with real FileConfigProvider
-            - FAIL FAST behavior works with production environment validation
+            - FAIL FAST behavior works with clinic environment validation
             - Inspector initialization with real production database connection
             - Error handling works for real production database connection failures
         """
@@ -133,12 +133,12 @@ class TestOpenDentalSchemaAnalyzerInitializationIntegration:
         Validates:
             - FAIL FAST behavior when OPENDENTAL_SOURCE_DB not set
             - Clear error message for missing environment variables
-            - No default fallback to production environment
-            - Settings injection validation with production environment
+            - No default fallback to clinic environment
+            - Settings injection validation with clinic environment
         """
-        # Since the environment variable is loaded from .env_production file,
+        # Since the environment variable is loaded from .env_clinic file,
         # we can't easily test the fail-fast behavior in this integration test.
-        # This test validates that the production environment is working correctly.
+        # This test validates that the clinic environment is working correctly.
         # The actual fail-fast behavior should be tested in unit tests with mocked environments.
         pytest.skip("Fail-fast behavior should be tested in unit tests with mocked environments")
 

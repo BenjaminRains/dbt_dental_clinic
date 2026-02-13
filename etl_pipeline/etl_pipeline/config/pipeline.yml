@@ -11,7 +11,7 @@
 # General pipeline settings
 general:
   pipeline_name: "dental_clinic_etl"
-  environment: "production"
+  environment: "clinic"
   timezone: "UTC"
   max_retries: 3
   retry_delay_seconds: 300

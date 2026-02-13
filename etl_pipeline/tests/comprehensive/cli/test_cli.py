@@ -33,7 +33,7 @@ TESTING APPROACH:
 - Subprocess Testing: Real CLI invocation testing
 - Error Scenarios: Comprehensive error handling testing including FAIL FAST
 - Performance Testing: Execution time validation
-- Environment Separation: Clear production/test environment handling
+- Environment Separation: Clear clinic/test environment handling
 
 MOCKED COMPONENTS:
 - PipelineOrchestrator: Main pipeline orchestration

@@ -66,9 +66,9 @@ class TestTableConfigMetadata:
             assert field in metadata, f"Metadata missing required field: {field}"
     
     def test_metadata_environment_valid(self, tables_config):
-        """Environment must be 'production' or 'test'."""
+        """Environment must be 'clinic' or 'test'."""
         environment = tables_config['metadata'].get('environment')
-        valid_environments = ['production', 'test']
+        valid_environments = ['clinic', 'test']
         
         assert environment in valid_environments, \
             f"Invalid environment '{environment}', must be one of {valid_environments}"

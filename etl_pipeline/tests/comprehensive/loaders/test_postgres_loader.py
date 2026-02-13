@@ -12,7 +12,7 @@ Test Strategy:
     - Environment: Mocked dependencies, no real connections with DictConfigProvider
     - Provider Usage: DictConfigProvider for comprehensive test scenarios
     - Settings Injection: Uses Settings with injected provider for complete test scenarios
-    - Environment Separation: Tests production/test environment handling
+    - Environment Separation: Tests clinic/test environment handling
     - FAIL FAST Testing: Validates system fails when ETL_ENVIRONMENT not set
 
 Coverage Areas:
@@ -21,7 +21,7 @@ Coverage Areas:
     - Provider pattern integration with comprehensive scenarios
     - Settings injection for environment-agnostic connections
     - FAIL FAST behavior for critical security requirements
-    - Environment separation between production and test
+    - Environment separation between clinic and test
     - Exception handling for all custom exception types
     - Configuration loading and validation
     - Data loading strategies (standard and chunked)

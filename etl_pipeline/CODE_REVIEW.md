@@ -81,7 +81,7 @@ The three patterns serve different purposes in the testing architecture:
 
 1. **`get_settings()`** - Production code (global singleton with `FileConfigProvider`)
    - Used in production components for convenience
-   - Reads from `.env_production` and `tables.yml`
+   - Reads from `.env_clinic` (or `.env_local`/`.env_test`) and `tables.yml`
    - Provides fail-fast validation
 
 2. **`Settings(environment=..., provider=...)`** - Explicit environment control
@@ -104,7 +104,7 @@ The three patterns serve different purposes in the testing architecture:
 ```python
 # Pattern 1: Production (global singleton)
 from ..config import get_settings
-self.settings = get_settings()  # Uses FileConfigProvider with .env_production
+self.settings = get_settings()  # Uses FileConfigProvider with .env_clinic (or .env_local/.env_test)
 
 # Pattern 2a: Unit Tests (mocked, fast, isolated)
 # Uses DictConfigProvider for in-memory configuration - no real DB connections
@@ -478,7 +478,7 @@ def create_settings(environment: Optional[str] = None,
 
 **Architecture Alignment:**
 This pattern aligns with the provider pattern documented in `PIPELINE_ARCHITECTURE.md`:
-- **Production**: `FileConfigProvider` with `.env_production` (via `get_settings()`)
+- **Clinic**: `FileConfigProvider` with `.env_clinic` (via `get_settings()`)
 - **Testing**: `DictConfigProvider` with injected config (via `create_settings()`)
 - **Integration**: `FileConfigProvider` with `.env_test` (via `create_settings()`)
 

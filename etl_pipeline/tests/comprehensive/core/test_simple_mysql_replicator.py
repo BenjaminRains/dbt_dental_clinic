@@ -10,7 +10,7 @@ Test Strategy:
     - Validates complete ETL workflows and integration points
     - Tests provider pattern dependency injection and Settings injection
     - Ensures type safety with DatabaseType and PostgresSchema enums
-    - Tests environment separation (production vs test) with provider pattern
+    - Tests environment separation (clinic vs test) with provider pattern
     - Validates complete error handling and recovery mechanisms
     - Tests performance optimization and batch processing
 
@@ -868,7 +868,7 @@ class TestSimpleMySQLReplicatorComprehensive:
         Validates:
             - Settings injection for environment-agnostic connections
             - Provider pattern integration with Settings injection
-            - Unified interface for production and test environments
+            - Unified interface for clinic and test environments
             - Environment-agnostic connection creation
             - Settings injection for consistent API
             - Provider pattern configuration isolation

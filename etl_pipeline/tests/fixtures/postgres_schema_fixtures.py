@@ -10,7 +10,7 @@ This module contains fixtures related to:
 Follows the connection architecture patterns where appropriate:
 - Uses provider pattern for dependency injection
 - Uses Settings injection for environment-agnostic schema testing
-- Uses environment separation for test vs production schema testing
+- Uses environment separation for test vs clinic schema testing
 - Uses unified interface with ConnectionFactory
 """
 

@@ -4,33 +4,33 @@
 Performance Analysis Integration tests for OpenDentalSchemaAnalyzer.
 
 This module tests the performance analysis functionality of the schema analyzer
-with real production database connections to validate performance characteristics
+with real clinic database connections to validate performance characteristics
 analysis, processing priority calculation, and performance category determination.
 
 Performance Analysis Test Strategy:
-- Uses production database connections with readonly access
-- Tests real performance analysis with actual production data structures
-- Validates performance characteristics calculation with real production data
-- Tests processing priority determination with real production metadata
-- Uses Settings injection with FileConfigProvider for production environment
-- Tests performance monitoring requirements with production data
+- Uses clinic database connections with readonly access
+- Tests real performance analysis with actual clinic data structures
+- Validates performance characteristics calculation with real clinic data
+- Tests processing priority determination with real clinic metadata
+- Uses Settings injection with FileConfigProvider for clinic environment
+- Tests performance monitoring requirements with clinic data
 - Validates performance optimization recommendations with real data
 
 Coverage Areas:
-- Real production database performance analysis
-- Actual production table performance characteristics
-- Real production processing priority calculation
+- Real clinic database performance analysis
+- Actual clinic table performance characteristics
+- Real clinic processing priority calculation
 - Production performance category determination
 - Real performance monitoring requirements analysis
-- Error handling with real production database scenarios
-- Settings injection for production environment-agnostic performance analysis
+- Error handling with real clinic database scenarios
+- Settings injection for clinic environment-agnostic performance analysis
 - Provider pattern integration for performance analysis testing
 
 ETL Context:
 - Critical for ETL pipeline performance optimization
-- Tests with real production dental clinic database performance characteristics
-- Validates actual production database performance analysis capabilities
-- Uses Settings injection for production environment-agnostic performance analysis
+- Tests with real clinic dental database performance characteristics
+- Validates actual clinic database performance analysis capabilities
+- Uses Settings injection for clinic environment-agnostic performance analysis
 - Supports performance monitoring and optimization recommendations
 """
 
@@ -73,23 +73,23 @@ def ensure_logs_directory():
 @pytest.mark.production
 @pytest.mark.performance_analysis
 class TestPerformanceAnalysisIntegration:
-    """Performance analysis integration tests for OpenDentalSchemaAnalyzer with real production database connections."""
+    """Performance analysis integration tests for OpenDentalSchemaAnalyzer with real clinic database connections."""
     
     @classmethod
     def setup_class(cls):
-        """Set up test class with production environment validation."""
+        """Set up test class with clinic environment validation."""
         # Store original environment for cleanup
         cls.original_etl_env = os.environ.get('ETL_ENVIRONMENT')
         cls.original_source_db = os.environ.get('OPENDENTAL_SOURCE_DB')
         
-        # Set production environment for all tests in this class
-        os.environ['ETL_ENVIRONMENT'] = 'production'
-        
-        # Validate production environment is available
+        # Set clinic environment for all tests in this class
+        os.environ['ETL_ENVIRONMENT'] = 'clinic'
+
+        # Validate clinic environment is available
         try:
             config_dir = Path(__file__).parent.parent.parent.parent.parent
             provider = FileConfigProvider(config_dir)
-            settings = Settings(environment='production', provider=provider)
+            settings = Settings(environment='clinic', provider=provider)
             
             # Test connection
             source_engine = ConnectionFactory.get_source_connection(settings)
@@ -118,34 +118,34 @@ class TestPerformanceAnalysisIntegration:
 
     def test_production_table_performance_analysis(self, production_settings_with_file_provider):
         """
-        Test table performance analysis with production data.
+        Test table performance analysis with clinic data.
         
         AAA Pattern:
-            Arrange: Set up analyzer with production settings and real database connection
-            Act: Call performance analysis methods with production data
+            Arrange: Set up analyzer with clinic environment settings and real database connection
+            Act: Call performance analysis methods with clinic data
             Assert: Verify performance characteristics are correctly calculated
             
         Validates:
-            - Performance characteristics analysis with production data
-            - Processing priority calculation with production data
-            - Performance category determination with production data
+            - Performance characteristics analysis with clinic data
+            - Processing priority calculation with clinic data
+            - Performance category determination with clinic data
             - Settings injection for environment-agnostic performance analysis
             - Provider pattern dependency injection for performance analysis
             
         ETL Pipeline Context:
-            - Tests performance analysis for dental clinic tables with production data
+            - Tests performance analysis for dental clinic tables with clinic data
             - Critical for ETL pipeline performance optimization
             - Uses provider pattern for clean performance analysis testing
             - Supports Settings injection for environment-agnostic performance analysis
         """
-        # Arrange: Set up analyzer with production settings
+        # Arrange: Set up analyzer with clinic environment settings
         analyzer = OpenDentalSchemaAnalyzer()
         
-        # Act: Call performance analysis methods with production data
+        # Act: Call performance analysis methods with clinic data
         schema_info = analyzer.get_table_schema('patient')
         size_info = analyzer.get_table_size_info('patient')
         
-        # Act: Call performance analysis method with production data
+        # Act: Call performance analysis method with clinic data
         performance_chars = analyzer.get_table_performance_profile('patient', schema_info, size_info)
         
         # Assert: Validate performance characteristics
@@ -184,10 +184,10 @@ class TestPerformanceAnalysisIntegration:
 
     def test_production_multiple_table_performance_comparison(self, production_settings_with_file_provider):
         """
-        Test performance analysis comparison across multiple production tables.
+        Test performance analysis comparison across multiple clinic tables.
         
         AAA Pattern:
-            Arrange: Set up analyzer with production settings and multiple table data
+            Arrange: Set up analyzer with clinic environment settings and multiple table data
             Act: Call performance analysis for multiple tables
             Assert: Verify performance characteristics vary appropriately across tables
             
@@ -197,7 +197,7 @@ class TestPerformanceAnalysisIntegration:
             - Processing priorities are assigned appropriately
             - Performance monitoring requirements vary by table characteristics
         """
-        # Arrange: Set up analyzer with production settings
+        # Arrange: Set up analyzer with clinic environment settings
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Test tables with different expected characteristics
@@ -247,7 +247,7 @@ class TestPerformanceAnalysisIntegration:
         Test performance analysis error handling with invalid table names.
         
         AAA Pattern:
-            Arrange: Set up analyzer with production settings
+            Arrange: Set up analyzer with clinic environment settings
             Act: Call performance analysis with invalid table name
             Assert: Verify appropriate error handling
             
@@ -256,7 +256,7 @@ class TestPerformanceAnalysisIntegration:
             - Graceful degradation when table analysis fails
             - Settings injection continues to work with errors
         """
-        # Arrange: Set up analyzer with production settings
+        # Arrange: Set up analyzer with clinic environment settings
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Act: Test with invalid table name
@@ -294,7 +294,7 @@ class TestPerformanceAnalysisIntegration:
         Test performance analysis behavior with minimal schema information.
         
         AAA Pattern:
-            Arrange: Set up analyzer with production settings and minimal schema data
+            Arrange: Set up analyzer with clinic environment settings and minimal schema data
             Act: Call performance analysis with minimal data
             Assert: Verify performance analysis handles minimal data gracefully
             
@@ -303,7 +303,7 @@ class TestPerformanceAnalysisIntegration:
             - Default values are used when data is insufficient
             - Error handling for edge cases in performance analysis
         """
-        # Arrange: Set up analyzer with production settings
+        # Arrange: Set up analyzer with clinic environment settings
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Create minimal schema and size info for testing
@@ -341,8 +341,8 @@ class TestPerformanceAnalysisIntegration:
 
     def setup_method(self, method):
         """Set up each test method with proper isolation."""
-        # Ensure we're in production environment for each test
-        os.environ['ETL_ENVIRONMENT'] = 'production'
+        # Ensure we're in clinic environment for each test
+        os.environ['ETL_ENVIRONMENT'] = 'clinic'
     
     def teardown_method(self, method):
         """Clean up after each test method."""

@@ -248,7 +248,7 @@ class TestPipelineReport:
         return {
             'execution_date': '2025-10-22T03:00:00',
             'dag_run_id': 'scheduled__2025-10-22T03:00:00',
-            'environment': 'production',
+            'environment': 'clinic',
             'configuration': {
                 'total_tables_configured': 436,
                 'config_age_days': 15,
@@ -338,7 +338,7 @@ class TestPipelineReport:
     def test_environment_valid(self, pipeline_report):
         """Environment must be valid value."""
         environment = pipeline_report['environment']
-        valid_environments = ['production', 'test']
+        valid_environments = ['clinic', 'test']
         
         assert environment in valid_environments, \
             f"Invalid environment: {environment}"
@@ -388,7 +388,7 @@ class TestXComDataSerializability:
         
         report = {
             'execution_date': '2025-10-22T03:00:00',  # String, not datetime!
-            'environment': 'production',
+            'environment': 'clinic',
             'processing_results': {
                 'total': 436,
                 'success': 430,

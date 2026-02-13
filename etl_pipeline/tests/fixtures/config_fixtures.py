@@ -195,17 +195,17 @@ def test_env_vars():
 
 @pytest.fixture
 def production_env_vars():
-    """Production environment variables following connection architecture naming convention.
+    """Clinic (production-like) environment variables following connection architecture.
     
-    This fixture provides production environment variables that conform to the connection architecture:
-    - Uses non-prefixed variables for production environment
+    This fixture provides clinic environment variables that conform to the connection architecture:
+    - Uses non-prefixed variables for clinic environment (replaces legacy production)
     - Follows the environment-specific variable naming convention
-    - Matches the .env_production file structure
+    - Matches the .env_clinic file structure
     - Supports the provider pattern for dependency injection
     """
     return {
         # Environment declaration (required for fail-fast validation)
-        'ETL_ENVIRONMENT': 'production',
+        'ETL_ENVIRONMENT': 'clinic',
         
         # OpenDental Source (Production) - following architecture naming
         'OPENDENTAL_SOURCE_HOST': 'prod-source-host',
@@ -252,7 +252,7 @@ def test_config_provider(test_pipeline_config, test_tables_config, test_env_vars
 def production_config_provider(valid_pipeline_config, complete_tables_config, production_env_vars):
     """Production configuration provider following the provider pattern.
     
-    This fixture implements the DictConfigProvider pattern for production-like testing:
+    This fixture implements the DictConfigProvider pattern for clinic-like testing:
     - Uses DictConfigProvider with production-like configuration
     - Provides injected configuration for integration testing
     - Supports dependency injection for configuration swapping
@@ -281,12 +281,12 @@ def test_settings(test_config_provider):
 def production_settings(production_config_provider):
     """Production settings with provider injection following connection architecture.
     
-    This fixture implements the Settings injection pattern for production-like testing:
+    This fixture implements the Settings injection pattern for clinic-like testing:
     - Uses Settings with provider injection for environment-agnostic operation
     - Uses DictConfigProvider with production-like configuration
     - Supports dependency injection for integration testing
     """
-    return Settings(environment='production', provider=production_config_provider)
+    return Settings(environment='clinic', provider=production_config_provider)
 
 
 @pytest.fixture
@@ -363,7 +363,7 @@ def valid_pipeline_config():
     return {
         'general': {
             'pipeline_name': 'dental_clinic_etl',
-            'environment': 'production',
+            'environment': 'clinic',
             'timezone': 'UTC',
             'max_retries': 3,
             'retry_delay_seconds': 300,

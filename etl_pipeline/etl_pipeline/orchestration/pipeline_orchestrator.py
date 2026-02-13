@@ -88,7 +88,7 @@ class PipelineOrchestrator:
         
         Args:
             config_path: Path to the configuration file (used for ConfigReader)
-            environment: Environment name ('production', 'test') for database connections
+            environment: Environment name ('clinic', 'test') for database connections
             settings: Optional Settings instance to use (for testing)
             config_reader: Optional ConfigReader instance to use (for testing)
         """

@@ -189,7 +189,7 @@ Set these in Airflow UI (Admin → Variables):
 
 ```python
 # Required
-etl_environment = 'production'  # or 'test'
+etl_environment = 'clinic'  # or 'test'
 
 # Optional
 slack_webhook_url = 'https://hooks.slack.com/services/...'
@@ -212,10 +212,10 @@ Ensure these are set in your Airflow environment:
 
 ```bash
 # Set in docker-compose.yml or Airflow configuration
-ETL_ENVIRONMENT=production
+ETL_ENVIRONMENT=clinic
 
 # Or mount .env files to Airflow containers
-# See etl_pipeline/.env_production and etl_pipeline/.env_test
+# See etl_pipeline/.env_clinic and etl_pipeline/.env_test
 ```
 
 ## Deployment
@@ -285,7 +285,7 @@ import requests
 response = requests.post(
     'http://localhost:8080/api/v1/dags/schema_analysis/dagRuns',
     auth=('airflow', 'airflow'),
-    json={'conf': {'environment': 'production'}}
+    json={'conf': {'environment': 'clinic'}}
 )
 ```
 
@@ -336,7 +336,7 @@ View logs in:
 - **Version Control**: Commit `tables.yml` changes to git
 - **Change Review**: Review schema changes before production deployment
 - **Backup Strategy**: Keep backups for rollback capability
-- **Environment Separation**: Separate production and test configurations
+- **Environment Separation**: Separate clinic and test configurations
 
 ### 3. Error Handling
 

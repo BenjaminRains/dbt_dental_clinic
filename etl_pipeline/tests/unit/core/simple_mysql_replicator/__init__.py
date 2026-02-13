@@ -24,7 +24,7 @@ Test Strategy:
     - Validates provider pattern dependency injection and Settings injection
     - Tests FAIL FAST behavior when ETL_ENVIRONMENT not set
     - Ensures type safety with DatabaseType and PostgresSchema enums
-    - Tests environment separation (production vs test) with provider pattern
+    - Tests environment separation (clinic vs test) with provider pattern
     - Validates incremental copy logic and configuration management
     - Tests performance optimization and adaptive batch sizing
     - Tests utility methods for data cleaning and SQL generation

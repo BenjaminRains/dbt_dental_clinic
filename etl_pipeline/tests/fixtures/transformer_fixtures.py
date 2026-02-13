@@ -12,7 +12,7 @@ Connection Architecture Compliance:
 - ✅ Uses unified ConnectionFactory API with Settings injection
 - ✅ Uses enum-based database type specification
 - ✅ Supports provider pattern for dependency injection
-- ✅ Environment-agnostic (works for both production and test)
+- ✅ Environment-agnostic (works for both clinic and test)
 """
 
 import pytest

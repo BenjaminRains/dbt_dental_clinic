@@ -11,7 +11,7 @@ Production Test Strategy:
 - Tests real analysis report generation with actual production database data
 - Validates summary report generation with real production data
 - Tests file output generation with production information
-- Uses Settings injection for production environment-agnostic connections
+- Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
 - Real production complete schema analysis with actual database
@@ -27,7 +27,7 @@ Coverage Areas:
 ETL Context:
 - Critical for production ETL pipeline configuration generation
 - Tests with real production dental clinic database schemas
-- Uses Settings injection with FileConfigProvider for production environment
+- Uses Settings injection with FileConfigProvider for clinic environment
 - Validates actual production database connections and reporting functionality
 """
 
@@ -141,7 +141,7 @@ class TestReportingIntegration:
                     assert isinstance(metadata['environment'], str)
                     assert len(metadata['schema_hash']) > 0  # Should be a valid hash
                     assert len(metadata['analysis_timestamp']) > 0  # Should be a timestamp string
-                    assert metadata['environment'] in ['production', 'test', 'unknown']  # Should be valid environment
+                    assert metadata['environment'] in ['clinic', 'test', 'unknown']  # Should be valid environment
                     
                     # Verify table configurations
                     for table_name, table_config in config['tables'].items():

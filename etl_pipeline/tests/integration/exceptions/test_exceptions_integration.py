@@ -35,7 +35,7 @@ ETL Context:
     - Provider pattern for clean dependency injection
     - Settings injection for environment-agnostic connections
     - Type safety with DatabaseType and PostgresSchema enums
-    - Real database integration for production-like testing
+    - Real database integration for clinic-like testing
 """
 
 import pytest
@@ -472,7 +472,7 @@ class TestExceptionRealConfigurationIntegration:
             - FAIL FAST behavior for missing environment variables
             - Structured error context preservation
             - Error details for debugging
-            - No defaulting to production environment
+            - No defaulting to clinic environment
             - Critical security requirement compliance
             - Real environment error scenarios
             
@@ -530,7 +530,7 @@ class TestExceptionRealConfigurationIntegration:
             - .env_test file is loaded correctly using existing fixtures
             - Environment is set to 'test'
             - Test database configurations are used
-            - No production environment variables are loaded
+            - No clinic environment variables are loaded
             - Provider pattern correctly loads test environment
             - Settings injection works with test environment
             - Real .env_test validation scenarios

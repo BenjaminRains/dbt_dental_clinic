@@ -26,7 +26,7 @@ Test Strategy:
     - Validates provider pattern dependency injection and Settings injection
     - Tests FAIL FAST behavior when OPENDENTAL_SOURCE_DB not set
     - Ensures type safety and configuration validation
-    - Tests environment separation (production vs test) with provider pattern
+    - Tests environment separation (clinic vs test) with provider pattern
     - Validates schema analysis and configuration generation
 
 Coverage Areas:
