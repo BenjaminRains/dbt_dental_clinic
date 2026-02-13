@@ -1,0 +1,18 @@
+[Unit]
+Description=Dental Clinic FastAPI (demo or clinic)
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/dbt_dental_clinic/api
+# On EC2 the env file is always api/.env; contents are from .env_api_demo or .env_api_clinic per instance.
+EnvironmentFile=/opt/dbt_dental_clinic/api/.env
+# Use venv Python so API deps (fastapi, etc.) are isolated from system packages
+ExecStart=/opt/dbt_dental_clinic/api/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+
+[Install]
+WantedBy=multi-user.target
