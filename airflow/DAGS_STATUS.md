@@ -23,7 +23,7 @@ Quick reference for the status of all Airflow DAGs in the OpenDental data pipeli
 - Sends notifications with severity levels
 
 **When to run**:
-- Scheduled: Weekly on Sunday at 2 AM
+- Scheduled: Weekly on Sunday at 9 PM (Central time)
 - Manual: Before OpenDental upgrades
 - Manual: When schema changes suspected
 - Manual: When ETL fails with schema errors
@@ -51,7 +51,7 @@ Quick reference for the status of all Airflow DAGs in the OpenDental data pipeli
 - Generates execution reports
 
 **When to run**:
-- Scheduled: Daily at 3 AM (production)
+- Scheduled: Daily at 9PM (localhost)
 - Can adjust to hourly for real-time needs
 - Manual: On-demand data refresh
 - Manual: After schema changes
