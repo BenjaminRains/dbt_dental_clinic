@@ -271,5 +271,5 @@ LEFT JOIN chair_time_utilization ctu
     AND am.date = ctu.date
 
 {% if is_incremental() %}
-WHERE am.date > (SELECT MAX(date) FROM {{ this }})
+WHERE am._loaded_at > (SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) FROM {{ this }})
 {% endif %}

@@ -26,7 +26,13 @@
     4. Enhances AR analysis with statement history
 */
 
-WITH statement_base AS (
+WITH
+    {% if is_incremental() %}
+    max_loaded AS (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff FROM {{ this }}
+    ),
+    {% endif %}
+statement_base AS (
     SELECT
         s.statement_id,
         s.patient_id,
@@ -56,11 +62,12 @@ WITH statement_base AS (
         s.note,
         s.email_subject,
         s.email_body,
-        s.super_family_id
+        s.super_family_id,
+        s._loaded_at
     FROM {{ ref('stg_opendental__statement') }} s
     WHERE s.date_sent >= CURRENT_DATE - INTERVAL '18 months'
     {% if is_incremental() %}
-        AND s.date_sent > (SELECT MAX(date_sent) FROM {{ this }})
+        AND s._loaded_at > (SELECT cutoff FROM max_loaded)
     {% endif %}
 ),
 
@@ -227,6 +234,9 @@ SELECT
     cf.is_collection_statement,
     cf.resulted_in_payment,
     cf.payment_result,
+    
+    -- Pipeline metadata
+    sb._loaded_at,
     
     -- Metadata
     CURRENT_TIMESTAMP AS model_created_at,

@@ -6,7 +6,7 @@
 with source_data as (
     select * from {{ source('opendental', 'eobattach') }}
     {% if is_incremental() %}
-        where {{ clean_opendental_date('"DateTCreated"') }} > (select max(_created_at) from {{ this }})
+        where {{ clean_opendental_date('"DateTCreated"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 

@@ -16,7 +16,13 @@
     5. Serves as the base for other communication models
 */
 
-WITH communication_base AS (
+WITH
+    {% if is_incremental() %}
+    max_loaded AS (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff FROM {{ this }}
+    ),
+    {% endif %}
+communication_base AS (
     SELECT
         cl.commlog_id AS communication_id,
         cl.patient_id,
@@ -97,12 +103,13 @@ WITH communication_base AS (
         NULL AS follow_up_task_id, -- Would be linked to a task record
         cl.program_id,
         cl._created_at,
+        cl._loaded_at,
         CURRENT_TIMESTAMP AS updated_at
     FROM {{ ref('stg_opendental__commlog') }} cl
     
-    -- For incremental models, only process new records
+    -- For incremental models, only process new records (filter by ETL load time)
     {% if is_incremental() %}
-    WHERE cl.communication_datetime > (SELECT MAX(communication_datetime) FROM {{ this }})
+    WHERE cl._loaded_at > (SELECT cutoff FROM max_loaded)
     {% endif %}
 ),
 
@@ -200,6 +207,7 @@ SELECT
     
     -- Metadata fields
     cb._created_at,
+    cb._loaded_at,
     cb.updated_at,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at

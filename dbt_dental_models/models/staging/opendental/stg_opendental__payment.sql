@@ -10,7 +10,7 @@ with source_data as (
         and "PayDate" <= current_date
         and "PayDate" > '2000-01-01'::date  
     {% if is_incremental() %}
-        and "PayDate" > (select max(payment_date) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 

@@ -10,7 +10,7 @@ with source_data as (
         and "SecDateEntry" <= current_date
         and "SecDateEntry" > '2000-01-01'::date
     {% if is_incremental() %}
-        and "SecDateEntry" > (select max(_created_at) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 

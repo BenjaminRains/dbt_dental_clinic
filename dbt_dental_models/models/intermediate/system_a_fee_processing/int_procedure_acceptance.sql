@@ -44,7 +44,7 @@ WITH source_procedures AS (
     FROM {{ ref('int_procedure_complete') }}
     WHERE procedure_date IS NOT NULL  -- Filter out NULL procedure_date values
     {% if is_incremental() %}
-        AND procedure_date >= (SELECT MAX(procedure_date) FROM {{ this }}) - INTERVAL '7 days'
+        AND _loaded_at > (SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) FROM {{ this }})
     {% endif %}
 ),
 

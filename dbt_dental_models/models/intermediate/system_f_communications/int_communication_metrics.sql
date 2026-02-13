@@ -61,13 +61,12 @@ WITH daily_communications AS (
         COUNT(CASE WHEN communication_mode = 5 THEN 1 END) as text_count,
         -- Add program-specific counts
         COUNT(CASE WHEN program_id = 0 THEN 1 END) as system_default_count,
-        COUNT(CASE WHEN program_id = 95 THEN 1 END) as legacy_system_count
+        COUNT(CASE WHEN program_id = 95 THEN 1 END) as legacy_system_count,
+        MAX(_loaded_at) as _loaded_at
     FROM {{ ref('int_patient_communications_base') }}
     
     {% if is_incremental() %}
-    WHERE communication_datetime::date >= (
-        SELECT MAX(date) + INTERVAL '1 day' FROM {{ this }}
-    )
+    WHERE _loaded_at > (SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) FROM {{ this }})
     {% endif %}
     
     GROUP BY 
@@ -102,9 +101,7 @@ response_metrics AS (
     FROM {{ ref('int_patient_communications_base') }}
 
     {% if is_incremental() %}
-    WHERE communication_datetime::date >= (
-        SELECT MAX(date) + INTERVAL '1 day' FROM {{ this }}
-    )
+    WHERE _loaded_at > (SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) FROM {{ this }})
     {% endif %}
 
     GROUP BY
@@ -147,6 +144,7 @@ SELECT
     -- Add program-specific counts
     dc.system_default_count,
     dc.legacy_system_count,
+    dc._loaded_at,
     -- Add standardized metadata
     {{ standardize_intermediate_metadata(primary_source_alias='dc', preserve_source_metadata=false) }}
 FROM daily_communications dc

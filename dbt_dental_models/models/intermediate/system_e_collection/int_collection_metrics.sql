@@ -285,6 +285,7 @@ final_metrics AS (
         mb.tasks_pending,
         mb.communications_sent,
         mb.communications_received,
+        CURRENT_TIMESTAMP AS _loaded_at,
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
     FROM metrics_base mb
@@ -321,10 +322,10 @@ SELECT
     tasks_pending,
     communications_sent,
     communications_received,
+    _loaded_at,
     model_created_at,
     model_updated_at
 FROM final_metrics
-
 {% if is_incremental() %}
-    WHERE snapshot_date > (SELECT MAX(snapshot_date) FROM {{ this }})
+WHERE snapshot_date > (SELECT MAX(snapshot_date) FROM {{ this }})
 {% endif %}

@@ -40,12 +40,13 @@ WITH base_communications AS (
         base.direction,
         base.program_id,
         base.communication_mode,
-        base.outcome
+        base.outcome,
+        base._loaded_at
     FROM {{ ref('int_patient_communications_base') }} base
     WHERE base.direction = 'outbound'
     {% if is_incremental() %}
-    AND base.communication_datetime > (
-        SELECT COALESCE(MAX(communication_datetime), '2020-01-01'::timestamp)
+    AND base._loaded_at > (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp)
         FROM {{ this }}
     )
     {% endif %}
@@ -216,6 +217,7 @@ simple_flags AS (
             ELSE 'general_campaign'
         END AS campaign_type,
         
+        comm._loaded_at,
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
     FROM base_communications comm
@@ -239,6 +241,7 @@ SELECT
     bounce_count,
     communication_datetime,
     communication_mode,
+    _loaded_at,
     model_created_at,
     model_updated_at
 FROM simple_flags

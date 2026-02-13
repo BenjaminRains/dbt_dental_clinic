@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'labcase') }}
     where "DateTimeCreated" >= '2023-01-01'
     {% if is_incremental() %}
-        and "DateTimeCreated" > (select max(date_created) from {{ this }})
+        and {{ clean_opendental_date('"DateTStamp"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 

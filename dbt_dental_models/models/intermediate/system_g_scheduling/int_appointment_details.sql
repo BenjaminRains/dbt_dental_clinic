@@ -121,7 +121,7 @@ WITH appointment_base AS (
     FROM {{ ref('stg_opendental__appointment') }} apt
     
     {% if is_incremental() %}
-    WHERE apt.appointment_datetime > (SELECT MAX(appointment_datetime) FROM {{ this }})
+    WHERE apt._loaded_at > (SELECT MAX(_loaded_at) FROM {{ this }})
     {% endif %}
 ),
 

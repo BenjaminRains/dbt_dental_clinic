@@ -14,7 +14,13 @@
     3. Calculates daily availability windows
 */
 
-with provider_schedules as (
+with
+    {% if is_incremental() %}
+    max_loaded as (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff FROM {{ this }}
+    ),
+    {% endif %}
+provider_schedules as (
     SELECT
         schedule_id,
         schedule_date,
@@ -23,11 +29,15 @@ with provider_schedules as (
         provider_id,
         schedule_type,
         status,
-        _created_at
+        _created_at,
+        _loaded_at
     FROM {{ ref('stg_opendental__schedule') }}
     WHERE schedule_type = 1  -- Individual provider schedules
         AND provider_id IS NOT NULL
         AND schedule_date >= CURRENT_DATE - INTERVAL '{{ var("schedule_window_days", "365") }} days'
+    {% if is_incremental() %}
+        AND _loaded_at > (SELECT cutoff FROM max_loaded)
+    {% endif %}
 ),
 
 -- Handle overlapping schedule blocks by merging them
@@ -38,6 +48,7 @@ merged_schedules as (
             schedule_date,
             start_time,
             end_time,
+            _loaded_at,
             LEAD(start_time) OVER (PARTITION BY provider_id, schedule_date ORDER BY start_time) as next_start_time
         from provider_schedules
     )
@@ -46,6 +57,7 @@ merged_schedules as (
         schedule_date,
         MIN(start_time) as start_time,
         MAX(end_time) as end_time,
+        MAX(_loaded_at) as _loaded_at,
         -- Calculate total available minutes accounting for overlaps
         SUM(
             EXTRACT(EPOCH FROM (
@@ -72,6 +84,7 @@ daily_availability as (
         schedule_date,
         start_time,
         end_time,
+        _loaded_at,
         CASE 
             WHEN start_time IS NULL OR end_time IS NULL THEN true
             ELSE false
@@ -90,10 +103,7 @@ SELECT
     is_day_off,
     available_minutes,
     schedule_status,
+    _loaded_at,
     CURRENT_TIMESTAMP as model_created_at,
     CURRENT_TIMESTAMP as model_updated_at
 from daily_availability
-
-{% if is_incremental() %}
-WHERE schedule_date >= (SELECT MAX(schedule_date)::date FROM {{ this }})
-{% endif %}

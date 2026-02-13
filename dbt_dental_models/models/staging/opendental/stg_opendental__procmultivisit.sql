@@ -7,7 +7,7 @@ with source_data as (
     select * from {{ source('opendental', 'procmultivisit') }}
     where "SecDateTEntry" >= '2023-01-01'
     {% if is_incremental() %}
-        and "SecDateTEdit" > (select max(_updated_at) from {{ this }})
+        and {{ clean_opendental_date('"SecDateTEdit"') }} > (select max(_loaded_at) from {{ this }})
     {% endif %}
 ),
 

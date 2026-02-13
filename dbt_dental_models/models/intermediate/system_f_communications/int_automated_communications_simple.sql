@@ -64,7 +64,7 @@ WITH template_matches AS (
             END) = base.communication_mode
         )
     {% if is_incremental() %}
-    WHERE base.communication_datetime > (SELECT MAX(communication_datetime) FROM {{ this }})
+    WHERE base._loaded_at > (SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) FROM {{ this }})
     {% endif %}
 ),
 
@@ -112,6 +112,7 @@ automated_comms AS (
         tmpl.template_subject,
         
         -- Metadata using standardize_intermediate_metadata macro
+        base._loaded_at,
         {{ standardize_intermediate_metadata(
             primary_source_alias='base',
             preserve_source_metadata=true,
@@ -124,9 +125,9 @@ automated_comms AS (
         ON flags.communication_id = tmpl.communication_id
         AND tmpl.template_rank = 1  -- Only get the best template match
     
-    -- For incremental models, only process new records
+    -- For incremental models, only process new records (filter by ETL load time)
     {% if is_incremental() %}
-    WHERE base.communication_datetime > (SELECT MAX(communication_datetime) FROM {{ this }})
+    WHERE base._loaded_at > (SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) FROM {{ this }})
     {% endif %}
 )
 
@@ -161,6 +162,7 @@ SELECT
     template_type,
     template_category,
     template_subject,
+    _loaded_at,
     _created_at,
     updated_at,
     _transformed_at

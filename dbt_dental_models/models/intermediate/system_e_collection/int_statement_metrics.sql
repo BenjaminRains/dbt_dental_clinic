@@ -198,10 +198,10 @@ SELECT
     collection_balance_rate_30days,
     full_payment_rate,
     day7_response_ratio,
+    CURRENT_TIMESTAMP AS _loaded_at,
     CURRENT_TIMESTAMP AS model_created_at,
     CURRENT_TIMESTAMP AS model_updated_at
 FROM derived_metrics
-
 {% if is_incremental() %}
-    WHERE snapshot_date > (SELECT MAX(snapshot_date) FROM {{ this }})
+WHERE (SELECT MAX(_loaded_at) FROM {{ ref('int_billing_statements') }}) > (SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) FROM {{ this }})
 {% endif %}

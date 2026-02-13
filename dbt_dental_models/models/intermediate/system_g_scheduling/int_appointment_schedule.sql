@@ -16,7 +16,14 @@
     4. Computes utilization rates
 */
 
-WITH date_spine AS (
+WITH
+    {% if is_incremental() %}
+    max_loaded AS (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff
+        FROM {{ this }}
+    ),
+    {% endif %}
+date_spine AS (
     {{ dbt_utils.date_spine(
         datepart="day",
         start_date="(CURRENT_DATE - INTERVAL '" ~ var('schedule_window_days') ~ " days')::date",
@@ -47,9 +54,13 @@ appointment_metrics AS (
         COUNT(CASE WHEN apt.appointment_status = 5 THEN 1 END) as cancelled_appointments,
         COUNT(CASE WHEN apt.appointment_status = 3 THEN 1 END) as no_show_appointments,
         COUNT(CASE WHEN apt.confirmation_status = 0 THEN 1 END) as unconfirmed_appointments,
-        SUM({{ calculate_pattern_length('apt.pattern') }}) as total_appointment_minutes
+        SUM({{ calculate_pattern_length('apt.pattern') }}) as total_appointment_minutes,
+        MAX(apt._loaded_at) as _loaded_at
     FROM {{ ref('stg_opendental__appointment') }} apt
     WHERE apt.appointment_datetime >= CURRENT_DATE - INTERVAL '{{ var("schedule_window_days") }} days'
+    {% if is_incremental() %}
+        AND apt._loaded_at > (SELECT cutoff FROM max_loaded)
+    {% endif %}
     GROUP BY DATE(apt.appointment_datetime), apt.provider_id
 ),
 
@@ -59,6 +70,7 @@ provider_availability AS (
         pa.schedule_date,
         pa.start_time,
         pa.end_time,
+        pa._loaded_at,
         CASE 
             WHEN pa.start_time IS NULL OR pa.end_time IS NULL THEN true
             ELSE false
@@ -87,7 +99,8 @@ daily_schedule AS (
         pa.end_time,
         COALESCE(pa.is_day_off, true) as is_day_off,
         COUNT(*) OVER (PARTITION BY ps.provider_id) as days_scheduled,
-        COUNT(*) FILTER (WHERE NOT COALESCE(pa.is_day_off, true)) OVER (PARTITION BY ps.provider_id) as days_worked
+        COUNT(*) FILTER (WHERE NOT COALESCE(pa.is_day_off, true)) OVER (PARTITION BY ps.provider_id) as days_worked,
+        GREATEST(COALESCE(am._loaded_at, '1900-01-01'::timestamp), COALESCE(pa._loaded_at, '1900-01-01'::timestamp)) as _loaded_at
     FROM provider_schedule ps
     CROSS JOIN date_spine_formatted ds
     LEFT JOIN appointment_metrics am
@@ -108,7 +121,9 @@ daily_schedule AS (
         pa.available_minutes,
         pa.start_time,
         pa.end_time,
-        pa.is_day_off
+        pa.is_day_off,
+        am._loaded_at,
+        pa._loaded_at
 )
 
 SELECT
@@ -128,9 +143,9 @@ SELECT
     is_day_off,
     days_scheduled,
     days_worked,
+    _loaded_at,
     {{ standardize_intermediate_metadata(preserve_source_metadata=false) }}
 FROM daily_schedule
-
 {% if is_incremental() %}
-WHERE schedule_date >= (SELECT MAX(schedule_date) FROM {{ this }})
+WHERE _loaded_at > (SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) FROM {{ this }})
 {% endif %}
