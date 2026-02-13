@@ -2,7 +2,7 @@
 ETL Pipeline Settings Configuration
 
 This file provides clean configuration management with fail-fast validation
-and support for separate environment files (.env_production, .env_test).
+and support for separate environment files (.env_local, .env_clinic, .env_test).
 """
 
 import os
@@ -38,6 +38,30 @@ class Settings:
     # Environment variable mappings for each database type and environment
     # These map to the actual variable names in the .env files
     ENV_MAPPINGS = {
+        'local': {
+            DatabaseType.SOURCE: {
+                'host': 'OPENDENTAL_SOURCE_HOST',
+                'port': 'OPENDENTAL_SOURCE_PORT',
+                'database': 'OPENDENTAL_SOURCE_DB',
+                'user': 'OPENDENTAL_SOURCE_USER',
+                'password': 'OPENDENTAL_SOURCE_PASSWORD'
+            },
+            DatabaseType.REPLICATION: {
+                'host': 'MYSQL_REPLICATION_HOST',
+                'port': 'MYSQL_REPLICATION_PORT',
+                'database': 'MYSQL_REPLICATION_DB',
+                'user': 'MYSQL_REPLICATION_USER',
+                'password': 'MYSQL_REPLICATION_PASSWORD'
+            },
+            DatabaseType.ANALYTICS: {
+                'host': 'POSTGRES_ANALYTICS_HOST',
+                'port': 'POSTGRES_ANALYTICS_PORT',
+                'database': 'POSTGRES_ANALYTICS_DB',
+                'schema': 'POSTGRES_ANALYTICS_SCHEMA',
+                'user': 'POSTGRES_ANALYTICS_USER',
+                'password': 'POSTGRES_ANALYTICS_PASSWORD'
+            }
+        },
         'clinic': {
             DatabaseType.SOURCE: {
                 'host': 'OPENDENTAL_SOURCE_HOST',
@@ -140,13 +164,13 @@ class Settings:
                 missing_variables=["ETL_ENVIRONMENT"],
                 details={"critical": True}
             )
-        valid_environments = ['clinic', 'test']
+        valid_environments = ['local', 'clinic', 'test']
         if environment not in valid_environments:
             # Special error message for deprecated "production" environment
             if environment == "production":
                 raise ConfigurationError(
                     message=f"Invalid environment '{environment}'. "
-                    f"'production' has been removed. Use 'clinic' for clinic deployment. "
+                    "'production' has been removed. Use 'local' for localhost or 'clinic' for clinic. "
                     f"Valid environments: {valid_environments}",
                     invalid_values={"ETL_ENVIRONMENT": environment},
                     details={"valid_environments": valid_environments}

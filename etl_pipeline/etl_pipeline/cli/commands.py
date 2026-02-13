@@ -135,19 +135,19 @@ def clear_test_settings():
 @click.option('--force', is_flag=True, help='Force run even if no new data')
 @click.option('--parallel', '-p', type=int, default=4, help='Number of parallel workers')
 @click.option('--dry-run', is_flag=True, help='Show what would be done without making changes')
-@click.option('--environment', type=click.Choice(['test', 'clinic']), help='Override ETL environment (fail-fast on mismatch)')
+@click.option('--environment', type=click.Choice(['local', 'test', 'clinic']), help='Override ETL environment (fail-fast on mismatch)')
 def run(config: Optional[str], tables: List[str], full: bool, force: bool, parallel: int, dry_run: bool, environment: Optional[str]):
     """Run the ETL pipeline."""
     try:
         # Resolve and validate environment before any settings/DB access
         resolved_env = _resolve_environment(environment)
         _assert_env_consistency(environment, resolved_env)
-        if resolved_env not in ('test', 'clinic'):
+        if resolved_env not in ('local', 'test', 'clinic'):
             # Special error message for deprecated "production" environment
             if resolved_env == 'production':
-                click.echo(f"❌ Invalid ETL_ENVIRONMENT='{resolved_env}'. 'production' has been removed. Use 'clinic' for clinic deployment.")
+                click.echo(f"❌ Invalid ETL_ENVIRONMENT='{resolved_env}'. 'production' has been removed. Use 'local' or 'clinic'.")
             else:
-                click.echo(f"❌ Invalid ETL_ENVIRONMENT='{resolved_env}'. Use 'test' or 'clinic'.")
+                click.echo(f"❌ Invalid ETL_ENVIRONMENT='{resolved_env}'. Use 'local', 'test', or 'clinic'.")
             raise click.Abort()
 
         # In test mode, enforce safety on DB names to avoid prod accidents

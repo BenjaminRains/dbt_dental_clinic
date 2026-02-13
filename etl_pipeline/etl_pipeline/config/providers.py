@@ -2,7 +2,7 @@
 Configuration Provider Pattern for ETL Pipeline
 
 This file provides the configuration provider pattern for dependency injection,
-supporting separate environment files (.env_production, .env_test) and fail-fast
+supporting separate environment files (.env_local, .env_clinic, .env_test) and fail-fast
 validation for missing environment variables.
 """
 
@@ -42,16 +42,16 @@ class FileConfigProvider(ConfigProvider):
             raise ValueError(
                 "ETL_ENVIRONMENT environment variable is not set. "
                 "This is a critical security requirement. "
-                "Please set ETL_ENVIRONMENT to 'clinic' or 'test'. "
-                "No defaulting to clinic is allowed for security reasons."
+                "Please set ETL_ENVIRONMENT to 'local', 'clinic', or 'test'. "
+                "No defaulting is allowed for security reasons."
             )
-        valid_environments = ['clinic', 'test']
+        valid_environments = ['local', 'clinic', 'test']
         if environment not in valid_environments:
             # Special error message for deprecated "production" environment
             if environment == "production":
                 raise ValueError(
                     f"Invalid environment '{environment}'. "
-                    f"'production' has been removed. Use 'clinic' for clinic deployment. "
+                    "'production' has been removed. Use 'local' for localhost or 'clinic' for clinic. "
                     f"Valid environments: {valid_environments}"
                 )
             raise ValueError(f"Invalid environment '{environment}'. Must be one of: {valid_environments}")
@@ -59,8 +59,8 @@ class FileConfigProvider(ConfigProvider):
     
     def _load_environment_file(self):
         """Load environment variables from appropriate .env file."""
-        # Load the specific environment file (.env_production or .env_test)
-        env_file = f".env_{self.environment}"  # .env_production or .env_test
+        # Load the specific environment file (.env_local, .env_clinic, or .env_test)
+        env_file = f".env_{self.environment}"
         
         # Environment files are in the etl_pipeline root directory (same as config_dir)
         env_path = self.config_dir / env_file
@@ -77,6 +77,7 @@ class FileConfigProvider(ConfigProvider):
                 
                 # Define the environment variable prefixes we care about
                 env_prefixes = {
+                    'local': ['OPENDENTAL_SOURCE_', 'GLIC_OPENDENTAL_SOURCE_', 'MYSQL_REPLICATION_', 'POSTGRES_ANALYTICS_'],
                     'clinic': ['OPENDENTAL_SOURCE_', 'MYSQL_REPLICATION_', 'POSTGRES_ANALYTICS_'],
                     'test': ['TEST_OPENDENTAL_SOURCE_', 'TEST_MYSQL_REPLICATION_', 'TEST_POSTGRES_ANALYTICS_']
                 }

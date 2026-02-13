@@ -9,9 +9,10 @@ and the PostgreSQL analytics database.
 Usage:
     python scripts/initialize_etl_tracking_tables.py [environment]
     
-    environment: 'test' or 'clinic' (default: 'clinic')
+    environment: 'local', 'test', or 'clinic' (default: 'local')
     
 Examples:
+    python scripts/initialize_etl_tracking_tables.py local
     python scripts/initialize_etl_tracking_tables.py clinic
     python scripts/initialize_etl_tracking_tables.py test
 """
@@ -40,21 +41,21 @@ def parse_arguments():
     parser.add_argument(
         'environment', 
         nargs='?', 
-        default='clinic',
-        choices=['test', 'clinic'],
-        help='Environment to initialize tracking tables for (default: clinic)'
+        default='local',
+        choices=['local', 'test', 'clinic'],
+        help='Environment to initialize tracking tables for (default: local)'
     )
     return parser.parse_args()
 
 def get_settings_for_environment(environment):
     """Get settings for the specified environment."""
     if environment == 'test':
-        # For test environment, we need to set ETL_ENVIRONMENT before getting settings
         os.environ['ETL_ENVIRONMENT'] = 'test'
         return create_settings(environment='test')
     else:
-        # For production, use the default get_settings()
-        return get_settings()
+        # local or clinic: set ETL_ENVIRONMENT and use create_settings for correct .env file
+        os.environ['ETL_ENVIRONMENT'] = environment
+        return create_settings(environment=environment)
 
 def load_tables_config():
     """Load the tables configuration file."""
