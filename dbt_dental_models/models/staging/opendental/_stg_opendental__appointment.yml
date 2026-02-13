@@ -121,6 +121,14 @@ models:
         description: >
           Foreign key to appointment type classification (e.g., cleaning, emergency, consultation).
           0 = 'None' (valid default for appointments without specific type designation).
+          
+          Data Quality Notes:
+          - Appointments with appointment_type_id = 0 are more likely to have data quality issues.
+          - 68.7% of broken appointments without procedures (pre-test-update cohort) had type_id = 0.
+          - 87.5% of past appointments still marked as scheduled had type_id = 0.
+          - Consider reviewing workflow for appointments created without a specific type; monitor rate via
+            validation/staging/appointment/monitor_unclassified_appointment_rate.sql.
+          - See validation/staging/appointment/APPOINTMENT_TYPE_CLASSIFICATION_INVESTIGATION.md for details.
         tests:
           - relationships:
               to: ref('stg_opendental__appointmenttype')
