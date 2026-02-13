@@ -13,6 +13,7 @@ $script:EnvManagerScriptRoot = $PSScriptRoot
 $script:IsDBTActive = $false
 $script:IsETLActive = $false
 $script:IsAPIActive = $false
+$script:IsConsultAudioActive = $false
 $script:ActiveProject = $null
 $script:VenvPath = $null
 
@@ -47,6 +48,11 @@ function Initialize-DBTEnvironment {
 
     if ($script:IsAPIActive) {
         Write-Host "❌ API environment is currently active. Run 'api-deactivate' first before activating dbt." -ForegroundColor Red
+        return
+    }
+
+    if ($script:IsConsultAudioActive) {
+        Write-Host "❌ Consult audio pipeline environment is currently active. Run 'consult-audio-deactivate' first before activating dbt." -ForegroundColor Red
         return
     }
 
@@ -391,6 +397,11 @@ function Initialize-ETLEnvironment {
         return
     }
 
+    if ($script:IsConsultAudioActive) {
+        Write-Host "❌ Consult audio pipeline environment is currently active. Run 'consult-audio-deactivate' first before activating ETL." -ForegroundColor Red
+        return
+    }
+
     $projectName = Split-Path -Leaf $ProjectPath
     Write-Host "`n🔄 Initializing ETL environment: $projectName" -ForegroundColor Magenta
 
@@ -668,6 +679,11 @@ function Initialize-APIEnvironment {
         return
     }
 
+    if ($script:IsConsultAudioActive) {
+        Write-Host "❌ Consult audio pipeline environment is currently active. Run 'consult-audio-deactivate' first before activating API." -ForegroundColor Red
+        return
+    }
+
     $projectName = Split-Path -Leaf $ProjectPath
     Write-Host "`n🌐 Initializing API environment: $projectName" -ForegroundColor Blue
     Write-Host "📍 This sets up LOCAL API development (runs API on your machine)" -ForegroundColor Cyan
@@ -869,6 +885,129 @@ function Stop-APIEnvironment {
     $script:VenvPath = $null
 
     Write-Host "✅ API environment deactivated - other environments can now be activated" -ForegroundColor Green
+}
+
+# =============================================================================
+# CONSULT AUDIO PIPELINE ENVIRONMENT
+# =============================================================================
+
+function Initialize-ConsultAudioEnvironment {
+    param([string]$ProjectPath = (Get-Location))
+
+    if ($script:IsConsultAudioActive) {
+        Write-Host "❌ Consult audio pipeline environment already active. Use 'consult-audio-deactivate' first." -ForegroundColor Yellow
+        return
+    }
+
+    if ($script:IsDBTActive) {
+        Write-Host "❌ dbt environment is currently active. Run 'dbt-deactivate' first before activating consult audio pipeline." -ForegroundColor Red
+        return
+    }
+
+    if ($script:IsETLActive) {
+        Write-Host "❌ ETL environment is currently active. Run 'etl-deactivate' first before activating consult audio pipeline." -ForegroundColor Red
+        return
+    }
+
+    if ($script:IsAPIActive) {
+        Write-Host "❌ API environment is currently active. Run 'api-deactivate' first before activating consult audio pipeline." -ForegroundColor Red
+        return
+    }
+
+    $projectName = Split-Path -Leaf $ProjectPath
+    Write-Host "`n🎙️  Initializing Consult Audio Pipeline environment: $projectName" -ForegroundColor DarkCyan
+
+    $consultAudioPath = "$ProjectPath\consult_audio_pipe"
+    if (-not (Test-Path "$consultAudioPath\requirements.txt")) {
+        Write-Host "❌ No requirements.txt found in consult_audio_pipe directory" -ForegroundColor Red
+        return
+    }
+
+    Push-Location $consultAudioPath
+    try {
+        Write-Host "📦 Setting up Consult Audio Pipeline virtual environment..." -ForegroundColor Yellow
+
+        if (-not (Test-Path "venv")) {
+            Write-Host "🔧 Creating virtual environment..." -ForegroundColor Yellow
+            python -m venv venv
+        }
+
+        $venvScripts = Join-Path (Get-Location) "venv\Scripts"
+        if (Test-Path $venvScripts) {
+            $script:VenvPath = Join-Path (Get-Location) "venv"
+            $env:VIRTUAL_ENV = $script:VenvPath
+            $env:PATH = "$venvScripts;$env:PATH"
+            Write-Host "✅ Consult Audio Pipeline virtual environment activated" -ForegroundColor Green
+
+            Write-Host "📦 Installing dependencies..." -ForegroundColor Yellow
+            pip install -r requirements.txt 2>$null | Out-Null
+
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✅ Consult Audio Pipeline dependencies installed successfully" -ForegroundColor Green
+            } else {
+                Write-Host "❌ Failed to install dependencies" -ForegroundColor Red
+                Pop-Location
+                return
+            }
+        } else {
+            Write-Host "❌ Failed to activate virtual environment" -ForegroundColor Red
+            Pop-Location
+            return
+        }
+    } catch {
+        Write-Host "❌ Failed to set up Consult Audio Pipeline environment: $_" -ForegroundColor Red
+        Pop-Location
+        return
+    }
+    Pop-Location
+
+    # Load .env from consult_audio_pipe if present (OPENAI_API_KEY, ANTHROPIC_API_KEY, etc.)
+    $envPath = "$consultAudioPath\.env"
+    if (Test-Path $envPath) {
+        Write-Host "📄 Loading environment from consult_audio_pipe/.env" -ForegroundColor Green
+        Get-Content $envPath | ForEach-Object {
+            if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
+                $name = $matches[1].Trim()
+                $value = $matches[2].Trim()
+                [Environment]::SetEnvironmentVariable($name, $value, 'Process')
+                Write-Host "  Loaded: $name" -ForegroundColor Gray
+            }
+        }
+    } else {
+        Write-Host "⚠️ No .env found in consult_audio_pipe/ (optional). Copy .env.template to .env for API keys." -ForegroundColor Yellow
+    }
+
+    $script:IsConsultAudioActive = $true
+    $script:ActiveProject = $projectName
+
+    Write-Host "`n✅ Consult Audio Pipeline environment ready!" -ForegroundColor Green
+    Write-Host "Commands: run pipeline scripts from consult_audio_pipe/ (e.g. python -m consult_audio_pipe.scripts.llm_analysis_integration)" -ForegroundColor Cyan
+    Write-Host "To switch to other environments: run 'consult-audio-deactivate' first`n" -ForegroundColor Gray
+}
+
+function Stop-ConsultAudioEnvironment {
+    if (-not $script:IsConsultAudioActive) {
+        Write-Host "❌ Consult audio pipeline environment not active" -ForegroundColor Yellow
+        return
+    }
+
+    Write-Host "🔄 Deactivating Consult Audio Pipeline environment..." -ForegroundColor Yellow
+
+    if ($script:VenvPath) {
+        $env:VIRTUAL_ENV = $null
+
+        $venvScripts = Join-Path $script:VenvPath "Scripts"
+        if ($env:PATH -like "*$venvScripts*") {
+            $env:PATH = $env:PATH.Replace("$venvScripts;", "").Replace(";$venvScripts", "").Replace($venvScripts, "")
+        }
+        Write-Host "✅ Consult Audio Pipeline virtual environment deactivated" -ForegroundColor Green
+    }
+
+    $script:IsConsultAudioActive = $false
+    $script:ActiveProject = $null
+    $script:VenvPath = $null
+
+    Write-Host "✅ Consult audio pipeline environment deactivated - other environments can now be activated" -ForegroundColor Green
 }
 
 # =============================================================================
@@ -2737,6 +2876,12 @@ function Get-EnvironmentStatus {
         Write-Host "  API: ⭕ Inactive" -ForegroundColor Gray
     }
     
+    if ($script:IsConsultAudioActive) {
+        Write-Host "  Consult Audio: ✅ Active ($script:ActiveProject)" -ForegroundColor Green
+    } else {
+        Write-Host "  Consult Audio: ⭕ Inactive" -ForegroundColor Gray
+    }
+    
     Write-Host ""
 }
 
@@ -2818,7 +2963,8 @@ function global:prompt {
     
     if (($script:IsDBTActive -and $script:IsETLActive) -or 
         ($script:IsDBTActive -and $script:IsAPIActive) -or 
-        ($script:IsETLActive -and $script:IsAPIActive)) {
+        ($script:IsETLActive -and $script:IsAPIActive) -or
+        ($script:IsConsultAudioActive -and ($script:IsDBTActive -or $script:IsETLActive -or $script:IsAPIActive))) {
         # This should never happen with our mutual exclusion, but just in case
         $envTag = "[ERROR:MULTIPLE] "
         $envColor = "Red"
@@ -2831,6 +2977,9 @@ function global:prompt {
     } elseif ($script:IsAPIActive) {
         $envTag = "[api:$script:ActiveProject] "
         $envColor = "Blue"
+    } elseif ($script:IsConsultAudioActive) {
+        $envTag = "[consult-audio:$script:ActiveProject] "
+        $envColor = "DarkCyan"
     }
     
     if ($envTag) {
@@ -2851,6 +3000,8 @@ Set-Alias -Name etl-init -Value Initialize-ETLEnvironment -Scope Global
 Set-Alias -Name etl-deactivate -Value Stop-ETLEnvironment -Scope Global
 Set-Alias -Name api-init -Value Initialize-APIEnvironment -Scope Global
 Set-Alias -Name api-deactivate -Value Stop-APIEnvironment -Scope Global
+Set-Alias -Name consult-audio-init -Value Initialize-ConsultAudioEnvironment -Scope Global
+Set-Alias -Name consult-audio-deactivate -Value Stop-ConsultAudioEnvironment -Scope Global
 Set-Alias -Name aws-ssm-init -Value Initialize-AWSSSMEnvironment -Scope Global
 
 # DBT Commands
@@ -2911,6 +3062,7 @@ Write-Host "  dbt-init              - Initialize dbt (default: local = localhost
 Write-Host "  dbt-init -Target clinic - Initialize dbt for AWS production (opendental_analytics)" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
 Write-Host "  api-init       - Initialize API (local = run API on your machine)" -ForegroundColor Blue
+Write-Host "  consult-audio-init - Initialize Consult Audio Pipeline (venv + deps in consult_audio_pipe/)" -ForegroundColor DarkCyan
 Write-Host "  frontend-dev   - Start frontend (local: localhost:3000 → localhost:8000)" -ForegroundColor Green
 Write-Host "  demo-frontend-deploy - Deploy demo frontend → dbtdentalclinic.com (public)" -ForegroundColor Green
 Write-Host "  clinic-frontend-deploy - Deploy clinic frontend → clinic.dbtdentalclinic.com (IP-restricted)" -ForegroundColor Green
@@ -2938,6 +3090,9 @@ if (Test-Path "$cwd\etl_pipeline\Pipfile") {
 if (Test-Path "$cwd\api\main.py") {
     Write-Host "🌐 API server detected (main.py in api/). Run 'api-init' to start (creates venv & installs deps)." -ForegroundColor Blue
 }
+if (Test-Path "$cwd\consult_audio_pipe\requirements.txt") {
+    Write-Host "🎙️ Consult Audio Pipeline detected (consult_audio_pipe/). Run 'consult-audio-init' to start." -ForegroundColor DarkCyan
+}
 if (Test-Path "$cwd\frontend\package.json") {
     Write-Host "🎨 Frontend detected. Run 'frontend-dev' (local), 'demo-frontend-deploy' (demo → dbtdentalclinic.com), or 'clinic-frontend-deploy' (clinic → clinic.dbtdentalclinic.com)." -ForegroundColor Green
 }
@@ -2946,7 +3101,7 @@ Write-Host ""
 
 # Export functions to global scope
 Write-Host "🔧 Loading functions into global scope..." -ForegroundColor Yellow
-Get-Command -Type Function | Where-Object {$_.Name -like "*ETL*" -or $_.Name -like "*DBT*" -or $_.Name -like "*API*"} | ForEach-Object {
+Get-Command -Type Function | Where-Object {$_.Name -like "*ETL*" -or $_.Name -like "*DBT*" -or $_.Name -like "*API*" -or $_.Name -like "*ConsultAudio*"} | ForEach-Object {
     Set-Item -Path "function:global:$($_.Name)" -Value $_.Definition
 }
 Write-Host "✅ Functions loaded successfully!" -ForegroundColor Green 
