@@ -46,10 +46,11 @@ Data Quality Notes:
 - Negative time calculations are prevented by filtering out future dates
 
 Performance Considerations:
+- eligible_patients CTE: single read of dim_patient with final filters; fact tables are joined to it so we only aggregate rows for patients that appear in the mart (avoids full fact scans for excluded patients).
 - Indexed on key query dimensions (date_id, patient_id, provider_id, clinic_id)
 - Optimized joins using proper foreign key relationships
 - Efficient aggregations with conditional counting and summing
-- Window functions for complex patient lifecycle calculations
+- dim_date cross join limited to required columns (date_id, year, month, quarter, day_name) for single-row lookup
 
 Dependencies:
 - dim_patient: Patient demographic and status information
@@ -61,8 +62,22 @@ Dependencies:
 - fact_communication: Patient communication and engagement data
 */
 
--- 1. Base appointment data aggregation
-with patient_activity_base as (
+with
+-- 0. Eligible patients: single read of dim_patient with filters; used to restrict fact aggregations and as final driver
+eligible_patients as (
+    select *
+    from {{ ref('dim_patient') }}
+    where patient_status in ('Patient', 'Inactive')
+      and first_visit_date is not null
+      and first_visit_date <= current_date
+      and first_visit_date >= '2000-01-01'
+      and patient_id != 32974
+      and birth_date not in ('0001-01-01', '1900-01-01')  -- OpenDental placeholders for unknown/missing DOB (see clean_opendental_date macro, _dim_patient.yml, _stg_opendental__patient.yml)
+      and position_code != 'House'
+),
+
+-- 1. Base appointment data aggregation (only for eligible patients)
+patient_activity_base as (
     select 
         fa.patient_id,
         count(*) as total_appointments,
@@ -91,10 +106,11 @@ with patient_activity_base as (
         count(case when fa.appointment_date >= current_date - interval '1 year' 
             and fa.is_completed then 1 end) as completed_visits_last_year
     from {{ ref('fact_appointment') }} fa
+    inner join eligible_patients ep on fa.patient_id = ep.patient_id
     group by fa.patient_id
 ),
 
--- 2. Financial transaction aggregation
+-- 2. Financial transaction aggregation (only for eligible patients)
 patient_financial_base as (
     select 
         fp.patient_id,
@@ -110,10 +126,11 @@ patient_financial_base as (
         count(case when fp.payment_date >= current_date - interval '1 year' 
             then 1 end) as payment_transactions_last_year
     from {{ ref('fact_payment') }} fp
+    inner join eligible_patients ep on fp.patient_id = ep.patient_id
     group by fp.patient_id
 ),
 
--- 3. Production and billing aggregation
+-- 3. Production and billing aggregation (only for eligible patients)
 patient_production_base as (
     select 
         fc.patient_id,
@@ -129,10 +146,11 @@ patient_production_base as (
         sum(case when fc.claim_date >= current_date - interval '2 years' 
             then fc.billed_amount else 0 end) as production_last_2_years
     from {{ ref('fact_claim') }} fc
+    inner join eligible_patients ep on fc.patient_id = ep.patient_id
     group by fc.patient_id
 ),
 
--- 4. Communication and engagement aggregation
+-- 4. Communication and engagement aggregation (only for eligible patients)
 patient_communication_base as (
     select 
         fcom.patient_id,
@@ -149,6 +167,7 @@ patient_communication_base as (
             nullif(count(*), 0) * 100)::numeric, 2
         ) as communication_response_rate
     from {{ ref('fact_communication') }} fcom
+    inner join eligible_patients ep on fcom.patient_id = ep.patient_id
     group by fcom.patient_id
 ),
 
@@ -358,9 +377,8 @@ final as (
             source_metadata_fields=['_loaded_at', '_updated_at']
         ) }}
         
-    from {{ ref('dim_patient') }} pt
-    inner join {{ ref('dim_date') }} dd
-        on current_date = dd.date_day
+    from eligible_patients pt
+    cross join (select date_id, year, month, quarter, day_name from {{ ref('dim_date') }} where date_day = current_date limit 1) dd
     inner join {{ ref('dim_provider') }} prov
         on pt.primary_provider_id = prov.provider_id
     left join patient_activity_base pa
@@ -373,13 +391,6 @@ final as (
         on pt.patient_id = pc.patient_id
     left join patient_gaps_calculated pg
         on pt.patient_id = pg.patient_id
-    where pt.patient_status in ('Patient', 'Inactive')
-        and pt.first_visit_date is not null
-        and pt.first_visit_date <= current_date  -- Exclude future patients
-        and pt.first_visit_date >= '2000-01-01'  -- Exclude patients with invalid early dates
-        and pt.patient_id != 32974  -- Exclude GLIC (implant center)
-        and pt.birth_date != '0001-01-01'  -- Exclude entities with invalid birth dates
-        and pt.position_code != 'House'  -- Exclude facility entities
 )
 
 select * from Final
