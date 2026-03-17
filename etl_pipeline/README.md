@@ -452,6 +452,23 @@ python -m etl_pipeline status
 python -m etl_pipeline test-connections
 ```
 
+#### **Agent-Oriented Status CLI (machine-readable)**
+
+For tools and agents that need structured JSON envelopes instead of human-centric logs, there is an additional CLI module:
+
+```bash
+# Recent pipeline run summaries (JSON, quiet for machine consumption)
+python -m etl_pipeline.cli.agent_commands status --since 2025-01-01T00:00:00 --format json --quiet
+
+# Filtered by clinic and pipeline
+python -m etl_pipeline.cli.agent_commands status \
+  --clinic-id 123 \
+  --pipeline daily_ingest \
+  --since 2025-01-10T00:00:00 \
+  --until 2025-01-11T00:00:00 \
+  --format json --quiet
+```
+
 #### **Programmatic Usage**
 
 ```python
