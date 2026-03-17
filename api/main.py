@@ -9,14 +9,19 @@ import os
 import time
 import traceback
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
-    handlers=[
-        logging.StreamHandler()  # Ensure logs go to console
-    ]
-)
+# Configure logging with [demo] / [clinic] prefix for CloudWatch (Phase 2, 7.2b)
+def _env_log_filter(record: logging.LogRecord) -> bool:
+    """Add env prefix for Phase 2 log separation (demo vs clinic)."""
+    env = os.getenv("API_ENVIRONMENT", "").strip().lower()
+    record.env_prefix = f"[{env}] " if env in ("demo", "clinic") else ""
+    return True
+
+_log_format = "%(asctime)s - %(env_prefix)s%(name)s - %(levelname)s - %(message)s"
+_handler = logging.StreamHandler()
+_handler.setFormatter(logging.Formatter(_log_format))
+_handler.addFilter(_env_log_filter)
+# force=True so [demo]/[clinic] prefix is used even if uvicorn configured root first (Phase 2, 7.2b)
+logging.basicConfig(level=logging.INFO, format=_log_format, handlers=[_handler], force=True)
 
 from routers import patient, reports, appointment, provider, revenue, dbt_metadata, ar, treatment_acceptance, hygiene
 from config import APIConfig
@@ -246,7 +251,9 @@ def read_root():
 @app.get("/health")
 def health_check():
     """Health check endpoint - public access for ALB health checks"""
-    return {"status": "healthy", "service": "dental-practice-api"}
+    env = os.getenv("API_ENVIRONMENT", "").strip().lower()
+    service = "dental-practice-api-demo" if env == "demo" else "dental-practice-api-clinic" if env == "clinic" else "dental-practice-api"
+    return {"status": "healthy", "service": service}
 
 @app.get("/test/rate-limit")
 def test_rate_limit_endpoint():
