@@ -1,0 +1,371 @@
+version: 2
+
+models:
+  - name: mart_claim_summary
+    description: >
+      Summary mart for insurance claim analytics and revenue cycle metrics by date and provider.
+      This mart provides aggregated claim volume, financial amounts, reimbursement and approval
+      rates, and payment cycle time to support insurance metrics dashboards and provider-level KPIs.
+      
+      ## Business Context
+      The claim summary mart enables:
+      - Insurance performance tracking and reimbursement analysis by provider
+      - Approval rate and denial/rejection monitoring for revenue cycle management
+      - Payment cycle time (days to payment) for carrier and process optimization
+      - Integration with provider performance and executive dashboards
+      
+      ## Technical Specifications
+      - Grain: One row per date + provider (date_id, provider_id)
+      - Source: fact_claim (primary); excludes pre-auth (claim_id = 0) and null claim_date/provider_id
+      - Refresh: Daily
+      - Dependencies:
+        * fact_claim (claim transaction and payment data)
+        * dim_date (temporal analysis)
+        * dim_provider (provider attributes)
+      
+      ## Business Logic
+      ### Aggregation Rules
+      - Daily aggregation by claim_date and provider_id from fact_claim
+      - Status counts use payment_status_category: Paid, Denied, Rejected, Pending, Other
+      - Reimbursement rate = (total_paid_amount / total_billed_amount) * 100
+      - Approval rate = (claims_paid / total_claim_procedures) * 100
+      - avg_payment_days_from_claim computed only for paid claims with non-null payment_days_from_claim
+      
+      ### Metric Definitions
+      - total_claim_procedures: Count of claim procedure rows (fact_claim grain)
+      - total_claims: Count of distinct claim_id
+      - claims_paid/denied/rejected/pending: Count by payment_status_category
+      - total_write_off_total: write_off_amount + adjustment_write_off_amount
+      
+      ## Data Quality Notes
+      - Pre-auth and draft claims (claim_id = 0) excluded from summary
+      - Rows with null claim_date or null provider_id excluded to maintain clean grain
+      - Rate columns may be null when denominator is zero (no billed amount or no procedures)
+      - Uses nullif() in SQL for all percentage calculations
+      
+      ## Performance Considerations
+      - Indexed on date_id, provider_id, and (date_id, provider_id)
+      - Materialized as table for fast dashboard and report queries
+      
+      ## Usage Notes
+      - Primary use case: Insurance metrics by provider and date; roll up by date for practice-level
+      - Supports reimbursement and approval rate benchmarking
+      - avg_payment_days_from_claim supports revenue cycle and carrier performance analysis
+    
+    meta:
+      owner: "Finance Team"
+      contains_pii: false
+      business_process: "Insurance and Claims Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "summary"
+      grain_description: "One row per date + provider"
+      primary_consumers: ["Finance Team", "Billing Team", "Practice Managers", "Executive Leadership"]
+      data_quality_requirements:
+        - "Financial amount columns must be non-negative"
+        - "Rate percentages (when present) must be between 0-100"
+        - "Volume counts must be non-negative integers"
+      performance_requirements:
+        - "Query response time under 5 seconds for date range and provider filters"
+    
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns: [date_id, provider_id]
+          config:
+            severity: error
+            description: "Grain must be unique on date_id and provider_id"
+      
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1
+          max_value: 100000
+          config:
+            severity: error
+            description: "Claim summary row count should be within operational scale"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "total_billed_amount >= 0 and total_paid_amount >= 0 and total_write_off_total >= 0"
+          config:
+            severity: error
+            description: "Financial amounts must be non-negative"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "(reimbursement_rate_pct is null) or (reimbursement_rate_pct >= 0 and reimbursement_rate_pct <= 100)"
+          config:
+            severity: error
+            description: "Reimbursement rate must be 0-100 when present"
+      
+      - dbt_expectations.expression_is_true:
+          expression: "(approval_rate_pct is null) or (approval_rate_pct >= 0 and approval_rate_pct <= 100)"
+          config:
+            severity: error
+            description: "Approval rate must be 0-100 when present"
+    
+    columns:
+      - name: date_id
+        description: >
+          Foreign key to dim_date. Date dimension for temporal analysis and filtering.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_date')
+              field: date_id
+              config:
+                severity: error
+      
+      - name: claim_date
+        description: >
+          Date of the claim (service/claim date). Matches date_id via dim_date.date_day.
+        tests:
+          - not_null
+      
+      - name: provider_id
+        description: >
+          Foreign key to dim_provider. Provider who performed the procedures on the claim.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_provider')
+              field: provider_id
+              config:
+                severity: error
+      
+      - name: provider_type
+        description: >
+          Provider type category from dim_provider (e.g. Dentist, Hygienist).
+        tests: []
+      
+      - name: specialty
+        description: >
+          Provider specialty from dim_provider. May be null.
+        tests: []
+      
+      - name: day_name
+        description: >
+          Day of week name from dim_date.
+        tests:
+          - not_null
+          - accepted_values:
+              values: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"]
+      
+      - name: is_weekend
+        description: >
+          True if date is Saturday or Sunday.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: is_holiday
+        description: >
+          True if date is a recognized holiday.
+        tests:
+          - not_null
+          - accepted_values:
+              values: [true, false]
+      
+      - name: month
+        description: >
+          Month number (1-12) from dim_date.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 12
+      
+      - name: quarter
+        description: >
+          Quarter (1-4) from dim_date.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 1
+              max_value: 4
+      
+      - name: year
+        description: >
+          Year from dim_date.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 2020
+              max_value: 2030
+      
+      - name: total_claim_procedures
+        description: >
+          Count of claim procedure records (fact_claim rows) for this date and provider.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: total_claims
+        description: >
+          Count of distinct claim_id for this date and provider.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: unique_patients
+        description: >
+          Count of distinct patient_id with claims for this date and provider.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: claims_paid
+        description: >
+          Number of claim procedures with payment_status_category = 'Paid'.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: claims_denied
+        description: >
+          Number of claim procedures with payment_status_category = 'Denied'.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: claims_rejected
+        description: >
+          Number of claim procedures with payment_status_category = 'Rejected'.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: claims_pending
+        description: >
+          Number of claim procedures with payment_status_category = 'Pending'.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: claims_other_status
+        description: >
+          Number of claim procedures with status other than Paid, Denied, Rejected, Pending.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: total_billed_amount
+        description: >
+          Sum of billed_amount for all claim procedures in this date/provider.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 99999999.99
+      
+      - name: total_allowed_amount
+        description: >
+          Sum of allowed_amount (insurance-approved) for claim procedures. May be negative when source uses -1 for undetermined.
+        tests:
+          - not_null
+      
+      - name: total_paid_amount
+        description: >
+          Sum of paid_amount (insurance payments received) for claim procedures.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 99999999.99
+      
+      - name: total_write_off_amount
+        description: >
+          Sum of write_off_amount from claimproc (legacy). Often zero when adjustment_write_off used.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 99999999.99
+      
+      - name: total_adjustment_write_off_amount
+        description: >
+          Sum of adjustment_write_off_amount from int_adjustments (insurance write-offs).
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 99999999.99
+      
+      - name: total_patient_responsibility
+        description: >
+          Sum of patient_responsibility (patient portion after insurance). May be negative when credits or overpayments apply.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: -99999999.99
+              max_value: 99999999.99
+      
+      - name: total_write_off_total
+        description: >
+          Sum of write_off_amount + adjustment_write_off_amount per procedure.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 99999999.99
+      
+      - name: reimbursement_rate_pct
+        description: >
+          (total_paid_amount / total_billed_amount) * 100. Null when total_billed_amount = 0.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: warn
+                where: "reimbursement_rate_pct is not null"
+      
+      - name: approval_rate_pct
+        description: >
+          (claims_paid / total_claim_procedures) * 100. Null when total_claim_procedures = 0.
+        tests:
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100
+              config:
+                severity: warn
+                where: "approval_rate_pct is not null"
+      
+      - name: avg_payment_days_from_claim
+        description: >
+          Average days from claim_date to check_date for paid claims only. Null when no paid claims with date.
+        tests: []
+      
+      - name: paid_claims_with_days
+        description: >
+          Count of paid claim procedures that have payment_days_from_claim populated.
+        tests:
+          - not_null
+          - dbt_expectations.expect_column_values_to_be_between:
+              min_value: 0
+              max_value: 100000
+      
+      - name: _transformed_at
+        description: >
+          Timestamp when this mart model was built (dbt run).
+        tests:
+          - not_null
+      
+      - name: _mart_refreshed_at
+        description: >
+          Mart refresh timestamp.
+        tests:
+          - not_null

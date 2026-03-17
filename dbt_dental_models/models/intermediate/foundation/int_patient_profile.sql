@@ -119,6 +119,8 @@ patient_demographics_enhanced as (
         
         -- Core demographics
         gender,
+        first_name,
+        last_name,
         language,
         birth_date,
         age,
@@ -184,6 +186,8 @@ patient_integrated as (
         
         -- Demographics
         pde.gender,
+        pde.first_name,
+        pde.last_name,
         pde.language,
         pde.birth_date,
         pde.age,

@@ -20,6 +20,8 @@ renamed_columns as (
         
         -- Demographics
         "Gender" as gender,
+        nullif(trim("FName"), '') as first_name,
+        nullif(trim("LName"), '') as last_name,
         "Language" as language,
         
         -- Status and Classification

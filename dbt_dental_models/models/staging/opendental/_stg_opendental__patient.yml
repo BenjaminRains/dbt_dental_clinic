@@ -212,6 +212,10 @@ models:
         #       where: "fee_schedule_id IS NOT NULL AND fee_schedule_id != 0"
       
       # Demographics
+      - name: first_name
+        description: "Patient's first name (maps to FName in OpenDental). PII - restored for operational reporting."
+      - name: last_name
+        description: "Patient's last name (maps to LName in OpenDental). PII - restored for operational reporting."
       - name: middle_initial
         description: "Patient's middle initial"
       

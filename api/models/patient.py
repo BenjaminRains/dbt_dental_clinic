@@ -7,8 +7,10 @@ class Patient(BaseModel):
     # Primary identification
     patient_id: int
     
-    # Demographics (PII removed for portfolio)
-    gender: Optional[str] = None  # M=Male, F=Female, O=Other
+    # Demographics
+    first_name: Optional[str] = None
+    last_name: Optional[str] = None
+    gender: Optional[str] = None  # M=Male, F=Female, U=Unknown
     language: Optional[str] = None
     # age removed (PII) - replaced with numeric age_category
     age_category: Optional[int] = None  # 1=Minor (0-17), 2=Young Adult (18-34), 3=Middle Aged (35-54), 4=Older Adult (55+)

@@ -207,7 +207,7 @@ models:
           - May be null if not provided by patient
         tests:
           - accepted_values:
-              values: ['M', 'F', 'O']
+              values: ['M', 'F', 'U']
               where: "gender is not null"
       
       - name: patient_status

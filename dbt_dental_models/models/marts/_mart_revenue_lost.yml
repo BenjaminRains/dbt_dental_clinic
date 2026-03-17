@@ -296,7 +296,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['M', 'F', 'O']
+              values: ['M', 'F', 'U']
       
       - name: has_insurance_flag
         description: >

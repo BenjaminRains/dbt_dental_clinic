@@ -23,6 +23,10 @@ sources:
             tests:
               - unique_quoted
               - not_null_quoted
+          - name: "FName"
+            description: "Patient first name (maps to first_name in staging)"
+          - name: "LName"
+            description: "Patient last name (maps to last_name in staging)"
           - name: "SecDateEntry"
             description: "Creation timestamp that can be null"
           - name: "DateTStamp"

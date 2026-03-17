@@ -137,6 +137,11 @@ models:
                 severity: error
                 description: "Primary provider must exist in provider profile"
 
+      - name: first_name
+        description: "Patient's first name (from OpenDental FName). PII - for operational reporting."
+      - name: last_name
+        description: "Patient's last name (from OpenDental LName). PII - for operational reporting."
+
       - name: patient_status
         description: >
           Current status of the patient

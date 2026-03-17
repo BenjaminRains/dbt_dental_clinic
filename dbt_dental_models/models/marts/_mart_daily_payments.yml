@@ -1,0 +1,43 @@
+version: 2
+
+models:
+  - name: mart_daily_payments
+    description: >
+      Daily payments KPI aggregated from fact_payment.
+      
+      Provides one row per payment_date with total collections, patient vs insurance
+      breakdown, income vs refund amounts, and counts. Intended to reconcile against
+      daily deposit logs and OpenDental daily payment reports.
+    config:
+      materialized: table
+      schema: marts
+      tags: ['kpi', 'daily', 'revenue_cycle']
+    columns:
+      - name: payment_date
+        description: "Date of payments (one row per day)."
+        tests:
+          - not_null
+          - unique
+      - name: total_payment_amount
+        description: "Sum of all payment_amount for that payment_date."
+      - name: patient_payment_amount
+        description: "Sum of payment_amount where is_patient_payment is true for that date."
+      - name: insurance_payment_amount
+        description: "Sum of payment_amount where is_insurance_payment is true for that date."
+      - name: other_payment_amount
+        description: "Sum of payment_amount for payments that are neither patient nor insurance (Partial, PrePayment, Adjustment, Refund, or unmapped payment_type_id)."
+      - name: income_amount
+        description: "Sum of payment_amount where payment_direction = 'Income' for that date."
+      - name: refund_amount
+        description: "Sum of payment_amount where payment_direction = 'Refund' for that date."
+      - name: net_collections_amount
+        description: "Net collections for the day: income_amount + refund_amount (refunds are negative)."
+      - name: payment_count
+        description: "Count of all payment records for that date."
+      - name: patient_payment_count
+        description: "Count of payments with is_patient_payment = true."
+      - name: insurance_payment_count
+        description: "Count of payments with is_insurance_payment = true."
+      - name: other_payment_count
+        description: "Count of payments that are neither patient nor insurance. Always payment_count - patient_payment_count - insurance_payment_count."
+

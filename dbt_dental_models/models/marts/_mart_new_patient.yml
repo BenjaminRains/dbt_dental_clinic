@@ -195,7 +195,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['M', 'F', 'O']
+              values: ['M', 'F', 'U']
       
       - name: age_category
         description: >

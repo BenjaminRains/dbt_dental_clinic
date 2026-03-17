@@ -173,13 +173,13 @@ models:
           Patient gender classification
           
           Business Rules:
-          - Standardized gender values (M=Male, F=Female, O=Other, U=Unknown)
+          - Standardized gender values (M=Male, F=Female, U=Unknown)
           - Used for demographic analysis and segmentation
           - Important for population health analysis
         tests:
           - not_null
           - accepted_values:
-              values: ['M', 'F', 'O', 'U']
+              values: ['M', 'F', 'U']
       
       - name: patient_status
         description: >

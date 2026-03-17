@@ -66,9 +66,11 @@ patient_enhanced as (
         case s.gender
             when 0 then 'M'
             when 1 then 'F'
-            when 2 then 'O'
+            when 2 then 'U'
             else 'U'
-        end as gender,  -- M=Male, F=Female, O=Other, U=Unknown
+        end as gender,  -- M=Male, F=Female, U=Unknown
+        s.first_name,
+        s.last_name,
         s.language,  -- Patient's preferred language
         s.birth_date,  -- Patient's date of birth
         s.age,  -- Calculated age in years

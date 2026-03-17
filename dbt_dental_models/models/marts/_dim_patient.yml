@@ -49,7 +49,7 @@ models:
       
       Business Rules:
       - Patient Status: Must be one of Patient, NonPatient, Inactive, Archived, Deceased, Deleted
-      - Gender Values: Must be M (Male), F (Female), O (Other), or U (Unknown)
+      - Gender Values: Must be M (Male), F (Female), or U (Unknown)
       - Contact Methods: Must be valid preference values (Phone, Email, Text, Mail, None, Portal, Other)
       - Age Calculation: Must be non-negative and calculated from valid birth_date
       - Balance Validation: Financial amounts must be within reasonable business ranges
@@ -124,9 +124,14 @@ models:
           - Important for clinical care and treatment planning
         tests:
           - accepted_values:
-              values: ['M', 'F', 'O']
+              values: ['M', 'F', 'U']
               config:
-                description: "Gender must be one of: M (Male), F (Female), O (Other)"
+                description: "Gender must be one of: M (Male), F (Female), U (Unknown)"
+
+      - name: first_name
+        description: "Patient's first name (from int_patient_profile / OpenDental FName). PII - restored for operational reporting."
+      - name: last_name
+        description: "Patient's last name (from int_patient_profile / OpenDental LName). PII - restored for operational reporting."
 
       - name: language
         description: >
