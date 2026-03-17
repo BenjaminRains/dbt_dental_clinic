@@ -1,0 +1,33 @@
+version: 2
+
+models:
+  - name: mart_untapped_implant_revenue
+    description: >
+      Patients who had extraction + bone graft on the same day but have not had implant placement (D6010).
+      Used to identify untapped implant revenue: they completed the first two steps (extraction, bone graft)
+      but did not return for implant placement.
+
+      Procedure codes:
+      - Extraction (any of): D7140 (erupted), D7210 (surgical partial bony), D7250 (surgical complete bony).
+      - Bone graft: D7953 (bone replacement graft).
+      - Implant placement (exclusion): D6010.
+
+      Same-day = same claim_date (service date). One row per patient; first/last qualifying date and
+      qualifying_visit_count are provided for follow-up and reporting.
+    config:
+      tags: ['marts', 'revenue', 'implant', 'extraction', 'bone_graft']
+    columns:
+      - name: patient_id
+        description: Patient identifier. Grain of the mart (one row per patient).
+      - name: first_name
+        description: Patient first name (from dim_patient). PII.
+      - name: last_name
+        description: Patient last name (from dim_patient). PII.
+      - name: first_extraction_bone_graft_date
+        description: First date the patient had both an extraction and bone graft on the same day.
+      - name: last_extraction_bone_graft_date
+        description: Most recent date the patient had both an extraction and bone graft on the same day.
+      - name: qualifying_visit_count
+        description: Number of distinct dates on which the patient had extraction + bone graft same day (no implant).
+      - name: provider_id
+        description: Provider associated with the qualifying visits (from one of the qualifying dates).

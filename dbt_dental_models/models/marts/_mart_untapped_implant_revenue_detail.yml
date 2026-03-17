@@ -1,0 +1,59 @@
+version: 2
+
+models:
+  - name: mart_untapped_implant_revenue_detail
+    description: >
+      Enriched list of untapped implant patients (extraction + bone graft same day, no D6010).
+      One row per patient with demographics, balance, primary insurance, and contact preferences
+      for outreach and reporting. Built from mart_untapped_implant_revenue + dim_patient + int_insurance_coverage.
+    config:
+      tags: ['marts', 'revenue', 'implant', 'extraction', 'bone_graft', 'outreach']
+    columns:
+      - name: patient_id
+        description: Patient identifier. Grain of the mart.
+      - name: first_extraction_bone_graft_date
+        description: First date the patient had extraction + bone graft on the same day.
+      - name: first_name
+        description: Patient first name (from dim_patient). PII.
+      - name: last_name
+        description: Patient last name (from dim_patient). PII.
+      - name: last_extraction_bone_graft_date
+        description: Most recent such date.
+      - name: qualifying_visit_count
+        description: Number of distinct qualifying dates.
+      - name: treating_provider_id
+        description: Provider who performed the extraction/bone graft (from cohort).
+      - name: gender
+        description: Patient gender (M/F/O/U) from dim_patient.
+      - name: age
+        description: Patient age in years.
+      - name: age_category
+        description: Minor / Adult / Senior.
+      - name: patient_status
+        description: Patient status description.
+      - name: estimated_balance
+        description: Estimated account balance.
+      - name: total_balance
+        description: Total outstanding balance.
+      - name: balance_status
+        description: No Balance / Outstanding Balance / Credit Balance.
+      - name: has_insurance_flag
+        description: Whether patient has active insurance.
+      - name: primary_carrier_name
+        description: Primary insurance carrier name (ordinal = 1).
+      - name: primary_group_name
+        description: Primary insurance group name.
+      - name: primary_plan_type
+        description: Primary plan type (e.g. PPO, HMO).
+      - name: first_visit_date
+        description: Patient first visit date.
+      - name: primary_provider_id
+        description: Patient primary provider.
+      - name: clinic_id
+        description: Patient clinic.
+      - name: preferred_contact_method
+        description: Preferred contact method for outreach.
+      - name: preferred_confirmation_method
+        description: Preferred confirmation method.
+      - name: text_messaging_consent
+        description: Whether patient has consented to text messaging.
