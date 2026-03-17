@@ -106,7 +106,7 @@ Essential pipeline building blocks with **modern static configuration**:
 #### 3. **Data Loading** (`loaders/`)
 PostgreSQL data loading with optimization:
 
-- **`postgres_loader.py`**: **PostgresLoader** - MySQL-to-PostgreSQL loading with chunked processing for large tables (11 methods)
+- **`postgres_loader.py`**: **PostgresLoader** - MySQL-to-PostgreSQL loading; large tables use copy_csv (chunked strategy removed)
 
 #### 4. **Configuration** (`config/`)
 **Modern, static configuration management with provider pattern**:
@@ -181,7 +181,7 @@ Source MySQL → SimpleMySQLReplicator → Replication MySQL
 ```
 Replication MySQL → PostgresLoader → PostgreSQL (raw schema)
 ```
-- Optimized loading with chunked processing for large tables
+- Optimized loading; large tables use copy_csv (chunked strategy removed)
 - Automatic type conversion and schema adaptation
 - Connection pooling and resource management
 
@@ -561,7 +561,7 @@ etl_pipeline/
 - Intelligent load balancing across available resources
 
 ### **Chunked Loading**
-- Large tables (>1M rows or >100MB) use chunked loading
+- Large tables (>200MB) use copy_csv loading (chunked strategy removed)
 - Memory-efficient processing for large datasets
 - Configurable batch sizes for optimal performance
 
