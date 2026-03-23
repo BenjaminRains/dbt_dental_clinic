@@ -12,7 +12,7 @@ Write-Host "🚀 Deploying EC2 Scheduler Lambda Function..." -ForegroundColor Gr
 
 # Try to load AccountId from deployment_credentials.json if not provided
 if ([string]::IsNullOrEmpty($AccountId)) {
-    $credentialsPath = Join-Path $PSScriptRoot ".." "deployment_credentials.json"
+    $credentialsPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "deployment_credentials.json"
     if (Test-Path $credentialsPath) {
         try {
             $credentials = Get-Content $credentialsPath | ConvertFrom-Json
@@ -289,7 +289,7 @@ Write-Host "`n✅ EC2 Scheduler deployment complete!" -ForegroundColor Green
 Write-Host "`nNext steps:" -ForegroundColor Cyan
 
 # Try to load instance IDs from deployment_credentials.json for helpful output
-$credentialsPath = Join-Path $PSScriptRoot ".." "deployment_credentials.json"
+$credentialsPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "deployment_credentials.json"
 $instanceIds = @()
 if (Test-Path $credentialsPath) {
     try {

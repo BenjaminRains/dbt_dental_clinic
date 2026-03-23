@@ -9,7 +9,7 @@ $ErrorActionPreference = "Stop"
 
 # Determine project root
 if ([string]::IsNullOrEmpty($ProjectRoot)) {
-    $ProjectRoot = Split-Path $PSScriptRoot -Parent
+    $ProjectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 }
 
 Write-Host "`n🔍 Verifying credential paths in deployment_credentials.json" -ForegroundColor Cyan

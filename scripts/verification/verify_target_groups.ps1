@@ -17,7 +17,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ([string]::IsNullOrEmpty($ProjectRoot)) {
-    $ProjectRoot = Split-Path $PSScriptRoot -Parent
+    $ProjectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 }
 
 # Optional: read ARNs from deployment_credentials.json
@@ -44,18 +44,17 @@ if (Test-Path $credentialsFile) {
     }
 }
 
-# Resolve target groups: by ARN from creds, or by name (explicit or pattern)
+# Resolve target groups: explicit -TargetGroupNames overrides creds; else use creds; else discover by default names
 $tgArnsToCheck = @()
-if ($tgArnsFromCreds.Count -gt 0) {
+$namesToFind = @()
+if ($TargetGroupNames.Count -gt 0) {
+    $namesToFind = @($TargetGroupNames)
+} elseif ($tgArnsFromCreds.Count -gt 0) {
     $tgArnsToCheck = @($tgArnsFromCreds)
 }
 
 if ($tgArnsToCheck.Count -eq 0) {
-    # Discover by name
-    $namesToFind = @()
-    if ($TargetGroupNames.Count -gt 0) {
-        $namesToFind = $TargetGroupNames
-    } else {
+    if ($namesToFind.Count -eq 0) {
         $namesToFind = @("dental-clinic-api-demo-tg", "dental-clinic-api-clinic-tg")
     }
     $listJson = aws elbv2 describe-target-groups --region $Region --output json 2>&1
@@ -80,6 +79,7 @@ Write-Host "`nDental Clinic – Target Group Health" -ForegroundColor Cyan
 Write-Host ("=" * 70) -ForegroundColor Gray
 
 $anyUnhealthy = $false
+$anyUnused = $false
 $instanceTargets = @{}
 foreach ($tgArn in $tgArnsToCheck) {
     $tgDesc = aws elbv2 describe-target-groups --target-group-arns $tgArn --region $Region --output json 2>&1
@@ -127,9 +127,11 @@ foreach ($tgArn in $tgArnsToCheck) {
             "healthy"   { "Green" }
             "initial"   { "Yellow" }
             "draining"  { "DarkYellow" }
+            "unused"    { "DarkYellow" }
             default     { "Red" }
         }
         if ($state -ne "healthy") { $anyUnhealthy = $true }
+        if ($state -eq "unused") { $anyUnused = $true }
         if (-not $instanceTargets.ContainsKey($id)) {
             $instanceTargets[$id] = @{
                 Ports        = @()
@@ -213,7 +215,12 @@ if ($anyUnhealthy) {
         Write-Host "Unhealthy targets detected. Exiting with error (-FailIfUnhealthy)." -ForegroundColor Red
         exit 1
     }
-    Write-Host "Some targets are not healthy. See Step 4 Troubleshooting in CLINIC_DEPLOYMENT_PHASE2_ACTION_PLAN.md" -ForegroundColor Yellow
+    if ($anyUnused) {
+        Write-Host "Target.NotInUse = no ALB listener rule forwards to this target group. Complete Step 5 (Update ALB Listener Rules) in CLINIC_DEPLOYMENT_PHASE2_ACTION_PLAN.md." -ForegroundColor Yellow
+    }
+    if (-not $anyUnused) {
+        Write-Host "Some targets are not healthy. See Step 4 Troubleshooting in CLINIC_DEPLOYMENT_PHASE2_ACTION_PLAN.md" -ForegroundColor Yellow
+    }
     exit 0
 }
 Write-Host "All target groups have healthy targets." -ForegroundColor Green

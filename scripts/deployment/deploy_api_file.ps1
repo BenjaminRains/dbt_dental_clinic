@@ -20,7 +20,7 @@ Write-Host "=" * 60 -ForegroundColor Gray
 
 # Get instance ID from deployment_credentials.json if not provided
 if (-not $InstanceId) {
-    $credentialsFile = Join-Path $PSScriptRoot ".." "deployment_credentials.json"
+    $credentialsFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "deployment_credentials.json"
     if (Test-Path $credentialsFile) {
         $credentials = Get-Content $credentialsFile | ConvertFrom-Json
         if ($Clinic -and $credentials.backend_api.clinic_api.ec2.instance_id) {
@@ -132,10 +132,16 @@ try {
         
         try {
             # Use simpler status check to avoid Unicode characters in output
+            $serviceName = if ($Clinic) { "dental-clinic-api-clinic" } else { "dental-clinic-api" }
+            $restartParams = @{ commands = @(
+                "sudo systemctl restart $serviceName",
+                "sleep 2",
+                "sudo systemctl is-active $serviceName && echo Service is active || echo Service is not active"
+            )} | ConvertTo-Json -Compress
             $restartResponse = aws ssm send-command `
                 --instance-ids $InstanceId `
                 --document-name "AWS-RunShellScript" `
-                --parameters '{"commands":["sudo systemctl restart dental-clinic-api","sleep 2","sudo systemctl is-active dental-clinic-api && echo Service is active || echo Service is not active"]}' `
+                --parameters $restartParams `
                 --output json 2>&1 | Out-String
             
             # Parse JSON with UTF-8 handling

@@ -15,7 +15,7 @@ param(
 $ErrorActionPreference = "Stop"
 
 # Load database credentials
-$credentialsPath = Join-Path (Split-Path $PSScriptRoot -Parent) "deployment_credentials.json"
+$credentialsPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "deployment_credentials.json"
 if (-not (Test-Path $credentialsPath)) {
     Write-Host "❌ deployment_credentials.json not found" -ForegroundColor Red
     exit 1

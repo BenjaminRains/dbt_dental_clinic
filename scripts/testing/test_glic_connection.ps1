@@ -24,7 +24,7 @@ Write-Host "✓ MySQL client found: $($mysqlCmd.Source)" -ForegroundColor Green
 Write-Host ""
 
 # Load configuration from .env_clinic file (clinic GLIC source)
-$envFilePath = Join-Path $PSScriptRoot "..\etl_pipeline\.env_clinic"
+$envFilePath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "etl_pipeline\.env_clinic"
 $glicHost = $null
 $glicPassword = $null
 $mdcPassword = $null

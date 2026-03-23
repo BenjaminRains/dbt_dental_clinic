@@ -10,10 +10,10 @@ param(
 $ErrorActionPreference = "Stop"
 
 if ([string]::IsNullOrEmpty($ProjectRoot)) {
-    $ProjectRoot = Split-Path $PSScriptRoot -Parent
+    $ProjectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 }
 
-$setupScriptPath = Join-Path $ProjectRoot "scripts\setup_ec2_dbt_env.sh"
+$setupScriptPath = Join-Path $ProjectRoot "scripts\ec2\setup_ec2_dbt_env.sh"
 if (-not (Test-Path $setupScriptPath)) {
     Write-Host "setup_ec2_dbt_env.sh not found: $setupScriptPath" -ForegroundColor Red
     exit 1

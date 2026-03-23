@@ -11,7 +11,7 @@ Write-Host "`n🔧 Updating Patient Balances on EC2 RDS Demo Database" -Foregrou
 Write-Host ""
 
 # Load database credentials
-$credentialsPath = Join-Path (Split-Path $PSScriptRoot -Parent) "deployment_credentials.json"
+$credentialsPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "deployment_credentials.json"
 if (-not (Test-Path $credentialsPath)) {
     Write-Host "❌ deployment_credentials.json not found" -ForegroundColor Red
     exit 1
@@ -53,7 +53,7 @@ Write-Host "   User: $($demo.postgresql.user)" -ForegroundColor Gray
 Write-Host ""
 
 # Read the SQL update script
-$sqlScriptPath = Join-Path (Split-Path $PSScriptRoot -Parent) "docs\dbt\manual_update_patient_balances.sql"
+$sqlScriptPath = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "docs\dbt\manual_update_patient_balances.sql"
 if (-not (Test-Path $sqlScriptPath)) {
     Write-Host "❌ SQL script not found: $sqlScriptPath" -ForegroundColor Red
     exit 1

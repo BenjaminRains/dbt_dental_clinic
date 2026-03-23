@@ -22,7 +22,7 @@ $ErrorActionPreference = "Stop"
 
 # Determine project root
 if ([string]::IsNullOrEmpty($ProjectRoot)) {
-    $ProjectRoot = Split-Path $PSScriptRoot -Parent
+    $ProjectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 }
 
 Write-Host "`n🚀 Deploying dbt model files to EC2" -ForegroundColor Cyan

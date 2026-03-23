@@ -18,7 +18,7 @@ $ErrorActionPreference = "Stop"
 
 # Determine project root
 if ([string]::IsNullOrEmpty($ProjectRoot)) {
-    $ProjectRoot = Split-Path $PSScriptRoot -Parent
+    $ProjectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 }
 
 Write-Host "`n🚀 Running dbt on EC2" -ForegroundColor Cyan
@@ -42,6 +42,13 @@ if (-not $InstanceId) {
 if (-not $DbtArgs -or $DbtArgs.Count -eq 0) {
     $DbtArgs = @("run")
     Write-Host "⚠️  No dbt command specified, defaulting to 'dbt run'" -ForegroundColor Yellow
+}
+
+# Default to --target clinic when running on EC2 (clinic RDS); allow override via explicit --target
+$hasTarget = $DbtArgs | Where-Object { $_ -match '^--target' -or $_ -eq '-t' }
+if (-not $hasTarget) {
+    $DbtArgs = $DbtArgs + @('--target', 'clinic')
+    Write-Host "🎯 Using target: clinic (default for EC2)" -ForegroundColor Gray
 }
 
 # Build the dbt command

@@ -24,7 +24,7 @@ if (-not $ApiKey) {
             $ApiKey = $envKey
         } else {
             # Try loading from .env_api_demo file (previously .env_api_production)
-            $projectRoot = Split-Path -Parent $PSScriptRoot
+            $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
             $envFile = Join-Path $projectRoot "api" ".env_api_demo"
             if (Test-Path $envFile) {
                 Write-Host "`n📄 Loading DEMO_API_KEY from: $envFile" -ForegroundColor Gray
@@ -44,7 +44,7 @@ if (-not $ApiKey) {
     
     # If still no key, try loading from PEM file (for local/test environments)
     if (-not $ApiKey) {
-        $projectRoot = Split-Path -Parent $PSScriptRoot
+        $projectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
         $pemFile = Join-Path $projectRoot ".ssh" "dbt-dental-clinic-api-key.pem"
         
         if (Test-Path $pemFile) {

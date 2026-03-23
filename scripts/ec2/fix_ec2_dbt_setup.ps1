@@ -19,7 +19,7 @@ $ErrorActionPreference = "Stop"
 
 # Determine project root
 if ([string]::IsNullOrEmpty($ProjectRoot)) {
-    $ProjectRoot = Split-Path $PSScriptRoot -Parent
+    $ProjectRoot = Split-Path (Split-Path $PSScriptRoot -Parent) -Parent
 }
 
 Write-Host "`n🔧 Fixing EC2 dbt Setup" -ForegroundColor Cyan
@@ -60,7 +60,8 @@ Write-Host ""
 $stepNum = 1
 $totalSteps = if ($SkipCredentials) { 3 } else { 4 }
 Write-Host "`n[$stepNum/$totalSteps] Deploying setup_ec2_dbt_env.sh..." -ForegroundColor Cyan
-& "$PSScriptRoot\deploy_setup_script.ps1" -InstanceId $InstanceId -ProjectRoot $ProjectRoot
+$deploymentDir = Join-Path (Split-Path $PSScriptRoot -Parent) "deployment"
+& "$deploymentDir\deploy_setup_script.ps1" -InstanceId $InstanceId -ProjectRoot $ProjectRoot
 if ($LASTEXITCODE -ne 0) {
     Write-Host "Failed to deploy setup script" -ForegroundColor Red
     exit 1
@@ -70,7 +71,7 @@ if ($LASTEXITCODE -ne 0) {
 if (-not $SkipCredentials) {
     $stepNum++
     Write-Host "`n[$stepNum/$totalSteps] Deploying deployment_credentials.json..." -ForegroundColor Cyan
-    & "$PSScriptRoot\deploy_credentials_json.ps1" -InstanceId $InstanceId -ProjectRoot $ProjectRoot
+    & "$deploymentDir\deploy_credentials_json.ps1" -InstanceId $InstanceId -ProjectRoot $ProjectRoot
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Failed to deploy credentials file" -ForegroundColor Red
         exit 1
