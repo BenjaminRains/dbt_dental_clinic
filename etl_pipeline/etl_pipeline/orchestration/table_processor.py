@@ -27,7 +27,7 @@ ACTIVE USAGE:
 SIMPLIFIED ARCHITECTURE:
 1. SINGLE ETL METHOD: process_table handles all phases in one place
 2. DIRECT SETTINGS USAGE: Uses Settings class directly without multiple lookups
-3. SIMPLIFIED LOADING: Uses standard loading for all tables (chunked only when needed)
+3. SIMPLIFIED LOADING: Single load_table() entrypoint; strategy selected by size (standard/streaming/copy_csv)
 4. REDUCED DEPENDENCIES: Fewer abstraction layers and components
 5. INTEGRATED APPROACH: Uses SimpleMySQLReplicator and PostgresLoader with static config
 
@@ -229,7 +229,8 @@ class TableProcessingContext:
         }
 
 class TableProcessor:
-    def __init__(self, config_reader: Optional[ConfigReader] = None, config_path: Optional[str] = None):
+    def __init__(self, config_reader: Optional[ConfigReader] = None, config_path: Optional[str] = None,
+                 metrics: Optional[UnifiedMetricsCollector] = None):
         """
         Initialize the table processor.
         
@@ -246,11 +247,12 @@ class TableProcessor:
         Args:
             config_reader: ConfigReader instance (optional, will be created if not provided)
             config_path: Path to the configuration file (used for ConfigReader)
+            metrics: Optional UnifiedMetricsCollector to use (e.g. from orchestrator)
         """
         # ✅ MODERN ARCHITECTURE: Use Settings injection for environment-agnostic operation
         self.settings = get_settings()
         self.config_path = config_path or "etl_pipeline/config/tables.yml"
-        self.metrics = UnifiedMetricsCollector(settings=self.settings)
+        self.metrics = metrics if metrics is not None else UnifiedMetricsCollector(settings=self.settings)
         
         # ✅ MODERN ARCHITECTURE: Validate environment configuration
         self._validate_environment()
@@ -360,16 +362,30 @@ class TableProcessor:
                 logger.info(f"Loading {table_name} to analytics database ({rows_extracted} rows)")
                 
             load_start = time.time()
-            if not self._load_to_analytics(table_name, force_full):
+            load_success, load_metadata = self._load_to_analytics(table_name, force_full)
+            if not load_success:
                 logger.error(f"Load to analytics failed for table: {table_name}")
                 return False
             load_duration = time.time() - load_start
             
-            # Track load performance
-            self._track_performance_metrics(f"{table_name}_load", performance_category, load_duration, rows_extracted)
+            # Track load performance (DEBUG only; single summary is logged below)
+            self._track_performance_metrics(f"{table_name}_load", performance_category, load_duration, load_metadata.get('rows_loaded', rows_extracted))
                 
             processing_time = (time.time() - start_time) / 60
-            logger.info(f"Successfully completed ETL pipeline for table: {table_name} in {processing_time:.2f} minutes")
+            meta = load_metadata or {}
+            rows_loaded = meta.get('rows_loaded', 0)
+            strategy_used = meta.get('strategy_used', 'unknown')
+            load_dur_sec = meta.get('duration', load_duration)
+            rows_per_sec = (rows_loaded / load_dur_sec) if load_dur_sec and load_dur_sec > 0 else 0
+            if strategy_used == 'skipped_no_new_data':
+                logger.info(
+                    f"{table_name}: 0 new rows in {processing_time:.1f} min (replication and analytics in sync, load skipped)"
+                )
+            else:
+                logger.info(
+                    f"{table_name}: {rows_loaded:,} rows in {processing_time:.1f} min ({strategy_used}, {rows_per_sec:.0f} rows/sec)"
+                )
+            logger.debug(f"Successfully completed ETL pipeline for table: {table_name} in {processing_time:.2f} minutes")
             return True
             
         except DataExtractionError as e:
@@ -586,7 +602,7 @@ class TableProcessor:
                 category=performance_category
             )
             
-            logger.info(f"Performance: {table_name} ({performance_category}) - "
+            logger.debug(f"Performance: {table_name} ({performance_category}) - "
                        f"{rows_processed:,} rows in {duration:.2f}s ({rate:.0f} rows/sec)")
             
         except Exception as e:
@@ -652,8 +668,8 @@ class TableProcessor:
                 else:
                     logger.warning(f"Failed to update PostgreSQL tracking for {table_name}")
             
-            # Log consolidated tracking information
-            logger.info(f"Pipeline tracking updated for {table_name} ({phase}): "
+            # Log consolidated tracking information (DEBUG; summary is logged once at pipeline completion)
+            logger.debug(f"Pipeline tracking updated for {table_name} ({phase}): "
                        f"{status}, {rows_processed} rows, {duration:.2f}s")
             
         except Exception as e:
@@ -678,7 +694,7 @@ class TableProcessor:
             if not force_full:
                 needs_updating, replication_primary, analytics_primary, force_full_load_recommended = loader._check_analytics_needs_updating(table_name)
                 if not needs_updating:
-                    logger.info(f"Analytics database is up to date for {table_name}, skipping load phase")
+                    logger.info(f"Analytics database is up to date for {table_name} (no new rows to load), skipping load phase")
                     # IMPORTANT: Update load status even when skipping load to reflect that table was processed
                     tracking_metadata = {
                         'rows_processed': 0,
@@ -688,29 +704,20 @@ class TableProcessor:
                         'strategy_used': 'skipped_no_new_data'
                     }
                     self._update_pipeline_status(table_name, 'load', 'success', tracking_metadata)
-                    return True
+                    return True, {'rows_loaded': 0, 'duration': 0.0, 'strategy_used': 'skipped_no_new_data'}
                 elif force_full_load_recommended:
                     logger.info(f"Analytics table {table_name} is empty but has load timestamp, forcing full load")
                     force_full = True
             
             # IMPROVED: Use unified processing context for consistent configuration access
             context = TableProcessingContext(table_name, force_full, self.config_reader)
-            estimated_size_mb = context.estimated_size_mb
-            batch_size = context.config.get('batch_size', 5000)
             
-            # Use chunked loading for large tables (> 100MB)
-            use_chunked = estimated_size_mb > 100
-            
-            if use_chunked and hasattr(loader, 'load_table_chunked'):
-                logger.info(f"Using chunked loading for large table: {table_name} ({estimated_size_mb}MB)")
-                success, metadata = loader.load_table_chunked(table_name=table_name, force_full=force_full, chunk_size=batch_size)
-            else:
-                logger.debug(f"Using standard loading for table: {table_name}")
-                success, metadata = loader.load_table(table_name=table_name, force_full=force_full)
+            # Single entrypoint: loader selects strategy by size (standard / streaming / copy_csv)
+            success, metadata = loader.load_table(table_name=table_name, force_full=force_full)
             
             if not success:
                 logger.error(f"Failed to load table {table_name}")
-                return False
+                return False, {}
             
             # IMPROVED: Use metadata from PostgresLoader for consistent tracking
             tracking_metadata = {
@@ -722,22 +729,22 @@ class TableProcessor:
             }
             self._update_pipeline_status(table_name, 'load', 'success', tracking_metadata)
             
-            logger.info(f"Successfully loaded {table_name} to analytics database "
+            logger.debug(f"Successfully loaded {table_name} to analytics database "
                        f"({metadata.get('rows_loaded', 0)} rows, {metadata.get('strategy_used', 'unknown')} strategy)")
-            return True
+            return True, metadata
             
         except DataLoadingError as e:
             logger.error(f"Data loading failed for {table_name}: {e}")
-            return False
+            return False, {}
         except DatabaseConnectionError as e:
             logger.error(f"Database connection failed during loading for {table_name}: {e}")
-            return False
+            return False, {}
         except DatabaseTransactionError as e:
             logger.error(f"Database transaction failed during loading for {table_name}: {e}")
-            return False
+            return False, {}
         except Exception as e:
             logger.error(f"Unexpected error during loading for {table_name}: {str(e)}")
-            return False 
+            return False, {} 
 
     def _instantiate_loader(self):
         """Create a loader instance using the PostgresLoader implementation.
@@ -768,10 +775,6 @@ class TableProcessor:
                     return self._impl._update_load_status(table_name, rows_loaded, load_status)
 
                 def load_table(self, table_name: str, force_full: bool = False):
-                    return self._impl.load_table(table_name, force_full)
-
-                def load_table_chunked(self, table_name: str, force_full: bool = False, chunk_size: int = 5000):
-                    # Loader chooses strategy internally; call unified entrypoint
                     return self._impl.load_table(table_name, force_full)
 
             return _LoaderAdapter(PostgresLoader(

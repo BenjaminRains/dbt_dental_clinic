@@ -24,7 +24,7 @@ Coverage Areas:
     - Environment separation between clinic and test
     - Exception handling for all custom exception types
     - Configuration loading and validation
-    - Data loading strategies (standard and chunked)
+    - Data loading strategies (standard, streaming, copy_csv)
     - Load verification and error recovery
 
 ETL Context:
@@ -102,7 +102,7 @@ class TestPostgresLoaderComprehensive:
         
     Test Order:
         1. Environment validation (FAIL FAST)
-        2. Core PostgresLoader logic (load_table, load_table_chunked, verify_load)
+        2. Core PostgresLoader logic (load_table, verify_load). Chunked strategy removed; large tables use copy_csv.
         3. Query building and schema operations
         4. Error handling and recovery
         
@@ -368,14 +368,11 @@ class TestPostgresLoaderComprehensive:
             
         self.logger.info("SUCCESS: load_table scenarios tested successfully with realistic data")
     
+    @pytest.mark.skip(reason="Chunked strategy removed; use load_table() which selects copy_csv for large tables")
     def test_load_table_chunked_scenarios(self, postgres_loader, sample_table_data, sample_mysql_schema):
         """
-        Test load_table_chunked method with different chunk sizes using realistic test data.
-        
-        AAA Pattern:
-            Arrange: Set up test data and chunk scenarios using real data structures
-            Act: Call load_table_chunked with different chunk sizes
-            Assert: Verify chunked loading behavior
+        Test load_table with large-table scenarios (chunked strategy removed).
+        Use load_table() which selects copy_csv for tables > 200MB. This test is skipped.
         """
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")

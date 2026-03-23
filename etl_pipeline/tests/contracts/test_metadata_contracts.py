@@ -152,7 +152,10 @@ class TestLoadMetadataContract:
     VALID_STRATEGIES = [
         'full_load',
         'incremental',
-        'chunked',
+        'standard',
+        'streaming',
+        'copy_csv',
+        'chunked',  # deprecated (load); use copy_csv. Kept for backward compatibility.
         'skipped_no_new_data',
         'error'
     ]
@@ -173,16 +176,15 @@ class TestLoadMetadataContract:
     
     @pytest.fixture
     def chunked_metadata(self) -> Dict[str, Any]:
-        """Example chunked load metadata."""
+        """Example large-table load metadata (copy_csv). 'chunked' strategy was removed."""
         return {
             'rows_loaded': 150000,
-            'strategy_used': 'chunked',
+            'strategy_used': 'copy_csv',
             'duration': 180.5,
             'last_primary_value': 150000,
             'primary_column': 'PatNum',
             'schema_converted': True,
-            'chunked_loading': True,
-            'chunk_count': 5,
+            'chunked_loading': False,
             'verification_passed': True
         }
     

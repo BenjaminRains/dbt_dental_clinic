@@ -22,7 +22,7 @@ ARCHITECTURE:
 1. PostgresLoader - Loading component (coordinates strategies internally)
 2. LoadPreparation - Universal pre-processing (config, schema, query building with incremental fallback)
 3. LoadStrategy (ABC) - Abstract base for execution strategies
-4. Concrete Strategies - StandardStrategy, StreamingStrategy, ChunkedStrategy
+4. Concrete Strategies - StandardStrategy, StreamingStrategy, CopyCSVStrategy
 5. LoadFinalization - Universal post-processing (tracking, metrics, validation)
 
 KEY IMPROVEMENTS:
@@ -147,9 +147,8 @@ class LoadStrategyType(Enum):
     """Available loading strategies based on table size."""
     STANDARD = "standard"      # < 50MB - Batch loading with fetchall()
     STREAMING = "streaming"    # 50-200MB - Generator-based streaming
-    CHUNKED = "chunked"        # 200-500MB - Paginated LIMIT/OFFSET
-    COPY_CSV = "copy_csv"      # > 500MB - Export CSV, use COPY command
-    PARALLEL = "parallel"      # > 1M rows - ThreadPoolExecutor parallel chunks
+    COPY_CSV = "copy_csv"      # > 200MB - Export CSV, PostgreSQL COPY
+    PARALLEL = "parallel"      # > 1M rows - ThreadPoolExecutor (future)
 
 
 @dataclass
@@ -431,6 +430,19 @@ class StreamingLoadStrategy(LoadStrategy):
             )
 
 
+def _serialize_value_for_copy_csv(value: Any) -> str:
+    """
+    Serialize a Python value (after PostgresSchema conversion) for PostgreSQL COPY CSV.
+    Handles only formatting: None → empty (NULL), datetime/date → ISO string, else str.
+    Schema/type edge cases (e.g. MySQL zero-datetime) are handled in PostgresSchema.
+    """
+    if value is None:
+        return ""
+    if isinstance(value, (datetime, date)):
+        return value.isoformat()
+    return "" if value == "" else str(value)
+
+
 class CopyCSVLoadStrategy(LoadStrategy):
     """
     COPY CSV loading for very large tables (> 500MB).
@@ -440,40 +452,60 @@ class CopyCSVLoadStrategy(LoadStrategy):
     - Use PostgreSQL COPY for fast bulk ingestion
     - Truncate target when force_full; otherwise upsert is not supported (fallback recommended)
 
-    BEST FOR:
-    - Very large full loads where COPY is substantially faster than batched INSERTs
+    Type/schema edge cases (e.g. MySQL 0000-00-00 → PostgreSQL NULL) are handled via
+    schema_adapter.convert_row_data_types() from postgres_schema.py, not in this strategy.
     """
+
+    def __init__(
+        self,
+        source_engine: Any,
+        target_engine: Any,
+        target_schema: str,
+        bulk_insert_method: Any = None,
+        schema_adapter: Any = None,
+    ):
+        super().__init__(source_engine, target_engine, target_schema, bulk_insert_method)
+        self.schema_adapter = schema_adapter
 
     def execute(self, load_prep: LoadPreparation) -> LoadResult:
         start_time = time.time()
         rows_loaded = 0
         tmp_path = None
+        count_before = 0
         try:
             logger.info(f"[CopyCsvStrategy] Loading {load_prep.table_name} via CSV COPY")
 
-            # Truncate when full load
+            # Truncate when full load; for incremental, capture current row count for verification
             if load_prep.should_truncate:
                 with self.target_engine.begin() as tgt_conn:
                     tgt_conn.execute(text(f'TRUNCATE TABLE {self.target_schema}.{load_prep.table_name}'))
+            else:
+                with self.target_engine.connect() as conn:
+                    count_before = conn.execute(text(
+                        f'SELECT COUNT(*) FROM {self.target_schema}.{load_prep.table_name}'
+                    )).scalar() or 0
 
+            table_name = load_prep.table_name
             # Execute source query and stream to temp CSV
             with self.source_engine.connect() as src_conn:
                 result = src_conn.execute(text(load_prep.query))
                 column_names = list(result.keys())
 
-                fd, tmp_path = tempfile.mkstemp(prefix=f"etl_{load_prep.table_name}_", suffix=".csv")
+                fd, tmp_path = tempfile.mkstemp(prefix=f"etl_{table_name}_", suffix=".csv")
                 os.close(fd)
 
                 with open(tmp_path, mode="w", newline="", encoding="utf-8") as f:
                     writer = csv.writer(f)
                     # Do not write header; COPY will use column list
-                    batch = []
-                    batch_size = max(1000, min(load_prep.batch_size, 100000))
                     for row in result:
                         if hasattr(row, "_mapping"):
-                            data = [row._mapping[col] for col in column_names]
+                            row_dict = {col: row._mapping[col] for col in column_names}
                         else:
-                            data = [row[idx] for idx, _ in enumerate(column_names)]
+                            row_dict = {col: row[idx] for idx, col in enumerate(column_names)}
+                        # Use PostgresSchema for type/schema edge cases (e.g. 0000-00-00 → NULL)
+                        if self.schema_adapter is not None:
+                            row_dict = self.schema_adapter.convert_row_data_types(table_name, row_dict)
+                        data = [_serialize_value_for_copy_csv(row_dict[col]) for col in column_names]
                         writer.writerow(data)
                         rows_loaded += 1
 
@@ -487,6 +519,22 @@ class CopyCSVLoadStrategy(LoadStrategy):
                         cur.copy_expert(copy_sql, f)
                         # Note: rows_loaded tracking happens during CSV write phase above
                         # begin() context manager auto-commits on success
+
+            # Verify rows are visible in analytics before we report success (ensures commit is done and data is in raw)
+            with self.target_engine.connect() as verify_conn:
+                verify_result = verify_conn.execute(text(
+                    f'SELECT COUNT(*) FROM {self.target_schema}.{load_prep.table_name}'
+                ))
+                actual_count = verify_result.scalar()
+            expected_count = rows_loaded if load_prep.should_truncate else (count_before + rows_loaded)
+            if actual_count != expected_count:
+                raise RuntimeError(
+                    f"Post-load count mismatch for {load_prep.table_name}: "
+                    f"expected {expected_count:,} rows in {self.target_schema}.{load_prep.table_name}, got {actual_count:,}"
+                )
+            logger.info(
+                f"Verified {rows_loaded:,} rows in {self.target_schema}.{load_prep.table_name} (analytics)"
+            )
 
             return LoadResult(
                 success=True,
@@ -509,93 +557,6 @@ class CopyCSVLoadStrategy(LoadStrategy):
                     os.remove(tmp_path)
                 except Exception:
                     pass
-
-
-class ChunkedLoadStrategy(LoadStrategy):
-    """
-    Chunked loading for large tables (200-500MB).
-    
-    APPROACH:
-    - Use LIMIT/OFFSET pagination
-    - Process in chunks of 25,000 rows
-    - Progress tracking per chunk
-    
-    BEST FOR:
-    - Large tables 1M-10M rows
-    - Long-running loads that need progress tracking
-    - Resumable loads (can restart from last chunk)
-    
-    PERFORMANCE:
-    - Memory usage: O(chunk_size) = constant
-    - Multiple queries (one per chunk)
-    - Overhead from pagination queries
-    """
-    
-    def execute(self, load_prep: LoadPreparation) -> LoadResult:
-        """
-        Execute chunked loading strategy with pagination.
-        
-        IMPLEMENTATION NOTES:
-        - Use LIMIT/OFFSET to paginate results
-        - Process chunks of 25,000 rows (configurable)
-        - Log progress after each chunk
-        - Can be interrupted and resumed
-        """
-        start_time = time.time()
-        rows_loaded = 0
-        
-        try:
-            logger.info(f"[ChunkedStrategy] Loading {load_prep.table_name} with pagination")
-            # Optional truncate for full loads
-            if load_prep.should_truncate:
-                with self.target_engine.begin() as tgt_conn:
-                    tgt_conn.execute(text(f'TRUNCATE TABLE {self.target_schema}.{load_prep.table_name}'))
-            # Decide chunk size
-            chunk_size = max(5000, min(load_prep.batch_size if load_prep.batch_size else 25000, 50000))
-            use_upsert = not load_prep.should_truncate
-            # Paginate by wrapping original query as subquery
-            # MySQL supports LIMIT :limit OFFSET :offset
-            offset = 0
-            chunk_index = 0
-            column_names: List[str] = []
-            while True:
-                paged_sql = f"SELECT * FROM ({load_prep.query}) AS subq LIMIT :limit OFFSET :offset"
-                with self.source_engine.connect() as src_conn:
-                    result = src_conn.execute(text(paged_sql), {"limit": chunk_size, "offset": offset})
-                    if chunk_index == 0:
-                        column_names = list(result.keys())
-                    rows = result.fetchall()
-                if not rows:
-                    break
-                converted = [self._convert_row_to_dict(r, column_names) for r in rows]
-                ok = self.bulk_insert(load_prep.table_name, converted, chunk_size=chunk_size, use_upsert=use_upsert)
-                if not ok:
-                    raise RuntimeError("bulk_insert_optimized returned False")
-                rows_loaded += len(converted)
-                chunk_index += 1
-                offset += chunk_size
-                if load_prep.estimated_rows:
-                    total_chunks = max(1, (load_prep.estimated_rows + chunk_size - 1) // chunk_size)
-                    percent = min(100, int((chunk_index / total_chunks) * 100))
-                    logger.info(f"[ChunkedStrategy] {load_prep.table_name}: chunk {chunk_index}/{total_chunks} (~{percent}%)")
-                else:
-                    logger.info(f"[ChunkedStrategy] {load_prep.table_name}: processed chunk {chunk_index} (+{len(converted)} rows)")
-            return LoadResult(
-                success=True,
-                rows_loaded=rows_loaded,
-                strategy_used="chunked",
-                duration=time.time() - start_time
-            )
-            
-        except Exception as e:
-            logger.error(f"[ChunkedStrategy] Error loading {load_prep.table_name}: {str(e)}")
-            return LoadResult(
-                success=False,
-                rows_loaded=rows_loaded,
-                strategy_used="chunked",
-                duration=time.time() - start_time,
-                error=str(e)
-            )
 
 
 class ParallelLoadStrategy(LoadStrategy):
@@ -759,17 +720,12 @@ class PostgresLoader:
                 self.analytics_schema,
                 self.bulk_insert_optimized
             ),
-            LoadStrategyType.CHUNKED: ChunkedLoadStrategy(
-                self.replication_engine,
-                self.analytics_engine,
-                self.analytics_schema,
-                self.bulk_insert_optimized
-            ),
             LoadStrategyType.COPY_CSV: CopyCSVLoadStrategy(
                 self.replication_engine,
                 self.analytics_engine,
                 self.analytics_schema,
-                self.bulk_insert_optimized
+                self.bulk_insert_optimized,
+                self.schema_adapter,
             ),
             LoadStrategyType.PARALLEL: ParallelLoadStrategy(
                 self.replication_engine,
@@ -1009,9 +965,8 @@ class PostgresLoader:
         SELECTION CRITERIA:
         - < 50MB: Standard (batch loading)
         - 50-200MB: Streaming (generator-based)
-        - 200-500MB: Chunked (paginated)
-        - > 500MB: CopyCSV (bulk COPY)
-        - > 1M rows: Parallel (if enabled)
+        - > 200MB: CopyCSV (bulk COPY; best throughput for large tables)
+        - > 1M rows: Parallel (if enabled in future)
         
         Args:
             load_prep: LoadPreparation with table size estimates
@@ -1029,11 +984,9 @@ class PostgresLoader:
             #     return LoadStrategyType.PARALLEL
             pass
         
-        # Size-based selection
-        if size_mb > 500:
+        # Size-based selection: use copy_csv for large tables (>200MB) for best throughput
+        if size_mb > 200:
             return LoadStrategyType.COPY_CSV
-        elif size_mb > 200:
-            return LoadStrategyType.CHUNKED
         elif size_mb > 50:
             return LoadStrategyType.STREAMING
         else:
@@ -1149,8 +1102,8 @@ class PostgresLoader:
             # 5. LOG FINAL SUMMARY
             # ============================================================
             if load_result.success:
-                logger.info(
-                    f"✅ Successfully loaded {table_name}: "
+                logger.debug(
+                    f"✅ Successfully loaded {table_name} into analytics: "
                     f"{load_result.rows_loaded:,} rows in {duration:.2f}s "
                     f"({rows_per_sec:.0f} rows/sec) using {load_result.strategy_used} strategy"
                 )
@@ -1668,8 +1621,10 @@ class PostgresLoader:
                                     f"Computed last_primary_value for {table_name} from analytics data using {selected_column}: {last_primary_value}"
                                 )
                             else:
+                                # Analytics table is empty - clear the invalid stored value
+                                last_primary_value = None
                                 logger.info(
-                                    f"Analytics table {self.analytics_schema}.{table_name} has no non-null values for {selected_column}; leaving last_primary_value as NULL"
+                                    f"Analytics table {self.analytics_schema}.{table_name} has no non-null values for {selected_column}; setting last_primary_value to NULL"
                                 )
                         except Exception as compute_err:
                             logger.warning(f"Could not compute MAX({selected_column}) for {table_name}: {str(compute_err)}")
@@ -1975,15 +1930,31 @@ class PostgresLoader:
                         # FIXED: Handle integer primary keys correctly
                         primary_incremental_column = table_config.get('primary_incremental_column')
                         last_primary_value = self._get_last_primary_value(table_name)
-                        
+
+                        def _is_numeric_value(val: object) -> bool:
+                            """Only use non-datetime values for integer column comparisons."""
+                            if val is None:
+                                return False
+                            s = str(val).strip()
+                            if not s:
+                                return False
+                            # Reject datetime-like strings (e.g. '2026-01-07 23:31:54')
+                            if '-' in s and (':' in s or len(s) == 10):
+                                return False
+                            try:
+                                float(s)
+                                return True
+                            except ValueError:
+                                return False
+
                         conditions = []
                         for col in incremental_columns:
-                            if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col):
-                                # Handle integer primary key columns
+                            if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col) and _is_numeric_value(last_primary_value):
+                                # Handle integer primary key columns - only with numeric values
                                 conditions.append(f"`{col}` > {last_primary_value}")
                             else:
                                 # Handle timestamp columns
-                                conditions.append(f"({col} > '{analytics_load_time}' AND {col} != '0001-01-01 00:00:00')")
+                                conditions.append(f"(`{col}` > '{analytics_load_time}' AND `{col}` != '0001-01-01 00:00:00')")
                         
                         # Use strategy-based logic
                         if incremental_strategy == 'or_logic':
@@ -1993,16 +1964,16 @@ class PostgresLoader:
                         elif incremental_strategy == 'single_column':
                             # Use only the primary incremental column
                             if primary_incremental_column and primary_incremental_column in incremental_columns:
-                                if last_primary_value and self._is_integer_column(table_name, primary_incremental_column):
+                                if last_primary_value and self._is_integer_column(table_name, primary_incremental_column) and _is_numeric_value(last_primary_value):
                                     where_clause = f"`{primary_incremental_column}` > {last_primary_value}"
                                 else:
-                                    where_clause = f"({primary_incremental_column} > '{analytics_load_time}' AND {primary_incremental_column} != '0001-01-01 00:00:00')"
+                                    where_clause = f"(`{primary_incremental_column}` > '{analytics_load_time}' AND `{primary_incremental_column}` != '0001-01-01 00:00:00')"
                             else:
                                 # Fallback to first column
-                                if last_primary_value and self._is_integer_column(table_name, incremental_columns[0]):
+                                if last_primary_value and self._is_integer_column(table_name, incremental_columns[0]) and _is_numeric_value(last_primary_value):
                                     where_clause = f"`{incremental_columns[0]}` > {last_primary_value}"
                                 else:
-                                    where_clause = f"({incremental_columns[0]} > '{analytics_load_time}' AND {incremental_columns[0]} != '0001-01-01 00:00:00')"
+                                    where_clause = f"(`{incremental_columns[0]}` > '{analytics_load_time}' AND `{incremental_columns[0]}` != '0001-01-01 00:00:00')"
                         else:
                             # Default to OR logic
                             where_clause = " OR ".join(conditions)
@@ -2016,7 +1987,10 @@ class PostgresLoader:
                             logger.info(f"Found {new_records_count} new records in replication for {table_name} since last analytics load")
                             return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
                         else:
-                            logger.info(f"No new records found in replication for {table_name} since last analytics load")
+                            logger.info(
+                                f"No new records in replication for {table_name} since last analytics load "
+                                f"(replication and analytics in sync; table already has full data)"
+                            )
                             return False, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
                     
                     # Fallback: Only use replication copy time comparison if no incremental columns available
@@ -2036,24 +2010,36 @@ class PostgresLoader:
                             return False, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
                     
                     else:
-                        # Fallback to timestamp comparison if no incremental columns or no analytics load time
-                        if replication_copy_time > analytics_load_time or force_full_load_recommended:
-                            logger.info(f"Analytics needs updating for {table_name}: "
-                                       f"replication_copy_time={replication_copy_time}, analytics_load_time={analytics_load_time}, "
-                                       f"analytics_row_count={analytics_row_count}, force_full_load_recommended={force_full_load_recommended}")
-                            return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
+                        # Fallback: no incremental columns or no analytics load time
+                        # When analytics_load_time is None (e.g. table has data but no load record), use row-count comparison
+                        if analytics_load_time is None:
+                            replication_count_query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"
+                            replication_count = conn.execute(text(replication_count_query)).scalar()
+                            needs_updating = (replication_count > analytics_row_count) or force_full_load_recommended
+                            logger.info(f"Analytics has no load timestamp for {table_name}: replication={replication_count}, analytics={analytics_row_count}, needs_updating={needs_updating}")
                         else:
-                            logger.info(f"Analytics is up to date for {table_name}: "
-                                       f"replication_copy_time={replication_copy_time}, analytics_load_time={analytics_load_time}")
-                            return False, str(replication_copy_time), str(analytics_load_time), False
+                            needs_updating = (replication_copy_time > analytics_load_time) or force_full_load_recommended
+                            if needs_updating:
+                                logger.info(f"Analytics needs updating for {table_name}: "
+                                           f"replication_copy_time={replication_copy_time}, analytics_load_time={analytics_load_time}, "
+                                           f"analytics_row_count={analytics_row_count}, force_full_load_recommended={force_full_load_recommended}")
+                            else:
+                                logger.info(f"Analytics is up to date for {table_name}: "
+                                           f"replication_copy_time={replication_copy_time}, analytics_load_time={analytics_load_time}")
+                        if needs_updating:
+                            return True, str(replication_copy_time), str(analytics_load_time) if analytics_load_time is not None else None, force_full_load_recommended
+                        else:
+                            return False, str(replication_copy_time), str(analytics_load_time) if analytics_load_time is not None else None, False
                             
             except Exception as e:
                 logger.error(f"Error checking for new records in replication for {table_name}: {str(e)}")
-                # Fallback to timestamp comparison
-                if replication_copy_time > analytics_load_time or force_full_load_recommended:
+                # Fallback: avoid comparing datetime to None
+                if analytics_load_time is not None and replication_copy_time is not None and (replication_copy_time > analytics_load_time or force_full_load_recommended):
                     return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
-                else:
-                    return False, str(replication_copy_time), str(analytics_load_time), False
+                if analytics_load_time is None and replication_copy_time is not None:
+                    # Table has data but no load timestamp - assume needs updating so load is attempted (row-count check will happen in load path)
+                    return True, str(replication_copy_time), None, force_full_load_recommended
+                return False, str(replication_copy_time) if replication_copy_time else None, str(analytics_load_time) if analytics_load_time else None, False
                 
         except Exception as e:
             logger.error(f"Error checking if analytics needs updating for {table_name}: {str(e)}")
@@ -2352,9 +2338,8 @@ PHASE 3: Implement Strategies
 Priority order (based on usage):
 1. StandardLoadStrategy - 95% of loads
 2. StreamingLoadStrategy - 5% of loads
-3. ChunkedLoadStrategy - 11% of loads
-4. CopyCSVLoadStrategy - 0% usage (consider removing)
-5. ParallelLoadStrategy - 0% usage (consider removing)
+3. CopyCSVLoadStrategy - large tables (>200MB); chunked strategy removed
+4. ParallelLoadStrategy - 0% usage (future)
 
 PHASE 4: Testing
 - Unit tests for each strategy

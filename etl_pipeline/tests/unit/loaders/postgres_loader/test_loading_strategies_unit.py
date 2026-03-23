@@ -378,8 +378,8 @@ class TestPostgresLoaderLoadingStrategies:
         test_cases = [
             (10, 'small'),      # Small table (< 50MB) - StandardStrategy
             (100, 'medium'),    # Medium table (50-200MB) - StreamingStrategy
-            (300, 'large'),     # Large table (200-500MB) - ChunkedStrategy
-            (600, 'xlarge')     # Very large table (> 500MB) - CopyCSVStrategy
+            (300, 'large'),     # Large table (> 200MB) - CopyCSVStrategy
+            (600, 'xlarge')     # Very large table (> 200MB) - CopyCSVStrategy
         ]
         
         for estimated_size_mb, size_category in test_cases:

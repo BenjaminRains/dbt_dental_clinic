@@ -171,8 +171,8 @@ def table_processor_large_config():
             'standardize_codes',
             'validate_amounts'
         ],
-        'estimated_rows': 1000001,  # > 1,000,000 to trigger chunked loading
-        'estimated_size_mb': 101,   # > 100 to trigger chunked loading
+        'estimated_rows': 1000001,  # > 1,000,000 rows; > 200MB triggers copy_csv (chunked strategy removed)
+        'estimated_size_mb': 101,   # > 200MB triggers copy_csv
         # Connection architecture specific settings
         'source_database_type': DatabaseType.SOURCE,
         'target_database_type': DatabaseType.ANALYTICS,
@@ -195,8 +195,8 @@ def table_processor_medium_large_config():
             'timezone_convert',
             'validate_dates'
         ],
-        'estimated_rows': 1000001,  # > 1,000,000 to trigger chunked loading
-        'estimated_size_mb': 101,   # > 100 to trigger chunked loading
+        'estimated_rows': 1000001,  # > 1,000,000 rows; > 200MB triggers copy_csv (chunked strategy removed)
+        'estimated_size_mb': 101,   # > 200MB triggers copy_csv
         # Connection architecture specific settings
         'source_database_type': DatabaseType.SOURCE,
         'target_database_type': DatabaseType.ANALYTICS,
