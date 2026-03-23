@@ -59,7 +59,7 @@ sys.path.insert(0, str(scripts_path))
 
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
-from etl_pipeline.config.logging import get_logger
+from etl_pipeline.config.logging import get_logger, get_current_log_file_path
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.orchestration import PipelineOrchestrator
 
@@ -188,6 +188,16 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
             if full:
                 force = True
                 click.echo("🔄 Full pipeline mode: Forcing full refresh for all tables")
+                # Snapshot tracking state before full refresh to preserve history
+                try:
+                    from etl_pipeline.core.tracking_snapshot import snapshot_tracking_before_full_refresh
+                    if snapshot_tracking_before_full_refresh(orchestrator.settings):
+                        click.echo("📸 State history snapshot taken (etl_copy_status + etl_load_status)")
+                    else:
+                        click.echo("⚠️ State history snapshot failed (pipeline will continue)")
+                except Exception as e:
+                    logger.warning(f"State history snapshot error: {e}")
+                    click.echo("⚠️ State history snapshot skipped (pipeline will continue)")
             
             if tables:
                 # Process specific tables
@@ -215,6 +225,10 @@ def run(config: Optional[str], tables: List[str], full: bool, force: bool, paral
             
         finally:
             orchestrator.cleanup()
+            # Print log file path before method usage report
+            log_path = get_current_log_file_path()
+            if log_path:
+                click.echo(f"📝 Log file: {log_path}")
             # Save method usage tracking report
             try:
                 save_tracking_report()
