@@ -114,6 +114,10 @@ def setup_logging(
     etl_logger.setLevel(getattr(logging, log_level.upper()))
 
 
+# Module-level storage for current run's log file path (set by setup_run_logging)
+_current_log_file_path: Optional[str] = None
+
+
 def setup_run_logging(
     log_level: str = "INFO",
     log_dir: Optional[str] = None,
@@ -132,6 +136,7 @@ def setup_run_logging(
     Returns:
         Path to the created log file
     """
+    global _current_log_file_path
     # Generate run-specific filename
     if run_id is None:
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -147,13 +152,18 @@ def setup_run_logging(
         format_type=format_type
     )
     
-    # Return the log file path
+    # Return and store the log file path
     if log_dir:
         log_path = Path(log_dir) / log_filename
     else:
         log_path = Path(log_filename)
-    
-    return str(log_path)
+    _current_log_file_path = str(log_path)
+    return _current_log_file_path
+
+
+def get_current_log_file_path() -> Optional[str]:
+    """Return the current run's log file path, if set."""
+    return _current_log_file_path
 
 
 def configure_sql_logging(enabled: bool = False, level: str = "WARNING") -> None:
