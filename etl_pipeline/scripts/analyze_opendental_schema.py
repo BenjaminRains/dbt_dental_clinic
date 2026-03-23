@@ -15,13 +15,12 @@ Connection Management Features:
 
 Performance Optimizations:
 - Uses estimated row counts from information_schema.TABLE_ROWS (much faster than COUNT(*))
-- Falls back to size-based estimation when TABLE_ROWS is unavailable
-- Avoids expensive COUNT(*) queries that can lock large tables
-- Adaptive batch sizing based on table characteristics
-- Intelligent extraction strategy selection
-- Performance monitoring thresholds
-- Memory requirements calculation
-- Processing priority assignment
+- Single information_schema query for all table metrics (bulk load) instead of 2*N per run
+- Incremental column validation uses a sampled subquery (LIMIT 2000) to avoid full table scans
+- find_incremental_columns() called once per table and passed to determine_extraction_strategy (no duplicate work)
+- Stage 4 detailed report built from config (no re-querying get_table_schema/get_table_size_info)
+- Reduced inter-batch sleep (0.2s) for faster runs
+- Adaptive batch sizing, extraction strategy selection, performance monitoring, memory/priority
 
 Usage:
     python etl_pipeline/scripts/analyze_opendental_schema.py
@@ -54,7 +53,8 @@ import threading
 import concurrent.futures
 
 from etl_pipeline.core.connections import ConnectionFactory, create_connection_manager
-from etl_pipeline.config import get_settings, Settings
+from etl_pipeline.config import get_settings, Settings, PostgresSchema as ConfigPostgresSchema
+from etl_pipeline.core.postgres_schema import PostgresSchema
 
 # Configure timeout for database operations
 DB_TIMEOUT = 30  # seconds
@@ -94,12 +94,13 @@ def setup_logging():
     # Get a logger specifically for schema analysis to avoid conflicts
     logger = logging.getLogger('schema_analysis')
     logger.setLevel(logging.INFO)
+    logger.propagate = False  # Prevent duplicate output from root logger
+    logger.handlers.clear()   # Reset handlers in case of re-initialization
     
-    # Add console handler if not already present
-    if not logger.handlers:
-        console_handler = logging.StreamHandler()
-        console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
-        logger.addHandler(console_handler)
+    # Add console handler
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(logging.Formatter('%(asctime)s - %(name)s - %(levelname)s - %(message)s'))
+    logger.addHandler(console_handler)
     
     return logger
 
@@ -244,6 +245,8 @@ class OpenDentalSchemaAnalyzer:
         
         # Initialize inspector for schema analysis
         self.inspector = inspect(self.source_engine)
+        # Cache for bulk table metrics (set by generate_complete_configuration to avoid N queries)
+        self._table_metrics_cache: Optional[Dict[str, Dict]] = None
         
         logger.info("Schema analyzer initialized with Settings injection pattern")
     
@@ -549,7 +552,8 @@ class OpenDentalSchemaAnalyzer:
     
     def validate_incremental_column_data_quality(self, table_name: str, column_name: str) -> bool:
         """
-        Validate data quality for an incremental column.
+        Validate data quality for an incremental column using a small sample (max 2000 rows).
+        Avoids full table scans that made large tables (e.g. securitylog) very slow.
         
         Args:
             table_name: Name of the table
@@ -560,42 +564,35 @@ class OpenDentalSchemaAnalyzer:
         """
         try:
             with create_connection_manager(self.source_engine) as conn_manager:
-                # Sample the column to check data quality
+                # Sample up to 2000 rows; MIN/MAX/COUNT on subquery so we don't full-scan huge tables
                 sample_query = f"""
-                    SELECT MIN({column_name}), MAX({column_name}), COUNT(*)
-                    FROM `{self.source_db}`.`{table_name}`
-                    WHERE {column_name} IS NOT NULL
-                    LIMIT 1000
+                    SELECT MIN(s.{column_name}), MAX(s.{column_name}), COUNT(*)
+                    FROM (
+                        SELECT `{column_name}` FROM `{self.source_db}`.`{table_name}`
+                        WHERE `{column_name}` IS NOT NULL
+                        LIMIT 2000
+                    ) s
                 """
-                
                 result = conn_manager.execute_with_retry(sample_query)
                 if not result:
                     return False
-                
                 row = result.fetchone()
                 if not row:
                     return False
-                
                 min_date = row[0]
                 max_date = row[1]
                 count = row[2]
-                
                 # Skip columns with obviously bad dates
-                if isinstance(min_date, (datetime, date)):
+                if isinstance(min_date, (datetime, date)) and isinstance(max_date, (datetime, date)):
                     if min_date.year < 2000 or max_date.year > 2030:
                         logger.debug(f"Column {column_name} in {table_name} has bad date range: {min_date} to {max_date}")
                         return False
-                
-                # Skip columns with too many NULL values (indicating poor data quality)
-                if count < 100:  # Less than 100 non-null values in sample
-                    logger.debug(f"Column {column_name} in {table_name} has poor data quality: only {count} non-null values")
+                if count < 100:
+                    logger.debug(f"Column {column_name} in {table_name} has poor data quality: only {count} non-null values in sample")
                     return False
-                
                 return True
-                
         except Exception as e:
             logger.warning(f"Could not validate data quality for column {column_name} in {table_name}: {str(e)}")
-            # If validation fails, return False (fail closed) to avoid using unreliable columns
             return False
 
     def find_incremental_columns(self, table_name: str, schema_info: Dict) -> List[str]:
@@ -913,14 +910,15 @@ class OpenDentalSchemaAnalyzer:
         
         return int(total_memory_mb)
     
-    def determine_extraction_strategy(self, table_name: str, schema_info: Dict, 
-                                             size_info: Dict, performance_chars: Dict) -> str:
+    def determine_extraction_strategy(self, table_name: str, schema_info: Dict,
+                                             size_info: Dict, performance_chars: Dict,
+                                             incremental_columns: Optional[List[str]] = None) -> str:
         """
         Enhanced extraction strategy determination with performance considerations.
+        Pass incremental_columns when already computed to avoid duplicate DB work.
         """
-        estimated_rows = size_info.get('estimated_row_count', 0)
-        incremental_columns = self.find_incremental_columns(table_name, schema_info)
-        
+        if incremental_columns is None:
+            incremental_columns = self.find_incremental_columns(table_name, schema_info)
         # No incremental columns = full table
         if not incremental_columns:
             return 'full_table'
@@ -1135,27 +1133,70 @@ class OpenDentalSchemaAnalyzer:
             logger.error(f"Failed to get batch schema: {e}")
             return {table_name: {'table_name': table_name, 'error': str(e)} for table_name in table_names}
     
+    def _load_all_table_metrics(self, table_names: List[str]) -> None:
+        """Load estimated rows and size for all tables in one information_schema query."""
+        if not table_names:
+            self._table_metrics_cache = {}
+            return
+        try:
+            with create_connection_manager(self.source_engine) as conn_manager:
+                # Single query for all tables (avoids N round-trips per batch)
+                placeholders = ", ".join(f"'{t}'" for t in table_names)
+                q = f"""
+                    SELECT table_name,
+                           COALESCE(TABLE_ROWS, 0) AS estimated_rows,
+                           COALESCE(ROUND(((data_length + index_length) / 1024 / 1024), 2), 0) AS size_mb
+                    FROM information_schema.tables
+                    WHERE table_schema = '{self.source_db}' AND table_name IN ({placeholders})
+                """
+                result = conn_manager.execute_with_retry(q)
+                rows = result.fetchall() if result else []
+                self._table_metrics_cache = {}
+                for row in rows:
+                    name = row[0]
+                    est = int(row[1] or 0)
+                    if est == 0:
+                        # Fallback rough estimate from size
+                        size_mb = float(row[2] or 0)
+                        if size_mb > 0:
+                            est = max(1, int(size_mb * 1024))  # ~1KB/row
+                    self._table_metrics_cache[name] = {
+                        'table_name': name,
+                        'estimated_row_count': est,
+                        'size_mb': float(row[2] or 0),
+                        'source': 'information_schema_estimate'
+                    }
+                # Tables not in information_schema (e.g. missing) get zeros
+                for t in table_names:
+                    if t not in self._table_metrics_cache:
+                        self._table_metrics_cache[t] = {
+                            'table_name': t,
+                            'estimated_row_count': 0,
+                            'size_mb': 0,
+                            'source': 'information_schema_estimate'
+                        }
+        except Exception as e:
+            logger.warning(f"Bulk table metrics failed, falling back to per-table: {e}")
+            self._table_metrics_cache = None
+
     def get_batch_size_info(self, table_names: List[str]) -> Dict[str, Dict]:
-        """Get size information for multiple tables in a single connection using estimated row counts."""
+        """Get size information for multiple tables. Uses _table_metrics_cache when set (one query for all tables)."""
+        if self._table_metrics_cache is not None:
+            return {t: self._table_metrics_cache.get(t, {
+                'table_name': t, 'estimated_row_count': 0, 'size_mb': 0, 'error': 'not_in_cache'
+            }) for t in table_names}
         def _get_batch_size():
             with create_connection_manager(self.source_engine) as conn_manager:
                 batch_results = {}
-                
                 for table_name in table_names:
                     try:
-                        # Get estimated row count (much faster than COUNT(*))
                         estimated_row_count = self.get_estimated_row_count(table_name)
-                        
-                        # Get table size (approximate)
                         size_result = conn_manager.execute_with_retry(f"""
-                            SELECT 
-                                ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
-                            FROM information_schema.tables 
-                            WHERE table_schema = '{self.source_db}' 
-                            AND table_name = '{table_name}'
+                            SELECT ROUND(((data_length + index_length) / 1024 / 1024), 2) AS size_mb
+                            FROM information_schema.tables
+                            WHERE table_schema = '{self.source_db}' AND table_name = '{table_name}'
                         """)
                         size_mb = size_result.scalar() if size_result else 0
-                        
                         batch_results[table_name] = {
                             'table_name': table_name,
                             'estimated_row_count': estimated_row_count,
@@ -1165,32 +1206,17 @@ class OpenDentalSchemaAnalyzer:
                     except Exception as e:
                         logger.warning(f"Failed to get size info for table {table_name}: {e}")
                         batch_results[table_name] = {
-                            'table_name': table_name,
-                            'estimated_row_count': 0,
-                            'size_mb': 0,
-                            'error': str(e)
+                            'table_name': table_name, 'estimated_row_count': 0, 'size_mb': 0, 'error': str(e)
                         }
-                
                 return batch_results
-        
         try:
-            return run_with_timeout(_get_batch_size, DB_TIMEOUT * 2)  # Longer timeout for batch operations
+            return run_with_timeout(_get_batch_size, DB_TIMEOUT * 2)
         except TimeoutError:
             logger.warning(f"Timeout getting batch size info for {len(table_names)} tables")
-            return {table_name: {
-                'table_name': table_name,
-                'estimated_row_count': 0,
-                'size_mb': 0,
-                'error': 'timeout'
-            } for table_name in table_names}
+            return {t: {'table_name': t, 'estimated_row_count': 0, 'size_mb': 0, 'error': 'timeout'} for t in table_names}
         except Exception as e:
             logger.error(f"Failed to get batch size info: {e}")
-            return {table_name: {
-                'table_name': table_name,
-                'estimated_row_count': 0,
-                'size_mb': 0,
-                'error': str(e)
-            } for table_name in table_names}
+            return {t: {'table_name': t, 'estimated_row_count': 0, 'size_mb': 0, 'error': str(e)} for t in table_names}
     
     # =========================================================================
     # SECTION 8: CONFIGURATION GENERATION
@@ -1214,8 +1240,11 @@ class OpenDentalSchemaAnalyzer:
         
         logger.info(f"Processing {len(tables)} tables (filtered from {len(all_tables)} total)")
         
+        # Load all table metrics in one query (avoids 2*N queries in get_batch_size_info)
+        logger.info("Loading table metrics (single information_schema query)...")
+        self._load_all_table_metrics(tables)
+        
         # Generate schema hash for change detection (simplified for large databases)
-        logger.info("Generating schema hash for change detection...")
         schema_hash = self._generate_schema_hash(tables[:min(50, len(tables))])  # Only hash first 50 tables
         
         # Detect environment from settings
@@ -1226,6 +1255,7 @@ class OpenDentalSchemaAnalyzer:
             environment = 'unknown'
         
         config = {
+            '_dbt_model_analysis': dbt_models,  # Cached for Stage 4 to avoid duplicate discovery
             'metadata': {
                 'generated_at': datetime.now().isoformat(),
                 'analyzer_version': '4.0_performance_enhanced',
@@ -1302,16 +1332,17 @@ class OpenDentalSchemaAnalyzer:
                         # Enhanced performance-based analysis
                         performance_chars = self.get_table_performance_profile(table_name, schema_info, size_info)
                         
-                        # Determine extraction strategy using enhanced method
-                        extraction_strategy = self.determine_extraction_strategy(table_name, schema_info, size_info, performance_chars)
-                        
+                        # Get incremental columns once (used by strategy and config)
+                        incremental_columns = self.find_incremental_columns(table_name, schema_info)
+                        extraction_strategy = self.determine_extraction_strategy(
+                            table_name, schema_info, size_info, performance_chars,
+                            incremental_columns=incremental_columns
+                        )
                         # Validate extraction strategy
                         if not self._validate_extraction_strategy(extraction_strategy):
                             extraction_strategy = 'full_table'
                             logger.warning(f"Using fallback strategy 'full_table' for {table_name}")
                         
-                        # Get incremental columns and strategy
-                        incremental_columns = self.find_incremental_columns(table_name, schema_info)
                         incremental_strategy = self.determine_incremental_strategy(table_name, schema_info, incremental_columns)
                         primary_incremental_column = self.select_primary_incremental_column(table_name, incremental_columns, schema_info)
                         
@@ -1343,6 +1374,8 @@ class OpenDentalSchemaAnalyzer:
                         # Calculate batch size based on performance characteristics
                         batch_size = performance_chars['recommended_batch_size'] # Changed from optimal_batch_size
                         
+                        # Column names for Stage 4 report without re-querying
+                        column_names = list(schema_info.get('columns', {}).keys())
                         # Generate table configuration
                         table_config = {
                             'table_name': table_name,
@@ -1355,6 +1388,7 @@ class OpenDentalSchemaAnalyzer:
                             'primary_incremental_column': primary_incremental_column,
                             'is_modeled': is_modeled,
                             'dbt_model_types': dbt_model_types,
+                            'column_names': column_names,
                             
                             # Performance optimization metadata
                             'performance_category': performance_chars['performance_category'],
@@ -1397,7 +1431,7 @@ class OpenDentalSchemaAnalyzer:
                 
                 # Add a small delay between batches to prevent overwhelming the database
                 if i + BATCH_SIZE < len(tables):
-                    time.sleep(1)
+                    time.sleep(0.2)  # Reduced from 1s for faster runs; increase if DB is under load
                 
                 # Log batch progress with timing
                 batch_time = time.time() - start_time
@@ -1463,13 +1497,13 @@ class OpenDentalSchemaAnalyzer:
                 logger.info(f"Backed up existing configuration to: {backup_path}")
             
             # Stage 1: Generate complete configuration
-            logger.info("Stage 1/4: Generating table configuration...")
+            logger.info("Stage 1/5: Generating table configuration...")
             config = self.generate_complete_configuration(output_dir)
             stage1_time = time.time() - start_time
             logger.info(f"Stage 1 completed in {stage1_time:.1f}s")
             
             # Stage 2: Compare with previous schema (detect slowly changing dimensions)
-            logger.info("Stage 2/4: Detecting schema changes...")
+            logger.info("Stage 2/5: Detecting schema changes...")
             schema_changes = None
             if backup_path and os.path.exists(backup_path):
                 schema_changes = self.compare_with_previous_schema(config, str(backup_path))
@@ -1512,13 +1546,14 @@ class OpenDentalSchemaAnalyzer:
             logger.info(f"Stage 2 completed in {stage2_time - stage1_time:.1f}s")
             
             # Stage 3: Save configuration
-            logger.info("Stage 3/4: Saving configuration files...")
+            logger.info("Stage 3/5: Saving configuration files...")
+            config_for_yaml = {k: v for k, v in config.items() if not k.startswith('_')}
             with open(tables_yml_path, 'w', encoding='utf-8') as f:
-                yaml.dump(config, f, default_flow_style=False, sort_keys=False)
+                yaml.dump(config_for_yaml, f, default_flow_style=False, sort_keys=False)
             logger.info(f"Configuration saved to: {tables_yml_path}")
             
             # Stage 4: Generate detailed analysis report (including schema changes)
-            logger.info("Stage 4/4: Generating detailed analysis report...")
+            logger.info("Stage 4/5: Generating detailed analysis report...")
             analysis_report = self._generate_detailed_analysis_report(config)
             
             # Add schema changes to report
@@ -1535,6 +1570,22 @@ class OpenDentalSchemaAnalyzer:
             # Generate enhanced performance summary
             self._generate_performance_summary(config, tables_yml_path, timestamp)
             
+            # Stage 5: Initialize new tables in analytics (post-schema-analysis step)
+            init_result = None
+            if schema_changes and schema_changes.get('added_tables'):
+                stage5_start = time.time()
+                logger.info("Stage 5/5: Initializing new tables in analytics database...")
+                init_result = self._initialize_new_tables_in_analytics(
+                    added_tables=schema_changes['added_tables'],
+                    config=config,
+                    schema_analysis_reports=schema_analysis_reports,
+                    timestamp=timestamp
+                )
+                init_result['elapsed_seconds'] = time.time() - stage5_start
+                logger.info(f"Stage 5 completed in {init_result['elapsed_seconds']:.1f}s")
+            else:
+                logger.info("Stage 5/5: No new tables to initialize (skipped)")
+            
             total_time = time.time() - start_time
             logger.info("=" * 60)
             logger.info("Performance-Enhanced Schema Analysis Completed Successfully!")
@@ -1547,6 +1598,7 @@ class OpenDentalSchemaAnalyzer:
                 'analysis_log': str(log_file),
                 'backup_path': str(backup_path) if backup_path else None,
                 'schema_changes': schema_changes,
+                'init_new_tables': init_result,
                 'total_time': total_time
             }
             
@@ -1577,33 +1629,30 @@ class OpenDentalSchemaAnalyzer:
                 'analyzer_version': '3.0'
             },
             'table_analysis': {},
-            'dbt_model_analysis': self.discover_dbt_models(),
+            'dbt_model_analysis': config.get('_dbt_model_analysis') or self.discover_dbt_models(),
             'performance_analysis': {},
             'recommendations': []
         }
         
-        # Analyze each table with progress bar
-        tables_to_analyze = [name for name, config in config.get('tables', {}).items() 
-                           if 'error' not in config]
-        
-        logger.info(f"Generating detailed analysis for {len(tables_to_analyze)} tables...")
-        
-        with tqdm(total=len(tables_to_analyze), desc="Generating detailed report", unit="table") as pbar:
-            for table_name in tables_to_analyze:
-                try:
-                    analysis['table_analysis'][table_name] = {
-                        'schema_info': self.get_table_schema(table_name),
-                        'size_info': self.get_table_size_info(table_name),
-                        'configuration': config['tables'][table_name]
-                    }
-                    pbar.set_postfix({'table': table_name})
-                except Exception as e:
-                    logger.warning(f"Failed to analyze table {table_name} for detailed report: {e}")
-                    analysis['table_analysis'][table_name] = {
-                        'error': str(e),
-                        'configuration': config['tables'][table_name]
-                    }
-                pbar.update(1)
+        # Build report from config (no re-querying); schema_info/size_info derived from table config
+        tables_to_analyze = [name for name, tbl in config.get('tables', {}).items() if 'error' not in tbl]
+        logger.info(f"Generating detailed analysis for {len(tables_to_analyze)} tables (from config)...")
+        for table_name in tables_to_analyze:
+            tbl = config['tables'][table_name]
+            analysis['table_analysis'][table_name] = {
+                'schema_info': {
+                    'table_name': table_name,
+                    'primary_keys': [tbl['primary_key']] if tbl.get('primary_key') else [],
+                    'columns': {c: {} for c in tbl.get('column_names', [])}
+                },
+                'size_info': {
+                    'table_name': table_name,
+                    'estimated_row_count': tbl.get('estimated_rows', 0),
+                    'size_mb': tbl.get('estimated_size_mb', 0),
+                    'source': 'config'
+                },
+                'configuration': tbl
+            }
         
         # Generate recommendations
         total_tables = len(config.get('tables', {}))
@@ -1911,8 +1960,8 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         if changes.get('added_tables'):
             changelog += "### High Priority\n\n"
-            changelog += "1. **Initialize new tables** in PostgreSQL analytics database\n"
-            changelog += "2. **Run initial load** for new tables\n"
+            changelog += "1. **Initialize new tables** in PostgreSQL analytics database (performed automatically by Stage 5)\n"
+            changelog += "2. **Run ETL pipeline** to load data into new tables\n"
             changelog += "3. **Consider dbt models** for business-critical tables\n\n"
         
         if changes.get('added_columns'):
@@ -1942,6 +1991,102 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
                 print(f"Impact: {change['impact']}")
             print(f"\nSee full changelog: {output_path}")
             print("=" * 60 + "\n")
+    
+    def _initialize_new_tables_in_analytics(
+        self,
+        added_tables: List[str],
+        config: Dict,
+        schema_analysis_reports: Path,
+        timestamp: str
+    ) -> Dict:
+        """
+        Initialize new tables in the analytics PostgreSQL database.
+        
+        Creates raw.{table} in analytics for each added_table, using schema from
+        source MySQL (new tables exist in source but may not be in replication yet).
+        Uses PostgresSchema with source engine override for schema extraction.
+        
+        Args:
+            added_tables: List of table names to initialize
+            config: Full tables config (for table metadata)
+            schema_analysis_reports: Path to reports directory
+            timestamp: Timestamp string for report filenames
+            
+        Returns:
+            Dict with created, skipped, failed lists and report path
+        """
+        result = {
+            'created': [],
+            'skipped': [],
+            'failed': [],
+            'report_path': None,
+            'elapsed_seconds': 0
+        }
+        
+        if not added_tables:
+            return result
+        
+        try:
+            # Create PostgresSchema with source engine override (new tables exist in source)
+            pg_schema = PostgresSchema(
+                postgres_schema=ConfigPostgresSchema.RAW,
+                settings=self.settings,
+                mysql_engine_override=self.source_engine,
+                mysql_database_override=self.source_db
+            )
+            
+            logger.info(f"Initializing {len(added_tables)} new tables in analytics: {', '.join(sorted(added_tables)[:10])}{'...' if len(added_tables) > 10 else ''}")
+            
+            for table_name in sorted(added_tables):
+                try:
+                    # Check if table already exists in analytics (idempotent)
+                    pg_inspector = inspect(pg_schema.postgres_engine)
+                    if pg_inspector.has_table(table_name, schema=pg_schema.postgres_schema):
+                        logger.info(f"  {table_name}: already exists in analytics (skipped)")
+                        result['skipped'].append(table_name)
+                        continue
+                    
+                    # Get schema from source and create in analytics
+                    mysql_schema = pg_schema.get_table_schema_from_mysql(table_name)
+                    if pg_schema.create_postgres_table(table_name, mysql_schema):
+                        logger.info(f"  {table_name}: created successfully")
+                        result['created'].append(table_name)
+                    else:
+                        logger.warning(f"  {table_name}: create returned False")
+                        result['failed'].append({'table': table_name, 'reason': 'create_postgres_table returned False'})
+                        
+                except Exception as e:
+                    logger.error(f"  {table_name}: failed - {e}")
+                    result['failed'].append({'table': table_name, 'reason': str(e)})
+            
+            # Write initialization report (audit trail)
+            report = {
+                'timestamp': timestamp,
+                'added_tables': added_tables,
+                'created': result['created'],
+                'skipped': result['skipped'],
+                'failed': result['failed'],
+                'summary': {
+                    'total': len(added_tables),
+                    'created_count': len(result['created']),
+                    'skipped_count': len(result['skipped']),
+                    'failed_count': len(result['failed'])
+                }
+            }
+            report_path = schema_analysis_reports / f'init_new_tables_{timestamp}.json'
+            with open(report_path, 'w', encoding='utf-8') as f:
+                json.dump(report, f, indent=2)
+            result['report_path'] = str(report_path)
+            logger.info(f"Initialization report saved to: {report_path}")
+            
+            if result['created']:
+                logger.info(f"Initialized {len(result['created'])} new tables in analytics. Run ETL pipeline to load data.")
+            
+        except Exception as e:
+            logger.error(f"Failed to initialize new tables: {e}")
+            raise
+        
+        return result
 
 def main():
     """Main function - generate complete schema analysis and configuration."""
@@ -1962,10 +2107,15 @@ def main():
         
         # Show schema changes if detected
         schema_changes = results.get('schema_changes')
+        init_result = results.get('init_new_tables')
         if schema_changes and schema_changes.get('schema_hash_changed'):
             print(f"\nSCHEMA CHANGES DETECTED:")
             if schema_changes.get('added_tables'):
                 print(f"   {len(schema_changes['added_tables'])} new tables")
+                if init_result:
+                    print(f"   Initialized: {len(init_result.get('created', []))} created, "
+                          f"{len(init_result.get('skipped', []))} skipped, "
+                          f"{len(init_result.get('failed', []))} failed")
             if schema_changes.get('removed_tables'):
                 print(f"   {len(schema_changes['removed_tables'])} removed tables")
             if schema_changes.get('added_columns'):
@@ -1979,9 +2129,10 @@ def main():
         
         print(f"\nFiles generated:")
         for name, path in results.items():
-            if name not in ['total_time', 'schema_changes']:
-                if path:  # Only print if path exists
-                    print(f"   {name}: {path}")
+            if name not in ['total_time', 'schema_changes', 'init_new_tables'] and path:
+                print(f"   {name}: {path}")
+        if init_result and init_result.get('report_path'):
+            print(f"   init_report: {init_result['report_path']}")
         print(f"\nTiming:")
         print(f"   Analysis time: {results.get('total_time', 0):.1f}s")
         print(f"   Total script time: {total_script_time:.1f}s")
@@ -1996,7 +2147,10 @@ def main():
         print(f"")
         print(f"Next steps:")
         print(f"  1. Review schema changelog (if changes detected)")
-        print(f"  2. Run ETL pipeline with updated configuration")
+        if init_result and init_result.get('created'):
+            print(f"  2. Run ETL pipeline to load data into {len(init_result['created'])} new tables")
+        else:
+            print(f"  2. Run ETL pipeline with updated configuration")
         print(f"  3. Monitor performance metrics")
         print(f"  4. Update dbt models if needed")
         print(f"=" * 60)
