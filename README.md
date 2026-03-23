@@ -164,7 +164,12 @@ dbt_dental_clinic/
 ├── frontend/                  # React app (src/pages, components, services)
 ├── scripts/
 │   ├── environment_manager.ps1   # dbt-init, etl-init, api-init, frontend-deploy, env-status
-│   └── (deployment, verification)
+│   ├── deployment/               # Deploy to EC2, deploy dbt/api files, credentials
+│   ├── ec2/                      # Run dbt on EC2, setup, fixes
+│   ├── verification/             # Verify AWS resources
+│   ├── database/                 # Local demo DB setup, query
+│   ├── testing/                  # API/connection tests
+│   └── utils/                    # list_env_files, generate_api_key, backup, etc.
 ├── docs/                      # Deployment, env files, architecture
 └── (airflow, consult_audio_pipe, etc. — see repo root)
 ```
@@ -185,7 +190,7 @@ Deployment is optional; the app can run locally against a PostgreSQL warehouse.
 
 **Frontend (S3 + CloudFront):** Use the `frontend-deploy` command from `scripts/environment_manager.ps1`. It builds the React app, uploads to S3, and invalidates CloudFront. Set `FRONTEND_BUCKET_NAME`, `FRONTEND_DIST_ID`, and `FRONTEND_DOMAIN` (env or `.frontend-deploy.json`). Other commands: `dbt-init`, `etl-init`, `api-init`, `frontend-status`, `env-status`.
 
-**Backend (EC2 + ALB):** API can be run on EC2 behind an ALB with RDS PostgreSQL; see `docs/DEPLOYMENT_WORKFLOW.md` and deployment scripts in `scripts/deployment/`. Hosted sample API: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com); frontend: [https://dbtdentalclinic.com](https://dbtdentalclinic.com). Demo uses synthetic data only; no production OpenDental connection.
+**Backend (EC2 + ALB):** API can be run on EC2 behind an ALB with RDS PostgreSQL; see `docs/DEPLOYMENT_WORKFLOW.md` and deployment scripts in [`scripts/deployment/`](scripts/deployment/) (see [`scripts/README.md`](scripts/README.md)). Hosted sample API: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com); frontend: [https://dbtdentalclinic.com](https://dbtdentalclinic.com). Demo uses synthetic data only; no production OpenDental connection.
 
 **Environment files:** The repo uses many `.env` and `.env_*` files (API, ETL, dbt, frontend, Docker). For a single reference and inventory script, see [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md). Run `.\scripts\list_env_files.ps1` to see which env files exist.
 
