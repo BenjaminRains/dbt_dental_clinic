@@ -18,9 +18,9 @@ $script:ActiveProject = $null
 $script:VenvPath = $null
 
 # AWS SSM state tracking
-$script:APIInstanceId = $null      # Demo API EC2 (api.dbtdentalclinic.com)
-$script:ClinicAPIInstanceId = $null # Clinic API EC2 (api-clinic.dbtdentalclinic.com)
-$script:DemoDBInstanceId = $null
+$script:APIInstanceId = $null      # dental-clinic-api-demo (api.dbtdentalclinic.com)
+$script:ClinicAPIInstanceId = $null # dental-clinic-api-clinic (api-clinic.dbtdentalclinic.com)
+$script:DemoDBInstanceId = $null   # dental-clinic-demo-db
 $script:RDSEndpoint = $null
 $script:DemoDBHost = $null
 $script:DemoDBPort = $null
@@ -1960,7 +1960,13 @@ function Deploy-ClinicFrontend {
                     }
                 }
                 if (-not $apiKey -and $credentials.backend_api -and $credentials.backend_api.clinic_api -and $credentials.backend_api.clinic_api.api_key) {
-                    $apiKey = $credentials.backend_api.clinic_api.api_key
+                    # Single, canonical format: backend_api.clinic_api.api_key.key MUST be present
+                    $clinicApiKey = $credentials.backend_api.clinic_api.api_key
+                    if (-not ($clinicApiKey.PSObject.Properties.Name -contains 'key') -or -not $clinicApiKey.key) {
+                        Write-Host "❌ backend_api.clinic_api.api_key must be an object with a 'key' property (see deployment_credentials.json template)." -ForegroundColor Red
+                        return
+                    }
+                    $apiKey = $clinicApiKey.key
                 }
                 Write-Host "✅ Loaded clinic configuration from deployment_credentials.json" -ForegroundColor Green
             } catch {
@@ -1987,7 +1993,7 @@ function Deploy-ClinicFrontend {
     
     if (-not $apiKey) {
         Write-Host "❌ CLINIC_API_KEY not set. This is required for clinic API authentication." -ForegroundColor Red
-        Write-Host "   Option 1: Run scripts\generate_api_key.ps1 -Clinic to create and save a clinic API key." -ForegroundColor Yellow
+        Write-Host "   Option 1: Run scripts\utils\generate_api_key.ps1 -Clinic to create and save a clinic API key." -ForegroundColor Yellow
         Write-Host "   Option 2: Set environment variable CLINIC_API_KEY, or add to api\.env_api_clinic as CLINIC_API_KEY=<key>." -ForegroundColor Yellow
         Write-Host "   Option 3: Add backend_api.clinic_api.api_key to deployment_credentials.json." -ForegroundColor Yellow
         return
@@ -2382,6 +2388,45 @@ function Deploy-DBTDocs {
 # =============================================================================
 # AWS SSM ENVIRONMENT
 # =============================================================================
+# EC2 instance names (match AWS console Name tag):
+#   dental-clinic-api-demo  = Demo API (api.dbtdentalclinic.com)
+#   dental-clinic-api-clinic = Clinic API (api-clinic.dbtdentalclinic.com)
+#   dental-clinic-demo-db   = Demo DB EC2 (opendental_demo host)
+
+# Load instance IDs from deployment_credentials.json on first use (not during aws-ssm-init).
+# Returns $true if the required resource is available; $false otherwise.
+function Ensure-SSMInstanceIdsLoaded {
+    param([string]$ProjectPath = (Get-Location))
+    $credPath = "$ProjectPath\deployment_credentials.json"
+    if (-not (Test-Path $credPath)) { return $false }
+    if ($script:APIInstanceId -and $script:ClinicAPIInstanceId -and $script:DemoDBInstanceId) { return $true }
+    try {
+        $credentials = Get-Content $credPath | ConvertFrom-Json
+        if ($credentials.backend_api.ec2.instance_id) {
+            $script:APIInstanceId = $credentials.backend_api.ec2.instance_id
+        }
+        if ($credentials.backend_api.clinic_api -and $credentials.backend_api.clinic_api.ec2.instance_id) {
+            $script:ClinicAPIInstanceId = $credentials.backend_api.clinic_api.ec2.instance_id
+        }
+        if ($credentials.demo_database.ec2.instance_id) {
+            $script:DemoDBInstanceId = $credentials.demo_database.ec2.instance_id
+        }
+        if (-not $script:RDSEndpoint) {
+            if ($credentials.backend_api.clinic_database_reference -and $credentials.backend_api.clinic_database_reference.rds.endpoint) {
+                $script:RDSEndpoint = $credentials.backend_api.clinic_database_reference.rds.endpoint
+            } elseif ($credentials.backend_api.production_database_reference -and $credentials.backend_api.production_database_reference.rds.endpoint) {
+                $script:RDSEndpoint = $credentials.backend_api.production_database_reference.rds.endpoint
+            }
+        }
+        if (-not $script:DemoDBHost -and $credentials.demo_database.database_connection) {
+            $script:DemoDBHost = $credentials.demo_database.database_connection.host
+            $script:DemoDBPort = $credentials.demo_database.database_connection.port
+        }
+        return $true
+    } catch {
+        return $false
+    }
+}
 
 function Initialize-AWSSSMEnvironment {
     param([string]$ProjectPath = (Get-Location))
@@ -2455,20 +2500,8 @@ function Initialize-AWSSSMEnvironment {
                 Write-Host "  AWS_DEFAULT_REGION: $($env:AWS_DEFAULT_REGION)" -ForegroundColor Gray
             }
 
-            # Store instance IDs for helper functions
-            if ($credentials.backend_api.ec2.instance_id) {
-                $script:APIInstanceId = $credentials.backend_api.ec2.instance_id
-                Write-Host "  API EC2 (demo): $script:APIInstanceId" -ForegroundColor Gray
-            }
-            if ($credentials.backend_api.clinic_api -and $credentials.backend_api.clinic_api.ec2.instance_id) {
-                $script:ClinicAPIInstanceId = $credentials.backend_api.clinic_api.ec2.instance_id
-                Write-Host "  API EC2 (clinic): $script:ClinicAPIInstanceId" -ForegroundColor Gray
-            }
-
-            if ($credentials.demo_database.ec2.instance_id) {
-                $script:DemoDBInstanceId = $credentials.demo_database.ec2.instance_id
-                Write-Host "  Demo DB EC2 Instance: $script:DemoDBInstanceId" -ForegroundColor Gray
-            }
+            # Do NOT load EC2 instance IDs here — they are loaded on demand when you run
+            # ssm-connect-api, ssm-connect-clinic-api, ssm-connect-demo-db, or a port-forward command.
 
             # Load RDS endpoint for port forwarding
             # Try new name first (clinic_database_reference), fall back to old name for compatibility
@@ -2559,26 +2592,31 @@ function Initialize-AWSSSMEnvironment {
 
     Write-Host "`n✅ AWS SSM Environment ready!" -ForegroundColor Green
     Write-Host "Commands (REMOTE EC2 access):" -ForegroundColor Cyan
-    Write-Host "  ssm-connect-api          - Connect to DEMO API EC2 (api.dbtdentalclinic.com)" -ForegroundColor White
-    Write-Host "  ssm-connect-clinic-api    - Connect to CLINIC API EC2 (api-clinic.dbtdentalclinic.com)" -ForegroundColor White
-    Write-Host "  ssm-connect-demo-db       - Connect to REMOTE Demo DB EC2 instance" -ForegroundColor White
-    Write-Host "  ssm-port-forward-rds      - Port forward RDS to localhost (via demo API instance)" -ForegroundColor White
-    Write-Host "  ssm-port-forward-rds-clinic - Port forward RDS to localhost (via clinic API instance)" -ForegroundColor White
-    Write-Host "  ssm-port-forward-demo-db  - Port forward demo DB to localhost" -ForegroundColor White
-    Write-Host "  ssm-status                - Check SSM plugin status" -ForegroundColor White
+    Write-Host "  ssm-connect-api          - Connect to dental-clinic-api-demo (api.dbtdentalclinic.com)" -ForegroundColor White
+    Write-Host "  ssm-connect-clinic-api   - Connect to dental-clinic-api-clinic (api-clinic.dbtdentalclinic.com)" -ForegroundColor White
+    Write-Host "  ssm-connect-demo-db      - Connect to dental-clinic-demo-db (demo database host)" -ForegroundColor White
+    Write-Host "  ssm-port-forward-rds     - Port forward RDS to localhost (via dental-clinic-api-demo)" -ForegroundColor White
+    Write-Host "  ssm-port-forward-rds-clinic - Port forward RDS to localhost (via dental-clinic-api-clinic)" -ForegroundColor White
+    Write-Host "  ssm-port-forward-demo-db - Port forward demo DB to localhost" -ForegroundColor White
+    Write-Host "  ssm-status               - Check SSM plugin and cached instance IDs" -ForegroundColor White
     Write-Host ""
-    Write-Host "💡 These commands connect to REMOTE EC2 instances." -ForegroundColor Cyan
+    Write-Host "💡 Instance IDs are loaded from deployment_credentials.json when you run a connect or port-forward command." -ForegroundColor Cyan
     Write-Host "   To run the API LOCALLY, use 'api-init' instead." -ForegroundColor Gray
     Write-Host ""
 }
 
 function Connect-SSMAPI {
-    if (-not $script:APIInstanceId) {
-        Write-Host "❌ Demo API EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+    $projectRoot = Split-Path $script:EnvManagerScriptRoot -Parent
+    if (-not (Ensure-SSMInstanceIdsLoaded -ProjectPath $projectRoot)) {
+        Write-Host "❌ Could not load credentials. Run from project root or ensure deployment_credentials.json exists." -ForegroundColor Red
         return
     }
-    
-    Write-Host "🔌 Connecting to DEMO API EC2 (api.dbtdentalclinic.com): $script:APIInstanceId" -ForegroundColor Cyan
+    if (-not $script:APIInstanceId) {
+        Write-Host "❌ dental-clinic-api-demo instance ID not in deployment_credentials.json." -ForegroundColor Red
+        return
+    }
+
+    Write-Host "🔌 Connecting to dental-clinic-api-demo (api.dbtdentalclinic.com): $script:APIInstanceId" -ForegroundColor Cyan
     Write-Host "📍 This opens a shell session on the remote server (like SSH)" -ForegroundColor Gray
     Write-Host "   To run API locally instead, use 'api-init' + 'api-run'" -ForegroundColor Gray
     Write-Host ""
@@ -2586,33 +2624,48 @@ function Connect-SSMAPI {
 }
 
 function Connect-SSMClinicAPI {
-    if (-not $script:ClinicAPIInstanceId) {
-        Write-Host "❌ Clinic API EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+    $projectRoot = Split-Path $script:EnvManagerScriptRoot -Parent
+    if (-not (Ensure-SSMInstanceIdsLoaded -ProjectPath $projectRoot)) {
+        Write-Host "❌ Could not load credentials. Run from project root or ensure deployment_credentials.json exists." -ForegroundColor Red
         return
     }
-    
-    Write-Host "🔌 Connecting to CLINIC API EC2 (api-clinic.dbtdentalclinic.com): $script:ClinicAPIInstanceId" -ForegroundColor Cyan
+    if (-not $script:ClinicAPIInstanceId) {
+        Write-Host "❌ dental-clinic-api-clinic instance ID not in deployment_credentials.json." -ForegroundColor Red
+        return
+    }
+
+    Write-Host "🔌 Connecting to dental-clinic-api-clinic (api-clinic.dbtdentalclinic.com): $script:ClinicAPIInstanceId" -ForegroundColor Cyan
     Write-Host "📍 This opens a shell session on the clinic API server" -ForegroundColor Gray
     Write-Host ""
     aws ssm start-session --target $script:ClinicAPIInstanceId
 }
 
 function Connect-SSMDemoDB {
-    if (-not $script:DemoDBInstanceId) {
-        Write-Host "❌ Demo DB EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+    $projectRoot = Split-Path $script:EnvManagerScriptRoot -Parent
+    if (-not (Ensure-SSMInstanceIdsLoaded -ProjectPath $projectRoot)) {
+        Write-Host "❌ Could not load credentials. Run from project root or ensure deployment_credentials.json exists." -ForegroundColor Red
         return
     }
-    
-    Write-Host "🔌 Connecting to Demo DB EC2 instance: $script:DemoDBInstanceId" -ForegroundColor Cyan
+    if (-not $script:DemoDBInstanceId) {
+        Write-Host "❌ dental-clinic-demo-db instance ID not in deployment_credentials.json." -ForegroundColor Red
+        return
+    }
+
+    Write-Host "🔌 Connecting to dental-clinic-demo-db: $script:DemoDBInstanceId" -ForegroundColor Cyan
     aws ssm start-session --target $script:DemoDBInstanceId
 }
 
 function Start-SSMPortForwardRDS {
-    if (-not $script:APIInstanceId) {
-        Write-Host "❌ API EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+    $projectRoot = Split-Path $script:EnvManagerScriptRoot -Parent
+    if (-not (Ensure-SSMInstanceIdsLoaded -ProjectPath $projectRoot)) {
+        Write-Host "❌ Could not load credentials. Run from project root or ensure deployment_credentials.json exists." -ForegroundColor Red
         return
     }
-    
+    if (-not $script:APIInstanceId) {
+        Write-Host "❌ dental-clinic-api-demo instance ID not in deployment_credentials.json." -ForegroundColor Red
+        return
+    }
+
     if (-not $script:RDSEndpoint) {
         Write-Host "❌ RDS endpoint not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
         return
@@ -2626,7 +2679,7 @@ function Start-SSMPortForwardRDS {
     Write-Host "🔌 Starting port forwarding to RDS..." -ForegroundColor Cyan
     Write-Host "  Local port: $localPort" -ForegroundColor Gray
     Write-Host "  Remote: $script:RDSEndpoint:5432" -ForegroundColor Gray
-    Write-Host "  Via: $script:APIInstanceId" -ForegroundColor Gray
+    Write-Host "  Via: dental-clinic-api-demo $script:APIInstanceId" -ForegroundColor Gray
     Write-Host ""
     Write-Host "💡 Keep this terminal open. Use Ctrl+C to stop forwarding." -ForegroundColor Yellow
     Write-Host ""
@@ -2641,11 +2694,16 @@ function Start-SSMPortForwardRDS {
 }
 
 function Start-SSMPortForwardRDSClinic {
-    if (-not $script:ClinicAPIInstanceId) {
-        Write-Host "❌ Clinic API EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+    $projectRoot = Split-Path $script:EnvManagerScriptRoot -Parent
+    if (-not (Ensure-SSMInstanceIdsLoaded -ProjectPath $projectRoot)) {
+        Write-Host "❌ Could not load credentials. Run from project root or ensure deployment_credentials.json exists." -ForegroundColor Red
         return
     }
-    
+    if (-not $script:ClinicAPIInstanceId) {
+        Write-Host "❌ dental-clinic-api-clinic instance ID not in deployment_credentials.json." -ForegroundColor Red
+        return
+    }
+
     if (-not $script:RDSEndpoint) {
         Write-Host "❌ RDS endpoint not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
         return
@@ -2656,10 +2714,10 @@ function Start-SSMPortForwardRDSClinic {
         $localPort = "5433"
     }
 
-    Write-Host "🔌 Starting port forwarding to RDS (via clinic API instance)..." -ForegroundColor Cyan
+    Write-Host "🔌 Starting port forwarding to RDS (via dental-clinic-api-clinic)..." -ForegroundColor Cyan
     Write-Host "  Local port: $localPort" -ForegroundColor Gray
     Write-Host "  Remote: $script:RDSEndpoint:5432" -ForegroundColor Gray
-    Write-Host "  Via: $script:ClinicAPIInstanceId" -ForegroundColor Gray
+    Write-Host "  Via: dental-clinic-api-clinic $script:ClinicAPIInstanceId" -ForegroundColor Gray
     Write-Host ""
     Write-Host "💡 Keep this terminal open. Use Ctrl+C to stop forwarding." -ForegroundColor Yellow
     Write-Host ""
@@ -2674,11 +2732,16 @@ function Start-SSMPortForwardRDSClinic {
 }
 
 function Start-SSMPortForwardDemoDB {
-    if (-not $script:APIInstanceId) {
-        Write-Host "❌ API EC2 instance ID not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
+    $projectRoot = Split-Path $script:EnvManagerScriptRoot -Parent
+    if (-not (Ensure-SSMInstanceIdsLoaded -ProjectPath $projectRoot)) {
+        Write-Host "❌ Could not load credentials. Run from project root or ensure deployment_credentials.json exists." -ForegroundColor Red
         return
     }
-    
+    if (-not $script:APIInstanceId) {
+        Write-Host "❌ dental-clinic-api-demo instance ID not in deployment_credentials.json (needed to tunnel to demo DB)." -ForegroundColor Red
+        return
+    }
+
     if (-not $script:DemoDBHost) {
         Write-Host "❌ Demo DB host not loaded. Run 'aws-ssm-init' first." -ForegroundColor Red
         return
@@ -2692,7 +2755,7 @@ function Start-SSMPortForwardDemoDB {
     Write-Host "🔌 Starting port forwarding to Demo Database..." -ForegroundColor Cyan
     Write-Host "  Local port: $localPort" -ForegroundColor Gray
     Write-Host "  Remote: $script:DemoDBHost:5432" -ForegroundColor Gray
-    Write-Host "  Via: $script:APIInstanceId" -ForegroundColor Gray
+    Write-Host "  Via: dental-clinic-api-demo $script:APIInstanceId" -ForegroundColor Gray
     Write-Host ""
     Write-Host "💡 Keep this terminal open. Use Ctrl+C to stop forwarding." -ForegroundColor Yellow
     Write-Host ""
@@ -2742,28 +2805,31 @@ function Get-SSMStatus {
         Write-Host "  AWS Credentials: ❌ Not configured or invalid" -ForegroundColor Red
     }
 
-    # Show loaded instance IDs
+    # Ensure instance IDs are loaded from deployment_credentials.json (if available)
+    $null = Ensure-SSMInstanceIdsLoaded -ProjectPath (Get-Location)
+
+    # Show cached instance IDs (populated from deployment_credentials.json / connect commands)
     Write-Host ""
-    Write-Host "  Loaded Resources:" -ForegroundColor White
+    Write-Host "  Cached instance IDs (from deployment_credentials.json when you run a connect/port-forward command):" -ForegroundColor White
     if ($script:APIInstanceId) {
-        Write-Host "    API EC2 (demo): ✅ $script:APIInstanceId" -ForegroundColor Green
+        Write-Host "    dental-clinic-api-demo ($script:APIInstanceId):  ✅ Cached" -ForegroundColor Green
     } else {
-        Write-Host "    API EC2 (demo): ⭕ Not loaded" -ForegroundColor Gray
+        Write-Host "    dental-clinic-api-demo:  ⭕ Not loaded" -ForegroundColor Gray
     }
     if ($script:ClinicAPIInstanceId) {
-        Write-Host "    API EC2 (clinic): ✅ $script:ClinicAPIInstanceId" -ForegroundColor Green
+        Write-Host "    dental-clinic-api-clinic ($script:ClinicAPIInstanceId): ✅ Cached" -ForegroundColor Green
     } else {
-        Write-Host "    API EC2 (clinic): ⭕ Not loaded" -ForegroundColor Gray
+        Write-Host "    dental-clinic-api-clinic: ⭕ Not loaded" -ForegroundColor Gray
     }
-    
+
     if ($script:DemoDBInstanceId) {
-        Write-Host "    Demo DB EC2: ✅ $script:DemoDBInstanceId" -ForegroundColor Green
+        Write-Host "    dental-clinic-demo-db ($script:DemoDBInstanceId):   ✅ Cached" -ForegroundColor Green
     } else {
-        Write-Host "    Demo DB EC2: ⭕ Not loaded" -ForegroundColor Gray
+        Write-Host "    dental-clinic-demo-db:   ⭕ Not loaded" -ForegroundColor Gray
     }
 
     if ($script:RDSEndpoint) {
-        Write-Host "    RDS Endpoint: ✅ $script:RDSEndpoint" -ForegroundColor Green
+        Write-Host "    RDS Endpoint ($script:RDSEndpoint): ✅ Cached" -ForegroundColor Green
     } else {
         Write-Host "    RDS Endpoint: ⭕ Not loaded" -ForegroundColor Gray
     }
@@ -3069,15 +3135,15 @@ Write-Host "  clinic-frontend-deploy - Deploy clinic frontend → clinic.dbtdent
 Write-Host "  dbt-docs-deploy - Deploy dbt docs to S3/CloudFront" -ForegroundColor Cyan
 Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
-Write-Host "`n☁️  AWS (3 EC2 instances – run aws-ssm-init first to load IDs):" -ForegroundColor DarkCyan
-Write-Host "  aws-ssm-init             - Load credentials; then use commands below" -ForegroundColor DarkCyan
-Write-Host "  ssm-connect-api          - Shell on DEMO API EC2 (api.dbtdentalclinic.com)" -ForegroundColor Gray
-Write-Host "  ssm-connect-clinic-api   - Shell on CLINIC API EC2 (api-clinic.dbtdentalclinic.com)" -ForegroundColor Gray
-Write-Host "  ssm-connect-demo-db      - Shell on DEMO DB EC2 (demo database host)" -ForegroundColor Gray
-Write-Host "  ssm-port-forward-rds     - Forward RDS to localhost (via demo API instance)" -ForegroundColor Gray
-Write-Host "  ssm-port-forward-rds-clinic - Forward RDS to localhost (via clinic API instance)" -ForegroundColor Gray
+Write-Host "`n☁️  AWS (EC2: run aws-ssm-init, then instance IDs load when you run a connect/port-forward command):" -ForegroundColor DarkCyan
+Write-Host "  aws-ssm-init             - Set up SSM (region, PATH, RDS); instance IDs load on first use" -ForegroundColor DarkCyan
+Write-Host "  ssm-connect-api          - Shell on dental-clinic-api-demo (api.dbtdentalclinic.com)" -ForegroundColor Gray
+Write-Host "  ssm-connect-clinic-api   - Shell on dental-clinic-api-clinic (api-clinic.dbtdentalclinic.com)" -ForegroundColor Gray
+Write-Host "  ssm-connect-demo-db      - Shell on dental-clinic-demo-db (demo database host)" -ForegroundColor Gray
+Write-Host "  ssm-port-forward-rds     - Forward RDS to localhost (via dental-clinic-api-demo)" -ForegroundColor Gray
+Write-Host "  ssm-port-forward-rds-clinic - Forward RDS to localhost (via dental-clinic-api-clinic)" -ForegroundColor Gray
 Write-Host "  ssm-port-forward-demo-db - Forward demo DB to localhost" -ForegroundColor Gray
-Write-Host "  ssm-status               - Show loaded instance IDs and env" -ForegroundColor Gray
+Write-Host "  ssm-status               - Show plugin status and cached instance IDs" -ForegroundColor Gray
 
 # Auto-detect project type
 $cwd = Get-Location
