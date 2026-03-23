@@ -2,8 +2,9 @@ import { Routes, Route } from 'react-router-dom';
 import { Suspense, lazy } from 'react';
 import { Box, CircularProgress } from '@mui/material';
 import Layout from './components/layout/Layout';
-import Portfolio from './pages/Portfolio_v2';
+import Portfolio from './pages/Portfolio_v3';
 import ClinicHome from './pages/ClinicHome';
+import AgentProfile from './pages/AgentProfile';
 
 // Lazy load dashboard pages for code splitting
 const Dashboard = lazy(() => import('./pages/Dashboard'));
@@ -39,6 +40,15 @@ function App() {
                     </Layout>
                 </Box>
             )} />
+
+            <Route
+                path="/agent-profile"
+                element={
+                    <Box sx={{ minHeight: '100vh' }}>
+                        <AgentProfile />
+                    </Box>
+                }
+            />
 
             {/* All other pages with Layout (sidebar navigation) - lazy loaded for code splitting */}
             <Route path="/dashboard" element={

@@ -836,7 +836,7 @@ const Portfolio: React.FC = () => {
                                         FastAPI endpoint reference and usage examples.
                                     </Typography>
                                     <Link
-                                        href="https://github.com/BenjaminRains/dbt_dental_clinic/tree/main/api/README.md"
+                                        href="https://api.dbtdentalclinic.com/docs"
                                         target="_blank"
                                         rel="noopener noreferrer"
                                     >

@@ -5,7 +5,7 @@ import LocalHospitalIcon from '@mui/icons-material/LocalHospital';
 /**
  * Clinic site home page (clinic.dbtdentalclinic.com).
  * Placeholder until the clinic-specific UI is developed.
- * Not used on the demo/portfolio site (Portfolio_v2 at dbtdentalclinic.com).
+ * Not used on the demo/portfolio site (Portfolio_v3 at dbtdentalclinic.com).
  */
 const ClinicHome: React.FC = () => {
     return (

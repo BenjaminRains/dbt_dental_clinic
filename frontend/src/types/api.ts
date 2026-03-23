@@ -39,7 +39,7 @@ export interface Patient {
     // Demographics
     middle_initial?: string;
     preferred_name?: string;
-    gender?: string; // M=Male, F=Female, O=Other, U=Unknown
+    gender?: string; // M=Male, F=Female, U=Unknown
     language?: string;
     birth_date?: string; // ISO date string
     // age removed (PII) - replaced with numeric age_category
