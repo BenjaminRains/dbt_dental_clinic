@@ -90,6 +90,10 @@ class PerformanceOptimizations:
         self.replicator = replicator
         self.performance_history = {}
         self.batch_performance_threshold = 100  # records/second minimum
+        # Minimum volume before we treat below-threshold rates as meaningful.
+        # Very small tables (or metadata tables) can legitimately have low or zero rows/sec
+        # and should not generate noisy performance warnings.
+        self.min_rows_for_warning = 10000
         
         # Enhanced bulk operation settings
         self.bulk_insert_buffer_size = 268435456  # 256MB
@@ -262,14 +266,7 @@ class PerformanceOptimizations:
                     else:
                         logger.warning(f"Failed to set bulk_insert_buffer_size: {e}")
                 
-                # Try to set innodb_flush_log_at_trx_commit, but handle GLOBAL variable gracefully
-                try:
-                    conn.execute(text("SET SESSION innodb_flush_log_at_trx_commit = 2"))
-                except Exception as e:
-                    if "GLOBAL variable" in str(e) or "Access denied" in str(e):
-                        logger.warning("innodb_flush_log_at_trx_commit requires GLOBAL privileges, skipping")
-                    else:
-                        logger.warning(f"Failed to set innodb_flush_log_at_trx_commit: {e}")
+                # Do not attempt innodb_flush_log_at_trx_commit - GLOBAL-only; set by grant_etl_privileges
                 
                 try:
                     conn.execute(text("SET SESSION autocommit = 0"))
@@ -312,11 +309,16 @@ class PerformanceOptimizations:
     
 
     
-    def _track_performance_optimized(self, table_name: str, duration: float, memory_mb: float, rows_processed: int):
+    def _track_performance_optimized(self, table_name: str, duration: float, memory_mb: float, rows_processed: int,
+                                     extraction_strategy: Optional[str] = None):
         """
         Enhanced performance tracking with detailed metrics.
+        
+        Suppresses the below-threshold warning for incremental runs, since records/sec
+        is dominated by overhead when processing small batches and is not meaningful.
         """
         records_per_second = rows_processed / duration if duration > 0 else 0
+        is_incremental = extraction_strategy in ('incremental', 'incremental_chunked')
         
         self.performance_history[table_name] = {
             'records_per_second': records_per_second,
@@ -327,11 +329,17 @@ class PerformanceOptimizations:
             'strategy': 'optimized'
         }
         
-        # Performance analysis
-        if records_per_second < self.batch_performance_threshold:
-            logger.warning(f"Performance below threshold for {table_name}: {records_per_second:.0f} records/sec")
-        else:
-            logger.info(f"Good performance for {table_name}: {records_per_second:.0f} records/sec")
+        # Performance analysis:
+        # - Only warn for full_table runs (not incremental), and
+        # - Only when the table volume is large enough that rows/sec is meaningful.
+        meets_volume_threshold = rows_processed >= self.min_rows_for_warning
+        if not is_incremental and meets_volume_threshold:
+            if records_per_second < self.batch_performance_threshold:
+                logger.warning(
+                    f"Performance below threshold for {table_name}: {records_per_second:.0f} records/sec"
+                )
+            else:
+                logger.info(f"Good performance for {table_name}: {records_per_second:.0f} records/sec")
         
         logger.info(f"Performance metrics for {table_name}: {rows_processed:,} rows in {duration:.2f}s "
                    f"({records_per_second:.0f} rows/sec), Memory: {memory_mb:.1f}MB")
@@ -487,7 +495,7 @@ class PerformanceOptimizations:
 
 
     def _execute_bulk_operation(self, table_name: str, columns: List[str], 
-                               rows: List, operation_type: str = 'insert') -> int:
+                               rows: List, operation_type: str = 'insert', skip_verification: bool = False) -> int:
         """
         Unified bulk operation handler.
         
@@ -496,6 +504,7 @@ class PerformanceOptimizations:
             columns: List of column names
             rows: List of row data
             operation_type: 'insert', 'upsert', or 'replace'
+            skip_verification: If True, skip pre/post-commit COUNT(*) (faster for large tables)
             
         Returns:
             Number of rows processed
@@ -550,22 +559,8 @@ class PerformanceOptimizations:
                     else:
                         logger.warning(f"Failed to set bulk_insert_buffer_size: {e}")
                 
-                # Try to set performance optimizations, but handle GLOBAL variable gracefully
-                try:
-                    cursor.execute("SET SESSION innodb_flush_log_at_trx_commit = 0")
-                except Exception as e:
-                    if "GLOBAL variable" in str(e) or "Access denied" in str(e):
-                        logger.warning("innodb_flush_log_at_trx_commit requires GLOBAL privileges, skipping")
-                    else:
-                        logger.warning(f"Failed to set innodb_flush_log_at_trx_commit: {e}")
-                
-                try:
-                    cursor.execute("SET SESSION sync_binlog = 0")
-                except Exception as e:
-                    if "GLOBAL variable" in str(e) or "Access denied" in str(e):
-                        logger.warning("sync_binlog requires GLOBAL privileges, skipping")
-                    else:
-                        logger.warning(f"Failed to set sync_binlog: {e}")
+                # Do not attempt innodb_flush_log_at_trx_commit or sync_binlog - GLOBAL-only;
+                # grant_etl_privileges sets them on the replication server.
                 
                 # Log target connection info
                 try:
@@ -578,69 +573,63 @@ class PerformanceOptimizations:
 
                 # Execute bulk operation
                 cursor.executemany(sql, values_list)
-                try:
-                    logger.info(f"Bulk executemany affected rowcount={cursor.rowcount} for {table_name}")
-                except Exception:
-                    pass
-
-                # Pre-commit verification inside same transaction
-                try:
-                    cursor.execute(f"SELECT COUNT(*) FROM `{target_db}`.`{table_name}`")
-                    pre_commit_count = cursor.fetchone()[0]
-                    logger.info(f"Pre-commit replication count for {table_name} = {pre_commit_count}")
-                    if (cursor.rowcount == 0 or pre_commit_count == 0) and values_list:
-                        sample = values_list[0]
-                        logger.error(
-                            f"No rows reported inserted for {table_name}. Logging SQL and first bind sample.\n"
-                            f"SQL: {sql.strip()}\n"
-                            f"First values: {sample}"
-                        )
-                except Exception as dbg_err:
-                    logger.warning(f"Pre-commit verification failed for {table_name}: {dbg_err}")
-                
-                # Reset session variables (only if they were set successfully)
-                try:
-                    cursor.execute("SET SESSION innodb_flush_log_at_trx_commit = 1")
-                except Exception:
-                    pass  # Ignore reset errors
-                
-                try:
-                    cursor.execute("SET SESSION sync_binlog = 1")
-                except Exception:
-                    pass  # Ignore reset errors
-                
-                # Commit using the raw DB-API connection to avoid any wrapper mismatch
-                try:
-                    # Extra diagnostics before commit
+                if not skip_verification:
                     try:
-                        cursor.execute("SELECT DATABASE(), @@hostname, @@port")
-                        dbg_db, dbg_host, dbg_port = cursor.fetchone()
-                        logger.info(f"Pre-commit (raw) context: db={dbg_db} host={dbg_host} port={dbg_port}")
+                        logger.info(f"Bulk executemany affected rowcount={cursor.rowcount} for {table_name}")
                     except Exception:
                         pass
 
+                # Pre-commit verification inside same transaction (skipped when skip_verification for speed)
+                if not skip_verification:
+                    try:
+                        cursor.execute(f"SELECT COUNT(*) FROM `{target_db}`.`{table_name}`")
+                        pre_commit_count = cursor.fetchone()[0]
+                        logger.info(f"Pre-commit replication count for {table_name} = {pre_commit_count}")
+                        if (cursor.rowcount == 0 or pre_commit_count == 0) and values_list:
+                            sample = values_list[0]
+                            logger.error(
+                                f"No rows reported inserted for {table_name}. Logging SQL and first bind sample.\n"
+                                f"SQL: {sql.strip()}\n"
+                                f"First values: {sample}"
+                            )
+                    except Exception as dbg_err:
+                        logger.warning(f"Pre-commit verification failed for {table_name}: {dbg_err}")
+                
+                # Commit using the raw DB-API connection to avoid any wrapper mismatch
+                try:
+                    # Extra diagnostics before commit (skipped when skip_verification)
+                    if not skip_verification:
+                        try:
+                            cursor.execute("SELECT DATABASE(), @@hostname, @@port")
+                            dbg_db, dbg_host, dbg_port = cursor.fetchone()
+                            logger.info(f"Pre-commit (raw) context: db={dbg_db} host={dbg_host} port={dbg_port}")
+                        except Exception:
+                            pass
+
                     raw_conn.commit()
-                    logger.info("Raw connection commit succeeded")
+                    if not skip_verification:
+                        logger.info("Raw connection commit succeeded")
                 except Exception as commit_err:
                     logger.warning(f"Raw connection commit failed, falling back to SQLAlchemy commit: {commit_err}")
                     conn.commit()
                 
-                # Post-commit verification on a NEW pooled connection
-                try:
-                    with self.replicator.target_engine.connect() as verify_conn:
-                        v_raw = verify_conn.connection.connection
-                        v_cur = v_raw.cursor()
-                        try:
-                            v_cur.execute("SELECT DATABASE(), @@hostname, @@port")
-                            v_db, v_host, v_port = v_cur.fetchone()
-                            logger.info(f"Post-commit (new conn) context: db={v_db} host={v_host} port={v_port}")
-                        except Exception:
-                            pass
-                        v_cur.execute(f"SELECT COUNT(*) FROM `{target_db}`.`{table_name}`")
-                        post_commit_count = v_cur.fetchone()[0]
-                        logger.info(f"Post-commit replication count for {table_name} = {post_commit_count}")
-                except Exception as post_err:
-                    logger.warning(f"Post-commit verification on new connection failed for {table_name}: {post_err}")
+                # Post-commit verification on a NEW pooled connection (skipped when skip_verification)
+                if not skip_verification:
+                    try:
+                        with self.replicator.target_engine.connect() as verify_conn:
+                            v_raw = verify_conn.connection.connection
+                            v_cur = v_raw.cursor()
+                            try:
+                                v_cur.execute("SELECT DATABASE(), @@hostname, @@port")
+                                v_db, v_host, v_port = v_cur.fetchone()
+                                logger.info(f"Post-commit (new conn) context: db={v_db} host={v_host} port={v_port}")
+                            except Exception:
+                                pass
+                            v_cur.execute(f"SELECT COUNT(*) FROM `{target_db}`.`{table_name}`")
+                            post_commit_count = v_cur.fetchone()[0]
+                            logger.info(f"Post-commit replication count for {table_name} = {post_commit_count}")
+                    except Exception as post_err:
+                        logger.warning(f"Post-commit verification on new connection failed for {table_name}: {post_err}")
                 
                 return len(values_list)
                 
@@ -1035,8 +1024,12 @@ class SimpleMySQLReplicator:
             primary_column = self._get_primary_incremental_column(config)
             incremental_columns = config.get('incremental_columns', [])
             
-            # Log the strategy being used
-            self._log_incremental_strategy(table_name, primary_column, incremental_columns)
+            # Log the strategy being used (skip incremental wording when forcing full copy)
+            if not force_full:
+                self._log_incremental_strategy(table_name, primary_column, incremental_columns)
+            else:
+                if primary_column and primary_column != 'none':
+                    logger.info(f"Table {table_name}: Full table copy using primary column '{primary_column}' for keyset pagination")
             
             # 1. Determine WHAT to copy (extraction strategy) with intelligent selection
             extraction_strategy = self.get_extraction_strategy(table_name)
@@ -1081,8 +1074,10 @@ class SimpleMySQLReplicator:
                 # Update copy tracking with primary column value
                 self._update_copy_status(table_name, rows_copied, 'success', last_primary_value, primary_column)
                 
-                # Use enhanced performance tracking
-                self.performance_optimizer._track_performance_optimized(table_name, duration, memory_used, rows_copied)
+                # Use enhanced performance tracking (pass strategy to suppress threshold warning for incremental)
+                self.performance_optimizer._track_performance_optimized(
+                    table_name, duration, memory_used, rows_copied, extraction_strategy=extraction_strategy
+                )
 
                 # Post-copy validation (test safe): confirm rows exist in replication DB
                 try:
@@ -1177,10 +1172,17 @@ class SimpleMySQLReplicator:
             performance_category = config.get('performance_category', 'medium')
             batch_size = self.performance_optimizer.calculate_adaptive_batch_size(table_name, config)
             
-            # Determine if full refresh is needed
+            # When caller already chose full table (e.g. etl run --full), skip re-evaluation
+            # so we don't log "Using incremental strategy" and then "Using full refresh"
+            if extraction_strategy == 'full_table':
+                force_full = True
+                logger.info(f"Full table copy for {table_name} ({performance_category})")
+                return self._copy_full_table_unified(table_name, batch_size, config)
+            
+            # Determine if full refresh is needed (intelligent selection when not forced)
             force_full = self.performance_optimizer.should_use_full_refresh(table_name, config)
             
-            if force_full or extraction_strategy == 'full_table':
+            if force_full:
                 logger.info(f"Using full refresh for {table_name} ({performance_category})")
                 return self._copy_full_table_unified(table_name, batch_size, config)
             elif extraction_strategy == 'incremental_chunked':
@@ -1221,6 +1223,12 @@ class SimpleMySQLReplicator:
             offset = 0
             total_copied = 0
             batch_num = 0
+            primary_key = config.get('primary_key', 'id')
+            # Keyset pagination for large tables: avoid OFFSET (O(offset) cost per batch)
+            use_keyset = performance_category == 'large' and primary_key
+            last_pk_value = None
+            if use_keyset:
+                logger.info(f"Using keyset pagination (WHERE {primary_key} > last) for fast large-table copy")
             
             # Performance optimizations for large tables
             if performance_category == 'large':
@@ -1230,26 +1238,37 @@ class SimpleMySQLReplicator:
                     target_conn.execute(text("SET autocommit = 0"))
                     target_conn.commit()
             
-            while offset < total_count:
+            while True:
                 batch_num += 1
                 batch_start_time = time.time()
                 
                 # Fetch batch from source
                 with self.source_engine.connect() as source_conn:
-                    if performance_category == 'large':
-                        # Use ORDER BY for consistent results in large tables
-                        primary_key = config.get('primary_key', 'id')
+                    if use_keyset:
+                        # WHERE pk > :last — constant-time per batch instead of OFFSET
+                        if last_pk_value is not None:
+                            result = source_conn.execute(
+                                text(
+                                    f"SELECT * FROM `{table_name}` WHERE `{primary_key}` > :last_pk "
+                                    f"ORDER BY `{primary_key}` LIMIT {batch_size}"
+                                ),
+                                {"last_pk": last_pk_value}
+                            )
+                        else:
+                            result = source_conn.execute(text(
+                                f"SELECT * FROM `{table_name}` ORDER BY `{primary_key}` LIMIT {batch_size}"
+                            ))
+                    elif performance_category == 'large':
+                        # Fallback: no primary key, use OFFSET
                         try:
                             result = source_conn.execute(text(
                                 f"SELECT * FROM `{table_name}` ORDER BY `{primary_key}` LIMIT {batch_size} OFFSET {offset}"
                             ))
                         except Exception:
-                            # Fallback without ORDER BY if primary key doesn't exist
                             result = source_conn.execute(text(
                                 f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}"
                             ))
                     else:
-                        # Simple fetch for medium/small tables
                         result = source_conn.execute(text(
                             f"SELECT * FROM `{table_name}` LIMIT {batch_size} OFFSET {offset}"
                         ))
@@ -1260,12 +1279,29 @@ class SimpleMySQLReplicator:
                 if not rows:
                     break
                 
-                # Use unified bulk operation
-                operation_type = 'insert' if performance_category == 'large' else 'upsert'
-                rows_inserted = self.performance_optimizer._execute_bulk_operation(table_name, columns, rows, operation_type)
+                # For keyset: remember last pk for next batch
+                if use_keyset:
+                    col_list = list(columns)
+                    if primary_key in col_list:
+                        pk_idx = col_list.index(primary_key)
+                        last_pk_value = rows[-1][pk_idx]
+                
+                # Skip per-batch verification for large tables (every 10 batches) to reduce COUNT(*) cost
+                skip_verification = (
+                    performance_category == 'large' and
+                    batch_num > 1 and
+                    (batch_num % 10) != 0
+                )
+                rows_inserted = self.performance_optimizer._execute_bulk_operation(
+                    table_name, columns, rows, operation_type='insert' if performance_category == 'large' else 'upsert',
+                    skip_verification=skip_verification
+                )
                 
                 total_copied += rows_inserted
-                offset += batch_size
+                if not use_keyset:
+                    offset += batch_size
+                    if offset >= total_count:
+                        break
                 
                 # Performance tracking and adaptive adjustment
                 batch_duration = time.time() - batch_start_time
@@ -1278,12 +1314,15 @@ class SimpleMySQLReplicator:
                 # Adaptive batch size adjustment for large tables
                 if performance_category == 'large':
                     expected_rate = self.performance_optimizer._get_expected_rate_for_category(performance_category)
+                    prev_batch_size = batch_size
                     if batch_rate < expected_rate * 0.5:  # Very slow
                         batch_size = max(self.performance_optimizer.min_bulk_batch_size, batch_size // 2)
-                        logger.info(f"Reducing batch size to {batch_size:,} due to slow performance")
+                        if batch_size < prev_batch_size:
+                            logger.info(f"Reducing batch size to {batch_size:,} due to slow performance")
                     elif batch_rate > expected_rate * 2:  # Very fast
                         batch_size = min(self.performance_optimizer.max_bulk_batch_size, int(batch_size * 1.5))
-                        logger.info(f"Increasing batch size to {batch_size:,} due to excellent performance")
+                        if batch_size > prev_batch_size:
+                            logger.info(f"Increasing batch size to {batch_size:,} due to excellent performance")
             
             # Re-enable foreign key checks for large tables
             if performance_category == 'large':
@@ -1362,7 +1401,7 @@ class SimpleMySQLReplicator:
                     return False, 0
             
             if metadata['new_records_count'] == 0:
-                logger.info(f"No new records to copy for {table_name}")
+                logger.info(f"No new records to copy for {table_name} (source already in sync with replication)")
                 return True, 0
             
             logger.info(f"Found {metadata['new_records_count']} new records to copy for {table_name}")
@@ -2045,7 +2084,7 @@ class SimpleMySQLReplicator:
             logger.info(f"Incremental chunked metadata for {table_name}: last_processed={last_processed}, new_records={new_records_count}, strategy={column_strategy}")
             
             if new_records_count == 0:
-                logger.info(f"No new records to copy for {table_name}")
+                logger.info(f"No new records to copy for {table_name} (source already in sync with replication)")
                 return True, 0
             
             # Use smaller chunk size for chunked processing to ensure no records are missed
