@@ -3,13 +3,15 @@
 ETL Pipeline Log Parser
 
 Parse and reorganize ETL pipeline log files, grouping logs by table name
-for easier analysis.
+for easier analysis. Extracts and organizes all ERROR and WARNING messages
+(ALL ERRORS and ALL WARNINGS sections with counts and chronological lists).
 
 Usage:
     python scripts/parse_etl_logs.py <log_file_path>
-    python scripts/parse_etl_logs.py logs/etl_pipeline/etl_pipeline_run_20260101_151617.log
+    python scripts/parse_etl_logs.py -Filepath logs/etl_pipeline/etl_pipeline_run_20260101_151617.log
 """
 
+import argparse
 import re
 import sys
 from pathlib import Path
@@ -79,6 +81,12 @@ class ETLLogParser:
     TABLE_PERF_PATTERN = re.compile(r'Performance metrics for (\w+):')
     TABLE_EXTRACT_PATTERN = re.compile(r'Successfully extracted (\w+)')
     TABLE_LOAD_PATTERN = re.compile(r'Successfully loaded (\w+):')
+    # Summary line when load skipped (0 new rows): "document: 0 new rows in 0.1 min (replication and analytics in sync, load skipped)"
+    TABLE_SUMMARY_SKIP_PATTERN = re.compile(r'^(\w+): 0 new rows in [\d.]+ min \(replication and analytics in sync')
+    # Summary line when load completed with rows: "paysplit: 105 rows in 0.4 min (copy_csv, 5 rows/sec)"
+    TABLE_SUMMARY_LOAD_PATTERN = re.compile(
+        r'^(\w+): ([\d,]+) rows in ([\d.]+) min \((\w+), ([\d.]+) rows/sec\)'
+    )
     TABLE_ERROR_PATTERN = re.compile(r'(?:ERROR|Failed|Exception|Error).*(?:for table: |table )(\w+)', re.IGNORECASE)
     # Additional patterns for table names in log messages
     TABLE_CHUNKED_PATTERN = re.compile(r'\[ChunkedStrategy\] (\w+):')  # "[ChunkedStrategy] table:"
@@ -102,34 +110,60 @@ class ETLLogParser:
     
     def __init__(self, log_file_path: str):
         """Initialize parser with log file path."""
-        log_path = Path(log_file_path)
-        
+        log_path = Path(log_file_path.strip())
+        script_file = Path(__file__).resolve()
+        project_root = script_file.parent.parent.parent  # scripts -> etl_pipeline -> project root
+        tried: List[Path] = []
+
         # If path is relative, try multiple resolution strategies
         if not log_path.is_absolute():
-            # Strategy 1: Try relative to current working directory first
+            # Strategy 1: relative to current working directory
             cwd_path = (Path.cwd() / log_path).resolve()
+            tried.append(cwd_path)
             if cwd_path.exists():
                 log_path = cwd_path
             else:
-                # Strategy 2: Try relative to project root
-                script_file = Path(__file__).resolve()
-                project_root = script_file.parent.parent.parent  # Go up 3 levels: scripts -> etl_pipeline -> project root
-                log_path = (project_root / log_path).resolve()
+                # Strategy 2: relative to project root
+                root_path = (project_root / log_path).resolve()
+                tried.append(root_path)
+                if root_path.exists():
+                    log_path = root_path
+                elif len(log_path.parts) == 1:
+                    # Strategy 3: filename only -> try known ETL log dirs (pipeline writes to etl_pipeline/logs/etl_pipeline/)
+                    search_dirs = [
+                        project_root / "logs" / "etl_pipeline",
+                        project_root / "etl_pipeline" / "logs" / "etl_pipeline",  # actual pipeline default
+                        Path.cwd() / "logs" / "etl_pipeline",
+                        Path.cwd() / "etl_pipeline" / "logs" / "etl_pipeline",
+                    ]
+                    for log_dir in search_dirs:
+                        default_log = (log_dir / log_path.name).resolve()
+                        tried.append(default_log)
+                        if default_log.exists():
+                            log_path = default_log
+                            break
+                    else:
+                        log_path = root_path  # use for error message
+                else:
+                    log_path = root_path
         else:
-            # Absolute path - just resolve it
             log_path = log_path.resolve()
-        
+            tried.append(log_path)
+
         if not log_path.exists():
+            tried_str = "\n  ".join(str(p) for p in tried)
             raise FileNotFoundError(
-                f"Log file not found: {log_file_path}\n"
+                f"Log file not found: {log_file_path.strip()!r}\n"
                 f"  Resolved path: {log_path}\n"
                 f"  Current working directory: {Path.cwd()}\n"
-                f"  Tried: {Path.cwd() / log_file_path} (from CWD) and {script_file.parent.parent.parent / log_file_path} (from project root)"
+                f"  Tried:\n  {tried_str}"
             )
         
         self.log_file_path = log_path
         self.tables: Dict[str, TableProcessingInfo] = {}
         self.system_logs: List[LogEntry] = []
+        self.all_errors: List[Tuple[Optional[str], LogEntry]] = []  # (table_name or None, entry)
+        self.all_warnings: List[Tuple[Optional[str], LogEntry]] = []  # (table_name or None, entry)
         self.current_table_context: Optional[str] = None
         # Track connection messages per table (to keep only first occurrence)
         self.table_connection_messages_seen: Dict[str, set] = {}  # table_name -> set of connection message types
@@ -173,9 +207,13 @@ class ETLLogParser:
                     # Extract metrics and status
                     self._extract_table_info(entry, table_name)
                     
-                    # Track errors
-                    if entry.level in ('ERROR', 'CRITICAL') or 'error' in entry.message.lower() or 'failed' in entry.message.lower():
+                    # Track errors (all errors also go to global all_errors)
+                    if self._is_error_entry(entry):
                         self.tables[table_name].errors.append(entry)
+                        self.all_errors.append((table_name, entry))
+                    # Track warnings
+                    if entry.level == 'WARNING':
+                        self.all_warnings.append((table_name, entry))
                 else:
                     # System log or unassociated log
                     # Only assign to current context if it's truly a generic log (no table mentions)
@@ -198,11 +236,23 @@ class ETLLogParser:
                         not mentions_known_table and
                         self._is_generic_log(entry)):
                         entry.table_name = self.current_table_context
+                        ctx = self.current_table_context
                         # Check for duplicate connection messages before adding (keep only first per table)
-                        if not self._should_filter_duplicate_connection(entry, self.current_table_context):
-                            self.tables[self.current_table_context].log_entries.append(entry)
+                        if not self._should_filter_duplicate_connection(entry, ctx):
+                            self.tables[ctx].log_entries.append(entry)
+                        # Track errors (including those assigned to context)
+                        if self._is_error_entry(entry):
+                            self.tables[ctx].errors.append(entry)
+                            self.all_errors.append((ctx, entry))
+                        if entry.level == 'WARNING':
+                            self.all_warnings.append((ctx, entry))
                     else:
                         self.system_logs.append(entry)
+                        # Track unassociated system errors
+                        if self._is_error_entry(entry):
+                            self.all_errors.append((None, entry))
+                        if entry.level == 'WARNING':
+                            self.all_warnings.append((None, entry))
         
         # Finalize table statuses
         self._finalize_table_statuses()
@@ -215,6 +265,26 @@ class ETLLogParser:
         for pattern in self.FILTER_PATTERNS:
             if pattern.search(entry.message):
                 return True
+        return False
+
+    def _is_error_entry(self, entry: LogEntry) -> bool:
+        """Check if a log entry represents an error (catches all error types)."""
+        if entry.level in ('ERROR', 'CRITICAL'):
+            return True
+        msg = entry.message.lower()
+        # Exclude known informational patterns (verification logs, not failures)
+        if 'pre-commit replication count for' in msg or 'post-commit replication count for' in msg:
+            return False
+        error_indicators = [
+            'error', 'failed', 'exception', 'traceback',
+            'programmingerror', 'operationalerror', 'integrityerror',
+            'sql syntax', 'syntax error',
+        ]
+        if any(ind in msg for ind in error_indicators):
+            return True
+        # MySQL error codes: match as whole words so "1062437" doesn't match "1062"
+        if re.search(r'\b1064\b', msg) or re.search(r'\b1062\b', msg):
+            return True
         return False
     
     def _should_filter_duplicate_connection(self, entry: LogEntry, table_name: str) -> bool:
@@ -330,6 +400,16 @@ class ETLLogParser:
         if match:
             return match.group(1)
         
+        # Check for table in load-skipped summary line ("table: 0 new rows in X min (replication and analytics in sync...)")
+        match = self.TABLE_SUMMARY_SKIP_PATTERN.search(entry.message.strip())
+        if match:
+            return match.group(1)
+
+        # Check for table in load summary line with rows ("table: N rows in X min (strategy, Y rows/sec)")
+        match = self.TABLE_SUMMARY_LOAD_PATTERN.search(entry.message.strip())
+        if match:
+            return match.group(1)
+
         # Check for table in bulk insert messages
         match = self.TABLE_BULK_INSERT_PATTERN.search(entry.message)
         if match:
@@ -483,7 +563,7 @@ class ETLLogParser:
                 except ValueError:
                     pass
         
-        # Extract load phase metrics
+        # Extract load phase metrics from "Successfully loaded" message
         if "Successfully loaded" in entry.message and table_name in entry.message:
             # Extract rows
             rows_match = self.ROWS_PATTERN.search(entry.message)
@@ -515,6 +595,32 @@ class ETLLogParser:
             strategy_match = self.STRATEGY_PATTERN.search(entry.message)
             if strategy_match:
                 info.load_strategy = strategy_match.group(1)
+
+        # Extract load-skipped summary: "table: 0 new rows in X min (replication and analytics in sync, load skipped)"
+        if self.TABLE_SUMMARY_SKIP_PATTERN.search(entry.message.strip()) and table_name in entry.message:
+            info.load_rows = 0
+            info.load_strategy = "skipped_no_new_data"
+            info.status = "completed"
+            info.end_time = entry.timestamp
+            duration_match = re.search(r'0 new rows in ([\d.]+) min', entry.message)
+            if duration_match:
+                try:
+                    info.load_duration = float(duration_match.group(1)) * 60.0  # min -> seconds
+                except ValueError:
+                    pass
+
+        # Extract load summary with rows: "table: N rows in X min (strategy, Y rows/sec)"
+        load_summary_match = self.TABLE_SUMMARY_LOAD_PATTERN.search(entry.message.strip())
+        if load_summary_match and table_name in entry.message:
+            try:
+                info.load_rows = int(load_summary_match.group(2).replace(',', ''))
+                info.load_duration = float(load_summary_match.group(3)) * 60.0  # min -> seconds
+                info.load_strategy = load_summary_match.group(4)
+                info.load_rate = float(load_summary_match.group(5))
+                info.status = "completed"
+                info.end_time = entry.timestamp
+            except (ValueError, IndexError):
+                pass
     
     def _finalize_table_statuses(self):
         """Finalize table statuses after parsing."""
@@ -531,6 +637,118 @@ class ETLLogParser:
                 # If we have start time but no end time, we can't calculate duration
                 pass
     
+    def _build_errors_section(self) -> List[str]:
+        """Build errors section: all errors organized at top for quick review."""
+        lines = []
+        if not self.all_errors:
+            return lines
+        lines.append("=" * 80)
+        lines.append("ALL ERRORS")
+        lines.append("=" * 80)
+        lines.append("")
+        # Sort by timestamp, then by table (None last)
+        sorted_errors = sorted(
+            self.all_errors,
+            key=lambda x: (x[1].timestamp, x[0] or "")
+        )
+        for table_name, entry in sorted_errors:
+            timestamp_str = entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            table_prefix = f"[{table_name}] " if table_name else "[system] "
+            lines.append(f"  {timestamp_str} {table_prefix}{entry.message}")
+        lines.append("")
+        lines.append("=" * 80)
+        lines.append("")
+        return lines
+
+    @staticmethod
+    def _normalize_warning_message(msg: str) -> str:
+        """Normalize a warning message so similar messages (e.g. differing only by table name) group together."""
+        s = msg
+        # "Could not track performance metrics for <table>:" or "for <table>_load:"
+        s = re.sub(r'\bfor\s+(\w+)(_load)?:\s*', r'for *\2: ', s)
+        # "Performance below threshold for <table>: N records/sec"
+        s = re.sub(r':\s*\d+(,\d+)*\s*records/sec', r': * records/sec', s)
+        return s
+
+    def _build_warnings_section(self) -> List[str]:
+        """Build warnings section: grouped by normalized pattern, by message type, then chronological list."""
+        lines = []
+        if not self.all_warnings:
+            return lines
+        lines.append("=" * 80)
+        lines.append("ALL WARNINGS")
+        lines.append("=" * 80)
+        lines.append("")
+
+        # Group by exact message: (message -> [(table_name, entry), ...])
+        by_message: Dict[str, List[Tuple[Optional[str], LogEntry]]] = defaultdict(list)
+        for table_name, entry in self.all_warnings:
+            by_message[entry.message].append((table_name, entry))
+
+        # Group by normalized pattern for a compact summary
+        by_pattern: Dict[str, List[Tuple[Optional[str], LogEntry]]] = defaultdict(list)
+        for table_name, entry in self.all_warnings:
+            pattern = self._normalize_warning_message(entry.message)
+            by_pattern[pattern].append((table_name, entry))
+
+        # Summary
+        lines.append(f"Total: {len(self.all_warnings)} warning(s), {len(by_message)} unique message type(s), {len(by_pattern)} pattern(s)")
+        lines.append("")
+
+        # By normalized pattern (collapses table names / numbers so you see few lines)
+        lines.append("By pattern (normalized; table names and numbers collapsed):")
+        lines.append("-" * 80)
+        sorted_patterns = sorted(
+            by_pattern.items(),
+            key=lambda x: len(x[1]),
+            reverse=True
+        )
+        for pattern, occurrences in sorted_patterns[:30]:  # top 30 patterns
+            count = len(occurrences)
+            _, entry = occurrences[0]
+            ts = entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            lines.append(f"  [{count:5}x] {ts}  {pattern}")
+        if len(sorted_patterns) > 30:
+            lines.append(f"  ... and {len(sorted_patterns) - 30} more pattern(s)")
+        lines.append("")
+
+        # By message type (count + one example)
+        lines.append("By message type (exact; count then one example):")
+        lines.append("-" * 80)
+        # Sort by count descending so most frequent appear first
+        sorted_groups = sorted(
+            by_message.items(),
+            key=lambda x: len(x[1]),
+            reverse=True
+        )
+        for message, occurrences in sorted_groups:
+            count = len(occurrences)
+            table_name, entry = occurrences[0]
+            timestamp_str = entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            table_prefix = f"[{table_name}] " if table_name else "[system] "
+            lines.append(f"  [{count:4}x] {timestamp_str} {table_prefix}{message}")
+        lines.append("")
+
+        # Chronological list (truncated when very long)
+        lines.append("Chronological list:")
+        lines.append("-" * 80)
+        sorted_warnings = sorted(
+            self.all_warnings,
+            key=lambda x: (x[1].timestamp, x[0] or "")
+        )
+        max_chrono = 500
+        to_show = sorted_warnings if len(sorted_warnings) <= max_chrono else sorted_warnings[:max_chrono]
+        for table_name, entry in to_show:
+            timestamp_str = entry.timestamp.strftime('%Y-%m-%d %H:%M:%S')
+            table_prefix = f"[{table_name}] " if table_name else "[system] "
+            lines.append(f"  {timestamp_str} {table_prefix}{entry.message}")
+        if len(sorted_warnings) > max_chrono:
+            lines.append(f"  ... ({len(sorted_warnings) - max_chrono} more; see raw log for full list)")
+        lines.append("")
+        lines.append("=" * 80)
+        lines.append("")
+        return lines
+
     def _build_summary_lines(self) -> List[str]:
         """Build summary block lines: category counts, status, time window, slowest tables."""
         lines = []
@@ -541,6 +759,10 @@ class ETLLogParser:
 
         n = len(self.tables)
         lines.append(f"Tables processed: {n}")
+        if self.all_errors:
+            lines.append(f"Errors: {len(self.all_errors)} (see ALL ERRORS section above)")
+        if self.all_warnings:
+            lines.append(f"Warnings: {len(self.all_warnings)} (see ALL WARNINGS section above)")
         completed = sum(1 for info in self.tables.values() if info.status == "completed")
         failed = sum(1 for info in self.tables.values() if info.status == "failed")
         incomplete = sum(1 for info in self.tables.values() if info.status == "incomplete")
@@ -630,7 +852,13 @@ class ETLLogParser:
         print(f"Writing grouped output to: {output_path}")
         
         with open(output_path, 'w', encoding='utf-8') as f:
-            # Write summary block at top
+            # Write errors at top (if any)
+            for line in self._build_errors_section():
+                f.write(line + "\n")
+            # Write warnings section (organized by message type, then chronological)
+            for line in self._build_warnings_section():
+                f.write(line + "\n")
+            # Write summary block
             for line in self._build_summary_lines():
                 f.write(line + "\n")
 
@@ -723,12 +951,26 @@ class ETLLogParser:
 
 def main():
     """Main entry point."""
-    if len(sys.argv) < 2:
-        print("Usage: python scripts/parse_etl_logs.py <log_file_path>")
-        sys.exit(1)
-    
-    log_file_path = sys.argv[1]
-    
+    arg_parser = argparse.ArgumentParser(
+        description="Parse ETL pipeline log files and output grouped report with errors and warnings."
+    )
+    arg_parser.add_argument(
+        "log_file_path",
+        nargs="?",
+        default=None,
+        help="Path to the ETL log file",
+    )
+    arg_parser.add_argument(
+        "-Filepath", "--filepath",
+        dest="filepath",
+        default=None,
+        help="Path to the ETL log file (alternative to positional argument)",
+    )
+    args = arg_parser.parse_args()
+    log_file_path = args.filepath or args.log_file_path
+    if not log_file_path:
+        arg_parser.error("Log file path required. Use: parse_etl_logs.py <path> or -Filepath <path>")
+    log_file_path = log_file_path.strip()
     try:
         parser = ETLLogParser(log_file_path)
         parser.parse()
