@@ -21,7 +21,7 @@ Usage:
 Requirements:
     - PostgreSQL server running on localhost:5432
     - MySQL server running on localhost:3305 (for replication)
-    - analytics_test_user and replication_test_user with appropriate permissions
+    - Use existing DB users: replication_test_user, analytics_test_user (see .env_test)
     - ETL_ENVIRONMENT=test or ENVIRONMENT=test must be set
 """
 
