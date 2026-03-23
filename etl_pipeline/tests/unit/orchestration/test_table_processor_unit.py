@@ -49,7 +49,7 @@ class TestTableProcessorUnit:
         - Validates ETL pipeline orchestration with mocked components
         - Tests environment validation and FAIL FAST behavior
         - Ensures proper delegation to SimpleMySQLReplicator and PostgresLoader
-        - Validates chunked loading logic for large tables
+        - Validates load strategy selection for large tables (copy_csv via load_table())
         - Tests error handling and exception propagation
     
     Coverage Areas:
@@ -59,7 +59,7 @@ class TestTableProcessorUnit:
         - Environment validation and FAIL FAST requirements
         - ConfigReader integration for table configuration
         - Error handling for various failure scenarios
-        - Chunked loading decision logic for large tables
+        - Load strategy decision: loader selects standard/streaming/copy_csv by size
         
     ETL Context:
         - Core ETL orchestration component used by PipelineOrchestrator
@@ -162,17 +162,32 @@ class TestTableProcessorUnit:
         settings = test_settings
         
         with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator') as mock_replicator_class:
-            with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader') as mock_loader_class:
-                with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
-                    
-                    # Mock successful components
-                    mock_replicator = MagicMock()
-                    mock_replicator.copy_table.return_value = True
+            with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
+                # Patch _instantiate_loader so no real DB connections (replication/analytics) are created.
+                # ConnectionFactory.get_* and PostgresLoader() are only used inside _instantiate_loader.
+                mock_loader = MagicMock()
+                mock_loader.load_table.return_value = (True, {
+                    'rows_loaded': 100,
+                    'duration': 1.0,
+                    'strategy_used': 'standard',
+                })
+                mock_loader._check_analytics_needs_updating.return_value = (True, None, None, False)
+                
+                with patch.object(TableProcessor, '_instantiate_loader', return_value=mock_loader):
+                    # Avoid real DB in _update_pipeline_status (it creates PostgresLoader + connections)
+                    with patch.object(TableProcessor, '_update_pipeline_status'):
+                        
+                        # Mock successful extraction (copy_table returns (success, metadata))
+                        mock_replicator = MagicMock()
+                    mock_replicator.copy_table.return_value = (True, {
+                        'rows_copied': 100,
+                        'strategy_used': 'full_table',
+                        'duration': 1.0,
+                        'force_full_applied': False,
+                        'primary_column': 'PatNum',
+                        'last_primary_value': '123',
+                    })
                     mock_replicator_class.return_value = mock_replicator
-                    
-                    mock_loader = MagicMock()
-                    mock_loader.load_table.return_value = True
-                    mock_loader_class.return_value = mock_loader
                     
                     mock_config_reader = MagicMock()
                     mock_config_reader.get_table_config.return_value = {
@@ -192,7 +207,8 @@ class TestTableProcessorUnit:
                     
                     # Assert: Verify successful ETL pipeline execution
                     assert result is True
-                    mock_replicator.copy_table.assert_called_once_with('patient', force_full=False)
+                    # Extract uses strategy-resolved force_full (True when no incremental columns)
+                    mock_replicator.copy_table.assert_called_once_with('patient', force_full=True)
                     mock_loader.load_table.assert_called_once_with(table_name='patient', force_full=False)
     
     def test_extract_to_replication_success(self, test_settings):
@@ -215,68 +231,58 @@ class TestTableProcessorUnit:
         
         with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator') as mock_replicator_class:
             mock_replicator = MagicMock()
-            mock_replicator.copy_table.return_value = True
+            mock_replicator.copy_table.return_value = (True, {
+                'rows_copied': 50,
+                'strategy_used': 'incremental',
+                'duration': 0.5,
+                'force_full_applied': False,
+                'primary_column': 'PatNum',
+                'last_primary_value': '100',
+            })
             mock_replicator_class.return_value = mock_replicator
             
             table_processor = TableProcessor()
             table_processor.settings = settings
             
             # Act: Call _extract_to_replication() with valid parameters
-            result = table_processor._extract_to_replication('patient', force_full=False)
+            success, metadata = table_processor._extract_to_replication('patient', force_full=False)
             
             # Assert: Verify successful extraction delegation
-            assert result is True
+            assert success is True
+            assert metadata.get('rows_copied') == 50
             mock_replicator.copy_table.assert_called_once_with('patient', force_full=False)
     
-    def test_load_to_analytics_chunked(self, test_settings):
+    def test_load_to_analytics_large_table_copy_csv(self, test_settings):
         """
-        Test chunked loading for large tables.
+        Test loading for large tables (loader selects copy_csv via load_table()).
         
-        AAA Pattern:
-            Arrange: Set up mocked PostgresLoader with large table config
-            Act: Call _load_to_analytics() with large table configuration
-            Assert: Verify chunked loading is used for large tables
-            
-        Validates:
-            - Chunked loading decision logic (> 100MB threshold)
-            - Proper delegation to PostgresLoader.load_table_chunked()
-            - Settings injection for environment-agnostic operation
-            - ConfigReader integration for table configuration
+        Table processor always calls load_table(); strategy is selected inside the loader.
+        Chunked load strategy was removed; large tables use copy_csv.
         """
-        # Arrange: Set up mocked PostgresLoader with large table config
         settings = test_settings
         
-        with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader') as mock_loader_class:
-            with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
-                
-                mock_loader = MagicMock()
-                mock_loader.load_table_chunked.return_value = True
-                mock_loader_class.return_value = mock_loader
-                
+        with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
+            mock_loader = MagicMock()
+            mock_loader.load_table.return_value = (True, {'rows_loaded': 1000, 'duration': 1.0, 'strategy_used': 'copy_csv'})
+            mock_loader._check_analytics_needs_updating.return_value = (True, None, None, False)
+            with patch.object(TableProcessor, '_instantiate_loader', return_value=mock_loader):
                 mock_config_reader = MagicMock()
                 mock_config_reader.get_table_config.return_value = {
                     'primary_key': 'ProcNum',
                     'incremental_column': 'ProcDate',
                     'extraction_strategy': 'incremental',
                     'batch_size': 5000,
-                    'estimated_size_mb': 150.0  # > 100MB triggers chunked loading
+                    'estimated_size_mb': 150.0
                 }
                 mock_config_reader_class.return_value = mock_config_reader
                 
                 table_processor = TableProcessor(config_reader=mock_config_reader)
                 table_processor.settings = settings
                 
-                # Act: Call _load_to_analytics() with large table configuration
                 result = table_processor._load_to_analytics('procedurelog', force_full=False)
                 
-                # Assert: Verify chunked loading is used for large tables
-                assert result is True
-                mock_loader.load_table_chunked.assert_called_once_with(
-                    table_name='procedurelog',
-                    force_full=False,
-                    chunk_size=5000
-                )
-                mock_loader.load_table.assert_not_called()  # Should not use standard loading
+                assert result[0] is True
+                mock_loader.load_table.assert_called_once_with(table_name='procedurelog', force_full=False)
     
     def test_load_to_analytics_standard(self, test_settings):
         """
@@ -296,13 +302,11 @@ class TestTableProcessorUnit:
         # Arrange: Set up mocked PostgresLoader with small table config
         settings = test_settings
         
-        with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader') as mock_loader_class:
-            with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
-                
-                mock_loader = MagicMock()
-                mock_loader.load_table.return_value = True
-                mock_loader_class.return_value = mock_loader
-                
+        with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
+            mock_loader = MagicMock()
+            mock_loader.load_table.return_value = (True, {'rows_loaded': 100, 'duration': 0.5, 'strategy_used': 'standard'})
+            mock_loader._check_analytics_needs_updating.return_value = (True, None, None, False)
+            with patch.object(TableProcessor, '_instantiate_loader', return_value=mock_loader):
                 mock_config_reader = MagicMock()
                 mock_config_reader.get_table_config.return_value = {
                     'primary_key': 'PatNum',
@@ -319,10 +323,9 @@ class TestTableProcessorUnit:
                 # Act: Call _load_to_analytics() with small table configuration
                 result = table_processor._load_to_analytics('patient', force_full=False)
                 
-                # Assert: Verify standard loading is used for small tables
-                assert result is True
+                # Assert: Verify load_table() is used
+                assert result[0] is True
                 mock_loader.load_table.assert_called_once_with(table_name='patient', force_full=False)
-                mock_loader.load_table_chunked.assert_not_called()  # Should not use chunked loading
     
     @pytest.mark.fail_fast
     def test_environment_validation_fail_fast(self):
@@ -447,54 +450,25 @@ class TestTableProcessorUnit:
                     # Assert: Verify proper error handling and logging
                     assert result is False
     
-    def test_chunked_loading_decision_logic(self, test_settings):
+    def test_load_table_always_called_strategy_in_loader(self, test_settings):
         """
-        Test chunked loading decision logic based on table size.
-        
-        AAA Pattern:
-            Arrange: Set up different table configurations with varying sizes
-            Act: Call _load_to_analytics() with different table configurations
-            Assert: Verify correct loading method is chosen based on size
-            
-        Validates:
-            - Chunked loading threshold (> 100MB)
-            - Standard loading for small tables (<= 100MB)
-            - ConfigReader integration for table configuration
-            - Settings injection for environment-agnostic operation
+        Test that load_table() is always called regardless of table size.
+        Strategy selection (standard/streaming/copy_csv) is done inside the loader.
         """
-        # Arrange: Set up different table configurations with varying sizes
         settings = test_settings
         
         test_cases = [
-            {
-                'table_name': 'patient',
-                'estimated_size_mb': 50.0,  # <= 100MB
-                'expected_method': 'load_table',
-                'expected_chunked': False
-            },
-            {
-                'table_name': 'procedurelog',
-                'estimated_size_mb': 150.0,  # > 100MB
-                'expected_method': 'load_table_chunked',
-                'expected_chunked': True
-            },
-            {
-                'table_name': 'appointment',
-                'estimated_size_mb': 100.0,  # Exactly 100MB
-                'expected_method': 'load_table',
-                'expected_chunked': False
-            }
+            {'table_name': 'patient', 'estimated_size_mb': 50.0},
+            {'table_name': 'procedurelog', 'estimated_size_mb': 150.0},
+            {'table_name': 'appointment', 'estimated_size_mb': 100.0},
         ]
         
         for test_case in test_cases:
-            with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader') as mock_loader_class:
-                with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
-                    
-                    mock_loader = MagicMock()
-                    mock_loader.load_table.return_value = True
-                    mock_loader.load_table_chunked.return_value = True
-                    mock_loader_class.return_value = mock_loader
-                    
+            with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
+                mock_loader = MagicMock()
+                mock_loader.load_table.return_value = (True, {'rows_loaded': 0, 'duration': 0.0, 'strategy_used': 'standard'})
+                mock_loader._check_analytics_needs_updating.return_value = (True, None, None, False)
+                with patch.object(TableProcessor, '_instantiate_loader', return_value=mock_loader):
                     mock_config_reader = MagicMock()
                     mock_config_reader.get_table_config.return_value = {
                         'primary_key': 'TestNum',
@@ -508,18 +482,10 @@ class TestTableProcessorUnit:
                     table_processor = TableProcessor(config_reader=mock_config_reader)
                     table_processor.settings = settings
                     
-                    # Act: Call _load_to_analytics() with different table configurations
                     result = table_processor._load_to_analytics(test_case['table_name'], force_full=False)
                     
-                    # Assert: Verify correct loading method is chosen based on size
-                    assert result is True
-                    
-                    if test_case['expected_chunked']:
-                        mock_loader.load_table_chunked.assert_called_once()
-                        mock_loader.load_table.assert_not_called()
-                    else:
-                        mock_loader.load_table.assert_called_once()
-                        mock_loader.load_table_chunked.assert_not_called()
+                    assert result[0] is True
+                    mock_loader.load_table.assert_called_once_with(table_name=test_case['table_name'], force_full=False)
     
     def test_full_refresh_processing(self, test_settings):
         """
@@ -540,34 +506,38 @@ class TestTableProcessorUnit:
         settings = test_settings
         
         with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator') as mock_replicator_class:
-            with patch('etl_pipeline.loaders.postgres_loader.PostgresLoader') as mock_loader_class:
-                with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
-                    
-                    mock_replicator = MagicMock()
-                    mock_replicator.copy_table.return_value = True
-                    mock_replicator_class.return_value = mock_replicator
-                    
-                    mock_loader = MagicMock()
-                    mock_loader.load_table.return_value = True
-                    mock_loader_class.return_value = mock_loader
-                    
-                    mock_config_reader = MagicMock()
-                    mock_config_reader.get_table_config.return_value = {
-                        'primary_key': 'PatNum',
-                        'incremental_column': 'DateTStamp',
-                        'extraction_strategy': 'incremental',
-                        'batch_size': 1000,
-                        'estimated_size_mb': 50.0
-                    }
-                    mock_config_reader_class.return_value = mock_config_reader
-                    
-                    table_processor = TableProcessor(config_reader=mock_config_reader)
-                    table_processor.settings = settings
-                    
-                    # Act: Call process_table() with force_full=True
-                    result = table_processor.process_table('patient', force_full=True)
-                    
-                    # Assert: Verify full refresh is properly handled
-                    assert result is True
-                    mock_replicator.copy_table.assert_called_once_with('patient', force_full=True)
-                    mock_loader.load_table.assert_called_once_with(table_name='patient', force_full=True) 
+            with patch('etl_pipeline.orchestration.table_processor.ConfigReader') as mock_config_reader_class:
+                mock_loader = MagicMock()
+                mock_loader.load_table.return_value = (True, {
+                    'rows_loaded': 100, 'duration': 1.0, 'strategy_used': 'standard',
+                })
+                mock_loader._check_analytics_needs_updating.return_value = (True, None, None, False)
+                with patch.object(TableProcessor, '_instantiate_loader', return_value=mock_loader):
+                    with patch.object(TableProcessor, '_update_pipeline_status'):
+                        mock_replicator = MagicMock()
+                        mock_replicator.copy_table.return_value = (True, {
+                            'rows_copied': 100, 'strategy_used': 'full_table', 'duration': 1.0,
+                            'force_full_applied': True, 'primary_column': 'PatNum', 'last_primary_value': '100',
+                        })
+                        mock_replicator_class.return_value = mock_replicator
+                        
+                        mock_config_reader = MagicMock()
+                        mock_config_reader.get_table_config.return_value = {
+                            'primary_key': 'PatNum',
+                            'incremental_column': 'DateTStamp',
+                            'extraction_strategy': 'incremental',
+                            'batch_size': 1000,
+                            'estimated_size_mb': 50.0
+                        }
+                        mock_config_reader_class.return_value = mock_config_reader
+                        
+                        table_processor = TableProcessor(config_reader=mock_config_reader)
+                        table_processor.settings = settings
+                        
+                        # Act: Call process_table() with force_full=True
+                        result = table_processor.process_table('patient', force_full=True)
+                        
+                        # Assert: Verify full refresh is properly handled
+                        assert result is True
+                        mock_replicator.copy_table.assert_called_once_with('patient', force_full=True)
+                        mock_loader.load_table.assert_called_once_with(table_name='patient', force_full=True) 

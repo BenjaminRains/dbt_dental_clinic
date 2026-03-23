@@ -313,4 +313,5 @@ class TestPostgresLoaderTrackingStatus:
         """
         pytest.skip("track_performance_metrics is not part of the new architecture")
         assert 'large_table' in call_args
-        assert 'chunked' in call_args 
+        # Chunked strategy removed; large tables use copy_csv
+        assert any(s in call_args for s in ('copy_csv', 'chunked', 'streaming', 'standard')) 

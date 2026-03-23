@@ -125,11 +125,10 @@ class TestTrackingFixes:
         # Mock the _update_load_status method
         mock_loader._update_load_status = Mock(return_value=True)
         
-        # Test each load method with error
+        # Test each load method with error (loader internal strategy entry points; load_table_chunked removed)
         load_methods = [
             'load_table_streaming',
-            'load_table_standard', 
-            'load_table_chunked',
+            'load_table_standard',
             'load_table_copy_csv',
             'load_table_parallel'
         ]

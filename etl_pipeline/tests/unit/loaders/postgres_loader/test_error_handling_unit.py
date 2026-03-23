@@ -96,7 +96,6 @@ def mock_postgres_loader_instance():
     mock_loader.load_table_copy_csv = MagicMock(return_value=True)
     mock_loader.load_table_standard = MagicMock(return_value=True)
     mock_loader.load_table_streaming = MagicMock(return_value=True)
-    mock_loader.load_table_chunked = MagicMock(return_value=True)
     
     return mock_loader
 

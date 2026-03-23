@@ -202,7 +202,7 @@ class TestPostgresLoaderPhase1Fixes:
         Integration test for Phase 1 fixes using public API load_table().
         
         This test verifies that load_table() works correctly with the new architecture,
-        automatically selecting the appropriate strategy (including chunked for large tables).
+        automatically selecting the appropriate strategy (including copy_csv for large tables).
         """
         from etl_pipeline.loaders.postgres_loader import LoadStrategyType, LoadResult, LoadPreparation
         
@@ -224,40 +224,35 @@ class TestPostgresLoaderPhase1Fixes:
         
         # Mock all the dependencies in a single context manager to avoid nesting issues
         with patch.object(postgres_loader, '_prepare_table_load', return_value=mock_load_prep), \
-             patch.object(postgres_loader, '_select_strategy', return_value=LoadStrategyType.CHUNKED), \
+             patch.object(postgres_loader, '_select_strategy', return_value=LoadStrategyType.COPY_CSV), \
              patch.object(postgres_loader, '_finalize_table_load') as mock_finalize:
             
-            # Mock the chunked strategy in the strategies dict
-            mock_chunked_strategy = MagicMock()
+            # Mock the copy_csv strategy in the strategies dict
+            mock_copy_csv_strategy = MagicMock()
             mock_load_result = LoadResult(
                 success=True,
                 rows_loaded=3,
-                strategy_used='chunked',  # Required field
+                strategy_used='copy_csv',
                 duration=1.0
             )
-            mock_chunked_strategy.execute.return_value = mock_load_result
-            # Replace the actual strategy in the dict BEFORE calling load_table
-            original_strategy = postgres_loader.strategies.get(LoadStrategyType.CHUNKED)
-            postgres_loader.strategies[LoadStrategyType.CHUNKED] = mock_chunked_strategy
+            mock_copy_csv_strategy.execute.return_value = mock_load_result
+            original_strategy = postgres_loader.strategies.get(LoadStrategyType.COPY_CSV)
+            postgres_loader.strategies[LoadStrategyType.COPY_CSV] = mock_copy_csv_strategy
             
             try:
                 mock_finalize.return_value = (True, {
                     'rows_loaded': 3,
-                    'chunk_count': 2,
-                    'strategy': 'chunked'
+                    'strategy_used': 'copy_csv'
                 })
                 
-                # Test the load using public API
                 success, metadata = postgres_loader.load_table('test_table', force_full=False)
                 
                 assert success is True
                 assert metadata['rows_loaded'] == 3
-                assert metadata['chunk_count'] == 2
-                assert metadata['strategy'] == 'chunked'
+                assert metadata['strategy_used'] == 'copy_csv'
             finally:
-                # Restore original strategy
                 if original_strategy:
-                    postgres_loader.strategies[LoadStrategyType.CHUNKED] = original_strategy
+                    postgres_loader.strategies[LoadStrategyType.COPY_CSV] = original_strategy
 
 
 if __name__ == "__main__":

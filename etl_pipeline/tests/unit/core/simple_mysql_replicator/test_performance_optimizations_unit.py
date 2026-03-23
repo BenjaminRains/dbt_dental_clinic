@@ -715,7 +715,9 @@ class TestPerformanceOptimizations:
         replicator = replicator_with_mock_engines
         optimizer = replicator.performance_optimizer
         
-        # Test performance tracking below threshold
+        # Test performance tracking below threshold for a low-volume table.
+        # For small tables, rows/sec is not a meaningful signal and should
+        # not generate a "Performance below threshold" warning.
         table_name = 'test_table'
         duration = 60.0  # Slow
         memory_mb = 50.0
@@ -724,10 +726,33 @@ class TestPerformanceOptimizations:
         with patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
             optimizer._track_performance_optimized(table_name, duration, memory_mb, rows_processed)
             
-            # Verify warning was logged for poor performance
-            mock_logger.warning.assert_called_once()
-            warning_call = mock_logger.warning.call_args[0][0]
-            assert "Performance below threshold" in warning_call
+            # Verify NO warning is logged for low-volume tables even if below threshold
+            mock_logger.warning.assert_not_called()
+            # Performance metrics should still be logged
+            assert mock_logger.info.call_count >= 1
+
+    def test_track_performance_optimized_incremental_below_threshold_no_warning(self, replicator_with_mock_engines):
+        """
+        Test that incremental runs below threshold do NOT log a warning.
+        
+        For incremental runs, records/sec is dominated by overhead (connections,
+        queries) when processing small batches, so the threshold is not meaningful.
+        """
+        replicator = replicator_with_mock_engines
+        optimizer = replicator.performance_optimizer
+        
+        table_name = 'test_table'
+        duration = 0.5
+        memory_mb = 10.0
+        rows_processed = 15  # Small batch typical of incremental
+        
+        with patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
+            optimizer._track_performance_optimized(
+                table_name, duration, memory_mb, rows_processed, extraction_strategy='incremental'
+            )
+            # No warning should be logged for incremental
+            mock_logger.warning.assert_not_called()
+            assert mock_logger.info.call_count >= 1  # Performance metrics still logged
 
     def test_copy_large_table_optimized_success(self, replicator_with_mock_engines):
         """
