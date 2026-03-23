@@ -80,6 +80,7 @@ from typing import Dict, List, Tuple, Optional
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from .table_processor import TableProcessor
 from ..config import get_settings, ConfigReader
+from ..monitoring.unified_metrics import UnifiedMetricsCollector
 from ..config.logging import get_logger
 
 # Import custom exceptions for structured error handling
@@ -90,7 +91,7 @@ from ..exceptions.configuration import ConfigurationError, EnvironmentError
 logger = get_logger(__name__)
 
 class PriorityProcessor:
-    def __init__(self, config_reader: ConfigReader):
+    def __init__(self, config_reader: ConfigReader, metrics: Optional[UnifiedMetricsCollector] = None):
         """
         Initialize the priority processor.
         
@@ -105,6 +106,7 @@ class PriorityProcessor:
         
         Args:
             config_reader: ConfigReader instance (REQUIRED for table configuration)
+            metrics: Optional UnifiedMetricsCollector to pass to TableProcessor (e.g. from orchestrator)
         """
         try:
             if not isinstance(config_reader, ConfigReader):
@@ -115,6 +117,7 @@ class PriorityProcessor:
                 )
             
             self.config_reader = config_reader
+            self.metrics = metrics
             
             # ✅ CONNECTION ARCHITECTURE: Always use get_settings() for proper environment detection
             self.settings = get_settings()
@@ -318,7 +321,7 @@ class PriorityProcessor:
                         success = future.result()
                         if success:
                             success_tables.append(table)
-                            logger.info(f"SUCCESS: Successfully processed {table} in parallel")
+                            logger.debug(f"SUCCESS: Successfully processed {table} in parallel")
                         else:
                             failed_tables.append(table)
                             logger.error(f"X Failed to process {table} in parallel")
@@ -363,7 +366,7 @@ class PriorityProcessor:
                 success = self._process_single_table(table, force_full)
                 if success:
                     success_tables.append(table)
-                    logger.info(f"SUCCESS: Successfully processed {table} sequentially")
+                    logger.debug(f"SUCCESS: Successfully processed {table} sequentially")
                 else:
                     failed_tables.append(table)
                     logger.error(f"✗ Failed to process {table} sequentially")
@@ -395,9 +398,10 @@ class PriorityProcessor:
         - Validates environment configuration before processing
         """
         try:
-            # Create TableProcessor with ConfigReader
+            # Create TableProcessor with ConfigReader and shared metrics (if any)
             table_processor = TableProcessor(
-                config_reader=self.config_reader
+                config_reader=self.config_reader,
+                metrics=self.metrics
             )
             
             # ✅ MODERN ARCHITECTURE: No connection initialization needed
@@ -407,7 +411,7 @@ class PriorityProcessor:
             success = table_processor.process_table(table_name, force_full)
             
             if success:
-                logger.info(f"Successfully processed {table_name} using integrated approach")
+                logger.debug(f"Successfully processed {table_name} using integrated approach")
             else:
                 logger.error(f"Failed to process {table_name} using integrated approach")
             

@@ -107,13 +107,13 @@ class PipelineOrchestrator:
                 # Use default ConfigReader which will auto-detect the path
                 self.config_reader = ConfigReader()
             
-            # ✅ MODERN ARCHITECTURE: Initialize components with ConfigReader
-            # Components handle their own connections using Settings injection
-            self.table_processor = TableProcessor(config_reader=self.config_reader)
-            self.priority_processor = PriorityProcessor(config_reader=self.config_reader)
-            
-            # Initialize metrics
+            # Initialize metrics (shared by table_processor and priority_processor)
             self.metrics = UnifiedMetricsCollector(settings=self.settings)
+            
+            # ✅ MODERN ARCHITECTURE: Initialize components with ConfigReader and shared metrics
+            # Components handle their own connections using Settings injection
+            self.table_processor = TableProcessor(config_reader=self.config_reader, metrics=self.metrics)
+            self.priority_processor = PriorityProcessor(config_reader=self.config_reader, metrics=self.metrics)
             
             # Track initialization state
             self._initialized = False
@@ -159,6 +159,7 @@ class PipelineOrchestrator:
             # TableProcessor and PriorityProcessor handle their own connections
             # using Settings injection for environment-agnostic operation
             
+            self.metrics.start_pipeline()
             self._initialized = True
             logger.info("Successfully initialized all pipeline components using modern architecture")
             return True

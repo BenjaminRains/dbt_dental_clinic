@@ -121,6 +121,7 @@ class UnifiedMetricsCollector:
             'start_time': None,
             'end_time': None,
             'total_time': None,
+            'total_processing_time': 0.0,
             'tables_processed': 0,
             'total_rows_processed': 0,
             'errors': [],
@@ -128,10 +129,14 @@ class UnifiedMetricsCollector:
             'status': 'idle'
         }
         self.start_time = None
+        self.pipeline_started = False
+        self.table_metrics = self.metrics['table_metrics']
+        self.pipeline_metrics = self.metrics  # same dict so record_* updates are visible in get_*
     
     def start_pipeline(self):
         """Start pipeline timing and metrics collection."""
         self.start_time = time.time()
+        self.pipeline_started = True
         self.metrics['start_time'] = datetime.now()
         self.metrics['status'] = 'running'
         logger.info("Pipeline metrics collection started")
