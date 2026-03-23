@@ -1340,7 +1340,7 @@ def main():
         analytics_config = settings.get_analytics_raw_connection_config()
         
         # Create engines using ConnectionFactory
-        source_engine = ConnectionFactory.create_mysql_engine(**source_config)
+        source_engine = ConnectionFactory.create_mysql_engine(**source_config, for_source=True)
         replication_engine = ConnectionFactory.create_mysql_engine(**replication_config)
         analytics_engine = ConnectionFactory.create_postgres_engine(**analytics_config)
         
