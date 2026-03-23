@@ -55,26 +55,44 @@ class PostgresSchema:
     - PostgresLoader: Data movement, pipeline mechanics, load verification
     """
     
-    def __init__(self, postgres_schema: ConfigPostgresSchema = ConfigPostgresSchema.RAW, settings=None):
+    def __init__(
+        self,
+        postgres_schema: ConfigPostgresSchema = ConfigPostgresSchema.RAW,
+        settings=None,
+        mysql_engine_override=None,
+        mysql_database_override=None,
+    ):
         """
         Initialize PostgreSQL schema adaptation using new Settings-centric architecture.
         
         Args:
             postgres_schema: PostgreSQL schema enum (default: PostgresSchema.RAW)
             settings: Settings instance (uses global if None)
+            mysql_engine_override: Optional MySQL engine to use instead of replication
+                (e.g. source engine for new tables not yet in replication)
+            mysql_database_override: Optional MySQL database name when using engine override
         """
         # Use provided settings or get global settings
         self.settings = settings or get_settings()
         
         # Get database connections using new ConnectionFactory (unified API)
-        self.mysql_engine = ConnectionFactory.get_replication_connection(self.settings)
+        # Allow override for schema-from-source scenarios (e.g. initialize new tables)
+        if mysql_engine_override is not None:
+            self.mysql_engine = mysql_engine_override
+            self.mysql_db = (
+                mysql_database_override
+                or getattr(mysql_engine_override.url, 'database', None)
+                or 'opendental'
+            )
+        else:
+            self.mysql_engine = ConnectionFactory.get_replication_connection(self.settings)
+            mysql_config = self.settings.get_replication_connection_config()
+            self.mysql_db = mysql_config.get('database', 'opendental_replication')
+        
         self.postgres_engine = ConnectionFactory.get_analytics_raw_connection(self.settings)
         
-        # Get database names from settings
-        mysql_config = self.settings.get_replication_connection_config()
+        # Get PostgreSQL config
         postgres_config = self.settings.get_analytics_connection_config(postgres_schema)
-        
-        self.mysql_db = mysql_config.get('database', 'opendental_replication')
         self.postgres_db = postgres_config.get('database', 'opendental_analytics')
         self.postgres_schema = postgres_schema.value  # Use enum value for string operations
         self._schema_cache = {}
@@ -219,7 +237,8 @@ class PostgresSchema:
             known_smallint_columns = {
                 'apptview': ['StackBehavUR', 'StackBehavLR'],
                 'provider': ['ProvStatus', 'AnesthProvType', 'EhrMuStage'],
-                'tasklist': ['TaskListStatus']
+                'tasklist': ['TaskListStatus'],
+                'userod': ['FailedAttempts', 'MobileWebPinFailedAttempts'],
             }
             
             if (table_name.lower() in known_smallint_columns and 
@@ -350,7 +369,8 @@ class PostgresSchema:
             known_smallint_columns = {
                 'apptview': ['StackBehavUR', 'StackBehavLR'],
                 'provider': ['ProvStatus', 'AnesthProvType', 'EhrMuStage'],
-                'tasklist': ['TaskListStatus']
+                'tasklist': ['TaskListStatus'],
+                'userod': ['FailedAttempts', 'MobileWebPinFailedAttempts'],
             }
             
             if (table_name.lower() in known_smallint_columns and 
