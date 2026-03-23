@@ -102,6 +102,7 @@ Essential pipeline building blocks with **modern static configuration**:
 - **`simple_mysql_replicator.py`**: **SimpleMySQLReplicator** - Efficient MySQL-to-MySQL replication with clear separation of copy methods and extraction strategies (10 methods)
 - **`connections.py`**: **ConnectionFactory** - Explicit environment separation and connection management (25 methods)
 - **`postgres_schema.py`**: **PostgresSchema** - Schema conversion and adaptation utilities (10 methods)
+- **`ops.py`**: **Operations API** - Agent-oriented operations layer with `EtlError`, `PipelineRunSummary`, `LagStatus`; stubs for `get_status`, `run_pipeline`, `inspect_lag`, `get_logs` (backend for agent CLI)
 
 #### 3. **Data Loading** (`loaders/`)
 PostgreSQL data loading with optimization:
@@ -121,6 +122,7 @@ PostgreSQL data loading with optimization:
 User-friendly command interface:
 
 - **`commands.py`**: CLI commands for pipeline operations (3 main commands)
+- **`agent_commands.py`**: Agent-oriented CLI with machine-readable JSON output (`status` command); invokes `ops` module
 - **`main.py`**: CLI entry point with Click-based interface
 - **`__main__.py`**: Module entry point for `python -m etl_pipeline`
 
@@ -253,6 +255,7 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 ### **Modern CLI Interface**
 - **Click-Based**: Modern CLI framework with command groups
 - **Multiple Commands**: `run`, `status`, `test_connections` with comprehensive options
+- **Agent CLI**: Separate `agent_commands` module for machine-readable JSON output (status, run summaries) backed by `ops` layer
 - **Dry Run Mode**: Preview pipeline operations without making changes
 - **Real-Time Status**: Monitor pipeline progress and status
 - **Connection Testing**: Validate database connections before execution
@@ -454,7 +457,7 @@ python -m etl_pipeline test-connections
 
 #### **Agent-Oriented Status CLI (machine-readable)**
 
-For tools and agents that need structured JSON envelopes instead of human-centric logs, there is an additional CLI module:
+For tools and agents that need structured JSON envelopes instead of human-centric logs, use the dedicated `agent_commands` module. It is invoked directly (not via the main `etl_pipeline` CLI) and backed by the `ops` module in `core/`:
 
 ```bash
 # Recent pipeline run summaries (JSON, quiet for machine consumption)
@@ -467,7 +470,12 @@ python -m etl_pipeline.cli.agent_commands status \
   --since 2025-01-10T00:00:00 \
   --until 2025-01-11T00:00:00 \
   --format json --quiet
+
+# Human-friendly text output
+python -m etl_pipeline.cli.agent_commands status --since 2025-01-01T00:00:00 --format text
 ```
+
+Output is a stable envelope: `{"status": "ok"|"error", "data": ..., "error": null|{...}}`. The `ops` module provides the backend; `get_status` and related functions are stubbed for now.
 
 #### **Programmatic Usage**
 
