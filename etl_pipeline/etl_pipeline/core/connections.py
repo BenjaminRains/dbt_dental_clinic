@@ -77,9 +77,16 @@ class ConnectionFactory:
         max_overflow: int = DEFAULT_MAX_OVERFLOW,
         pool_timeout: int = DEFAULT_POOL_TIMEOUT,
         pool_recycle: int = DEFAULT_POOL_RECYCLE,
+        for_source: bool = False,
         **kwargs
     ) -> Engine:
-        """Create a MySQL engine with proper configuration."""
+        """Create a MySQL engine with proper configuration.
+
+        Args:
+            for_source: If True, skip session variables that require GLOBAL privileges
+                (innodb_flush_log_at_trx_commit). Source connections (readonly_user) must
+                not attempt to set these on the clinic server.
+        """
         # Validate required parameters
         params = {
             'host': host,
@@ -105,7 +112,7 @@ class ConnectionFactory:
             )
             
             # Apply MySQL performance optimizations for bulk operations
-            ConnectionFactory._apply_mysql_performance_settings(engine)
+            ConnectionFactory._apply_mysql_performance_settings(engine, for_source=for_source)
             
             logger.info(f"Successfully created MySQL connection to {database}")
             return engine
@@ -126,8 +133,14 @@ class ConnectionFactory:
             )
 
     @staticmethod
-    def _apply_mysql_performance_settings(engine: Engine) -> None:
-        """Apply MySQL bulk operation optimizations."""
+    def _apply_mysql_performance_settings(engine: Engine, for_source: bool = False) -> None:
+        """Apply MySQL bulk operation optimizations.
+
+        Args:
+            engine: MySQL engine
+            for_source: If True, skip innodb_flush_log_at_trx_commit (GLOBAL-only on source;
+                we do not modify source server). Only replication/target gets this.
+        """
         try:
             with engine.connect() as conn:
                 # Critical for bulk operations
@@ -139,14 +152,10 @@ class ConnectionFactory:
                     else:
                         logger.warning(f"Failed to set bulk_insert_buffer_size: {e}")
                 
-                # Try to set innodb_flush_log_at_trx_commit, but handle GLOBAL variable gracefully
-                try:
-                    conn.execute(text("SET SESSION innodb_flush_log_at_trx_commit = 2"))
-                except Exception as e:
-                    if "GLOBAL variable" in str(e) or "Access denied" in str(e):
-                        logger.warning("innodb_flush_log_at_trx_commit requires GLOBAL privileges, skipping")
-                    else:
-                        logger.warning(f"Failed to set innodb_flush_log_at_trx_commit: {e}")
+                # Do not attempt innodb_flush_log_at_trx_commit - it is GLOBAL-only on MySQL.
+                # Source: we never modify the clinic server. Replication: GLOBAL is set by
+                # grant_etl_privileges.py; sessions inherit. Attempting SET SESSION would fail
+                # and log warnings.
                 
                 try:
                     conn.execute(text("SET SESSION autocommit = 0"))
@@ -278,9 +287,13 @@ class ConnectionFactory:
 
     @staticmethod
     def get_source_connection(settings) -> Engine:
-        """Get source database connection using provided settings."""
+        """Get source database connection using provided settings.
+
+        Does not attempt to set GLOBAL-only variables (innodb_flush_log_at_trx_commit)
+        on the source server - we do not modify the clinic OpenDental server.
+        """
         config = settings.get_database_config(DatabaseType.SOURCE)
-        return ConnectionFactory.create_mysql_engine(**config)
+        return ConnectionFactory.create_mysql_engine(**config, for_source=True)
     
     @staticmethod
     def get_replication_connection(settings) -> Engine:
