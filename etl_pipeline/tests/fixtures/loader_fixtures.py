@@ -165,8 +165,7 @@ def postgres_loader(test_settings):
     }
     
     # Mock the methods that tests will call
-    loader.load_table.return_value = True
-    loader.load_table_chunked.return_value = True
+    loader.load_table.return_value = (True, {'rows_loaded': 0, 'duration': 0.0, 'strategy_used': 'standard'})
     loader.verify_load.return_value = True
     loader.get_table_config.return_value = {'incremental_columns': ['DateModified']}
     
