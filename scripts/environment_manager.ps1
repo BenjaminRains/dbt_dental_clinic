@@ -1051,16 +1051,42 @@ function Invoke-DBT {
     Write-Host "🚀 dbt $($newArgs -join ' ')" -ForegroundColor Cyan
     # FIXED: Use pipenv run to avoid infinite recursion with dbt alias
     # Also change to dbt project directory before running commands
-    $currentLocation = Get-Location
+    $firstSubcommand = $null
+    foreach ($arg in $newArgs) {
+        if ($arg -notmatch '^-') { $firstSubcommand = $arg; break }
+    }
+    $depsWithRetry = ($firstSubcommand -eq 'deps')
+
+    $invokeDbtCommand = {
+        if ($depsWithRetry) {
+            $maxAttempts = 6
+            $sleepSeconds = @(3, 5, 8, 12, 15)
+            for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
+                if ($attempt -gt 1) {
+                    $delay = $sleepSeconds[$attempt - 2]
+                    Write-Host "🔄 dbt deps attempt $attempt/$maxAttempts (hub.getdbt.com often resets connections; waiting ${delay}s)..." -ForegroundColor Yellow
+                    Start-Sleep -Seconds $delay
+                }
+                pipenv run dbt $newArgs
+                if ($LASTEXITCODE -eq 0) { break }
+                if ($attempt -eq $maxAttempts) {
+                    Write-Host "❌ dbt deps failed after $maxAttempts attempts. Try another network/VPN or run again later." -ForegroundColor Red
+                }
+            }
+        } else {
+            pipenv run dbt $newArgs
+        }
+    }
+
     if (Test-Path "dbt_dental_models") {
         Push-Location "dbt_dental_models"
         try {
-            pipenv run dbt $newArgs
+            & $invokeDbtCommand
         } finally {
             Pop-Location
         }
     } else {
-        pipenv run dbt $newArgs
+        & $invokeDbtCommand
     }
 }
 
@@ -1708,6 +1734,7 @@ function Deploy-Frontend {
 
 function Get-FrontendStatus {
     $projectPath = Get-Location
+    $projectRoot = if ($script:EnvManagerScriptRoot) { Split-Path $script:EnvManagerScriptRoot -Parent } else { $projectPath }
     
     Write-Host "`n📊 Frontend Deployment Status:" -ForegroundColor White
     Write-Host "  Nomenclature: local = localhost dev | demo = portfolio (dbtdentalclinic.com) | clinic = production (clinic.dbtdentalclinic.com)" -ForegroundColor Gray
@@ -1754,11 +1781,11 @@ function Get-FrontendStatus {
     $clinicBucket = $env:CLINIC_FRONTEND_BUCKET_NAME
     $clinicDistId = $env:CLINIC_FRONTEND_DIST_ID
     $clinicDomain = $env:CLINIC_FRONTEND_DOMAIN
-    if ($credentials.clinic_frontend) {
+    if ($credentials -and $credentials.clinic_frontend) {
         if (-not $clinicBucket -and $credentials.clinic_frontend.s3_buckets.clinic_frontend) { $clinicBucket = $credentials.clinic_frontend.s3_buckets.clinic_frontend.bucket_name }
         if (-not $clinicDistId -and $credentials.clinic_frontend.cloudfront) { $clinicDistId = $credentials.clinic_frontend.cloudfront.distribution_id }
         if (-not $clinicDomain -and $credentials.clinic_frontend.domain) { $clinicDomain = "https://$($credentials.clinic_frontend.domain)" }
-    } elseif ($credentials.frontend -and $credentials.frontend.s3_buckets.clinic_frontend) {
+    } elseif ($credentials -and $credentials.frontend -and $credentials.frontend.s3_buckets.clinic_frontend) {
         if (-not $clinicBucket) { $clinicBucket = $credentials.frontend.s3_buckets.clinic_frontend.bucket_name }
         if (-not $clinicDistId -and $credentials.frontend.cloudfront.clinic_distribution_id) { $clinicDistId = $credentials.frontend.cloudfront.clinic_distribution_id }
         if (-not $clinicDomain -and $credentials.frontend.domain) { $clinicDomain = "https://clinic.$($credentials.frontend.domain)" }
@@ -1779,6 +1806,39 @@ function Get-FrontendStatus {
         Write-Host "  Domain: $clinicDomain" -ForegroundColor Green
     } else {
         Write-Host "  Domain: ❌ Not configured" -ForegroundColor Red
+    }
+    
+    # Clinic frontend build targets (Vite: same as clinic-frontend-deploy)
+    $clinicApiUrlStatus = $env:CLINIC_API_URL
+    if ($credentials -and $credentials.backend_api -and $credentials.backend_api.clinic_api -and $credentials.backend_api.clinic_api.api_url) {
+        if (-not $clinicApiUrlStatus) { $clinicApiUrlStatus = $credentials.backend_api.clinic_api.api_url }
+    }
+    if (-not $clinicApiUrlStatus) { $clinicApiUrlStatus = "https://api-clinic.dbtdentalclinic.com" }
+    $clinicKeyFromEnv = [bool]$env:CLINIC_API_KEY
+    $clinicKeyFromFile = $false
+    if (-not $clinicKeyFromEnv) {
+        foreach ($p in @((Join-Path $projectRoot "api\.env_api_clinic"), (Join-Path $projectPath "api\.env_api_clinic"))) {
+            if (-not (Test-Path -LiteralPath $p)) { continue }
+            try {
+                foreach ($line in (Get-Content -LiteralPath $p -Encoding UTF8 -ErrorAction Stop)) {
+                    $t = $line.Trim()
+                    if (-not $t -or $t.StartsWith('#')) { continue }
+                    if ($t -match '^CLINIC_API_KEY\s*=\s*(.+)$') { $clinicKeyFromFile = $true; break }
+                }
+            } catch { }
+            if ($clinicKeyFromFile) { break }
+        }
+    }
+    Write-Host "  clinic-frontend-deploy API (Vite):" -ForegroundColor Gray
+    Write-Host "    CLINIC_API_URL → $clinicApiUrlStatus" -ForegroundColor $(if ($clinicApiUrlStatus) { 'Green' } else { 'Red' })
+    if ($clinicKeyFromEnv) {
+        Write-Host "    CLINIC_API_KEY: ✅ from environment" -ForegroundColor Green
+    } elseif ($clinicKeyFromFile) {
+        Write-Host "    CLINIC_API_KEY: ✅ from api\.env_api_clinic" -ForegroundColor Green
+    } elseif ($credentials -and $credentials.backend_api -and $credentials.backend_api.clinic_api -and $credentials.backend_api.clinic_api.api_key -and $credentials.backend_api.clinic_api.api_key.key) {
+        Write-Host "    CLINIC_API_KEY: ✅ from deployment_credentials.json" -ForegroundColor Green
+    } else {
+        Write-Host "    CLINIC_API_KEY: ❌ not set (env, api\.env_api_clinic, or credentials)" -ForegroundColor Red
     }
     
     # Check prerequisites
@@ -1830,9 +1890,15 @@ function Deploy-ClinicFrontend {
 
     .DESCRIPTION
     Builds and deploys the clinic frontend to clinic.dbtdentalclinic.com.
-    This frontend connects to the clinic API (api-clinic.dbtdentalclinic.com)
-    which accesses opendental_analytics database with real PHI.
-    
+    Vite bakes VITE_API_URL and VITE_API_KEY at build time; they must target the clinic API.
+
+    Configuration (see docs/deployment/CLINIC_DEPLOYMENT_PHASE3_ACTION_PLAN.md):
+    - CLINIC_API_URL — optional; defaults to https://api-clinic.dbtdentalclinic.com, or backend_api.clinic_api.api_url in deployment_credentials.json
+    - CLINIC_API_KEY — required; env var, api\.env_api_clinic (CLINIC_API_KEY=...), or backend_api.clinic_api.api_key.key in deployment_credentials.json
+    - CLINIC_FRONTEND_BUCKET_NAME, CLINIC_FRONTEND_DIST_ID, CLINIC_FRONTEND_DOMAIN — optional if set in deployment_credentials.json (clinic_frontend.*)
+
+    The clinic API server uses api\.env_api_clinic on EC2; use the same CLINIC_API_KEY value here as on that server.
+
     .EXAMPLE
     Deploy-ClinicFrontend
     #>
@@ -1924,7 +1990,8 @@ function Deploy-ClinicFrontend {
     
     # Try to load from deployment_credentials.json if env vars not set
     # Nomenclature: clinic = production clinic (clinic.dbtdentalclinic.com, api-clinic.dbtdentalclinic.com)
-    if (-not $bucketName -or -not $distributionId -or -not $domain -or -not $apiUrl -or -not $apiKey) {
+    # Include -not $apiUrl so backend_api.clinic_api.api_url from credentials applies when CLINIC_API_URL is unset
+    if (-not $bucketName -or -not $distributionId -or -not $domain -or -not $apiKey -or -not $apiUrl) {
         $credentialsPath = Join-Path $projectRoot "deployment_credentials.json"
         if (Test-Path $credentialsPath) {
             try {
@@ -1974,6 +2041,12 @@ function Deploy-ClinicFrontend {
             }
         }
     }
+
+    # Default clinic API URL (Phase 3: production clinic API hostname)
+    if (-not $apiUrl) {
+        $apiUrl = "https://api-clinic.dbtdentalclinic.com"
+        Write-Host "ℹ️ CLINIC_API_URL not set; using default $apiUrl" -ForegroundColor DarkGray
+    }
     
     # Validate configuration
     if (-not $bucketName) {
@@ -1983,11 +2056,6 @@ function Deploy-ClinicFrontend {
     
     if (-not $distributionId) {
         Write-Host "❌ CLINIC_FRONTEND_DIST_ID not set. Set env var or add clinic_frontend.cloudfront.distribution_id to deployment_credentials.json." -ForegroundColor Red
-        return
-    }
-    
-    if (-not $apiUrl) {
-        Write-Host "❌ CLINIC_API_URL not set. Set env var or add backend_api.clinic_api.api_url to deployment_credentials.json." -ForegroundColor Red
         return
     }
     
@@ -3132,6 +3200,7 @@ Write-Host "  consult-audio-init - Initialize Consult Audio Pipeline (venv + dep
 Write-Host "  frontend-dev   - Start frontend (local: localhost:3000 → localhost:8000)" -ForegroundColor Green
 Write-Host "  demo-frontend-deploy - Deploy demo frontend → dbtdentalclinic.com (public)" -ForegroundColor Green
 Write-Host "  clinic-frontend-deploy - Deploy clinic frontend → clinic.dbtdentalclinic.com (IP-restricted)" -ForegroundColor Green
+Write-Host "    Vite: CLINIC_API_URL (default https://api-clinic.dbtdentalclinic.com), CLINIC_API_KEY or api\.env_api_clinic" -ForegroundColor DarkGray
 Write-Host "  dbt-docs-deploy - Deploy dbt docs to S3/CloudFront" -ForegroundColor Cyan
 Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
