@@ -6,4 +6,7 @@ packages:
   - package: godatadriven/dbt_date
     version: 0.13.0
   - package: dbt-labs/audit_helper
-    version: 0.12.1 
+    version: 0.12.1
+  # Last 0.x release; supports dbt 1.7.x. Newer 1.2.x on Hub requires dbt >= 1.10.6 (upgrade dbt to use it).
+  - package: dbt-labs/dbt_project_evaluator
+    version: 0.14.3
