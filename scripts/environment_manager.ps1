@@ -1445,6 +1445,68 @@ VITE_API_URL=http://localhost:8000
     }
 }
 
+function Merge-DemoFrontendFromCredentialsFile {
+    <#
+    .SYNOPSIS
+        Fills missing demo frontend S3/CloudFront settings from deployment_credentials.json.
+        Emits success only when both bucket and distribution id resolve; otherwise a targeted warning.
+    #>
+    param(
+        [Parameter(Mandatory)][string] $ProjectPath,
+        [string] $BucketName,
+        [string] $DistributionId,
+        [string] $Domain
+    )
+    function Local:Normalize([string]$s) {
+        if ([string]::IsNullOrWhiteSpace($s)) { return $null }
+        return $s.Trim()
+    }
+    $bucketName = Normalize $BucketName
+    $distributionId = Normalize $DistributionId
+    $domain = Normalize $Domain
+
+    $needFile = [string]::IsNullOrWhiteSpace($bucketName) -or [string]::IsNullOrWhiteSpace($distributionId)
+    if (-not $needFile) {
+        return [pscustomobject]@{ BucketName = $bucketName; DistributionId = $distributionId; Domain = $domain }
+    }
+
+    $credentialsPath = Join-Path $ProjectPath "deployment_credentials.json"
+    if (-not (Test-Path $credentialsPath)) {
+        return [pscustomobject]@{ BucketName = $bucketName; DistributionId = $distributionId; Domain = $domain }
+    }
+    try {
+        $credentials = Get-Content $credentialsPath -Raw | ConvertFrom-Json
+        if ([string]::IsNullOrWhiteSpace($bucketName)) {
+            $bn = $credentials.frontend.s3_buckets.frontend.bucket_name
+            if (-not [string]::IsNullOrWhiteSpace($bn)) { $bucketName = $bn.Trim() }
+        }
+        if ([string]::IsNullOrWhiteSpace($distributionId)) {
+            $did = $credentials.frontend.cloudfront.distribution_id
+            if (-not [string]::IsNullOrWhiteSpace($did)) { $distributionId = $did.Trim() }
+        }
+        if ([string]::IsNullOrWhiteSpace($domain)) {
+            $fd = $credentials.frontend.domain
+            if (-not [string]::IsNullOrWhiteSpace($fd)) { $domain = "https://$($fd.Trim())" }
+        }
+        $missing = @()
+        if ([string]::IsNullOrWhiteSpace($bucketName)) {
+            $missing += 'frontend.s3_buckets.frontend.bucket_name (or FRONTEND_BUCKET_NAME)'
+        }
+        if ([string]::IsNullOrWhiteSpace($distributionId)) {
+            $missing += 'frontend.cloudfront.distribution_id (or FRONTEND_DIST_ID)'
+        }
+        if ($missing.Count -eq 0) {
+            Write-Host "✅ Loaded demo frontend configuration from deployment_credentials.json" -ForegroundColor Green
+        } else {
+            Write-Host "⚠️ deployment_credentials.json was read but demo frontend values are still missing:" -ForegroundColor Yellow
+            foreach ($m in $missing) { Write-Host "   - $m" -ForegroundColor Gray }
+        }
+    } catch {
+        Write-Host "⚠️ Failed to parse deployment_credentials.json: $_" -ForegroundColor Yellow
+    }
+    return [pscustomobject]@{ BucketName = $bucketName; DistributionId = $distributionId; Domain = $domain }
+}
+
 function Deploy-Frontend {
     $projectPath = Get-Location
     $frontendPath = "$projectPath\frontend"
@@ -1517,39 +1579,18 @@ function Deploy-Frontend {
     
     # Get configuration from environment variables or deployment_credentials.json
     # Nomenclature: demo = portfolio/demo frontend (dbtdentalclinic.com, api.dbtdentalclinic.com)
-    $bucketName = $env:FRONTEND_BUCKET_NAME
-    $distributionId = $env:FRONTEND_DIST_ID
-    $domain = $env:FRONTEND_DOMAIN
-    
-    # Try to load from deployment_credentials.json if env vars not set
-    if (-not $bucketName -or -not $distributionId) {
-        $credentialsPath = "$projectPath\deployment_credentials.json"
-        if (Test-Path $credentialsPath) {
-            try {
-                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
-                if (-not $bucketName) {
-                    $bucketName = $credentials.frontend.s3_buckets.frontend.bucket_name
-                }
-                if (-not $distributionId) {
-                    $distributionId = $credentials.frontend.cloudfront.distribution_id
-                }
-                if (-not $domain) {
-                    $domain = "https://$($credentials.frontend.domain)"
-                }
-                Write-Host "✅ Loaded demo frontend configuration from deployment_credentials.json" -ForegroundColor Green
-            } catch {
-                Write-Host "⚠️ Failed to parse deployment_credentials.json: $_" -ForegroundColor Yellow
-            }
-        }
-    }
+    $merged = Merge-DemoFrontendFromCredentialsFile -ProjectPath $projectPath -BucketName $env:FRONTEND_BUCKET_NAME -DistributionId $env:FRONTEND_DIST_ID -Domain $env:FRONTEND_DOMAIN
+    $bucketName = $merged.BucketName
+    $distributionId = $merged.DistributionId
+    $domain = $merged.Domain
     
     # Validate configuration
-    if (-not $bucketName) {
-        Write-Host "❌ FRONTEND_BUCKET_NAME not set. Set environment variable or ensure deployment_credentials.json frontend.s3_buckets.frontend exists." -ForegroundColor Red
+    if ([string]::IsNullOrWhiteSpace($bucketName)) {
+        Write-Host "❌ FRONTEND_BUCKET_NAME not set. Set environment variable or ensure deployment_credentials.json frontend.s3_buckets.frontend.bucket_name exists." -ForegroundColor Red
         return
     }
     
-    if (-not $distributionId) {
+    if ([string]::IsNullOrWhiteSpace($distributionId)) {
         Write-Host "❌ FRONTEND_DIST_ID not set. Set environment variable or ensure deployment_credentials.json frontend.cloudfront.distribution_id exists." -ForegroundColor Red
         return
     }
@@ -2317,41 +2358,20 @@ function Deploy-DBTDocs {
         return
     }
     
-    # Get configuration from environment variables or deployment_credentials.json
-    $bucketName = $env:FRONTEND_BUCKET_NAME
-    $distributionId = $env:FRONTEND_DIST_ID
-    $domain = $env:FRONTEND_DOMAIN
-    
-    # Try to load from deployment_credentials.json if env vars not set
-    if (-not $bucketName -or -not $distributionId) {
-        $credentialsPath = "$projectPath\deployment_credentials.json"
-        if (Test-Path $credentialsPath) {
-            try {
-                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
-                if (-not $bucketName) {
-                    $bucketName = $credentials.frontend.s3_buckets.frontend.bucket_name
-                }
-                if (-not $distributionId) {
-                    $distributionId = $credentials.frontend.cloudfront.distribution_id
-                }
-                if (-not $domain) {
-                    $domain = "https://$($credentials.frontend.domain)"
-                }
-                Write-Host "✅ Loaded configuration from deployment_credentials.json" -ForegroundColor Green
-            } catch {
-                Write-Host "⚠️ Failed to parse deployment_credentials.json: $_" -ForegroundColor Yellow
-            }
-        }
-    }
+    # Get configuration from environment variables or deployment_credentials.json (same demo frontend bucket as the site)
+    $merged = Merge-DemoFrontendFromCredentialsFile -ProjectPath $projectPath -BucketName $env:FRONTEND_BUCKET_NAME -DistributionId $env:FRONTEND_DIST_ID -Domain $env:FRONTEND_DOMAIN
+    $bucketName = $merged.BucketName
+    $distributionId = $merged.DistributionId
+    $domain = $merged.Domain
     
     # Validate configuration
-    if (-not $bucketName) {
-        Write-Host "❌ FRONTEND_BUCKET_NAME not set. Set environment variable or ensure deployment_credentials.json exists." -ForegroundColor Red
+    if ([string]::IsNullOrWhiteSpace($bucketName)) {
+        Write-Host "❌ FRONTEND_BUCKET_NAME not set. Set environment variable or ensure deployment_credentials.json frontend.s3_buckets.frontend.bucket_name exists." -ForegroundColor Red
         return
     }
     
-    if (-not $distributionId) {
-        Write-Host "❌ FRONTEND_DIST_ID not set. Set environment variable or ensure deployment_credentials.json exists." -ForegroundColor Red
+    if ([string]::IsNullOrWhiteSpace($distributionId)) {
+        Write-Host "❌ FRONTEND_DIST_ID not set. Set environment variable or ensure deployment_credentials.json frontend.cloudfront.distribution_id exists." -ForegroundColor Red
         return
     }
     
