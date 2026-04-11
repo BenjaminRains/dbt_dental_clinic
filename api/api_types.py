@@ -77,6 +77,53 @@ class DashboardKPIs(BaseModel):
     revenue: RevenueKPIs
     providers: ProviderKPIs
 
+
+# Referral source KPIs (mart_referral_source_kpis)
+class ReferralSourceKPIRow(BaseModel):
+    reporting_month: str
+    reporting_year: int
+    reporting_month_number: int
+    reporting_year_month: str
+    referral_id: int
+    referral_display_name: str
+    referral_last_name: Optional[str] = None
+    referral_first_name: Optional[str] = None
+    referral_middle_name: Optional[str] = None
+    referral_business_name: Optional[str] = None
+    referral_title: Optional[str] = None
+    referral_national_provider_id: Optional[str] = None
+    referral_is_doctor: bool
+    referral_not_person: bool
+    referral_source_segment: str
+    period_basis: str
+    period_basis_sort_order: int
+    period_basis_description: str
+    distinct_patient_count: int
+    production_value_in_period: float
+    net_collections_in_period: float
+
+
+class ReferralSourceMonthlySummary(BaseModel):
+    """Aggregated by month + period_basis. Money sums are additive. summed_distinct_patient_count is SUM of mart row counts and is not deduplicated across referral_id (same patient can appear under multiple referrers)."""
+
+    reporting_month: str
+    reporting_year_month: str
+    period_basis: str
+    period_basis_sort_order: int
+    total_production_value: float
+    total_net_collections: float
+    summed_distinct_patient_count: int
+    source_row_count: int
+    patient_counts_are_trustworthy_for_unique_patients: bool = False
+
+
+class ReferralSourceSummaryResponse(BaseModel):
+    """Time series summary for charts; includes a single note on patient count semantics."""
+
+    rows: List[ReferralSourceMonthlySummary]
+    patient_count_note: str
+
+
 # DBT Lineage and Metadata Types
 class DBTModelMetadata(BaseModel):
     model_name: str
