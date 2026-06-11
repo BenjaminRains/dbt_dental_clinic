@@ -68,8 +68,12 @@ class FileConfigProvider(ConfigProvider):
         if env_path.exists():
             logger.info(f"Loading environment from {env_path}")
             try:
-                # Load environment variables from the specific environment file
-                load_dotenv(env_path, override=True)
+                # Load environment variables from the specific environment file.
+                # override=False: the OS process environment is the single source of truth
+                # (vars exported by environment_manager.ps1, Docker, or systemd win); the
+                # .env_<stage> file only fills in vars not already set. Matches api/config.py
+                # and the "OS env wins" rule in ENVIRONMENT_HANDLING_REVIEW.md (Phase 0).
+                load_dotenv(env_path, override=False)
                 
                 # Capture ONLY the environment variables that are relevant to our ETL pipeline
                 # This avoids capturing system variables like CHOCOLATEYINSTALL, APPDATA, etc.
