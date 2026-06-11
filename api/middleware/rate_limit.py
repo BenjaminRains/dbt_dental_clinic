@@ -300,7 +300,7 @@ async def rate_limit_middleware(request: Request, call_next):
     
     # Skip rate limiting for health checks and CORS preflight requests
     # Note: /test/rate-limit is NOT excluded - it's for testing rate limits
-    if request.url.path in ["/", "/health", "/docs", "/openapi.json", "/redoc"]:
+    if request.url.path in ["/", "/health", "/health/db", "/docs", "/openapi.json", "/redoc"]:
         return await call_next(request)
     
     # Log that middleware is being called (for debugging)

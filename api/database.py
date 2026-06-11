@@ -16,7 +16,12 @@ DATABASE_URL = config.get_database_url()
 
 logger.info(f"Connecting to database for environment: {config.environment}")
 
-engine = create_engine(DATABASE_URL)
+# pool_pre_ping: reconnect if RDS closed idle connections; reduces OperationalError bursts
+engine = create_engine(
+    DATABASE_URL,
+    pool_pre_ping=True,
+    pool_recycle=3600,
+)
 SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 Base = declarative_base()
 

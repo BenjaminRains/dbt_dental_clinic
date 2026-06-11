@@ -265,6 +265,35 @@ def health_check():
     service = "dental-practice-api-demo" if env == "demo" else "dental-practice-api-clinic" if env == "clinic" else "dental-practice-api"
     return {"status": "healthy", "service": service}
 
+
+@app.get("/health/db")
+def health_database():
+    """
+    Verify PostgreSQL connectivity (SELECT 1). Use when dashboard routes return OperationalError:
+    - 200 = DB reachable with current POSTGRES_* and sslmode settings
+    - 503 = connection/auth/SSL/network failure (check RDS security group, endpoint, password, POSTGRES_ANALYTICS_SSLMODE)
+    No API key required so you can curl from the EC2 instance or your machine for debugging.
+    """
+    from sqlalchemy import text
+    from database import engine
+
+    try:
+        with engine.connect() as conn:
+            conn.execute(text("SELECT 1"))
+        return {"status": "healthy", "database": "connected"}
+    except Exception as e:
+        logger = logging.getLogger(__name__)
+        logger.error("GET /health/db failed: %s: %s", type(e).__name__, e, exc_info=True)
+        return JSONResponse(
+            status_code=503,
+            content={
+                "status": "unhealthy",
+                "database": "disconnected",
+                "error_type": type(e).__name__,
+            },
+        )
+
+
 @app.get("/test/rate-limit")
 def test_rate_limit_endpoint():
     """
