@@ -1534,6 +1534,17 @@ class SimpleMySQLReplicator:
                         if isinstance(value, (int, float, bool)):
                             # Preserve normal data types
                             cleaned_row.append(value)
+                        elif isinstance(value, timedelta):
+                            # MySQL TIME columns are returned as timedelta. str() yields
+                            # '-1 day, 23:00:00' for negatives (and '1 day, ...' for >24h),
+                            # which MySQL rejects (error 1292: Incorrect time value). Emit a
+                            # valid [-]HH:MM:SS literal so negative/over-24h TIME values load.
+                            total_seconds = int(value.total_seconds())
+                            sign = '-' if total_seconds < 0 else ''
+                            total_seconds = abs(total_seconds)
+                            hours, remainder = divmod(total_seconds, 3600)
+                            minutes, seconds = divmod(remainder, 60)
+                            cleaned_row.append(f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}")
                         else:
                             # Handle problematic objects (like raw Python objects)
                             try:
