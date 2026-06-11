@@ -1,0 +1,248 @@
+version: 2
+
+models:
+  - name: mart_patient_journey
+    description: >
+      Patient journey spine: one row per patient capturing the full clinical/financial
+      lifecycle as a set of milestone dates, stage-to-stage velocity (lags), lifetime value,
+      recall-loop status, and a current journey_stage classification.
+
+      ## Business Context
+      Unifies the per-stage marts (acquisition, acceptance, production, retention, recall) into
+      a single patient-grain timeline so the practice can answer both funnel questions
+      ("where do patients drop off between stages?") and velocity questions
+      ("how long from first visit to accepted treatment?").
+
+      ## Technical Specifications
+      - Grain: One row per patient (current state as of journey_as_of_date = current_date).
+        Mirrors dim_patient / mart_patient_retention so the three reconcile. Carries
+        journey_as_of_date so a periodic snapshot grain can be layered on later.
+      - Refresh: Daily
+      - Dependencies:
+        * dim_patient (eligible population, demographics, first_visit_date)
+        * dim_provider (provider type/specialty)
+        * dim_referral, int_patient_referral_bridge (acquisition source attribution)
+        * fact_appointment (visit milestones, no-shows, hygiene visits, reactivation gaps)
+        * int_procedure_acceptance (procedure-based presented/accepted/treatment milestones)
+        * fact_claim (production milestones and lifetime value)
+        * fact_payment (first patient payment, lifetime patient payments)
+        * int_recall_management (recall loop status)
+
+      ## Business Logic
+      ### Acceptance (procedure-based only)
+      - Presented = procedure status 1/6 (Treatment Planned / Ordered)
+      - Accepted  = procedure status 2 (Completed) OR status 1/6 with a scheduled appointment
+      - Treatment = procedure status 2 (Completed)
+      Mirrors int_procedure_acceptance / mart_procedure_acceptance_summary (PBN-aligned).
+      The treatment-plan signature path is intentionally NOT used because the MDC clinic
+      barely uses treatment plans (~220 plans vs 40K+ patients).
+
+      ### Journey stages
+      - Prospect: no completed visit yet (future appointment may exist)
+      - New Patient: first completed visit within last 90 days, no treatment presented yet
+      - Treatment Presented: treatment presented but not yet accepted
+      - In Treatment: treatment accepted, not yet established in recall loop
+      - Active / Recall: treatment done and seen within 12 months or in the hygiene loop
+      - At Risk: 6-18 months since last visit, or recall >60 days overdue
+      - Reactivated: seen within 180 days after a prior gap of >365 days
+      - Lapsed / Lost: >18 months since last completed visit
+
+      ## Data Quality Notes
+      - Eligible population mirrors mart_patient_retention filters (active statuses, valid first
+        visit + DOB, excludes House position and test patient 32974).
+      - case_acceptance_pct can exceed 100% because completed (status 2) procedures count as
+        accepted even when never formally presented (see int_procedure_acceptance).
+      - Lag/tenure calculations exclude future dates to avoid negative durations.
+
+    meta:
+      owner: "Patient Management Team"
+      contains_pii: true
+      business_process: "Patient Journey and Lifecycle Management"
+      refresh_frequency: "daily"
+      business_impact: "High"
+      mart_type: "spine"
+      grain_description: "One row per patient (current state)"
+      primary_consumers: ["Patient Management", "Marketing", "Executive Leadership", "Clinical Operations"]
+
+    tests:
+      - dbt_expectations.expect_table_row_count_to_be_between:
+          min_value: 1000
+          max_value: 100000
+          config:
+            severity: warn
+            description: "Expected patient journey records based on active patient base"
+      - dbt_expectations.expression_is_true:
+          expression: >
+            journey_stage in ('Prospect', 'New Patient', 'Treatment Presented', 'In Treatment',
+            'Active / Recall', 'At Risk', 'Reactivated', 'Lapsed / Lost')
+          config:
+            severity: error
+            description: "journey_stage must be one of the defined lifecycle stages"
+
+    columns:
+      - name: patient_id
+        description: "Primary key. Foreign key to dim_patient."
+        tests:
+          - unique
+          - not_null
+          - relationships:
+              to: ref('dim_patient')
+              field: patient_id
+      - name: journey_as_of_date
+        description: "Snapshot date for this current-state row (current_date at build time)."
+        tests:
+          - not_null
+
+      # Demographics
+      - name: age
+        description: "Patient age in years."
+      - name: gender
+        description: "Patient gender (M/F/U)."
+      - name: age_category
+        description: "Minor / Adult / Senior bucket from dim_patient."
+      - name: patient_status
+        description: "Patient status (Patient or Inactive; eligible population only)."
+      - name: has_insurance_flag
+        description: "Whether the patient has active insurance coverage."
+      - name: primary_provider_id
+        description: "Foreign key to dim_provider (primary provider)."
+      - name: clinic_id
+        description: "Clinic identifier."
+      - name: primary_provider_type
+        description: "Provider type category from dim_provider."
+      - name: primary_provider_specialty
+        description: "Provider specialty category from dim_provider."
+
+      # Acquisition source
+      - name: referral_id
+        description: "Earliest referral source for the patient (foreign key to dim_referral); null if not referral-attributed."
+      - name: referral_source_name
+        description: "Display name of the earliest referral source."
+      - name: first_referral_date
+        description: "Date of the patient's earliest referral attachment."
+      - name: acquisition_year
+        description: "Calendar year of first visit (acquisition cohort)."
+      - name: acquisition_month
+        description: "Calendar month of first visit (acquisition cohort)."
+      - name: acquisition_quarter
+        description: "Calendar quarter of first visit (acquisition cohort)."
+
+      # Milestone dates
+      - name: acquisition_date
+        description: "First visit date (from dim_patient). The start of the journey."
+        tests:
+          - not_null
+      - name: first_appointment_date
+        description: "Earliest appointment of any status."
+      - name: first_completed_visit_date
+        description: "Earliest completed appointment; null if patient never completed a visit."
+      - name: first_exam_date
+        description: "Earliest completed diagnostic exam procedure (D0 codes)."
+      - name: first_tx_presented_date
+        description: "Earliest date a procedure was presented (status 1/6)."
+      - name: first_tx_accepted_date
+        description: "Earliest date a procedure was accepted (completed, or planned with scheduled appt)."
+      - name: first_treatment_date
+        description: "Earliest completed (status 2) procedure date."
+      - name: first_production_date
+        description: "Earliest claim date (first billed production)."
+      - name: first_patient_payment_date
+        description: "Earliest patient (out-of-pocket) payment date."
+      - name: last_visit_date
+        description: "Most recent completed visit date."
+      - name: last_appointment_date
+        description: "Most recent appointment of any status (may be a future booking)."
+      - name: next_recall_due_date
+        description: "Earliest due date among active recalls."
+
+      # Tenure & velocity
+      - name: days_as_patient
+        description: "Days since first visit."
+      - name: years_as_patient
+        description: "Years since first visit (1 decimal)."
+      - name: days_since_last_visit
+        description: "Days since most recent completed visit."
+      - name: days_acquisition_to_presented
+        description: "Days from first completed visit to first treatment presentation."
+      - name: days_presented_to_accepted
+        description: "Days from first presentation to first acceptance."
+      - name: days_accepted_to_treatment
+        description: "Days from first acceptance to first completed treatment."
+      - name: days_acquisition_to_first_payment
+        description: "Days from first visit to first patient payment."
+      - name: max_visit_gap_days
+        description: "Largest gap (days) between consecutive completed visits; used for reactivation detection."
+
+      # Activity & value
+      - name: total_appointments
+        description: "Total appointments of any status."
+      - name: total_completed_visits
+        description: "Total completed visits."
+      - name: no_show_count
+        description: "Total no-show appointments."
+      - name: no_show_rate
+        description: "No-shows as a percent of total appointments."
+      - name: hygiene_visits
+        description: "Count of hygiene appointments."
+      - name: unique_providers_seen
+        description: "Distinct providers the patient has seen."
+      - name: procedures_presented
+        description: "Distinct procedures presented (status 1/6)."
+      - name: procedures_accepted
+        description: "Distinct procedures accepted."
+      - name: tx_presented_amount
+        description: "Total fees of presented procedures."
+      - name: tx_accepted_amount
+        description: "Total fees of accepted procedures."
+      - name: case_acceptance_pct
+        description: "Accepted / presented fees * 100. Can exceed 100% by design (see model header)."
+      - name: lifetime_production
+        description: "Lifetime billed production from claims."
+      - name: lifetime_collections
+        description: "Lifetime paid amount from claims."
+      - name: lifetime_patient_payments
+        description: "Lifetime patient (out-of-pocket) payments."
+      - name: annual_patient_value
+        description: "Lifetime production divided by years as patient."
+
+      # Recall loop
+      - name: has_active_recall
+        description: "Whether the patient has at least one active recall."
+      - name: is_recall_overdue
+        description: "Whether any recall is overdue."
+      - name: recall_overdue_days
+        description: "Most overdue recall, in days."
+      - name: in_recall_loop
+        description: "True if >=2 hygiene visits or an active recall exists."
+
+      # Funnel flags
+      - name: reached_first_visit
+        description: "Patient completed at least one visit."
+      - name: reached_presented
+        description: "Treatment was presented at least once."
+      - name: reached_acceptance
+        description: "Treatment was accepted at least once."
+      - name: reached_treatment
+        description: "At least one procedure was completed."
+      - name: reached_payment
+        description: "At least one patient payment was made."
+      - name: is_reactivated
+        description: "Seen within 180 days following a prior gap of >365 days between visits."
+
+      # Stage
+      - name: journey_stage
+        description: >
+          Current lifecycle stage: Prospect, New Patient, Treatment Presented, In Treatment,
+          Active / Recall, At Risk, Reactivated, or Lapsed / Lost.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - 'Prospect'
+                - 'New Patient'
+                - 'Treatment Presented'
+                - 'In Treatment'
+                - 'Active / Recall'
+                - 'At Risk'
+                - 'Reactivated'
+                - 'Lapsed / Lost'
