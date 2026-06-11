@@ -120,6 +120,15 @@ deployment/scripts/*.md
 docs/
 etl_pipeline/docs/
 
+# Vendor reference material (OpenDental manual mirror, etc.)
+reference/
+
+# Incident investigation working dir (source error logs, internal IPs, ad-hoc scripts)
+scripts/investigation/
+
+# Personal career / interview prep notes (relocated out of docs/)
+career/
+
 # Personal migration documents (desktop-specific setup)
 docs/DESKTOP_TO_LAPTOP_MIGRATION_PLAN.md
 docs/MIGRATION_QUICK_CHECKLIST.md
