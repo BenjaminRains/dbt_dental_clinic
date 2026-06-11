@@ -189,6 +189,19 @@ models:
                 description: "Procedure execution must reference valid procedure code for clinical analysis"
           - not_null
       
+      - name: ordering_referral_id
+        description: >
+          OpenDental OrderingReferralNum on procedurelog: ordering/referring provider on a procedure,
+          distinct from patient marketing referral source (refattach). Nullable when not set.
+        tests:
+          - relationships:
+              to: ref('dim_referral')
+              field: referral_id
+              severity: warn
+              config:
+                where: "ordering_referral_id is not null"
+                description: "When set, should resolve to dim_referral"
+      
       - name: actual_fee
         description: >
           Actual fee charged for the procedure execution

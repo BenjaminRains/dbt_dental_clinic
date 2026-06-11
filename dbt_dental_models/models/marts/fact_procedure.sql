@@ -5,7 +5,8 @@
         {'columns': ['date_id']},
         {'columns': ['patient_id']},
         {'columns': ['provider_id']},
-        {'columns': ['procedure_type_id']}
+        {'columns': ['procedure_type_id']},
+        {'columns': ['ordering_referral_id']}
     ]
 ) }}
 
@@ -53,6 +54,7 @@ with procedure_data as (
         procedure_status,
         clinic_id,
         appointment_id,
+        ordering_referral_id,
         -- Include metadata fields for downstream use
         _loaded_at,
         _created_at,
@@ -90,6 +92,7 @@ final as (
         p.patient_id,
         p.provider_id,
         p.procedure_type_id,
+        p.ordering_referral_id,
         
         -- Financial metrics
         p.actual_fee,

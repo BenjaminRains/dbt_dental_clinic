@@ -142,6 +142,7 @@ procedure_complete_integrated as (
         pl.old_code,
         pl.procedure_time,
         pl.procedure_time_end,
+        pl.ordering_referral_id,
         
         -- Procedure code information
         pc.procedure_code,

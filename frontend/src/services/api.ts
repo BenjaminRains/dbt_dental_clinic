@@ -31,7 +31,9 @@ import {
     TreatmentAcceptanceTrend,
     TreatmentAcceptanceProviderPerformance,
     HygieneRetentionSummary,
-    TopPatientBalance
+    TopPatientBalance,
+    ReferralSourceKPIRow,
+    ReferralSourceSummaryResponse,
 } from '../types/api';
 
 // Configure axios base URL
@@ -372,6 +374,35 @@ export const treatmentAcceptanceApi = {
     },
 };
 
+// Referral source KPIs (mart_referral_source_kpis)
+export const referralApi = {
+    getKpis: async (params?: {
+        start_month?: string;
+        end_month?: string;
+        period_basis?: string;
+        referral_id?: number;
+        referral_source_segment?: string;
+        referral_search?: string;
+        is_doctor_only?: boolean;
+        limit?: number;
+        offset?: number;
+    }): Promise<ApiResponse<ReferralSourceKPIRow[]>> => {
+        return apiCall(() => api.get('/reports/referrals/kpis', { params }));
+    },
+
+    getSummary: async (params?: {
+        start_month?: string;
+        end_month?: string;
+        period_basis?: string;
+        referral_id?: number;
+        referral_source_segment?: string;
+        referral_search?: string;
+        is_doctor_only?: boolean;
+    }): Promise<ApiResponse<ReferralSourceSummaryResponse>> => {
+        return apiCall(() => api.get('/reports/referrals/summary', { params }));
+    },
+};
+
 // Dashboard API calls
 export const dashboardApi = {
     getKPIs: async (params: DateRange = {}): Promise<ApiResponse<DashboardKPIs>> => {
@@ -537,6 +568,7 @@ export const apiService = {
     dbt: dbtMetadataApi,
     treatmentAcceptance: treatmentAcceptanceApi,
     hygiene: hygieneApi,
+    referral: referralApi,
     utils: dateUtils,
 };
 
