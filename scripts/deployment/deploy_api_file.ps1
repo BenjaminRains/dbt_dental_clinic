@@ -1,8 +1,9 @@
 # PowerShell script to deploy a single API file to EC2 using AWS Systems Manager
 # Usage: .\scripts\deploy_api_file.ps1 -FilePath "api\services\treatment_acceptance_service.py"
-# Clinic env (recommended): writes BOTH api/.env (systemd EnvironmentFile) and api/.env_api_clinic
-# (config.py load_dotenv). If you only deploy .env, a stale .env_api_clinic on EC2 can still supply
-# POSTGRES_ANALYTICS_PASSWORD and the process will show the old password.
+# Clinic env (recommended): writes api/.env (the single systemd EnvironmentFile source of truth)
+# and RETIRES any stale api/.env_api_clinic on the instance. config.py treats the OS environment
+# (systemd .env) as authoritative and no longer reads .env_api_clinic on EC2, so one file wins
+# (see ENVIRONMENT_HANDLING_REVIEW.md, Phase 0).
 #        .\scripts\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
 # Single file (advanced): .\scripts\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env"
 
@@ -13,7 +14,7 @@ param(
     [string]$InstanceId = "",
     [string]$RemotePath = "/opt/dbt_dental_clinic/api",
     [switch]$Clinic,
-    # Deploy clinic env to both .env and .env_api_clinic on the instance (see header comments).
+    # Deploy clinic env to api/.env (single source of truth) and retire any stale .env_api_clinic.
     [switch]$ClinicEnv,
     [string]$RemoteFileName = "",
     # Skip systemctl restart (use when batching multiple files; restart on the last deploy only).
@@ -100,7 +101,7 @@ if (-not (Test-Path $localFile)) {
 $relativePath = $FilePath -replace "^api\\", "" -replace "^api/", ""
 if ($ClinicEnv) {
     if ($RemoteFileName) {
-        Write-Host "⚠️  -ClinicEnv ignores -RemoteFileName; writing both .env and .env_api_clinic." -ForegroundColor Yellow
+        Write-Host "⚠️  -ClinicEnv ignores -RemoteFileName; writing .env and retiring stale .env_api_clinic." -ForegroundColor Yellow
     }
     $remotePathNorm = $RemotePath -replace '\\', '/'
     $remoteFilePath = "$remotePathNorm/.env"
@@ -122,7 +123,8 @@ if ($null -ne $clinicEnvSecondPath) {
 Write-Host "`n📄 File to deploy:" -ForegroundColor Cyan
 Write-Host "   Local: $localFile" -ForegroundColor Gray
 if ($ClinicEnv) {
-    Write-Host "   Remote: $remoteFilePath AND $clinicEnvSecondPath (same content)" -ForegroundColor Gray
+    Write-Host "   Remote: $remoteFilePath (single source of truth)" -ForegroundColor Gray
+    Write-Host "   Retiring stale (if present): $clinicEnvSecondPath" -ForegroundColor Gray
 } else {
     Write-Host "   Remote: $remoteFilePath" -ForegroundColor Gray
 }
@@ -147,17 +149,18 @@ try {
     # Create deployment commands using base64 encoding
     # Note: AWS SSM expects parameters as JSON object with "commands" key
     if ($ClinicEnv) {
-        $env2 = $clinicEnvSecondPath -replace '\\', '/'
+        $stale = $clinicEnvSecondPath -replace '\\', '/'
         $commands = @(
             "ENV1='$remoteFilePath'",
-            "ENV2='$env2'",
+            "STALE='$stale'",
             "REMOTE_DIR=`$(dirname `"`$ENV1`")",
-            "for REMOTE_FILE in `"`$ENV1`" `"`$ENV2`"; do if [ -f `"`$REMOTE_FILE`" ]; then BACKUP=`"`${REMOTE_FILE}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$REMOTE_FILE`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi; done",
             "sudo mkdir -p `"`$REMOTE_DIR`"",
-            "echo '$base64Content' | base64 -d | sudo tee `"`$ENV1`" `"`$ENV2`" > /dev/null",
-            "sudo chown ec2-user:ec2-user `"`$ENV1`" `"`$ENV2`"",
-            "sudo chmod 644 `"`$ENV1`" `"`$ENV2`"",
-            "SIZE1=`$(stat -c%s `"`$ENV1`" 2>/dev/null || stat -f%z `"`$ENV1`" 2>/dev/null); SIZE2=`$(stat -c%s `"`$ENV2`" 2>/dev/null || stat -f%z `"`$ENV2`" 2>/dev/null); if [ `"`$SIZE1`" = `"`$SIZE2`" ] && [ -n `"`$SIZE1`" ]; then echo `"Deployed both files: `$SIZE1 bytes each`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
+            "if [ -f `"`$ENV1`" ]; then BACKUP=`"`${ENV1}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$ENV1`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
+            "echo '$base64Content' | base64 -d | sudo tee `"`$ENV1`" > /dev/null",
+            "sudo chown ec2-user:ec2-user `"`$ENV1`"",
+            "sudo chmod 644 `"`$ENV1`"",
+            "if [ -f `"`$STALE`" ]; then RETIRED=`"`${STALE}.retired.`$(date +%Y%m%d_%H%M%S)`"; sudo mv `"`$STALE`" `"`$RETIRED`"; echo `"Retired stale env file: `$STALE -> `$RETIRED`"; fi",
+            "if [ -f `"`$ENV1`" ]; then SIZE=`$(stat -c%s `"`$ENV1`" 2>/dev/null || stat -f%z `"`$ENV1`" 2>/dev/null); echo `"Deployed .env: `$SIZE bytes (single source of truth)`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
         )
     } else {
         $commands = @(
