@@ -17,13 +17,23 @@ NC='\033[0m' # No Color
 echo -e "${GREEN}Setting up dbt environment variables for RDS connection...${NC}"
 
 # Find deployment_credentials.json file
+# When this file is sourced, $0 is the shell (e.g. -bash) — dirname then fails with "invalid option -- 'b'".
+# Use BASH_SOURCE so project-relative path resolves whether sourced or executed.
+_setup_script="${BASH_SOURCE[0]:-$0}"
+_cred_repo=""
+if [[ -n "$_setup_script" && "$_setup_script" != -* && -f "$_setup_script" ]]; then
+    _cred_repo="$(cd "$(dirname "$_setup_script")/../.." && pwd)/deployment_credentials.json"
+fi
+
 CREDENTIALS_FILE=""
 CREDENTIALS_LOCATIONS=(
     "/opt/dbt_dental_clinic/deployment_credentials.json"  # EC2 deployment location
     "$HOME/deployment_credentials.json"                   # User home directory
     "$(pwd)/deployment_credentials.json"                   # Current directory
-    "$(dirname "$0")/../deployment_credentials.json"      # Project root (if script is in scripts/)
 )
+if [[ -n "$_cred_repo" ]]; then
+    CREDENTIALS_LOCATIONS+=("$_cred_repo")                 # repo root (script lives in scripts/ec2/)
+fi
 
 for location in "${CREDENTIALS_LOCATIONS[@]}"; do
     if [ -f "$location" ]; then
