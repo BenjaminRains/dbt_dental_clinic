@@ -47,7 +47,7 @@ def get_ar_kpi_summary(
             collection_rate_last_year,
             billed_last_year,
             total_payments_last_year
-        FROM raw_marts.mart_ar_summary
+        FROM marts.mart_ar_summary
         WHERE (:start_date IS NULL OR snapshot_date >= :start_date)
           AND (:end_date IS NULL OR snapshot_date <= :end_date)
           AND total_balance > 0
@@ -79,12 +79,12 @@ def get_ar_kpi_summary(
         SELECT 
             -- Production: All procedures in last 365 days
             (SELECT COALESCE(SUM(fp.actual_fee), 0)
-             FROM raw_marts.fact_procedure fp
-             INNER JOIN raw_marts.dim_date dd ON fp.date_id = dd.date_id
+             FROM marts.fact_procedure fp
+             INNER JOIN marts.dim_date dd ON fp.date_id = dd.date_id
              WHERE dd.date_day >= CURRENT_DATE - INTERVAL '365 days') as total_production,
             -- Collections: All payments in last 365 days (excluding refunds)
             (SELECT COALESCE(SUM(payment_amount), 0)
-             FROM raw_marts.fact_payment
+             FROM marts.fact_payment
              WHERE payment_date >= CURRENT_DATE - INTERVAL '365 days'
                AND payment_direction = 'Income') as total_collections
     ),
@@ -93,12 +93,12 @@ def get_ar_kpi_summary(
         SELECT 
             -- Production: All procedures in current month
             (SELECT COALESCE(SUM(fp.actual_fee), 0)
-             FROM raw_marts.fact_procedure fp
-             INNER JOIN raw_marts.dim_date dd ON fp.date_id = dd.date_id
+             FROM marts.fact_procedure fp
+             INNER JOIN marts.dim_date dd ON fp.date_id = dd.date_id
              WHERE dd.date_day >= DATE_TRUNC('month', CURRENT_DATE)) as monthly_production,
             -- Collections: All payments in current month (excluding refunds)
             (SELECT COALESCE(SUM(payment_amount), 0)
-             FROM raw_marts.fact_payment
+             FROM marts.fact_payment
              WHERE payment_date >= DATE_TRUNC('month', CURRENT_DATE)
                AND payment_direction = 'Income') as monthly_collections
     )
@@ -233,7 +233,7 @@ def get_ar_aging_summary(
         # Get latest snapshot date
         latest_date_query = """
         SELECT MAX(snapshot_date) as latest_date
-        FROM raw_marts.mart_ar_summary
+        FROM marts.mart_ar_summary
         """
         latest_result = db.execute(text(latest_date_query)).fetchone()
         if latest_result and latest_result.latest_date:
@@ -250,7 +250,7 @@ def get_ar_aging_summary(
             balance_31_60_days,
             balance_61_90_days,
             balance_over_90_days
-        FROM raw_marts.mart_ar_summary
+        FROM marts.mart_ar_summary
         WHERE total_balance > 0 {date_filter}
         ORDER BY patient_id, provider_id, snapshot_date DESC
     ),
@@ -432,7 +432,7 @@ def get_ar_priority_queue(
             mas.payment_recency,
             mas.collection_rate_last_year,
             mas.snapshot_date
-        FROM raw_marts.mart_ar_summary mas
+        FROM marts.mart_ar_summary mas
         WHERE mas.total_balance > 0 {where_clause}
         ORDER BY mas.patient_id, mas.provider_id, mas.snapshot_date DESC
     )
@@ -508,7 +508,7 @@ def get_ar_risk_distribution(
         # Get latest snapshot date
         latest_date_query = """
         SELECT MAX(snapshot_date) as latest_date
-        FROM raw_marts.mart_ar_summary
+        FROM marts.mart_ar_summary
         """
         latest_result = db.execute(text(latest_date_query)).fetchone()
         if latest_result and latest_result.latest_date:
@@ -522,7 +522,7 @@ def get_ar_risk_distribution(
             provider_id,
             aging_risk_category,
             total_balance
-        FROM raw_marts.mart_ar_summary
+        FROM marts.mart_ar_summary
         WHERE total_balance > 0 {date_filter}
         ORDER BY patient_id, provider_id, snapshot_date DESC
     ),
@@ -573,7 +573,7 @@ def get_available_snapshot_dates(
     """
     query = """
     SELECT DISTINCT snapshot_date
-    FROM raw_marts.mart_ar_summary
+    FROM marts.mart_ar_summary
     WHERE snapshot_date IS NOT NULL
     ORDER BY snapshot_date DESC
     """
@@ -618,7 +618,7 @@ def get_ar_aging_trends(
             SUM(balance_61_90_days) as over_60_amount,
             SUM(balance_over_90_days) as over_90_amount,
             SUM(total_balance) as total_amount
-        FROM raw_marts.mart_ar_summary
+        FROM marts.mart_ar_summary
         WHERE total_balance > 0 {date_filter}
         GROUP BY snapshot_date
     )

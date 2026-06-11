@@ -84,7 +84,7 @@ def get_providers(
         _updated_at,
         _transformed_at,
         _mart_refreshed_at
-    FROM raw_marts.dim_provider
+    FROM marts.dim_provider
     WHERE provider_id IS NOT NULL
     """
     
@@ -145,7 +145,7 @@ def get_provider_by_id(
         _updated_at,
         _transformed_at,
         _mart_refreshed_at
-    FROM raw_marts.dim_provider
+    FROM marts.dim_provider
     WHERE provider_id = :provider_id
     """
     
@@ -166,7 +166,7 @@ def get_provider_summary(
         test_cols = db.execute(text("""
             SELECT column_name, data_type 
             FROM information_schema.columns 
-            WHERE table_schema = 'raw_marts' 
+            WHERE table_schema = 'marts' 
             AND table_name = 'fact_appointment'
             AND column_name IN ('provider_id', 'appointment_date', 'is_completed', 'is_no_show', 'is_broken', 'scheduled_production_amount', 'patient_id')
             ORDER BY column_name
@@ -211,7 +211,7 @@ def get_provider_summary(
             THEN ROUND(AVG(COALESCE(fa.scheduled_production_amount, 0.0)::numeric), 2)
             ELSE 0.0
         END::numeric as avg_production_per_appointment
-    FROM raw_marts.fact_appointment fa
+    FROM marts.fact_appointment fa
     WHERE fa.appointment_date IS NOT NULL
     AND fa.provider_id IS NOT NULL
     """
@@ -232,7 +232,7 @@ def get_provider_summary(
         logger.debug(f"Params: {params}")
         
         # Test if table exists first
-        test_query = "SELECT COUNT(*) FROM raw_marts.fact_appointment LIMIT 1"
+        test_query = "SELECT COUNT(*) FROM marts.fact_appointment LIMIT 1"
         try:
             test_result = db.execute(text(test_query)).scalar()
             logger.info(f"Table exists, row count check returned: {test_result}")

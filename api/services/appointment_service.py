@@ -28,7 +28,7 @@ def get_appointment_summary(
         ROUND(SUM(CASE WHEN fa.is_broken THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 2) as cancellation_rate,
         SUM(fa.scheduled_production_amount) as total_scheduled_production,
         SUM(CASE WHEN fa.is_completed THEN fa.scheduled_production_amount ELSE 0 END) as completed_production
-    FROM raw_marts.fact_appointment fa
+    FROM marts.fact_appointment fa
     WHERE fa.appointment_date IS NOT NULL
     """
     
@@ -90,7 +90,7 @@ def get_appointments(
         fa.is_broken,
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
-    FROM raw_marts.fact_appointment fa
+    FROM marts.fact_appointment fa
     WHERE fa.appointment_date IS NOT NULL
     """
     
@@ -144,7 +144,7 @@ def get_appointment_by_id(db: Session, appointment_id: int) -> Optional[Appointm
         fa.is_broken,
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
-    FROM raw_marts.fact_appointment fa
+    FROM marts.fact_appointment fa
     WHERE fa.appointment_id = :appointment_id
     """
     
@@ -183,7 +183,7 @@ def get_today_appointments(db: Session, provider_id: Optional[int] = None) -> Li
         fa.is_broken,
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
-    FROM raw_marts.fact_appointment fa
+    FROM marts.fact_appointment fa
     WHERE fa.appointment_date = CURRENT_DATE
     """
     
@@ -229,7 +229,7 @@ def get_upcoming_appointments(db: Session, days: int = 7, provider_id: Optional[
         fa.is_broken,
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
-    FROM raw_marts.fact_appointment fa
+    FROM marts.fact_appointment fa
     WHERE fa.appointment_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '1 day' * :days
     """
     

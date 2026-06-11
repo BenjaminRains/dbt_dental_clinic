@@ -118,13 +118,13 @@ def _convert_patient_row(row_dict):
 
 def get_patients(db: Session, skip: int = 0, limit: int = 100):
     # Get total count first
-    count_query = text("SELECT COUNT(*) as total FROM raw_marts.dim_patient")
+    count_query = text("SELECT COUNT(*) as total FROM marts.dim_patient")
     count_result = db.execute(count_query)
     total = count_result.fetchone().total
     
     # Get paginated results
     query = text("""
-        SELECT * FROM raw_marts.dim_patient
+        SELECT * FROM marts.dim_patient
         LIMIT :limit OFFSET :skip
     """)
     result = db.execute(query, {"skip": skip, "limit": limit})
@@ -141,7 +141,7 @@ def get_patients(db: Session, skip: int = 0, limit: int = 100):
 
 def get_patient_by_id(db: Session, patient_id: int):
     query = text("""
-        SELECT * FROM raw_marts.dim_patient
+        SELECT * FROM marts.dim_patient
         WHERE patient_id = :patient_id
     """)
     result = db.execute(query, {"patient_id": patient_id})
@@ -166,7 +166,7 @@ def get_top_patient_balances(db: Session, limit: int = 10):
                 mas.days_since_last_payment,
                 mas.payment_recency,
                 mas.snapshot_date
-            FROM raw_marts.mart_ar_summary mas
+            FROM marts.mart_ar_summary mas
             WHERE mas.total_balance > 0
             ORDER BY mas.patient_id::integer, mas.snapshot_date DESC
         )

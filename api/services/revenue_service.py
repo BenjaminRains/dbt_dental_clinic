@@ -21,7 +21,7 @@ def get_revenue_trends(
         SUM(lost_revenue) as revenue_lost,
         SUM(estimated_recoverable_amount) as recovery_potential,
         COUNT(*) as opportunity_count
-    FROM raw_marts.mart_revenue_lost
+    FROM marts.mart_revenue_lost
     WHERE lost_revenue > 0
     """
     
@@ -64,7 +64,7 @@ def get_revenue_kpi_summary(
         COUNT(*) as total_opportunities,
         COUNT(DISTINCT patient_id) as affected_patients,
         COUNT(DISTINCT provider_id) as affected_providers
-    FROM raw_marts.mart_revenue_lost
+    FROM marts.mart_revenue_lost
     WHERE lost_revenue > 0
     """
     
@@ -170,7 +170,7 @@ def get_revenue_opportunities(
         _loaded_at,
         _updated_at,
         _created_by
-    FROM raw_marts.mart_revenue_lost
+    FROM marts.mart_revenue_lost
     WHERE 1=1
     """
     
@@ -294,8 +294,8 @@ def get_revenue_opportunities_from_source(
                 true as appointment_related,
                 (CURRENT_DATE - fa.appointment_date)::int as days_since_opportunity,
                 COALESCE(SUM(pc.procedure_fee), 0) * 0.5 as estimated_recoverable_amount
-            FROM raw_marts.fact_appointment fa
-            LEFT JOIN raw_intermediate.int_procedure_complete pc
+            FROM marts.fact_appointment fa
+            LEFT JOIN int.int_procedure_complete pc
                 ON fa.appointment_id = pc.appointment_id
                 AND pc.procedure_date = fa.appointment_date
             WHERE (fa.is_broken = true OR fa.is_no_show = true)
@@ -342,9 +342,9 @@ def get_revenue_opportunities_from_source(
                 pt.has_insurance_flag,
                 CASE WHEN pt.patient_id IS NOT NULL THEN true ELSE false END as patient_specific
             FROM missed_appts ma
-            LEFT JOIN raw_marts.dim_date dd ON ma.appointment_date = dd.date_day
-            LEFT JOIN raw_marts.dim_provider dp ON ma.provider_id = dp.provider_id
-            LEFT JOIN raw_marts.dim_patient pt ON ma.patient_id = pt.patient_id
+            LEFT JOIN marts.dim_date dd ON ma.appointment_date = dd.date_day
+            LEFT JOIN marts.dim_provider dp ON ma.provider_id = dp.provider_id
+            LEFT JOIN marts.dim_patient pt ON ma.patient_id = pt.patient_id
         )
         SELECT 
             date_id,
@@ -457,7 +457,7 @@ def get_revenue_opportunities_from_source(
                 false as appointment_related,
                 (CURRENT_DATE - fc.claim_date)::int as days_since_opportunity,
                 (fc.billed_amount - COALESCE(fc.paid_amount, 0)) * 0.3 as estimated_recoverable_amount
-            FROM raw_marts.fact_claim fc
+            FROM marts.fact_claim fc
             WHERE fc.claim_status IN ('S', 'W', 'H')  -- S = Submitted (Pending), W = Waiting (Pending), H = Hold (Denied/Rejected)
                 AND fc.claim_date IS NOT NULL
                 AND fc.billed_amount > 0  -- Must have billed amount
@@ -492,8 +492,8 @@ def get_revenue_opportunities_from_source(
                 pt.has_insurance_flag,
                 CASE WHEN pt.patient_id IS NOT NULL THEN true ELSE false END as patient_specific
             FROM claim_rejections cr
-            LEFT JOIN raw_marts.dim_date dd ON cr.appointment_date = dd.date_day
-            LEFT JOIN raw_marts.dim_patient pt ON cr.patient_id = pt.patient_id
+            LEFT JOIN marts.dim_date dd ON cr.appointment_date = dd.date_day
+            LEFT JOIN marts.dim_patient pt ON cr.patient_id = pt.patient_id
         )
         SELECT 
             date_id,
@@ -595,7 +595,7 @@ def get_revenue_opportunities_from_source(
                 false as appointment_related,
                 COALESCE(tp.days_since_last_activity, 0) as days_since_opportunity,
                 COALESCE(tp.remaining_amount, 0) * 0.4 as estimated_recoverable_amount
-            FROM raw_intermediate.int_treatment_plan tp
+            FROM int.int_treatment_plan tp
             WHERE tp.treatment_plan_status = 0  -- Active treatment plans only
                 AND tp.treatment_plan_date >= CURRENT_DATE - INTERVAL '2 years'  -- Within last 2 years
                 AND tp.days_since_last_activity > 90  -- Only include delayed treatment plans (>90 days since last activity)
@@ -639,9 +639,9 @@ def get_revenue_opportunities_from_source(
                 pt.has_insurance_flag,
                 CASE WHEN pt.patient_id IS NOT NULL THEN true ELSE false END as patient_specific
             FROM treatment_delays td
-            LEFT JOIN raw_marts.dim_date dd ON td.appointment_date = dd.date_day
-            LEFT JOIN raw_marts.dim_provider dp ON td.provider_id = dp.provider_id
-            LEFT JOIN raw_marts.dim_patient pt ON td.patient_id = pt.patient_id
+            LEFT JOIN marts.dim_date dd ON td.appointment_date = dd.date_day
+            LEFT JOIN marts.dim_provider dp ON td.provider_id = dp.provider_id
+            LEFT JOIN marts.dim_patient pt ON td.patient_id = pt.patient_id
         )
         SELECT 
             date_id,
@@ -761,7 +761,7 @@ def get_revenue_opportunity_summary(
         AVG(recovery_priority_score) as avg_priority_score,
         SUM(CASE WHEN recent_opportunity THEN 1 ELSE 0 END) as recent_opportunities,
         SUM(CASE WHEN recovery_priority_score >= 70 THEN 1 ELSE 0 END) as high_priority_opportunities
-    FROM raw_marts.mart_revenue_lost
+    FROM marts.mart_revenue_lost
     WHERE lost_revenue > 0
     """
     
@@ -823,7 +823,7 @@ def get_revenue_recovery_plan(
                 ARRAY['Review adjustment reason', 'Verify patient eligibility', 'Consider payment plan']
             ELSE ARRAY['Review opportunity details', 'Determine appropriate action']
         END as recommended_actions
-    FROM raw_marts.mart_revenue_lost
+    FROM marts.mart_revenue_lost
     WHERE recovery_priority_score >= :min_priority_score
     AND recoverable = true
     AND lost_revenue > 0
@@ -914,7 +914,7 @@ def get_revenue_opportunity_by_id(
         _loaded_at,
         _updated_at,
         _created_by
-    FROM raw_marts.mart_revenue_lost
+    FROM marts.mart_revenue_lost
     WHERE opportunity_id = :opportunity_id
     """
     
@@ -948,8 +948,8 @@ def get_revenue_lost_summary(
                 ELSE 'Other'
             END as status,
             COALESCE(SUM(pc.procedure_fee), 0) as production_amount
-        FROM raw_marts.fact_appointment fa
-        LEFT JOIN raw_intermediate.int_procedure_complete pc
+        FROM marts.fact_appointment fa
+        LEFT JOIN int.int_procedure_complete pc
             ON fa.appointment_id = pc.appointment_id
             AND pc.procedure_date = fa.appointment_date
         WHERE (fa.is_broken = true OR fa.is_no_show = true)
@@ -972,12 +972,12 @@ def get_revenue_lost_summary(
         SELECT 
             iad.appointment_id as original_appointment_id,
             COALESCE(SUM(pc.procedure_fee), 0) as rescheduled_production
-        FROM raw_intermediate.int_appointment_details iad
+        FROM int.int_appointment_details iad
         INNER JOIN lost_appointments la
             ON iad.appointment_id = la.appointment_id
-        LEFT JOIN raw_marts.fact_appointment resched
+        LEFT JOIN marts.fact_appointment resched
             ON iad.rescheduled_appointment_id = resched.appointment_id
-        LEFT JOIN raw_intermediate.int_procedure_complete pc
+        LEFT JOIN int.int_procedure_complete pc
             ON resched.appointment_id = pc.appointment_id
             AND pc.procedure_date = resched.appointment_date
         WHERE iad.rescheduled_appointment_id IS NOT NULL
@@ -985,7 +985,7 @@ def get_revenue_lost_summary(
     ),
     total_appointments AS (
         SELECT COUNT(*) as total_count
-        FROM raw_marts.fact_appointment
+        FROM marts.fact_appointment
         WHERE appointment_date IS NOT NULL
     """
     
@@ -1055,7 +1055,7 @@ def get_revenue_lost_opportunity(
                 WHEN fa.is_broken THEN 'Cancelled'
                 ELSE NULL
             END as status
-        FROM raw_marts.fact_appointment fa
+        FROM marts.fact_appointment fa
         WHERE (fa.is_broken = true OR fa.is_no_show = true)
             AND fa.appointment_date IS NOT NULL
     """
@@ -1078,14 +1078,14 @@ def get_revenue_lost_opportunity(
                 WHEN iad.rescheduled_appointment_id IS NOT NULL THEN true
                 ELSE false
             END as is_rescheduled
-        FROM raw_intermediate.int_appointment_details iad
+        FROM int.int_appointment_details iad
         INNER JOIN appointment_status ast
             ON iad.appointment_id = ast.appointment_id
         WHERE iad.rescheduled_appointment_id IS NOT NULL
     ),
     total_appointments AS (
         SELECT COUNT(*) as total_count
-        FROM raw_marts.fact_appointment
+        FROM marts.fact_appointment
         WHERE appointment_date IS NOT NULL
     """
     
@@ -1208,13 +1208,13 @@ def get_lost_appointments_detail(
             COALESCE(SUM(pc.procedure_fee), 0) as production_amount,
             ARRAY_AGG(DISTINCT pc.procedure_code) FILTER (WHERE pc.procedure_code IS NOT NULL) as procedure_codes,
             MAX(at.appointment_type_name) as appointment_type
-        FROM raw_marts.fact_appointment fa
-        LEFT JOIN raw_intermediate.int_procedure_complete pc
+        FROM marts.fact_appointment fa
+        LEFT JOIN int.int_procedure_complete pc
             ON fa.appointment_id = pc.appointment_id
             AND pc.procedure_date = fa.appointment_date
-        LEFT JOIN raw_intermediate.int_appointment_details iad
+        LEFT JOIN int.int_appointment_details iad
             ON fa.appointment_id = iad.appointment_id
-        LEFT JOIN raw_staging.stg_opendental__appointmenttype at
+        LEFT JOIN staging.stg_opendental__appointmenttype at
             ON iad.appointment_type_id = at.appointment_type_id
         WHERE (fa.is_broken = true OR fa.is_no_show = true)
             AND fa.appointment_date IS NOT NULL
@@ -1242,10 +1242,10 @@ def get_lost_appointments_detail(
             iad.appointment_id,
             iad.rescheduled_appointment_id,
             resched.appointment_date as next_date
-        FROM raw_intermediate.int_appointment_details iad
+        FROM int.int_appointment_details iad
         INNER JOIN lost_appointments la
             ON iad.appointment_id = la.appointment_id
-        LEFT JOIN raw_marts.fact_appointment resched
+        LEFT JOIN marts.fact_appointment resched
             ON iad.rescheduled_appointment_id = resched.appointment_id
         WHERE iad.rescheduled_appointment_id IS NOT NULL
     )

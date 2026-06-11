@@ -35,7 +35,7 @@ async def get_revenue_trends(
         SUM(mrl.lost_revenue) as total_revenue_lost,
         SUM(mrl.estimated_recoverable_amount) as total_recovery_potential,
         COUNT(DISTINCT mrl.opportunity_id) as opportunity_count
-    FROM raw_marts.mart_revenue_lost mrl
+    FROM marts.mart_revenue_lost mrl
     WHERE 1=1
     """
     
@@ -82,7 +82,7 @@ async def get_revenue_kpi_summary(
         COUNT(DISTINCT mrl.opportunity_id) as total_opportunities,
         COUNT(DISTINCT mrl.patient_id) as affected_patients,
         COUNT(DISTINCT mrl.provider_id) as affected_providers
-    FROM raw_marts.mart_revenue_lost mrl
+    FROM marts.mart_revenue_lost mrl
     WHERE 1=1
     """
     
@@ -129,7 +129,7 @@ async def get_provider_performance(
         mpp.daily_no_show_rate as no_show_rate,
         round(mpp.total_production / nullif(mpp.daily_unique_patients, 0), 2) as avg_production_per_patient,
         round(mpp.total_production / nullif(mpp.total_completed_appointments, 0), 2) as avg_production_per_appointment
-    FROM raw_marts.mart_provider_performance mpp
+    FROM marts.mart_provider_performance mpp
     WHERE 1=1
     """
     
@@ -186,7 +186,7 @@ async def get_provider_summary(
         AVG(mpp.daily_no_show_rate) as avg_no_show_rate,
         AVG(round(mpp.total_production / nullif(mpp.daily_unique_patients, 0), 2)) as avg_production_per_patient,
         AVG(round(mpp.total_production / nullif(mpp.total_completed_appointments, 0), 2)) as avg_production_per_appointment
-    FROM raw_marts.mart_provider_performance mpp
+    FROM marts.mart_provider_performance mpp
     WHERE 1=1
     """
     
@@ -247,7 +247,7 @@ async def get_appointment_summary(
         ROUND(SUM(CASE WHEN fa.is_broken THEN 1 ELSE 0 END)::numeric / NULLIF(COUNT(*), 0) * 100, 2) as cancellation_rate,
         SUM(fa.scheduled_production_amount) as total_scheduled_production,
         SUM(CASE WHEN fa.is_completed THEN fa.scheduled_production_amount ELSE 0 END) as completed_production
-    FROM raw_marts.fact_appointment fa
+    FROM marts.fact_appointment fa
     WHERE fa.appointment_date IS NOT NULL
     """
     
@@ -310,7 +310,7 @@ async def get_ar_summary(
         count(distinct mas.patient_id) as patient_count_with_ar,
         mas.insurance_estimate as insurance_ar_balance,
         mas.patient_responsibility as patient_ar_balance
-    FROM raw_marts.mart_ar_summary mas
+    FROM marts.mart_ar_summary mas
     WHERE 1=1
     """
     
@@ -361,7 +361,7 @@ async def get_dashboard_kpis(
     SELECT 
         SUM(mrl.lost_revenue) as total_revenue_lost,
         SUM(mrl.estimated_recoverable_amount) as total_recovery_potential
-    FROM raw_marts.mart_revenue_lost mrl
+    FROM marts.mart_revenue_lost mrl
     WHERE 1=1
     """
     
@@ -392,7 +392,7 @@ async def get_dashboard_kpis(
             COUNT(DISTINCT mpp.provider_id) as active_providers,
             COALESCE(SUM(mpp.total_production), 0.0)::numeric as total_production,
             COALESCE(SUM(mpp.total_collections), 0.0)::numeric as total_collection
-        FROM raw_marts.mart_provider_performance mpp
+        FROM marts.mart_provider_performance mpp
         {where_clause}
     )
     SELECT 

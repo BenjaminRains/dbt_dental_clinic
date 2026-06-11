@@ -94,7 +94,7 @@ def get_treatment_acceptance_kpi_summary(
             ELSE 0
         END as procedure_acceptance_rate
         
-    FROM raw_marts.mart_procedure_acceptance_summary
+    FROM marts.mart_procedure_acceptance_summary
     WHERE 1=1
     """
     
@@ -210,7 +210,7 @@ def get_treatment_acceptance_summary(
         diagnosis_rate,
         same_day_treatment_rate,
         procedure_acceptance_rate
-    FROM raw_marts.mart_procedure_acceptance_summary
+    FROM marts.mart_procedure_acceptance_summary
     WHERE 1=1
     """
     
@@ -293,7 +293,7 @@ def get_treatment_acceptance_trends(
         SUM(patients_presented) as patients_presented,
         SUM(patients_accepted) as patients_accepted
         
-    FROM raw_marts.mart_procedure_acceptance_summary
+    FROM marts.mart_procedure_acceptance_summary
     WHERE 1=1
     """
     
@@ -384,7 +384,7 @@ def get_treatment_acceptance_provider_performance(
             ELSE 0
         END as same_day_treatment_rate
         
-    FROM raw_marts.mart_procedure_acceptance_summary mas
+    FROM marts.mart_procedure_acceptance_summary mas
     WHERE 1=1
     """
     

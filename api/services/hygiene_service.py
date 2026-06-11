@@ -38,8 +38,8 @@ def get_hygiene_retention_summary(
     -- KPI 1 & 5: Active patients (visited in past 18 months)
     active_patients AS (
         SELECT DISTINCT p.patient_id
-        FROM raw_marts.dim_patient p
-        INNER JOIN raw_marts.fact_appointment fa
+        FROM marts.dim_patient p
+        INNER JOIN marts.fact_appointment fa
             ON p.patient_id = fa.patient_id
         WHERE fa.appointment_date >= CURRENT_DATE - INTERVAL '18 months'
             AND p.patient_status IN ('Patient', 'Active')
@@ -54,7 +54,7 @@ def get_hygiene_retention_summary(
     patients_with_recall AS (
         SELECT DISTINCT 
             irm.patient_id
-        FROM raw_intermediate.int_recall_management irm
+        FROM int.int_recall_management irm
         WHERE irm.is_disabled = false
             AND irm.is_valid_recall = true
     ),
@@ -62,7 +62,7 @@ def get_hygiene_retention_summary(
     -- Patients seen in last 6 months (count as "current" even if recall date is past)
     patients_seen_recently AS (
         SELECT DISTINCT fa.patient_id
-        FROM raw_marts.fact_appointment fa
+        FROM marts.fact_appointment fa
         WHERE fa.is_completed = true
             AND fa.appointment_date >= CURRENT_DATE - INTERVAL '6 months'
     ),
@@ -93,7 +93,7 @@ def get_hygiene_retention_summary(
         SELECT DISTINCT
             fa.patient_id,
             fa.appointment_date as hygiene_date
-        FROM raw_marts.fact_appointment fa
+        FROM marts.fact_appointment fa
         WHERE (fa.hygienist_id IS NOT NULL AND fa.hygienist_id != 0)
             AND fa.appointment_date >= :start_date
             AND fa.appointment_date <= :end_date
@@ -107,8 +107,8 @@ def get_hygiene_retention_summary(
         SELECT DISTINCT
             ipc.patient_id,
             ipc.procedure_date as hygiene_date
-        FROM raw_intermediate.int_procedure_complete ipc
-        INNER JOIN raw_marts.dim_procedure pc ON ipc.procedure_code_id = pc.procedure_code_id
+        FROM int.int_procedure_complete ipc
+        INNER JOIN marts.dim_procedure pc ON ipc.procedure_code_id = pc.procedure_code_id
         WHERE pc.procedure_code IN ('D0120', 'D0150', 'D1110', 'D1120', 'D0180', 'D0272', 'D0274', 'D0330')
             AND ipc.procedure_status = 2  -- Only completed procedures
             AND ipc.procedure_date >= :start_date
@@ -134,7 +134,7 @@ def get_hygiene_retention_summary(
         FROM hygiene_patients hp
         WHERE EXISTS (
             SELECT 1 
-            FROM raw_marts.fact_appointment fa2
+            FROM marts.fact_appointment fa2
             WHERE fa2.patient_id = hp.patient_id
                 AND fa2.appointment_date > hp.hygiene_date
                 AND fa2.appointment_date > CURRENT_DATE  -- Must be future appointment
@@ -175,7 +175,7 @@ def get_hygiene_retention_summary(
         FROM hygiene_patients hp
         WHERE EXISTS (
             SELECT 1 
-            FROM raw_marts.fact_appointment fa2
+            FROM marts.fact_appointment fa2
             WHERE fa2.patient_id = hp.patient_id
                 AND fa2.appointment_date > hp.hygiene_date
                 AND fa2.appointment_date > CURRENT_DATE  -- Must be future appointment
@@ -192,7 +192,7 @@ def get_hygiene_retention_summary(
     active_recall_patients AS (
         SELECT DISTINCT ap.patient_id
         FROM active_patients ap
-        INNER JOIN raw_intermediate.int_recall_management irm ON ap.patient_id = irm.patient_id
+        INNER JOIN int.int_recall_management irm ON ap.patient_id = irm.patient_id
         WHERE irm.is_disabled = false
             AND irm.is_valid_recall = true
     ),
@@ -206,21 +206,21 @@ def get_hygiene_retention_summary(
     overdue_recall_patients AS (
         SELECT DISTINCT arp.patient_id
         FROM active_recall_patients arp
-        INNER JOIN raw_intermediate.int_recall_management irm ON arp.patient_id = irm.patient_id
+        INNER JOIN int.int_recall_management irm ON arp.patient_id = irm.patient_id
         WHERE irm.compliance_status = 'Overdue'
             AND irm.is_disabled = false
             AND irm.is_valid_recall = true
             -- Exclude patients with scheduled appointments
             AND NOT EXISTS (
                 SELECT 1
-                FROM raw_marts.fact_appointment fa
+                FROM marts.fact_appointment fa
                 WHERE fa.patient_id = arp.patient_id
                     AND fa.appointment_date > CURRENT_DATE
             )
             -- Exclude patients seen in last 6 months
             AND NOT EXISTS (
                 SELECT 1
-                FROM raw_marts.fact_appointment fa
+                FROM marts.fact_appointment fa
                 WHERE fa.patient_id = arp.patient_id
                     AND fa.is_completed = true
                     AND fa.appointment_date >= CURRENT_DATE - INTERVAL '6 months'
@@ -245,8 +245,8 @@ def get_hygiene_retention_summary(
     -- "Not on Recall = Active patients who've never had a periodic exam in their history"
     active_patients_for_recall AS (
         SELECT DISTINCT p.patient_id
-        FROM raw_marts.dim_patient p
-        INNER JOIN raw_marts.fact_appointment fa ON p.patient_id = fa.patient_id
+        FROM marts.dim_patient p
+        INNER JOIN marts.fact_appointment fa ON p.patient_id = fa.patient_id
         WHERE fa.appointment_date >= CURRENT_DATE - INTERVAL '18 months'
             AND p.patient_status IN ('Patient', 'Active')
     ),
@@ -266,8 +266,8 @@ def get_hygiene_retention_summary(
     -- Only count completed procedures (status = 2) - this yields 33.49% which is closer to PBN's 20%
     patients_with_periodic_exam AS (
         SELECT DISTINCT ipc.patient_id
-        FROM raw_intermediate.int_procedure_complete ipc
-        INNER JOIN raw_marts.dim_procedure pc ON ipc.procedure_code_id = pc.procedure_code_id
+        FROM int.int_procedure_complete ipc
+        INNER JOIN marts.dim_procedure pc ON ipc.procedure_code_id = pc.procedure_code_id
         WHERE pc.procedure_code IN ('D1110', 'D1120', 'D1208', 'D4910', 'D0274', 'D0330', 'D0210', 'D0120', 'D0272')
             AND ipc.procedure_status = 2  -- Only completed procedures
     ),
