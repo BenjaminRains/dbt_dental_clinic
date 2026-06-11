@@ -27,6 +27,7 @@ import {
     AccountBalance as ARIcon,
     CheckCircle as TreatmentAcceptanceIcon,
     Spa as HygieneIcon,
+    ShareOutlined as ReferralIcon,
     Close as CloseIcon,
     HelpOutline as HelpIcon,
 } from '@mui/icons-material';
@@ -50,6 +51,7 @@ const menuItems = isDemoBuild
           { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
           { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
           { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
+          { text: 'Referral sources', icon: <ReferralIcon />, path: '/referral-sources' },
           { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
           { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
           { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
@@ -62,6 +64,7 @@ const menuItems = isDemoBuild
           { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
           { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
           { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
+          { text: 'Referral sources', icon: <ReferralIcon />, path: '/referral-sources' },
           { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
           { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
           { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },

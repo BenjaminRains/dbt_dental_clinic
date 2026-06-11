@@ -1,0 +1,27 @@
+version: 2
+
+models:
+  - name: dim_referral
+    description: >
+      OpenDental referral source dimension (external referrers, including physician referrers).
+      Join to stg_opendental__refattach on referral_id for patient attribution; distinct from dim_provider.
+    config:
+      materialized: table
+      schema: marts
+      unique_key: referral_id
+    columns:
+      - name: referral_id
+        description: Primary key; maps to ReferralNum in OpenDental.
+        tests:
+          - unique
+          - not_null
+      - name: display_name
+        description: Business name if present; otherwise title, first, and last name.
+      - name: last_name_norm
+        description: Lowercased trimmed last name for filter patterns (e.g. Drakos).
+      - name: referral_search_key
+        description: Lowercased concatenation of name parts without spaces for fuzzy display checks.
+      - name: is_doctor
+        description: OpenDental IsDoctor flag; use for "any doctor referrer" cohorts.
+      - name: is_hidden
+        description: Hidden referrals may be excluded in KPI marts.

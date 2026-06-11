@@ -595,6 +595,48 @@ export interface TreatmentAcceptanceProviderPerformance {
     same_day_treatment_rate: number | null;
 }
 
+// Referral source KPIs (mart_referral_source_kpis)
+export interface ReferralSourceKPIRow {
+    reporting_month: string;
+    reporting_year: number;
+    reporting_month_number: number;
+    reporting_year_month: string;
+    referral_id: number;
+    referral_display_name: string;
+    referral_last_name?: string | null;
+    referral_first_name?: string | null;
+    referral_middle_name?: string | null;
+    referral_business_name?: string | null;
+    referral_title?: string | null;
+    referral_national_provider_id?: string | null;
+    referral_is_doctor: boolean;
+    referral_not_person: boolean;
+    referral_source_segment: string;
+    period_basis: string;
+    period_basis_sort_order: number;
+    period_basis_description: string;
+    distinct_patient_count: number;
+    production_value_in_period: number;
+    net_collections_in_period: number;
+}
+
+export interface ReferralSourceMonthlySummary {
+    reporting_month: string;
+    reporting_year_month: string;
+    period_basis: string;
+    period_basis_sort_order: number;
+    total_production_value: number;
+    total_net_collections: number;
+    summed_distinct_patient_count: number;
+    source_row_count: number;
+    patient_counts_are_trustworthy_for_unique_patients: boolean;
+}
+
+export interface ReferralSourceSummaryResponse {
+    rows: ReferralSourceMonthlySummary[];
+    patient_count_note: string;
+}
+
 // Hygiene Retention Types
 export interface HygieneRetentionSummary {
     recall_current_percent: number;  // Recall Current %

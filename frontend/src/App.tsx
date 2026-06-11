@@ -15,6 +15,7 @@ const Appointments = lazy(() => import('./pages/Appointments'));
 const AR = lazy(() => import('./pages/AR'));
 const TreatmentAcceptance = lazy(() => import('./pages/TreatmentAcceptance'));
 const HygieneRetention = lazy(() => import('./pages/HygieneRetention'));
+const ReferralSources = lazy(() => import('./pages/ReferralSources'));
 const KPIDefinitions = lazy(() => import('./pages/KPIDefinitions'));
 const EnvironmentManager = lazy(() => import('./pages/EnvironmentManager'));
 const SchemaDiscovery = lazy(() => import('./pages/SchemaDiscovery'));
@@ -119,6 +120,15 @@ function App() {
                     <Layout>
                         <Suspense fallback={<PageLoader />}>
                             <HygieneRetention />
+                        </Suspense>
+                    </Layout>
+                </Box>
+            } />
+            <Route path="/referral-sources" element={
+                <Box sx={{ display: 'flex', minHeight: '100vh' }}>
+                    <Layout>
+                        <Suspense fallback={<PageLoader />}>
+                            <ReferralSources />
                         </Suspense>
                     </Layout>
                 </Box>

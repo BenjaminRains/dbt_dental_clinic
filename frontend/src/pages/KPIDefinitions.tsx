@@ -590,6 +590,52 @@ const dashboardKPIs: DashboardKPIs[] = [
             },
         ],
     },
+    {
+        dashboardName: 'Referral sources',
+        dashboardPath: '/referral-sources',
+        kpis: [
+            {
+                name: 'Distinct patient count (per row)',
+                description:
+                    'Count of distinct patients in the cohort for that reporting month, referral source, and period_basis. Summing this metric across multiple referrers double-counts patients who appear under more than one source.',
+                calculation: {
+                    source: 'mart_referral_source_kpis.distinct_patient_count',
+                    sourceModel: 'mart_referral_source_kpis',
+                    sqlDetail:
+                        'Grain: reporting_month × referral_id × period_basis. Cohort rules differ by period_basis (referral link date, first visit, or production month).',
+                    filter: 'Hidden referrers excluded in mart',
+                },
+                dataSource: 'mart_referral_source_kpis',
+                businessContext:
+                    'Use Referral sources dashboard; filter to a single referral_id when you need patient counts that are not inflated by multi-referrer overlap.',
+            },
+            {
+                name: 'Production value (in period)',
+                description:
+                    'Sum of completed / existing-prior procedure fees (fact_procedure.actual_fee) dated in the reporting month for patients in the cohort.',
+                calculation: {
+                    source: 'mart_referral_source_kpis.production_value_in_period',
+                    sourceModel: 'mart_referral_source_kpis',
+                    sourceField: 'production_value_in_period',
+                    sqlDetail: 'Production dollars, not cash collected.',
+                },
+                dataSource: 'mart_referral_source_kpis',
+                businessContext: 'Compare to net collections when explaining timing (treatment vs payment).',
+            },
+            {
+                name: 'Net collections (in period)',
+                description:
+                    'Cash in the reporting month: sum of fact_payment amounts where payment_direction is Income or Refund (refunds negative), aligned with mart_daily_payments.',
+                calculation: {
+                    source: 'mart_referral_source_kpis.net_collections_in_period',
+                    sourceModel: 'mart_referral_source_kpis',
+                    sourceField: 'net_collections_in_period',
+                },
+                dataSource: 'mart_referral_source_kpis',
+                businessContext: 'Primary stakeholder-facing money metric for collections by referred patient activity in-period.',
+            },
+        ],
+    },
 ];
 
 const KPIDefinitions: React.FC = () => {

@@ -1,0 +1,88 @@
+version: 2
+
+models:
+  - name: mart_referral_source_kpis
+    description: >
+      Monthly metrics by OpenDental referral_id and attribution basis. Excludes hidden referrers.
+      Join to dim_referral for display names and is_doctor filters (e.g. all physician referrers).
+      Includes production (completed procedure fees) and net_collections (cash: Income + Refund payment rows
+      in fact_payment) for the reporting month on cohort patients—collections definition matches mart_daily_payments.
+    config:
+      materialized: table
+      schema: marts
+      unique_key:
+        - reporting_month
+        - referral_id
+        - period_basis
+    columns:
+      - name: reporting_month
+        description: First calendar day of the reporting month.
+        tests:
+          - not_null
+      - name: reporting_year
+        description: Calendar year of reporting_month (for slicers and sorts).
+      - name: reporting_month_number
+        description: 1–12 month-of-year of reporting_month.
+      - name: reporting_year_month
+        description: YYYY-MM string for axis labels and exports.
+      - name: referral_id
+        description: Foreign key to dim_referral.
+        tests:
+          - not_null
+          - relationships:
+              to: ref('dim_referral')
+              field: referral_id
+      - name: referral_display_name
+        description: >
+          Denormalized from dim_referral — business name if present, else title + first + last (referring source in OpenDental).
+      - name: referral_last_name
+        description: Referrer last name from dim_referral.
+      - name: referral_first_name
+        description: Referrer first name from dim_referral.
+      - name: referral_middle_name
+        description: Referrer middle name from dim_referral.
+      - name: referral_business_name
+        description: Referrer practice or business name when not_person / org-style entries.
+      - name: referral_title
+        description: Professional title on referral record (e.g. Dr.).
+      - name: referral_national_provider_id
+        description: NPI on referral record when populated.
+      - name: referral_is_doctor
+        description: OpenDental IsDoctor flag on the referral record.
+      - name: referral_not_person
+        description: OpenDental NotPerson flag (organization-style referral vs individual).
+      - name: referral_source_segment
+        description: >
+          Derived bucket for charts: physician_or_clinical | organization | individual
+          (from is_doctor and not_person on dim_referral).
+      - name: period_basis
+        description: >
+          referral_link | new_patient_first_visit | production_in_period — defines how the cohort is built.
+        tests:
+          - not_null
+          - accepted_values:
+              values:
+                - referral_link
+                - new_patient_first_visit
+                - production_in_period
+      - name: period_basis_sort_order
+        description: 1=referral_link, 2=new_patient_first_visit, 3=production_in_period for consistent report ordering.
+      - name: period_basis_description
+        description: Short human-readable definition of the cohort for each period_basis.
+      - name: distinct_patient_count
+        description: Distinct patients in the cohort for that month and basis.
+      - name: production_value_in_period
+        description: >
+          Production (not cash): sum of fact_procedure.actual_fee for procedures in the reporting month
+          for cohort patients; fact includes completed and existing-prior procedures only.
+      - name: net_collections_in_period
+        description: >
+          Cash collections aligned with mart_daily_payments: sum of payment_amount on fact_payment rows
+          in the reporting month where payment_direction is Income or Refund (refunds negative). Excludes
+          Zero-direction rows; Partial/PrePayment/Adjustment types follow fact_payment classifications.
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - reporting_month
+            - referral_id
+            - period_basis
