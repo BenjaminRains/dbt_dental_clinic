@@ -9,8 +9,9 @@ import pandas as pd
 from database import get_db
 from auth.api_key import require_api_key
 from api_types import (
-    RevenueTrend, RevenueKPISummary, ProviderPerformance, 
-    ProviderSummary, ARSummary, DashboardKPIs
+    RevenueTrend, RevenueKPISummary, ProviderPerformance,
+    ProviderSummary, ARSummary, DashboardKPIs,
+    ReferralSourceKPIRow, ReferralSourceMonthlySummary, ReferralSourceSummaryResponse,
 )
 
 router = APIRouter(
@@ -471,3 +472,200 @@ async def get_dashboard_kpis(
         "revenue": revenue_data,
         "providers": provider_data
     }
+
+
+PATIENT_COUNT_NOTE = (
+    "summed_distinct_patient_count is the sum of per-row distinct_patient_count values. "
+    "It is not deduplicated across referral sources (one patient can appear under multiple referrers). "
+    "When referral_id is filtered to a single source, summed counts match that slice only."
+)
+
+_REFERRAL_KPI_SQL_BASE = """
+    FROM marts.mart_referral_source_kpis r
+    WHERE 1=1
+"""
+
+
+def _row_to_referral_kpi(row) -> dict:
+    rm = row.reporting_month
+    return {
+        "reporting_month": rm.isoformat() if hasattr(rm, "isoformat") else str(rm),
+        "reporting_year": int(row.reporting_year),
+        "reporting_month_number": int(row.reporting_month_number),
+        "reporting_year_month": row.reporting_year_month,
+        "referral_id": int(row.referral_id),
+        "referral_display_name": row.referral_display_name or "",
+        "referral_last_name": row.referral_last_name,
+        "referral_first_name": row.referral_first_name,
+        "referral_middle_name": row.referral_middle_name,
+        "referral_business_name": row.referral_business_name,
+        "referral_title": row.referral_title,
+        "referral_national_provider_id": row.referral_national_provider_id,
+        "referral_is_doctor": bool(row.referral_is_doctor),
+        "referral_not_person": bool(row.referral_not_person),
+        "referral_source_segment": row.referral_source_segment or "",
+        "period_basis": row.period_basis,
+        "period_basis_sort_order": int(row.period_basis_sort_order),
+        "period_basis_description": row.period_basis_description or "",
+        "distinct_patient_count": int(row.distinct_patient_count or 0),
+        "production_value_in_period": float(row.production_value_in_period or 0),
+        "net_collections_in_period": float(row.net_collections_in_period or 0),
+    }
+
+
+def _apply_referral_kpi_filters(
+    query: str,
+    params: dict,
+    *,
+    start_month: Optional[date],
+    end_month: Optional[date],
+    period_basis: Optional[str],
+    referral_id: Optional[int],
+    referral_source_segment: Optional[str],
+    referral_search: Optional[str],
+    is_doctor_only: Optional[bool],
+) -> str:
+    if start_month:
+        query += " AND r.reporting_month >= :start_month"
+        params["start_month"] = start_month
+    if end_month:
+        query += " AND r.reporting_month <= :end_month"
+        params["end_month"] = end_month
+    if period_basis:
+        query += " AND r.period_basis = :period_basis"
+        params["period_basis"] = period_basis
+    if referral_id is not None:
+        query += " AND r.referral_id = :referral_id"
+        params["referral_id"] = referral_id
+    if referral_source_segment:
+        query += " AND r.referral_source_segment = :referral_source_segment"
+        params["referral_source_segment"] = referral_source_segment
+    if referral_search:
+        query += " AND r.referral_display_name ILIKE :referral_search"
+        params["referral_search"] = f"%{referral_search}%"
+    if is_doctor_only is True:
+        query += " AND r.referral_is_doctor = true"
+    return query
+
+
+@router.get(
+    "/referrals/kpis",
+    response_model=List[ReferralSourceKPIRow],
+    summary="Referral source KPI detail rows (mart_referral_source_kpis)",
+)
+async def get_referral_source_kpis(
+    start_month: Optional[date] = Query(None, description="Include rows with reporting_month >= this date (first of month)"),
+    end_month: Optional[date] = Query(None, description="Include rows with reporting_month <= this date"),
+    period_basis: Optional[str] = Query(
+        None,
+        description="Filter: referral_link | new_patient_first_visit | production_in_period",
+    ),
+    referral_id: Optional[int] = Query(None),
+    referral_source_segment: Optional[str] = Query(
+        None,
+        description="physician_or_clinical | organization | individual",
+    ),
+    referral_search: Optional[str] = Query(None, description="ILIKE on referral_display_name"),
+    is_doctor_only: Optional[bool] = Query(None, description="If true, only rows where referral_is_doctor"),
+    limit: int = Query(5000, ge=1, le=20000),
+    offset: int = Query(0, ge=0),
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key),
+):
+    """Granular rows from marts.mart_referral_source_kpis for BI tables and exports."""
+    params: dict = {}
+    query = "SELECT r.* " + _REFERRAL_KPI_SQL_BASE
+    query = _apply_referral_kpi_filters(
+        query,
+        params,
+        start_month=start_month,
+        end_month=end_month,
+        period_basis=period_basis,
+        referral_id=referral_id,
+        referral_source_segment=referral_source_segment,
+        referral_search=referral_search,
+        is_doctor_only=is_doctor_only,
+    )
+    query += " ORDER BY r.reporting_month, r.period_basis_sort_order, r.referral_display_name"
+    query += " LIMIT :limit OFFSET :offset"
+    params["limit"] = limit
+    params["offset"] = offset
+
+    result = db.execute(text(query), params).fetchall()
+    return [_row_to_referral_kpi(row) for row in result]
+
+
+@router.get(
+    "/referrals/summary",
+    response_model=ReferralSourceSummaryResponse,
+    summary="Referral KPI monthly summary (safe money sums; patient sum semantics in patient_count_note)",
+)
+async def get_referral_source_summary(
+    start_month: Optional[date] = Query(None),
+    end_month: Optional[date] = Query(None),
+    period_basis: Optional[str] = Query(None),
+    referral_id: Optional[int] = Query(None),
+    referral_source_segment: Optional[str] = Query(None),
+    referral_search: Optional[str] = Query(None),
+    is_doctor_only: Optional[bool] = Query(None),
+    db: Session = Depends(get_db),
+    _api_key: dict = Depends(require_api_key),
+):
+    """
+    Monthly aggregates for charts. total_production_value and total_net_collections are sums of mart values.
+    summed_distinct_patient_count sums row-level counts (not unique patients across referrers unless referral_id is set).
+    """
+    params: dict = {}
+    query = (
+        "SELECT r.reporting_month, r.reporting_year_month, r.period_basis, "
+        "MAX(r.period_basis_sort_order) AS period_basis_sort_order, "
+        "SUM(r.production_value_in_period)::double precision AS total_production_value, "
+        "SUM(r.net_collections_in_period)::double precision AS total_net_collections, "
+        "SUM(r.distinct_patient_count)::bigint AS summed_distinct_patient_count, "
+        "COUNT(*)::integer AS source_row_count "
+        + _REFERRAL_KPI_SQL_BASE.strip()
+    )
+    query = _apply_referral_kpi_filters(
+        query,
+        params,
+        start_month=start_month,
+        end_month=end_month,
+        period_basis=period_basis,
+        referral_id=referral_id,
+        referral_source_segment=referral_source_segment,
+        referral_search=referral_search,
+        is_doctor_only=is_doctor_only,
+    )
+    query += (
+        " GROUP BY r.reporting_month, r.reporting_year_month, r.period_basis "
+        " ORDER BY r.reporting_month, MAX(r.period_basis_sort_order)"
+    )
+
+    rows_out = []
+    result = db.execute(text(query), params).fetchall()
+    trustworthy_patients = referral_id is not None
+
+    for row in result:
+        rm = row.reporting_month
+        rows_out.append(
+            ReferralSourceMonthlySummary(
+                reporting_month=rm.isoformat() if hasattr(rm, "isoformat") else str(rm),
+                reporting_year_month=row.reporting_year_month,
+                period_basis=row.period_basis,
+                period_basis_sort_order=int(row.period_basis_sort_order),
+                total_production_value=float(row.total_production_value or 0),
+                total_net_collections=float(row.total_net_collections or 0),
+                summed_distinct_patient_count=int(row.summed_distinct_patient_count or 0),
+                source_row_count=int(row.source_row_count or 0),
+                patient_counts_are_trustworthy_for_unique_patients=trustworthy_patients,
+            )
+        )
+
+    return ReferralSourceSummaryResponse(
+        rows=rows_out,
+        patient_count_note=PATIENT_COUNT_NOTE + (
+            " Current filters include a single referral_id; row-level patient counts apply to that referrer only."
+            if trustworthy_patients
+            else " Summing patient counts across multiple referrers in a dashboard headline will over-count people."
+        ),
+    )
