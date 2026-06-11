@@ -6,6 +6,7 @@ from fastapi.exceptions import RequestValidationError, HTTPException
 from pydantic import ValidationError
 import logging
 import os
+import re
 import time
 import traceback
 
@@ -25,6 +26,7 @@ logging.basicConfig(level=logging.INFO, format=_log_format, handlers=[_handler],
 
 from routers import patient, reports, appointment, provider, revenue, dbt_metadata, ar, treatment_acceptance, hygiene
 from config import APIConfig
+from cors_runtime import apply_cors_to_response, set_allowed_origins
 from middleware.rate_limit import rate_limit_middleware
 from middleware.request_logger import RequestLoggingMiddleware
 
@@ -76,6 +78,10 @@ def is_running_locally() -> bool:
     #    This is unambiguous - we're on AWS, so we're NOT local.
     hostname = os.getenv("HOSTNAME", "").lower()
     if ".ec2.internal" in hostname:
+        return False
+
+    # 2b. EC2 often sets HOSTNAME to ip-10-* or ip-172-* only (no .ec2.internal in env)
+    if re.match(r"^ip-(10|172|192)-", hostname):
         return False
 
     # 3. Local development indicators
@@ -181,7 +187,10 @@ if api_environment == "demo" and not is_local_dev:
             cors_origins.append(origin)
     cors_origins = sorted(list(set([origin.strip() for origin in cors_origins if origin and origin.strip()])))
     logger.info(f"Final CORS allowed origins after demo check: {cors_origins}")
-elif api_environment == "clinic" and not is_local_dev:
+elif api_environment == "clinic":
+    # Always allow clinic frontend origin when API_ENVIRONMENT=clinic, even if
+    # is_running_locally() misfires on EC2 (e.g. odd hostname); otherwise the browser
+    # gets no Access-Control-Allow-Origin for https://clinic.dbtdentalclinic.com.
     required_origins = ["https://clinic.dbtdentalclinic.com"]
     for origin in required_origins:
         if origin not in cors_origins:
@@ -190,24 +199,23 @@ elif api_environment == "clinic" and not is_local_dev:
     cors_origins = sorted(list(set([origin.strip() for origin in cors_origins if origin and origin.strip()])))
     logger.info(f"Final CORS allowed origins after clinic check: {cors_origins}")
 
-# Add CORS middleware - MUST be added before other middleware
-# In FastAPI, middleware is applied in reverse order, so CORS should be added first
+# Same allowlist for short-circuit responses (e.g. 429) that skip the ASGI CORS layer
+set_allowed_origins(cors_origins)
+
+# Middleware order: last add_middleware() is outermost in Starlette/FastAPI — register CORS last so
+# every response (including errors from inner middleware) gets CORS headers.
+app.add_middleware(RequestLoggingMiddleware)
+app.middleware("http")(rate_limit_middleware)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=cors_origins,  # Use environment-specific origins
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],  # Restrict methods
     allow_headers=["Content-Type", "X-API-Key", "Accept"],  # Explicit headers only
-    expose_headers=["X-RateLimit-Limit-Minute", "X-RateLimit-Remaining-Minute", 
+    expose_headers=["X-RateLimit-Limit-Minute", "X-RateLimit-Remaining-Minute",
                     "X-RateLimit-Limit-Hour", "X-RateLimit-Remaining-Hour"],  # Rate limit headers
     max_age=3600,  # Cache preflight requests
 )
-
-# Add request logging middleware (should be first to log all requests)
-app.add_middleware(RequestLoggingMiddleware)
-
-# Add rate limiting middleware
-app.middleware("http")(rate_limit_middleware)
 
 # Include routers
 app.include_router(patient.router)
@@ -238,7 +246,9 @@ def read_root():
                 "revenue": "/reports/revenue/",
                 "providers": "/reports/providers/",
                 "dashboard": "/reports/dashboard/",
-                "ar": "/reports/ar/"
+                "ar": "/reports/ar/",
+                "referrals": "/reports/referrals/kpis",
+                "referrals_summary": "/reports/referrals/summary",
             },
             "appointments": "/appointments/"
         },
@@ -334,7 +344,7 @@ async def validation_exception_handler(request: Request, exc: ValidationError):
             logger.error(f"  Input value: {first_error['input']} (type: {type(first_error['input']).__name__})")
     
     # Return detailed error response
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "detail": f"Validation error: {exc.errors()[0].get('msg', 'Unknown validation error')}",
@@ -342,6 +352,8 @@ async def validation_exception_handler(request: Request, exc: ValidationError):
             "path": str(request.url.path)
         }
     )
+    apply_cors_to_response(request, response)
+    return response
 
 # Global exception handler for unhandled exceptions (but NOT HTTPException)
 # FastAPI handles HTTPException automatically, so we don't need a custom handler
@@ -364,10 +376,12 @@ async def global_exception_handler(request: Request, exc: Exception):
     logger.error(f"Unhandled exception: {error_type}: {error_msg}", exc_info=True)
     
     # Return JSON error response
-    return JSONResponse(
+    response = JSONResponse(
         status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
         content={
             "detail": f"Internal server error: {error_type}: {error_msg}",
             "error_type": error_type
         }
     )
+    apply_cors_to_response(request, response)
+    return response

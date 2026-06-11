@@ -12,6 +12,8 @@ import logging
 import os
 from pathlib import Path
 
+from cors_runtime import apply_cors_to_response
+
 # Set up detailed logging to file (lazy initialization)
 # Use a unique logger name to avoid conflicts
 _logger_initialized = False
@@ -348,6 +350,7 @@ async def rate_limit_middleware(request: Request, call_next):
         response.headers["X-RateLimit-Remaining-Minute"] = "0"
         response.headers["X-RateLimit-Limit-Hour"] = str(rate_limiter.requests_per_hour)
         response.headers["X-RateLimit-Remaining-Hour"] = str(hour_remaining)
+        apply_cors_to_response(request, response)
         logger.debug(
             f"[MIDDLEWARE] Response | "
             f"IP={client_ip} | "
