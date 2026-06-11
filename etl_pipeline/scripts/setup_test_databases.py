@@ -30,7 +30,9 @@ import sys
 import logging
 import subprocess
 import platform
+import re
 from sqlalchemy import create_engine, text
+from sqlalchemy.engine import URL
 from datetime import datetime, date
 from dotenv import load_dotenv
 from pathlib import Path
@@ -191,6 +193,100 @@ def ping_mysql_server(host, port):
     except Exception as e:
         logger.error(f"Error pinging MySQL server host {host}: {e}")
         return False
+
+def _require_safe_test_db_name(db_name):
+    """
+    Hard safety guard before any CREATE DATABASE.
+
+    The live OpenDental source database is named 'opendental' and lives on the SAME host as the
+    test source. This function refuses to create any database whose name does not contain 'test'
+    or that contains characters outside [A-Za-z0-9_], so we can never create/select 'opendental'
+    and the name is safe to interpolate as an identifier.
+    """
+    if not db_name or 'test' not in db_name.lower():
+        logger.error(f"SAFETY ABORT: refusing to create a database without 'test' in its name: '{db_name}'")
+        sys.exit(1)
+    if not re.fullmatch(r'[A-Za-z0-9_]+', db_name):
+        logger.error(f"SAFETY ABORT: unsafe database identifier '{db_name}' (allowed: letters, digits, underscore)")
+        sys.exit(1)
+
+def ensure_mysql_database(host, port, user, password, db_name):
+    """Create a MySQL test database if it does not already exist. Never drops anything."""
+    _require_safe_test_db_name(db_name)
+    # Connect to the SERVER (no database selected) so we can check/create the target db.
+    server_url = URL.create("mysql+pymysql", username=user, password=password, host=host, port=int(port))
+    engine = create_engine(server_url)
+    try:
+        with engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = :n"),
+                {"n": db_name},
+            ).fetchone()
+            if exists:
+                logger.info(f"MySQL database already exists (leaving as-is): {db_name} on {host}:{port}")
+                return
+            conn.execute(text(f"CREATE DATABASE `{db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"))
+            conn.commit()
+            logger.info(f"Created MySQL database: {db_name} on {host}:{port}")
+    finally:
+        engine.dispose()
+
+def ensure_postgres_database(host, port, user, password, db_name, maintenance_db="postgres"):
+    """Create a PostgreSQL test database if it does not already exist. Never drops anything."""
+    _require_safe_test_db_name(db_name)
+    # CREATE DATABASE cannot run inside a transaction, so use an AUTOCOMMIT connection to a
+    # maintenance database (default 'postgres') to check/create the target db.
+    url = URL.create(
+        "postgresql+psycopg2", username=user, password=password,
+        host=host, port=int(port), database=maintenance_db,
+    )
+    engine = create_engine(url, isolation_level="AUTOCOMMIT")
+    try:
+        with engine.connect() as conn:
+            exists = conn.execute(
+                text("SELECT 1 FROM pg_database WHERE datname = :n"), {"n": db_name}
+            ).fetchone()
+            if exists:
+                logger.info(f"PostgreSQL database already exists (leaving as-is): {db_name} on {host}:{port}")
+                return
+            conn.execute(text(f'CREATE DATABASE "{db_name}"'))
+            logger.info(f"Created PostgreSQL database: {db_name} on {host}:{port}")
+    finally:
+        engine.dispose()
+
+def ensure_test_databases_exist():
+    """
+    Create any missing test databases (source, replication, analytics) before tables are built.
+
+    Only databases whose names contain 'test' are ever created (validate_database_names() has
+    already enforced this for all three). The live 'opendental' database is never created,
+    dropped, or selected here.
+    """
+    logger.info("Ensuring test databases exist (creating only those that are missing)...")
+
+    ensure_mysql_database(
+        os.environ.get('TEST_OPENDENTAL_SOURCE_HOST'),
+        os.environ.get('TEST_OPENDENTAL_SOURCE_PORT'),
+        os.environ.get('TEST_OPENDENTAL_SOURCE_USER'),
+        os.environ.get('TEST_OPENDENTAL_SOURCE_PASSWORD'),
+        os.environ.get('TEST_OPENDENTAL_SOURCE_DB'),
+    )
+    ensure_mysql_database(
+        os.environ.get('TEST_MYSQL_REPLICATION_HOST'),
+        os.environ.get('TEST_MYSQL_REPLICATION_PORT'),
+        os.environ.get('TEST_MYSQL_REPLICATION_USER'),
+        os.environ.get('TEST_MYSQL_REPLICATION_PASSWORD'),
+        os.environ.get('TEST_MYSQL_REPLICATION_DB'),
+    )
+    ensure_postgres_database(
+        os.environ.get('TEST_POSTGRES_ANALYTICS_HOST'),
+        os.environ.get('TEST_POSTGRES_ANALYTICS_PORT'),
+        os.environ.get('TEST_POSTGRES_ANALYTICS_USER'),
+        os.environ.get('TEST_POSTGRES_ANALYTICS_PASSWORD'),
+        os.environ.get('TEST_POSTGRES_ANALYTICS_DB'),
+    )
+
+    logger.info("Test database existence check complete.")
 
 def setup_postgresql_test_database():
     """Set up PostgreSQL test analytics database using new ConnectionFactory."""
@@ -681,6 +777,10 @@ def main():
         if not ping_mysql_server(replication_host, replication_port):
             logger.error(f"MySQL replication server ping failed at {replication_host}:{replication_port}. Cannot proceed with database setup.")
             sys.exit(1)
+
+        # Ensure the test databases themselves exist (create only those missing).
+        # Every name is guarded to contain 'test'; the live 'opendental' DB is never created or touched.
+        ensure_test_databases_exist()
 
         # Set up MySQL test source database with test data
         logger.info("Setting up SOURCE database (test_opendental) with test data...")
