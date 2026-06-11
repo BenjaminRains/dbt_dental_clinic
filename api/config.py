@@ -109,16 +109,36 @@ class APIConfig:
         return environment
     
     def _load_environment_file(self):
-        """Load API-specific environment file."""
+        """Load API-specific environment file.
+
+        One source of truth per context (see ENVIRONMENT_HANDLING_REVIEW.md, Phase 0):
+        if the OS process environment already supplies the analytics DB config (systemd
+        EnvironmentFile=api/.env on EC2, Docker env, or vars exported by
+        environment_manager.ps1), that environment is authoritative and we do NOT read a
+        second on-disk .env_api_* file that could shadow it with stale values. The
+        .env_api_<stage> file is the source only for local/dev contexts where nothing has
+        pre-populated the environment.
+        """
+        # If the env is already populated (e.g. systemd .env on EC2), it wins — skip the file.
+        host_var = self.ENV_MAPPINGS[self.environment][DatabaseType.ANALYTICS.value]['host']
+        if os.getenv(host_var):
+            logger.info(
+                f"Analytics DB config already present in OS environment ({host_var} set); "
+                f"skipping on-disk .env_api_{self.environment} so it cannot shadow it."
+            )
+            return
+
         # Look for .env files in the api/ directory (where this file is located)
         current_dir = Path(__file__).parent  # api directory
-        
+
         # Use API-specific .env files from api/ directory
         env_file = current_dir / f".env_api_{self.environment}"
-        
+
         if env_file.exists():
-            load_dotenv(env_file, override=True)
-            logger.info(f"Loaded API environment variables from: {env_file}")
+            # Local/dev context: OS env was not pre-populated, so load from the stage file.
+            # override=False keeps OS env authoritative for any individual var that IS set.
+            load_dotenv(env_file, override=False)
+            logger.info(f"Loaded API environment variables from: {env_file} (does not override existing env)")
         else:
             logger.warning(f"API environment file not found: {env_file}")
             logger.info("Using environment variables from system/os.environ")
