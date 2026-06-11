@@ -126,6 +126,9 @@ reference/
 # Incident investigation working dir (source error logs, internal IPs, ad-hoc scripts)
 scripts/investigation/
 
+# VPN diagnostic (hardcodes clinic internal subnets / network topology)
+scripts/utils/WIREGUARD_WINDOWS_CHECK.ps1
+
 # Personal career / interview prep notes (relocated out of docs/)
 career/
 
