@@ -9,6 +9,7 @@ import os
 import logging
 from typing import Dict, Optional
 from pathlib import Path
+from urllib.parse import quote
 from enum import Enum
 from dotenv import load_dotenv
 
@@ -196,13 +197,29 @@ class APIConfig:
         return config
     
     def get_database_url(self, db_type: DatabaseType = DatabaseType.ANALYTICS) -> str:
-        """Get database URL for specified type."""
+        """Get database URL for specified type.
+
+        Appends sslmode query param: AWS RDS endpoints require TLS (sslmode=require).
+        Override with POSTGRES_ANALYTICS_SSLMODE (e.g. disable, prefer, require, verify-full).
+        """
         config = self.get_database_config(db_type)
-        
-        return (
-            f"postgresql://{config['user']}:{config['password']}"
+        host = (config["host"] or "").lower()
+        # Percent-encode user/password so :, @, <, >, etc. do not break URL parsing (common with RDS passwords)
+        user_enc = quote(str(config["user"]), safe="")
+        password_enc = quote(str(config["password"]), safe="")
+        url = (
+            f"postgresql://{user_enc}:{password_enc}"
             f"@{config['host']}:{config['port']}/{config['database']}"
         )
+        explicit = os.getenv("POSTGRES_ANALYTICS_SSLMODE", "").strip()
+        if explicit:
+            sslmode = explicit
+        elif "rds.amazonaws.com" in host:
+            sslmode = "require"
+        else:
+            sslmode = "prefer"
+        sep = "&" if "?" in url else "?"
+        return f"{url}{sep}sslmode={sslmode}"
     
     def get_api_setting(self, key: str, default=None):
         """Get API-specific setting with dot notation."""
