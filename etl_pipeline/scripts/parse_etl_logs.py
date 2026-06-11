@@ -282,8 +282,11 @@ class ETLLogParser:
         ]
         if any(ind in msg for ind in error_indicators):
             return True
-        # MySQL error codes: match as whole words so "1062437" doesn't match "1062"
-        if re.search(r'\b1064\b', msg) or re.search(r'\b1062\b', msg):
+        # MySQL error codes: match as whole words so "1062437" doesn't match "1062".
+        # Exclude throughput text like "1062 rows/sec" (false positive vs duplicate-key 1062).
+        if re.search(r'\b1064\b(?!\s+rows/sec)', msg) or re.search(
+            r'\b1062\b(?!\s+rows/sec)', msg
+        ):
             return True
         return False
     
