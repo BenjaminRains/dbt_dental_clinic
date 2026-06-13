@@ -1219,3 +1219,60 @@ exposures:
         - Responsive grid layout for multi-device access
       - Performance: Parallel API calls for optimized loading, paginated table for large datasets
 
+  # ============================================================================
+  # BI TOOL CONNECTIONS
+  # ============================================================================
+
+  - name: power_bi_executive_pilot
+    label: "Power BI - Dental Executive Pilot"
+    type: dashboard
+    maturity: medium
+    owner:
+      name: Data Engineering & Analytics
+      email: analytics@dentalclinic.com
+
+    depends_on:
+      - ref('mart_revenue_lost')
+      - ref('mart_provider_performance')
+      - ref('dim_provider')
+      - ref('dim_date')
+
+    url: https://github.com/your-org/dbt_dental_clinic/tree/main/powerbi
+
+    description: >
+      **Power BI Executive Pilot - Revenue Lost & Provider Performance**
+
+      Power BI Desktop implementation of the executive KPI slice, mirroring the
+      `executive_dashboard` exposure (same KPIs as the React dashboard, rendered
+      through a Power BI star model with DAX measures).
+
+      ## Data Model:
+      - Facts: `mart_revenue_lost` (grain: lost-revenue opportunity),
+        `mart_provider_performance` (grain: provider per production day)
+      - Dimensions: `dim_provider`, `dim_date` (marked as Power BI date table)
+      - Relationships: many-to-one from each fact to each dimension on
+        `provider_id` and `date_id`; single-direction cross filtering
+
+      ## Key Measures (DAX):
+      - Total Production / Total Collections / Collection Rate
+      - Revenue Lost / Recovery Potential / Recovery Rate
+      - Active Providers, time intelligence (MTD, YoY, rolling 30 days)
+
+      ## Connection:
+      - Local development: PostgreSQL `localhost:5432/opendental_analytics`,
+        read-only `bi_user` (SELECT on the four pilot tables only), Import mode
+      - Deployed design: private Aurora PostgreSQL via on-premises data gateway
+        (see docs/analytics/power_bi_postgresql_access.md)
+
+      ## Artifacts:
+      - powerbi/README.md - setup and connection guide
+      - powerbi/model_guide.md - grains, relationships, model settings
+      - powerbi/measures.dax - measure definitions
+      - powerbi/report_checklist.md - report layout and QA checks
+      - PBIP project committed under powerbi/ once authored
+
+      ## Data Refresh:
+      - Import-mode dataset; refresh manually in Desktop after dbt runs
+      - Note: mart rebuilds drop per-table grants; re-run the bi_user GRANT
+        statements after dbt runs (docs/analytics/sql/bi_user_marts_grants.sql)
+

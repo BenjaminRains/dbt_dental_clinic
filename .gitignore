@@ -116,8 +116,17 @@ deployment/scripts/*.md
 
 !deployment/scripts/README_ENVIRONMENT_SETUP.md
 
-# Documentation with sensitive business info
+# Documentation with sensitive business info.
+# Root docs/ is ignored except whitelisted analytics runbooks (Power BI pilot).
 docs/
+!/docs/
+/docs/*
+!/docs/analytics/
+!/docs/analytics/power_bi_postgresql_access.md
+!/docs/analytics/power_bi_pilot_dataset.md
+!/docs/analytics/BI_TOOLS_DEVELOPMENT_PLAN.md
+!/docs/analytics/sql/
+!/docs/analytics/sql/bi_user_marts_grants.sql
 etl_pipeline/docs/
 
 # Vendor reference material (OpenDental manual mirror, etc.)
@@ -185,6 +194,11 @@ consult_audio_pipe/whisper_env/
 consult_audio_pipe/api_debug_responses/
 consult_audio_pipe/progress.log
 consult_audio_pipe/dental_consultation_pipeline.egg-info/
+
+# Power BI (PBIP) - user-specific cache and local settings; TMDL/JSON sources are committed
+powerbi/**/.pbi/localSettings.json
+powerbi/**/.pbi/cache.abf
+powerbi/**/.pbi/unappliedChanges.json
 
 # Consult Audio Pipeline - PII files (documents, audio, transcripts)
 consult_audio_pipe/**/*.md

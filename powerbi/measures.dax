@@ -1,0 +1,86 @@
+// Starter DAX measures for the Dental Executive Pilot.
+// Create a measure table (Home > Enter data > name it "_Measures") or attach these to
+// the fact tables. Definitions align with the executive_dashboard dbt exposure.
+// Requires dim_date marked as the model date table (see model_guide.md).
+
+// ---------------------------------------------------------------------------
+// Production & collections (mart_provider_performance)
+// ---------------------------------------------------------------------------
+
+Total Production =
+SUM ( mart_provider_performance[total_production] )
+// Format: currency, 0 decimals
+
+Total Collections =
+SUM ( mart_provider_performance[total_collections] )
+// Format: currency, 0 decimals
+
+Collection Rate =
+DIVIDE ( [Total Collections], [Total Production] )
+// Format: percentage, 1 decimal
+
+Active Providers =
+CALCULATE (
+    DISTINCTCOUNT ( mart_provider_performance[provider_id] ),
+    mart_provider_performance[total_scheduled_appointments] > 0
+)
+// Providers with scheduled appointments in the filter context
+// (matches the exposure's "Active Providers" definition)
+
+Completed Appointments =
+SUM ( mart_provider_performance[total_completed_appointments] )
+
+No-Show Rate =
+AVERAGE ( mart_provider_performance[daily_no_show_rate] )
+// Format: percentage. Simple average of daily rates; switch to a weighted
+// version (missed / scheduled) if you need appointment-weighted accuracy:
+// DIVIDE ( SUM ( mart_provider_performance[total_missed_appointments] ),
+//          SUM ( mart_provider_performance[total_scheduled_appointments] ) )
+
+// ---------------------------------------------------------------------------
+// Revenue lost & recovery (mart_revenue_lost)
+// ---------------------------------------------------------------------------
+
+Revenue Lost =
+SUM ( mart_revenue_lost[lost_revenue] )
+// Format: currency, 0 decimals
+
+Recovery Potential Amt =
+SUM ( mart_revenue_lost[estimated_recoverable_amount] )
+// Note: the column recovery_potential is a TEXT bucket; the dollar metric is
+// estimated_recoverable_amount. Format: currency, 0 decimals
+
+Recovery Rate =
+DIVIDE ( [Recovery Potential Amt], [Revenue Lost] )
+// Format: percentage, 1 decimal
+
+Lost Opportunities =
+COUNTROWS ( mart_revenue_lost )
+
+Recoverable Opportunities =
+CALCULATE ( [Lost Opportunities], mart_revenue_lost[recoverable] = TRUE () )
+
+Lost Time (Hours) =
+DIVIDE ( SUM ( mart_revenue_lost[lost_time_minutes] ), 60 )
+// Format: decimal, 1 decimal
+
+// ---------------------------------------------------------------------------
+// Time intelligence (requires dim_date marked as date table)
+// ---------------------------------------------------------------------------
+
+Production MTD =
+TOTALMTD ( [Total Production], dim_date[date_id] )
+
+Production PY =
+CALCULATE ( [Total Production], SAMEPERIODLASTYEAR ( dim_date[date_id] ) )
+
+Production YoY % =
+DIVIDE ( [Total Production] - [Production PY], [Production PY] )
+// Format: percentage, 1 decimal
+
+Revenue Lost Rolling 30D =
+CALCULATE (
+    [Revenue Lost],
+    DATESINPERIOD ( dim_date[date_id], MAX ( dim_date[date_id] ), -30, DAY )
+)
+// Mirrors the exposure's 30-day revenue-lost trend window
