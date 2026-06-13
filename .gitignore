@@ -117,16 +117,10 @@ deployment/scripts/*.md
 !deployment/scripts/README_ENVIRONMENT_SETUP.md
 
 # Documentation with sensitive business info.
-# Root docs/ is ignored except whitelisted analytics runbooks (Power BI pilot).
 docs/
 !/docs/
 /docs/*
-!/docs/analytics/
-!/docs/analytics/power_bi_postgresql_access.md
-!/docs/analytics/power_bi_pilot_dataset.md
-!/docs/analytics/BI_TOOLS_DEVELOPMENT_PLAN.md
-!/docs/analytics/sql/
-!/docs/analytics/sql/bi_user_marts_grants.sql
+/docs/analytics/
 etl_pipeline/docs/
 
 # Vendor reference material (OpenDental manual mirror, etc.)
