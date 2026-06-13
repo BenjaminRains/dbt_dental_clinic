@@ -1,0 +1,89 @@
+# dbt connection contract for dbt_dental_models.
+#
+# Setup: copy this file to profiles.yml in this directory (profiles.yml is
+# gitignored) and ensure the POSTGRES_ANALYTICS_* / DEMO_POSTGRES_* environment
+# variables are set (e.g. via scripts/environment_manager.ps1 `dbt-init`, which
+# loads them from etl_pipeline/.env_<stage>).
+#
+#   cp profiles.yml.template profiles.yml
+#
+# Select the target with DBT_TARGET (local | demo | clinic), or pass
+# `--target <stage>` on the dbt CLI. All credentials come from env_var() —
+# never hardcode secrets in profiles.yml.
+#
+# Unified stage vocabulary across subprojects: local | test | demo | clinic.
+# dbt has no `test` target (ETL/API integration tests own the test databases),
+# and ETL has no `demo` stage (demo data comes from the synthetic generator).
+dbt_dental_models:
+  target: "{{ env_var('DBT_TARGET', 'local') }}"
+  outputs:
+    local:
+      type: postgres
+      host: "{{ env_var('POSTGRES_ANALYTICS_HOST', 'localhost') }}"
+      port: "{{ env_var('POSTGRES_ANALYTICS_PORT', '5432') | as_number }}"
+      database: "{{ env_var('POSTGRES_ANALYTICS_DB', 'opendental_analytics') }}"
+      # Target schema - used as default for models without custom schema
+      # Custom schemas (staging, int, marts) are handled by generate_schema_name macro
+      # which prevents prefixing (no raw_staging, raw_int, raw_marts)
+      schema: "{{ env_var('POSTGRES_ANALYTICS_SCHEMA', 'dbt') }}"
+      user: "{{ env_var('POSTGRES_ANALYTICS_USER', 'analytics_user') }}"
+      password: "{{ env_var('POSTGRES_ANALYTICS_PASSWORD') }}"
+      # PostgreSQL specific settings
+      search_path: "$user, raw, staging, intermediate, marts, dbt_test__audit"
+      keepalives_idle: 0
+      connect_timeout: 10
+      retries: 3
+      quote_columns: true
+      # SSL/TLS settings for database connections
+      # 'prefer' uses SSL if available, but allows non-SSL for localhost connections
+      sslmode: "{{ env_var('POSTGRES_ANALYTICS_SSLMODE', 'prefer') }}"
+      # Locale settings
+      client_encoding: UTF8
+      lc_collate: "en-US"
+      lc_ctype: "en-US"
+      threads: 4
+    clinic:
+      type: postgres
+      host: "{{ env_var('POSTGRES_ANALYTICS_HOST') }}"
+      port: "{{ env_var('POSTGRES_ANALYTICS_PORT', '5432') | as_number }}"
+      database: "{{ env_var('POSTGRES_ANALYTICS_DB', 'opendental_analytics') }}"
+      # Target schema - used as default for models without custom schema
+      # Custom schemas (staging, int, marts) are handled by generate_schema_name macro
+      # which prevents prefixing (no raw_staging, raw_int, raw_marts)
+      schema: "{{ env_var('POSTGRES_ANALYTICS_SCHEMA', 'dbt') }}"
+      user: "{{ env_var('POSTGRES_ANALYTICS_USER', 'analytics_user') }}"
+      password: "{{ env_var('POSTGRES_ANALYTICS_PASSWORD') }}"
+      # PostgreSQL specific settings
+      search_path: "$user, raw, staging, intermediate, marts, dbt_test__audit"
+      keepalives_idle: 0
+      connect_timeout: 10
+      retries: 3
+      quote_columns: true
+      # SSL/TLS settings for database connections
+      # 'require' enforces SSL for AWS RDS/production connections
+      sslmode: "{{ env_var('POSTGRES_ANALYTICS_SSLMODE', 'require') }}"
+      # Locale settings
+      client_encoding: UTF8
+      lc_collate: "en-US"
+      lc_ctype: "en-US"
+      threads: 4
+    demo:
+      type: postgres
+      host: "{{ env_var('DEMO_POSTGRES_HOST', 'localhost') }}"
+      port: "{{ env_var('DEMO_POSTGRES_PORT', '5432') | as_number }}"
+      database: "{{ env_var('DEMO_POSTGRES_DB', 'opendental_demo') }}"
+      # Target schema - custom schemas handled by generate_schema_name macro
+      schema: "{{ env_var('DEMO_POSTGRES_SCHEMA', 'dbt') }}"
+      user: "{{ env_var('DEMO_POSTGRES_USER', 'opendental_demo_user') }}"
+      password: "{{ env_var('DEMO_POSTGRES_PASSWORD', '') }}"
+      # PostgreSQL specific settings
+      search_path: "$user, raw, staging, intermediate, marts, dbt_test__audit"
+      keepalives_idle: 0
+      connect_timeout: 10
+      retries: 3
+      quote_columns: true
+      # Locale settings
+      client_encoding: UTF8
+      lc_collate: "en-US"
+      lc_ctype: "en-US"
+      threads: 4 
