@@ -6,6 +6,13 @@ Tests:
 1. Stage env files exist under api/ (not repo root)
 2. APIConfig loads and validates for the current API_ENVIRONMENT
 3. Phase 0 precedence: OS env wins over on-disk .env_api_*; file loads when host var unset
+
+Usage:
+    python test_config.py              # env file inventory only if API_ENVIRONMENT unset
+    python test_config.py local        # full tests for stage (no api-init required)
+    python test_config.py --stage test
+
+After api-init, API_ENVIRONMENT is already set — run with no arguments.
 """
 
 import os
@@ -26,13 +33,46 @@ HOST_VARS = {
 }
 
 
+def parse_stage_arg() -> str | None:
+    """Optional stage from CLI: test_config.py [local] or --stage local."""
+    args = [a for a in sys.argv[1:] if a and not a.startswith("-")]
+    for i, arg in enumerate(sys.argv[1:]):
+        if arg in ("--stage", "-s") and i + 2 <= len(sys.argv[1:]):
+            candidate = sys.argv[i + 2]
+            if candidate in STAGES:
+                return candidate
+        if arg.startswith("--stage="):
+            candidate = arg.split("=", 1)[1].strip()
+            if candidate in STAGES:
+                return candidate
+    if len(args) == 1 and args[0] in STAGES:
+        return args[0]
+    return None
+
+
+def ensure_api_environment(cli_stage: str | None) -> tuple[bool, bool]:
+    """
+    Resolve API_ENVIRONMENT for tests.
+
+    Returns (ready_for_full_tests, stage_was_set_by_this_script).
+    """
+    if os.getenv("API_ENVIRONMENT") in STAGES:
+        return True, False
+
+    if cli_stage:
+        os.environ["API_ENVIRONMENT"] = cli_stage
+        print(f"Using stage from argument: API_ENVIRONMENT={cli_stage}")
+        return True, True
+
+    return False, False
+
+
 def test_environment_files() -> bool:
     """Check api/.env_api_* files (and templates where committed)."""
     print("\n" + "=" * 60)
     print("ENVIRONMENT FILES CHECK (api/)")
     print("=" * 60)
 
-    ok = True
     for stage in STAGES:
         env_path = api_dir / f".env_api_{stage}"
         template_path = api_dir / f".env_api_{stage}.template"
@@ -43,7 +83,7 @@ def test_environment_files() -> bool:
         if template_path.exists():
             print(f"  template: api/.env_api_{stage}.template")
 
-    return ok
+    return True
 
 
 def test_api_config() -> bool:
@@ -88,9 +128,9 @@ def test_api_config() -> bool:
     except Exception as e:
         print(f"\nFAIL: API CONFIGURATION TEST: {e}")
         print("\nTroubleshooting:")
-        print("1. Set API_ENVIRONMENT to test, demo, clinic, or local (e.g. api-init)")
+        print("1. Run api-init, or pass a stage: python test_config.py local")
         print("2. Create api/.env_api_<stage> from the matching template")
-        print("3. Ensure required vars are set in that file or exported in the shell")
+        print("3. Ensure required vars are set in that file")
         return False
 
 
@@ -108,7 +148,7 @@ def test_env_precedence() -> bool:
 
     stage = os.getenv("API_ENVIRONMENT")
     if not stage or stage not in HOST_VARS:
-        print("SKIP Part 1 — set API_ENVIRONMENT (test/demo/clinic/local) first")
+        print("SKIP — API_ENVIRONMENT not set")
         return True
 
     host_var = HOST_VARS[stage]
@@ -121,7 +161,6 @@ def test_env_precedence() -> bool:
     print(f"   Env file: {env_file}")
 
     try:
-        # Part 1: OS env wins — config skips loading the file when host is already set
         os.environ[host_var] = bogus
         reset_config()
         host = APIConfig().get_database_config(DatabaseType.ANALYTICS)["host"]
@@ -130,7 +169,6 @@ def test_env_precedence() -> bool:
             return False
         print(f"OK Part 1: OS env wins ({host_var}={bogus!r})")
 
-        # Part 2: unset host → load from file (when file exists and defines host)
         os.environ.pop(host_var, None)
         reset_config()
         host = APIConfig().get_database_config(DatabaseType.ANALYTICS)["host"]
@@ -167,10 +205,30 @@ def test_env_precedence() -> bool:
         reset_config()
 
 
+def print_usage_hint() -> None:
+    print("\n" + "-" * 60)
+    print("Config/precedence tests skipped - API_ENVIRONMENT is not set.")
+    print("Either:")
+    print("  - Run api-init (then api-run / re-run this script), or")
+    print("  - Pass a stage (no api-init needed):")
+    print("      python test_config.py local")
+    print("      python test_config.py --stage test")
+    print("-" * 60)
+
+
 if __name__ == "__main__":
     print("Testing API Environment Configuration...")
 
+    cli_stage = parse_stage_arg()
+    ready, _ = ensure_api_environment(cli_stage)
+
     test_environment_files()
+
+    if not ready:
+        print_usage_hint()
+        print("\nEnv file inventory complete.")
+        sys.exit(0)
+
     config_ok = test_api_config()
     precedence_ok = test_env_precedence()
 
