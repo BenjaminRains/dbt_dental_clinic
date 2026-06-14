@@ -9,10 +9,62 @@
 # Project root (set when script loads so Deploy-ClinicFrontend etc. find api/.env and credentials from any cwd)
 $script:EnvManagerScriptRoot = $PSScriptRoot
 
+function Sync-EnvironmentManagerScript {
+    param([switch]$Quiet)
+
+    $scriptFile = Join-Path $script:EnvManagerScriptRoot "environment_manager.ps1"
+    if (-not (Test-Path $scriptFile)) { return $false }
+
+    $ticks = (Get-Item $scriptFile).LastWriteTimeUtc.Ticks
+    if ($null -ne $script:EnvManagerFileTicks -and $script:EnvManagerFileTicks -eq $ticks) {
+        return $false
+    }
+
+    if (-not $Quiet) {
+        Write-Host "🔄 Reloading scripts/environment_manager.ps1 (file changed on disk)..." -ForegroundColor DarkCyan
+    }
+
+    $savedState = @{
+        IsDBTActive = $script:IsDBTActive
+        IsETLActive = $script:IsETLActive
+        IsAPIActive = $script:IsAPIActive
+        APIStage = $script:APIStage
+        IsConsultAudioActive = $script:IsConsultAudioActive
+        ActiveProject = $script:ActiveProject
+        VenvPath = $script:VenvPath
+        APIInstanceId = $script:APIInstanceId
+        ClinicAPIInstanceId = $script:ClinicAPIInstanceId
+        DemoDBInstanceId = $script:DemoDBInstanceId
+        RDSEndpoint = $script:RDSEndpoint
+        DemoDBHost = $script:DemoDBHost
+        DemoDBPort = $script:DemoDBPort
+    }
+
+    $env:ENV_MANAGER_QUIET_RELOAD = "1"
+    try {
+        . $scriptFile
+    } finally {
+        Remove-Item Env:ENV_MANAGER_QUIET_RELOAD -ErrorAction SilentlyContinue
+    }
+
+    foreach ($key in $savedState.Keys) {
+        Set-Variable -Scope Script -Name $key -Value $savedState[$key]
+    }
+
+    return $true
+}
+
+function Reload-EnvironmentManager {
+    $script:EnvManagerFileTicks = $null
+    Sync-EnvironmentManagerScript | Out-Null
+    Write-Host "✅ Environment manager reloaded from disk." -ForegroundColor Green
+}
+
 # Environment state tracking
 $script:IsDBTActive = $false
 $script:IsETLActive = $false
 $script:IsAPIActive = $false
+$script:APIStage = $null
 $script:IsConsultAudioActive = $false
 $script:ActiveProject = $null
 $script:VenvPath = $null
@@ -664,6 +716,11 @@ function Stop-ETLEnvironment {
 function Initialize-APIEnvironment {
     param([string]$ProjectPath = (Get-Location))
 
+    if (Sync-EnvironmentManagerScript -Quiet) {
+        Initialize-APIEnvironment -ProjectPath $ProjectPath
+        return
+    }
+
     if ($script:IsAPIActive) {
         Write-Host "❌ API environment already active. Use 'api-deactivate' first." -ForegroundColor Yellow
         return
@@ -686,8 +743,8 @@ function Initialize-APIEnvironment {
 
     $projectName = Split-Path -Leaf $ProjectPath
     Write-Host "`n🌐 Initializing API environment: $projectName" -ForegroundColor Blue
-    Write-Host "📍 This sets up LOCAL API development (runs API on your machine)" -ForegroundColor Cyan
-    Write-Host "   To connect to REMOTE EC2 instance, use 'aws-ssm-init' + 'ssm-connect-api'" -ForegroundColor Gray
+    Write-Host "📍 Runs uvicorn on this machine (choose which config file to load)" -ForegroundColor Cyan
+    Write-Host "   Remote EC2 shells: demo → ssm-connect-api | clinic → ssm-connect-clinic-api" -ForegroundColor Gray
 
     # Check for API project structure
     $apiPath = "$ProjectPath\api"
@@ -698,11 +755,18 @@ function Initialize-APIEnvironment {
     }
 
     # Interactive Environment Selection first (cancel = no venv, no install, no env vars)
-    Write-Host "`n🔧 API Environment Selection (LOCAL Development)" -ForegroundColor Cyan
-    Write-Host "Which environment would you like to use for LOCAL API development?" -ForegroundColor White
+    Write-Host "`n🔧 API environment selection" -ForegroundColor Cyan
+    Write-Host "Which config should load into this shell? (API_ENVIRONMENT + api/.env_api_*)" -ForegroundColor White
     Write-Host ""
     Write-Host "  Type 'local' for Local Development (.env_api_local)" -ForegroundColor Yellow
-    Write-Host "    → opendental_analytics on localhost (PHI - real clinic data)" -ForegroundColor Gray
+    Write-Host "    → opendental_analytics (PHI) — typically localhost Postgres" -ForegroundColor Gray
+    Write-Host "    → API key from .ssh/dbt-dental-clinic-api-key.pem (local dev default)" -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "  Type 'clinic' for Clinic API config (.env_api_clinic)" -ForegroundColor Yellow
+    Write-Host "    → Same database as api-clinic.dbtdentalclinic.com (opendental_analytics on RDS, PHI)" -ForegroundColor Gray
+    Write-Host "    → Uses CLINIC_API_KEY and clinic CORS — mirrors production clinic API settings" -ForegroundColor Gray
+    Write-Host "    → If RDS is not reachable, run 'ssm-port-forward-rds-clinic' first (via dental-clinic-api-clinic)" -ForegroundColor Gray
+    Write-Host "    → Deploy to EC2: copy this file to api/.env on the clinic instance (see api/README.md)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Type 'demo' for Demo API (.env_api_demo)" -ForegroundColor Yellow
     Write-Host "    → opendental_demo (synthetic data - safe for local testing)" -ForegroundColor Gray
@@ -715,8 +779,8 @@ function Initialize-APIEnvironment {
     Write-Host ""
     Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
     Write-Host ""
-    Write-Host "💡 Note: This runs the API LOCALLY on your machine." -ForegroundColor Cyan
-    Write-Host "   To connect to the REMOTE EC2 instance, use 'aws-ssm-init' + 'ssm-connect-api'" -ForegroundColor Gray
+    Write-Host "💡 Note: api-init runs uvicorn on YOUR machine. It does not SSH to EC2." -ForegroundColor Cyan
+    Write-Host "   Remote shells: ssm-connect-api (demo) or ssm-connect-clinic-api (clinic)" -ForegroundColor Gray
     
     do {
         $choice = Read-Host "`nEnter environment (local/demo/clinic/test/cancel)"
@@ -816,16 +880,39 @@ function Initialize-APIEnvironment {
         return
     }
 
+    # User's menu choice is the source of truth (same pattern as etl-init)
+    [Environment]::SetEnvironmentVariable('API_ENVIRONMENT', $choice, 'Process')
+    Write-Host "  Set: API_ENVIRONMENT=$choice" -ForegroundColor Gray
+
     $script:IsAPIActive = $true
+    $script:APIStage = $choice
     $script:ActiveProject = $projectName
 
-    Write-Host "`n✅ API environment ready (LOCAL development)!" -ForegroundColor Green
-    Write-Host "Commands: api, api-test, api-docs, api-run" -ForegroundColor Cyan
-    Write-Host "  • api-run - Start API server locally on your machine" -ForegroundColor Gray
+    $stageSummary = switch ($choice) {
+        "clinic" { "Clinic API config — same settings as api-clinic.dbtdentalclinic.com (PHI on RDS)" }
+        "demo"   { "Demo API config — same settings as api.dbtdentalclinic.com (synthetic data)" }
+        "test"   { "Test API config — TEST_* databases only" }
+        default  { "Local dev config — opendental_analytics, typically on localhost" }
+    }
+
+    Write-Host "`n✅ API environment ready: $envName (API_ENVIRONMENT=$choice)" -ForegroundColor Green
+    Write-Host "   $stageSummary" -ForegroundColor Gray
+    Write-Host "   Process runs on this machine; EC2 deploy uses ssm-connect-clinic-api (clinic) or ssm-connect-api (demo)." -ForegroundColor Gray
+    Write-Host ""
+    $displayPort = if ($env:API_PORT) { $env:API_PORT } else { "8000" }
+    Write-Host "Commands: api, api-test, api-docs, api-run, api-env-status" -ForegroundColor Cyan
+    Write-Host "  • api-run - Start uvicorn (http://localhost:$displayPort)" -ForegroundColor Gray
     Write-Host "  • api-docs - Open API documentation (http://localhost:8000/docs)" -ForegroundColor Gray
     Write-Host ""
-    Write-Host "To switch to other environments: run 'api-deactivate' first" -ForegroundColor Gray
-    Write-Host "To connect to REMOTE EC2 instance: use 'aws-ssm-init' + 'ssm-connect-api'`n" -ForegroundColor Gray
+    Write-Host "To switch configs: run 'api-deactivate' first, then 'api-init'" -ForegroundColor Gray
+    if ($choice -eq "clinic") {
+        Write-Host "Clinic RDS unreachable? Run 'ssm-port-forward-rds-clinic' in another terminal." -ForegroundColor Yellow
+        Write-Host "Shell on clinic EC2 (not local uvicorn): 'aws-ssm-init' + 'ssm-connect-clinic-api'`n" -ForegroundColor Gray
+    } elseif ($choice -eq "demo") {
+        Write-Host "Remote demo EC2 shell: 'aws-ssm-init' + 'ssm-connect-api'`n" -ForegroundColor Gray
+    } else {
+        Write-Host ""
+    }
 }
 
 function Stop-APIEnvironment {
@@ -867,6 +954,9 @@ function Stop-APIEnvironment {
         'DEMO_POSTGRES_USER',
         'DEMO_POSTGRES_PASSWORD',
         'DEMO_API_KEY',
+        'CLINIC_API_KEY',
+        'POSTGRES_ANALYTICS_SSLMODE',
+        'PGSSLMODE',
         'API_CORS_ORIGINS',
         'API_DEBUG',
         'API_LOG_LEVEL',
@@ -881,6 +971,7 @@ function Stop-APIEnvironment {
     }
 
     $script:IsAPIActive = $false
+    $script:APIStage = $null
     $script:ActiveProject = $null
     $script:VenvPath = $null
 
@@ -1304,7 +1395,9 @@ function Start-APIServer {
         "clinic" {
             $dbName = $env:POSTGRES_ANALYTICS_DB
             if (-not $dbName) { $dbName = "opendental_analytics" }
-            "opendental_analytics (clinic database - real PHI)"
+            $hostHint = $env:POSTGRES_ANALYTICS_HOST
+            if (-not $hostHint) { $hostHint = "(host not set)" }
+            "$dbName @ $hostHint (clinic config — real PHI, CLINIC_API_KEY)"
         }
         "test" {
             $dbName = $env:TEST_POSTGRES_ANALYTICS_DB
@@ -1316,11 +1409,11 @@ function Start-APIServer {
         default {
             $dbName = $env:POSTGRES_ANALYTICS_DB
             if (-not $dbName) { $dbName = "opendental_analytics" }
-            "$dbName (local development)"
+            "$dbName (local config — .env_api_local)"
         }
     }
     
-    Write-Host "🚀 Starting API server on $apiHost`:$port..." -ForegroundColor Blue
+    Write-Host "🚀 Starting API server (API_ENVIRONMENT=$($env:API_ENVIRONMENT)) on $apiHost`:$port..." -ForegroundColor Blue
     Write-Host "   Database: $dbInfo" -ForegroundColor Gray
     
     # Check if we're already in the api directory or need to change to it
@@ -3082,6 +3175,12 @@ function Get-APIEnvironmentStatus {
     Write-Host "  Environment: $environment" -ForegroundColor Green
     Write-Host "  Active: ✅" -ForegroundColor Green
     Write-Host "  Project: $script:ActiveProject" -ForegroundColor Cyan
+    if ($environment -eq "clinic") {
+        Write-Host "  Run context: clinic config in this shell — uvicorn runs locally, not on EC2" -ForegroundColor Yellow
+        Write-Host "  Remote clinic server: aws-ssm-init + ssm-connect-clinic-api" -ForegroundColor Gray
+    } elseif ($environment -eq "demo") {
+        Write-Host "  Run context: demo config in this shell — uvicorn runs locally" -ForegroundColor Cyan
+    }
     
     # Show some key environment variables
     Write-Host "`n🔧 Key Environment Variables:" -ForegroundColor White
@@ -3112,6 +3211,10 @@ function Get-APIEnvironmentStatus {
 # =============================================================================
 
 function global:prompt {
+    if (Get-Command Sync-EnvironmentManagerScript -ErrorAction SilentlyContinue) {
+        Sync-EnvironmentManagerScript -Quiet | Out-Null
+    }
+
     $envTag = ""
     $envColor = "White"
     
@@ -3129,8 +3232,14 @@ function global:prompt {
         $envTag = "[etl:$script:ActiveProject] "
         $envColor = "Magenta"
     } elseif ($script:IsAPIActive) {
-        $envTag = "[api:$script:ActiveProject] "
-        $envColor = "Blue"
+        $stage = if ($env:API_ENVIRONMENT) { $env:API_ENVIRONMENT } elseif ($script:APIStage) { $script:APIStage } else { "?" }
+        $envTag = "[api:$stage`:$script:ActiveProject] "
+        $envColor = switch ($stage) {
+            "clinic" { "Yellow" }
+            "demo"   { "Cyan" }
+            "test"   { "DarkYellow" }
+            default  { "Blue" }
+        }
     } elseif ($script:IsConsultAudioActive) {
         $envTag = "[consult-audio:$script:ActiveProject] "
         $envColor = "DarkCyan"
@@ -3201,11 +3310,13 @@ Set-Alias -Name ssm-status -Value Get-SSMStatus -Scope Global
 
 # Utility
 Set-Alias -Name env-status -Value Get-EnvironmentStatus -Scope Global
+Set-Alias -Name env-reload -Value Reload-EnvironmentManager -Scope Global
 
 # =============================================================================
 # STARTUP MESSAGE
 # =============================================================================
 
+if (-not $env:ENV_MANAGER_QUIET_RELOAD) {
 Write-Host "`n╔══════════════════════════════════════════════════════════╗" -ForegroundColor DarkBlue
 Write-Host "║          Data Engineering Environment Manager           ║" -ForegroundColor Blue
 Write-Host "║            Dental Clinic ETL & dbt Pipeline             ║" -ForegroundColor Blue
@@ -3215,7 +3326,7 @@ Write-Host "`n🚀 Quick Start:" -ForegroundColor White
 Write-Host "  dbt-init              - Initialize dbt (default: local = localhost dev)" -ForegroundColor Cyan
 Write-Host "  dbt-init -Target clinic - Initialize dbt for AWS production (opendental_analytics)" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
-Write-Host "  api-init       - Initialize API (local = run API on your machine)" -ForegroundColor Blue
+Write-Host "  api-init       - Initialize API (local/demo/clinic/test config on this machine)" -ForegroundColor Blue
 Write-Host "  consult-audio-init - Initialize Consult Audio Pipeline (venv + deps in consult_audio_pipe/)" -ForegroundColor DarkCyan
 Write-Host "  frontend-dev   - Start frontend (local: localhost:3000 → localhost:8000)" -ForegroundColor Green
 Write-Host "  demo-frontend-deploy - Deploy demo frontend → dbtdentalclinic.com (public)" -ForegroundColor Green
@@ -3253,10 +3364,17 @@ if (Test-Path "$cwd\frontend\package.json") {
 }
 
 Write-Host ""
+}
 
-# Export functions to global scope
-Write-Host "🔧 Loading functions into global scope..." -ForegroundColor Yellow
+# Record load time so Sync-EnvironmentManagerScript can detect edits
+$script:EnvManagerScriptFile = Join-Path $script:EnvManagerScriptRoot "environment_manager.ps1"
+$script:EnvManagerFileTicks = (Get-Item $script:EnvManagerScriptFile).LastWriteTimeUtc.Ticks
+
+# Export functions to global scope (only on full startup, not quiet reload)
+if (-not $env:ENV_MANAGER_QUIET_RELOAD) {
+Write-Host ""
 Get-Command -Type Function | Where-Object {$_.Name -like "*ETL*" -or $_.Name -like "*DBT*" -or $_.Name -like "*API*" -or $_.Name -like "*ConsultAudio*"} | ForEach-Object {
     Set-Item -Path "function:global:$($_.Name)" -Value $_.Definition
 }
-Write-Host "✅ Functions loaded successfully!" -ForegroundColor Green 
+Write-Host "✅ Functions loaded successfully!" -ForegroundColor Green
+} 
