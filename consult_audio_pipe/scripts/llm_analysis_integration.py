@@ -4,10 +4,11 @@ import requests
 from pathlib import Path
 from datetime import datetime
 
-# Load environment variables from .env file
+# Load environment variables from consult_audio_pipe/.env (OS env wins)
 try:
     from dotenv import load_dotenv
-    load_dotenv()
+    _env_file = Path(__file__).resolve().parent.parent / ".env"
+    load_dotenv(_env_file, override=False)
 except ImportError:
     pass
 except Exception as e:

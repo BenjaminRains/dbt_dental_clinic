@@ -151,7 +151,8 @@ def setup_environment():
         for env_file in env_files:
             if env_file.exists():
                 logger.info(f"Loading environment from: {env_file}")
-                load_dotenv(env_file, override=True)
+                # override=False: OS env wins over the file (see ENVIRONMENT_HANDLING_REVIEW.md).
+                load_dotenv(env_file, override=False)
                 loaded = True
                 break
         

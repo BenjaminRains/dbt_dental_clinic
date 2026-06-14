@@ -258,7 +258,7 @@ def load_test_environment_file():
     env_test_path = etl_pipeline_dir / '.env_test'
     
     if env_test_path.exists():
-        # Load environment variables from .env_test file
+        # override=True intentional: tests must load .env_test even if os.environ is polluted.
         load_dotenv(env_test_path, override=True)
         print(f"Loaded environment variables from: {env_test_path}")
         # Debug print for replication variables
@@ -297,7 +297,7 @@ def load_production_environment_file():
     env_clinic_path = etl_pipeline_dir / '.env_clinic'
     
     if env_clinic_path.exists():
-        # Load environment variables from .env_clinic file
+        # override=True intentional: tests must load .env_clinic even if os.environ is polluted.
         load_dotenv(env_clinic_path, override=True)
         print(f"Loaded clinic environment variables from: {env_clinic_path}")
         # Debug print for clinic variables

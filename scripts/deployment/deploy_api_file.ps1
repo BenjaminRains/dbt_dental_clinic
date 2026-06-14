@@ -1,11 +1,11 @@
 # PowerShell script to deploy a single API file to EC2 using AWS Systems Manager
-# Usage: .\scripts\deploy_api_file.ps1 -FilePath "api\services\treatment_acceptance_service.py"
+# Usage: .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\services\treatment_acceptance_service.py"
 # Clinic env (recommended): writes api/.env (the single systemd EnvironmentFile source of truth)
 # and RETIRES any stale api/.env_api_clinic on the instance. config.py treats the OS environment
 # (systemd .env) as authoritative and no longer reads .env_api_clinic on EC2, so one file wins
 # (see ENVIRONMENT_HANDLING_REVIEW.md, Phase 0).
-#        .\scripts\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
-# Single file (advanced): .\scripts\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env"
+#        .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+# Single file (advanced): .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env"
 
 param(
     [Parameter(Mandatory=$true)]

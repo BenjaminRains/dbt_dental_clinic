@@ -13,7 +13,6 @@ from unittest.mock import patch, MagicMock
 from sqlalchemy import create_engine, text
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.engine import Engine
-from dotenv import load_dotenv
 
 # Import modern architecture components
 from etl_pipeline.core.connections import ConnectionFactory, ConnectionManager, create_connection_manager
@@ -25,9 +24,6 @@ from etl_pipeline.config import (
 )
 from etl_pipeline.config.providers import DictConfigProvider
 from etl_pipeline.exceptions.configuration import ConfigurationError, EnvironmentError
-
-# Load environment variables for testing
-load_dotenv()
 
 logger = logging.getLogger(__name__)
 

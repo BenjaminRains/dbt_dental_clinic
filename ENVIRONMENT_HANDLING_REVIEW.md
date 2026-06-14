@@ -88,8 +88,42 @@ forward-compatible with §5.
 
 ### Remaining (folds into later phases)
 
-- Migrate the ~12 ad-hoc `load_dotenv()` calls (§2.3) to `override=False` or the central config.
-- Replace this hand-rolled precedence with `pydantic-settings`, which enforces it natively (§5).
+- ~~Migrate ad-hoc `load_dotenv()` calls to `override=False`~~ → Phase 1 (below).
+- Replace hand-rolled precedence with `pydantic-settings`, which enforces it natively (§5).
+
+---
+
+## Phase 1 — Close Phase 0 gaps (in progress)
+
+> Status: **in progress** on branch `refactor/environment-handling`.
+> Low-risk cleanup before the `pydantic-settings` migration in §5.
+
+### Goals
+
+1. Confirm deploy tooling matches the single-source-of-truth rule (Phase 0 item 3).
+2. Align ad-hoc ETL scripts with `override=False` (same precedence as `api/config.py` and `FileConfigProvider`).
+3. Track onboarding docs so README links resolve.
+4. Sync this review doc with the current repo state.
+
+### Changes
+
+| Item | Action |
+|---|---|
+| **`scripts/deployment/deploy_api_file.ps1`** | Already implements `-ClinicEnv`: writes `api/.env` only and retires stale `api/.env_api_clinic` on EC2. Header comments corrected to the `scripts/deployment/` path. |
+| **Ad-hoc ETL scripts** | `override=True` → `override=False` in `grant_etl_privileges.py`, `test_root_connections.py`, `test_env_test_connections.py`, `setup_test_databases.py`, `analyze_opendental_schema.py`. |
+| **Test fixtures** | `env_fixtures.py` keeps `override=True` intentionally (test isolation when `os.environ` is polluted). |
+| **`consult_audio_pipe/`** | Explicit `load_dotenv(..., override=False)` loading `consult_audio_pipe/.env` (not cwd `.env`). |
+| **`api/README.md`** | EC2 clinic env documented as `api/.env` + `-ClinicEnv` deploy (not `.env_api_clinic` on instance). |
+| **Stale backup** | Removed tracked `analyze_opendental_schema.py.backup` (had old `override=True` / env names). |
+| **`docs/ENVIRONMENT_FILES.md`** | Whitelisted in `.gitignore` and committed — project-wide env inventory and conventions. |
+| **README / `list_env_files.ps1`** | Fixed script path to `scripts/utils/list_env_files.ps1`. |
+| **§2.5 below** | Updated: `profiles.yml.template` now exists. |
+
+### Remaining (Phase 2+)
+
+- `pydantic-settings` migration (§5).
+- PowerShell env manager delegates to Python (§4.5).
+- Single venv tool / stale artifact cleanup (§4.4, §4.6).
 
 ---
 
@@ -135,9 +169,8 @@ helpful message steering you to `clinic`/`demo`.)
 
 - **Python `python-dotenv`** (runtime): `api/config.py` (`APIConfig`) and
   `etl_pipeline/etl_pipeline/config/providers.py` (`FileConfigProvider`) each load
-  `.env_{stage}` and do fail-fast validation. Note the subtle divergence: API uses
-  `load_dotenv(..., override=False)` (so systemd/EC2 env wins), ETL uses `override=True`.
-  This `override` mismatch already caused one production bug (documented in `config.py`).
+  `.env_{stage}` and do fail-fast validation. Both use `load_dotenv(..., override=False)` so
+  the OS process environment wins over on-disk files (Phase 0).
 - **PowerShell `scripts/environment_manager.ps1`** (developer workflow): a ~3,200-line script
   that does **not** use `python-dotenv`. It parses `KEY=VALUE` itself, injects vars via
   `[Environment]::SetEnvironmentVariable(...)`, activates the right venv, and sets
@@ -161,24 +194,27 @@ VS Code is configured to disable its own venv activation so the PowerShell scrip
 
 ### 2.5 dbt specifics
 
-- `profiles.yml` is gitignored and generated locally; **no `env_var()` usage anywhere** in dbt
-  SQL/YAML, so the connection contract is invisible in the repo.
-- A `profiles.yml.template` is whitelisted in `.gitignore` but **does not actually exist**.
+- `profiles.yml` is gitignored and generated locally from the committed template.
+- `dbt_dental_models/profiles.yml.template` **is committed** and uses `env_var()` for all
+  credentials — the connection contract is visible in the repo. Copy to `profiles.yml` locally:
+  `cp dbt_dental_models/profiles.yml.template dbt_dental_models/profiles.yml`.
+- dbt SQL/YAML models do not call `env_var()` directly; connection vars flow through `profiles.yml`.
 
 ---
 
 ## 3. Pain points (why this is hard for new devs)
 
 1. **"Which environment am I in?" has three different answers** depending on subproject.
-2. **Two implementations of "read a `.env` file"** (Python + PowerShell) that can and do drift
-   (the `override` bug).
+2. **Two implementations of "read a `.env` file"** (Python + PowerShell) that can drift.
+   The `override=True`/`override=False` mismatch is **fixed** (Phase 0–1); PowerShell still
+   parses `.env` files separately (Phase 3).
 3. **No single setup command.** Pipenv here, `venv` there; PowerShell-only ergonomics.
 4. **Stale/misaligned artifacts** add confusion: root `Dockerfile` does `COPY Pipfile` but there
    is no root `Pipfile`; a duplicate root `pyproject.toml` declares `etl-pipeline` that doesn't
    match the nested layout; `frontend/README.md` references a non-existent `.env.example`.
-5. **Key docs are gitignored.** `README.md` points to `docs/ENVIRONMENT_FILES.md`, but `docs/`
-   is entirely gitignored, so the canonical reference isn't in the repo.
-6. **No committed `profiles.yml.template`**, so dbt connection setup is tribal knowledge.
+5. **Onboarding docs were gitignored.** `README.md` pointed to `docs/ENVIRONMENT_FILES.md`, but
+   most of `docs/` was gitignored. Phase 1 whitelists and commits `docs/ENVIRONMENT_FILES.md`.
+6. ~~**No committed `profiles.yml.template`**~~ — **done** (`dbt_dental_models/profiles.yml.template`).
 
 ---
 
@@ -190,8 +226,7 @@ VS Code is configured to disable its own venv activation so the PowerShell scrip
 2. **Adopt `pydantic-settings`** as the single typed source of truth for API and ETL config
    (see the deep dive in §5). This replaces both custom config classes and most ad-hoc
    `load_dotenv()` calls, and gives typing + validation + `.env` support for free.
-3. **Commit a `profiles.yml.template`** (already whitelisted) using `env_var()` so the dbt
-   connection contract is visible and reproducible.
+3. **Commit a `profiles.yml.template`** — **done** (`dbt_dental_models/profiles.yml.template`).
 4. **Standardize on one venv tool.** Recommended: [`uv`](https://docs.astral.sh/uv/) for speed
    and a single `uv.lock`, or Poetry. At minimum, add lockfiles for `api/` and
    `consult_audio_pipe/`.
@@ -199,8 +234,8 @@ VS Code is configured to disable its own venv activation so the PowerShell scrip
    re-parsing `.env` files. Keep the ergonomic aliases; drop the second `.env` parser.
 6. **Delete/fix stale artifacts**: root `Dockerfile` + compose `dbt` service, duplicate root
    `pyproject.toml`, missing `frontend/.env.example`.
-7. **Un-gitignore the onboarding docs** (or keep them at repo root like this file) so new devs
-   can actually find them.
+7. **Un-gitignore the onboarding docs** — **partial (Phase 1):** `docs/ENVIRONMENT_FILES.md`
+   is tracked; broader `docs/` remains gitignored for sensitive material.
 
 ---
 
@@ -455,10 +490,12 @@ exists — no need to grep the codebase for `os.getenv` calls.
 
 - `api/config.py` — current `APIConfig`, `load_dotenv(override=False)`, fail-fast validation.
 - `etl_pipeline/etl_pipeline/config/providers.py` — `FileConfigProvider`,
-  `load_dotenv(override=True)`, prefix capture.
+  `load_dotenv(override=False)`, prefix capture.
 - `etl_pipeline/etl_pipeline/config/settings.py` — `ETL_ENVIRONMENT` detection, `production`
   rejection.
+- `scripts/deployment/deploy_api_file.ps1` — EC2 deploy; `-ClinicEnv` writes `api/.env` and retires stale `.env_api_clinic`.
 - `scripts/environment_manager.ps1` — ~3,200-line orchestrator; aliases `dbt-init` / `etl-init`
   / `api-init` / `consult-audio-init`.
+- `docs/ENVIRONMENT_FILES.md` — project-wide env file inventory and conventions (tracked).
 - `.gitignore` — `.env`/`.env_*`/`profiles.yml` rules; `docs/` ignored.
 - `dbt_dental_models/dbt_project.yml` — `profile: 'dbt_dental_models'`.

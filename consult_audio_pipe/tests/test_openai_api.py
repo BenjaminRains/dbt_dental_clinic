@@ -1,9 +1,10 @@
 import os
 import requests
+from pathlib import Path
 from dotenv import load_dotenv
 
-# Load environment variables from .env file
-load_dotenv()
+_env_file = Path(__file__).resolve().parent.parent / ".env"
+load_dotenv(_env_file, override=False)
 
 def test_openai_api():
     """Test OpenAI API connection"""

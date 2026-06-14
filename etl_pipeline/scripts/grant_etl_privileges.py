@@ -32,7 +32,8 @@ env_name = os.getenv('ETL_ENVIRONMENT', 'local')
 env_file = etl_dir / f'.env_{env_name}'
 if env_file.exists():
     from dotenv import load_dotenv
-    load_dotenv(env_file, override=True)
+    # override=False: OS env (e.g. from environment_manager.ps1) wins over the file.
+    load_dotenv(env_file, override=False)
     print(f"Loaded {env_file.name}")
 else:
     print(f"Warning: {env_file} not found")
