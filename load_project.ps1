@@ -2,7 +2,7 @@
 # Dot-sources scripts\environment_manager.ps1 to register project commands and aliases.
 # Run from project root: .\load_project.ps1
 
-Write-Host "Loading environment manager..." -ForegroundColor Cyan
+Write-Host "Loading environment manager (refreshes commands from disk)..." -ForegroundColor Cyan
 
 $scriptPath = Join-Path (Get-Location) "scripts\environment_manager.ps1"
 if (-not (Test-Path $scriptPath)) {
