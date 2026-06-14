@@ -1,17 +1,17 @@
 """
 API Environment Configuration
 
-This file provides clean configuration management for the API following the
-ETL pipeline's environment handling pattern with fail-fast validation.
+Backward-compatible facade over api/settings.py (pydantic-settings, Phase 2).
+Callers keep using APIConfig, get_config(), Environment, and DatabaseType unchanged.
 """
 
-import os
 import logging
-from typing import Dict, Optional
-from pathlib import Path
-from urllib.parse import quote
+import os
 from enum import Enum
-from dotenv import load_dotenv
+from typing import Dict, Optional
+from urllib.parse import quote
+
+from settings import get_settings, load_api_settings, reset_settings
 
 logger = logging.getLogger(__name__)
 
@@ -19,9 +19,9 @@ logger = logging.getLogger(__name__)
 class Environment(Enum):
     """Supported API environments."""
     TEST = "test"
-    DEMO = "demo"        # Portfolio/Demo deployment (public, AWS)
-    CLINIC = "clinic"     # Clinic deployment (private, IP-restricted, AWS)
-    LOCAL = "local"       # Local development (localhost)
+    DEMO = "demo"
+    CLINIC = "clinic"
+    LOCAL = "local"
 
 
 class DatabaseType(Enum):
@@ -30,188 +30,80 @@ class DatabaseType(Enum):
 
 
 class APIConfig:
-    """API configuration manager with fail-fast validation."""
-    
-    # Environment variable mappings for each environment
+    """API configuration manager — delegates to typed pydantic-settings."""
+
+    # Preserved for tests/docs that reference prefix maps (settings.py owns loading).
     ENV_MAPPINGS = {
         Environment.TEST.value: {
             DatabaseType.ANALYTICS.value: {
-                'host': 'TEST_POSTGRES_ANALYTICS_HOST',
-                'port': 'TEST_POSTGRES_ANALYTICS_PORT',
-                'database': 'TEST_POSTGRES_ANALYTICS_DB',
-                'user': 'TEST_POSTGRES_ANALYTICS_USER',
-                'password': 'TEST_POSTGRES_ANALYTICS_PASSWORD'
+                "host": "TEST_POSTGRES_ANALYTICS_HOST",
+                "port": "TEST_POSTGRES_ANALYTICS_PORT",
+                "database": "TEST_POSTGRES_ANALYTICS_DB",
+                "user": "TEST_POSTGRES_ANALYTICS_USER",
+                "password": "TEST_POSTGRES_ANALYTICS_PASSWORD",
             }
         },
         Environment.DEMO.value: {
             DatabaseType.ANALYTICS.value: {
-                'host': 'DEMO_POSTGRES_HOST',
-                'port': 'DEMO_POSTGRES_PORT',
-                'database': 'DEMO_POSTGRES_DB',
-                'user': 'DEMO_POSTGRES_USER',
-                'password': 'DEMO_POSTGRES_PASSWORD'
+                "host": "DEMO_POSTGRES_HOST",
+                "port": "DEMO_POSTGRES_PORT",
+                "database": "DEMO_POSTGRES_DB",
+                "user": "DEMO_POSTGRES_USER",
+                "password": "DEMO_POSTGRES_PASSWORD",
             }
         },
         Environment.CLINIC.value: {
             DatabaseType.ANALYTICS.value: {
-                'host': 'POSTGRES_ANALYTICS_HOST',  # Same RDS, different schemas
-                'port': 'POSTGRES_ANALYTICS_PORT',
-                'database': 'POSTGRES_ANALYTICS_DB',
-                'user': 'POSTGRES_ANALYTICS_USER',
-                'password': 'POSTGRES_ANALYTICS_PASSWORD'
+                "host": "POSTGRES_ANALYTICS_HOST",
+                "port": "POSTGRES_ANALYTICS_PORT",
+                "database": "POSTGRES_ANALYTICS_DB",
+                "user": "POSTGRES_ANALYTICS_USER",
+                "password": "POSTGRES_ANALYTICS_PASSWORD",
             }
         },
         Environment.LOCAL.value: {
             DatabaseType.ANALYTICS.value: {
-                'host': 'POSTGRES_ANALYTICS_HOST',
-                'port': 'POSTGRES_ANALYTICS_PORT',
-                'database': 'POSTGRES_ANALYTICS_DB',
-                'user': 'POSTGRES_ANALYTICS_USER',
-                'password': 'POSTGRES_ANALYTICS_PASSWORD'
+                "host": "POSTGRES_ANALYTICS_HOST",
+                "port": "POSTGRES_ANALYTICS_PORT",
+                "database": "POSTGRES_ANALYTICS_DB",
+                "user": "POSTGRES_ANALYTICS_USER",
+                "password": "POSTGRES_ANALYTICS_PASSWORD",
             }
-        }
+        },
     }
-    
-    # Required variables for each database type
+
     REQUIRED_VARS = {
-        DatabaseType.ANALYTICS.value: ['host', 'port', 'database', 'user', 'password']
+        DatabaseType.ANALYTICS.value: ["host", "port", "database", "user", "password"]
     }
-    
+
     def __init__(self, environment: Optional[str] = None):
-        """Initialize API configuration with fail-fast validation."""
-        self.environment = environment or self._detect_environment()
-        self._load_environment_file()
-        self._validate_environment()
-    
-    @staticmethod
-    def _detect_environment() -> str:
-        """Detect environment from environment variables."""
-        environment = os.getenv('API_ENVIRONMENT')
-        if not environment:
-            raise ValueError(
-                "API_ENVIRONMENT environment variable is not set. "
-                "Must be one of: test, demo, clinic, local"
-            )
-        
-        valid_environments = [e.value for e in Environment]
-        if environment not in valid_environments:
-            # Special error message for deprecated "production" environment
-            if environment == "production":
-                raise ValueError(
-                    f"Invalid environment '{environment}'. "
-                    f"'production' has been removed. Use 'demo' for portfolio/demo deployment. "
-                    f"Valid environments: {valid_environments}"
-                )
-            raise ValueError(
-                f"Invalid environment '{environment}'. "
-                f"Must be one of: {valid_environments}"
-            )
-        
-        return environment
-    
-    def _load_environment_file(self):
-        """Load API-specific environment file.
+        self._settings = load_api_settings(environment=environment)
+        self.environment = self._settings.stage.value
 
-        One source of truth per context (see ENVIRONMENT_HANDLING_REVIEW.md, Phase 0):
-        if the OS process environment already supplies the analytics DB config (systemd
-        EnvironmentFile=api/.env on EC2, Docker env, or vars exported by
-        environment_manager.ps1), that environment is authoritative and we do NOT read a
-        second on-disk .env_api_* file that could shadow it with stale values. The
-        .env_api_<stage> file is the source only for local/dev contexts where nothing has
-        pre-populated the environment.
-        """
-        # If the env is already populated (e.g. systemd .env on EC2), it wins — skip the file.
-        host_var = self.ENV_MAPPINGS[self.environment][DatabaseType.ANALYTICS.value]['host']
-        if os.getenv(host_var):
-            logger.info(
-                f"Analytics DB config already present in OS environment ({host_var} set); "
-                f"skipping on-disk .env_api_{self.environment} so it cannot shadow it."
-            )
-            return
+    def get_database_config(
+        self, db_type: DatabaseType = DatabaseType.ANALYTICS
+    ) -> Dict[str, object]:
+        if db_type != DatabaseType.ANALYTICS:
+            raise ValueError(f"Unsupported database type: {db_type}")
+        db = self._settings.analytics
+        return {
+            "host": db.host,
+            "port": db.port,
+            "database": db.db,
+            "user": db.user,
+            "password": db.password.get_secret_value(),
+        }
 
-        # Look for .env files in the api/ directory (where this file is located)
-        current_dir = Path(__file__).parent  # api directory
-
-        # Use API-specific .env files from api/ directory
-        env_file = current_dir / f".env_api_{self.environment}"
-
-        if env_file.exists():
-            # Local/dev context: OS env was not pre-populated, so load from the stage file.
-            # override=False keeps OS env authoritative for any individual var that IS set.
-            load_dotenv(env_file, override=False)
-            logger.info(f"Loaded API environment variables from: {env_file} (does not override existing env)")
-        else:
-            logger.warning(f"API environment file not found: {env_file}")
-            logger.info("Using environment variables from system/os.environ")
-    
-    def _validate_environment(self):
-        """Fail-fast validation of environment configuration."""
-        logger.info(f"Validating API environment: {self.environment}")
-        
-        for db_type, env_mapping in self.ENV_MAPPINGS[self.environment].items():
-            missing_vars = []
-            invalid_values = {}
-            
-            for config_key, env_var in env_mapping.items():
-                value = os.getenv(env_var)
-                if not value:
-                    missing_vars.append(env_var)
-                    continue
-                
-                # Validate port is numeric
-                if config_key == 'port' and value:
-                    try:
-                        int(value)
-                    except ValueError:
-                        invalid_values[env_var] = value
-            
-            if missing_vars or invalid_values:
-                error_msg = f"Missing or invalid required environment variables for {db_type} database in {self.environment} environment."
-                if missing_vars:
-                    error_msg += f" Missing: {missing_vars}"
-                if invalid_values:
-                    error_msg += f" Invalid: {invalid_values}"
-                raise ValueError(error_msg)
-        
-        logger.info("Environment validation passed")
-    
-    def get_database_config(self, db_type: DatabaseType = DatabaseType.ANALYTICS) -> Dict[str, str]:
-        """Get database configuration for specified type."""
-        env_mapping = self.ENV_MAPPINGS[self.environment][db_type.value]
-        config = {}
-        
-        for config_key, env_var in env_mapping.items():
-            value = os.getenv(env_var)
-            if not value:
-                raise ValueError(f"Required environment variable {env_var} not set")
-            
-            # Convert port to integer
-            if config_key == 'port':
-                try:
-                    value = int(value)
-                except ValueError:
-                    raise ValueError(f"Invalid port value in {env_var}: {value}")
-            
-            config[config_key] = value
-        
-        return config
-    
     def get_database_url(self, db_type: DatabaseType = DatabaseType.ANALYTICS) -> str:
-        """Get database URL for specified type.
-
-        Appends sslmode query param: AWS RDS endpoints require TLS (sslmode=require).
-        Override with POSTGRES_ANALYTICS_SSLMODE (e.g. disable, prefer, require, verify-full).
-        """
         config = self.get_database_config(db_type)
         host = (config["host"] or "").lower()
-        # Percent-encode user/password so :, @, <, >, etc. do not break URL parsing (common with RDS passwords)
         user_enc = quote(str(config["user"]), safe="")
         password_enc = quote(str(config["password"]), safe="")
         url = (
             f"postgresql://{user_enc}:{password_enc}"
             f"@{config['host']}:{config['port']}/{config['database']}"
         )
-        explicit = os.getenv("POSTGRES_ANALYTICS_SSLMODE", "").strip()
+        explicit = self._settings.sslmode_env
         if explicit:
             sslmode = explicit
         elif "rds.amazonaws.com" in host:
@@ -220,61 +112,50 @@ class APIConfig:
             sslmode = "prefer"
         sep = "&" if "?" in url else "?"
         return f"{url}{sep}sslmode={sslmode}"
-    
+
     def get_api_setting(self, key: str, default=None):
-        """Get API-specific setting with dot notation."""
         if not key:
             return default
-        
-        # Handle API-specific environment variables
-        if key.startswith('api.'):
-            env_key = key.upper().replace('.', '_')
+        if key.startswith("api."):
+            env_key = key.upper().replace(".", "_")
             return os.getenv(env_key, default)
-        
-        # Handle direct environment variable lookup
         return os.getenv(key.upper(), default)
-    
+
     def get_cors_origins(self) -> list:
-        """Get CORS origins from environment."""
-        origins_str = self.get_api_setting('api.cors_origins', 'http://localhost:3000')
-        return [origin.strip() for origin in origins_str.split(',')]
-    
+        origins_str = self._settings.runtime.cors_origins
+        if not origins_str and self.get_api_setting("api.cors_origins"):
+            origins_str = self.get_api_setting("api.cors_origins")
+        return [origin.strip() for origin in (origins_str or "").split(",") if origin.strip()]
+
     def is_debug_mode(self) -> bool:
-        """Check if debug mode is enabled."""
-        return self.get_api_setting('api.debug', 'false').lower() == 'true'
-    
+        return self._settings.runtime.debug
+
     def get_log_level(self) -> str:
-        """Get log level for API."""
-        return self.get_api_setting('api.log_level', 'info').upper()
-    
+        return self._settings.runtime.log_level.upper()
+
     def get_port(self) -> int:
-        """Get API port."""
-        try:
-            return int(self.get_api_setting('api.port', '8000'))
-        except ValueError:
-            return 8000
-    
+        return self._settings.runtime.port
+
     def get_host(self) -> str:
-        """Get API host."""
-        return self.get_api_setting('api.host', '0.0.0.0')
+        return self._settings.runtime.host
 
 
-# Global instance management
-_global_config = None
+_global_config: Optional[APIConfig] = None
+
 
 def get_config() -> APIConfig:
-    """Get global API configuration instance (lazy initialization)."""
     global _global_config
     if _global_config is None:
         _global_config = APIConfig()
     return _global_config
 
-def reset_config():
-    """Reset global configuration instance (for testing)."""
+
+def reset_config() -> None:
     global _global_config
+    reset_settings()
     _global_config = None
 
-def set_config(config: APIConfig):
-    """Set global configuration instance (for testing)."""
+
+def set_config(config: APIConfig) -> None:
     global _global_config
     _global_config = config
