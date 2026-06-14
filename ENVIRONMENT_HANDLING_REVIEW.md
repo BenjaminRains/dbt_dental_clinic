@@ -124,11 +124,26 @@ forward-compatible with §5.
 | **§2.5 below** | Updated: `profiles.yml.template` now exists. |
 | **Deploy health check** | `-ClinicEnv` runs `GET /health/db` on EC2 after restart; `-SkipHealthCheck` to opt out. |
 
+## Phase 2 — pydantic-settings for API (in progress)
+
+> Status: **in progress** on branch `refactor/pydantic-settings-api`.
+> Typed loader in `api/settings.py`; `api/config.py` remains the public facade.
+
+### Changes
+
+| Item | Action |
+|---|---|
+| **`api/settings.py`** | New — `AnalyticsDBSettings`, `APIRuntimeSettings`, `load_api_settings()`, Phase 0 env-file skip |
+| **`api/config.py`** | Delegates to settings; `APIConfig` / `get_config()` signatures unchanged |
+| **`api/test_config.py`** | Precedence test seeds non-host vars when `api-init` was not run |
+
 ### Remaining (Phase 2+)
 
-- `pydantic-settings` migration (§5).
-- PowerShell env manager delegates to Python (§4.5).
-- Single venv tool / stale artifact cleanup (§4.4, §4.6).
+- ETL `settings_v2.py` + delegate `FileConfigProvider`
+- Remove redundant hand-rolled validation from config facade once ETL migrated
+- Optional FastAPI `Depends(get_settings)`
+- PowerShell env manager delegates to Python (§4.5)
+- Single venv tool / stale artifact cleanup (§4.4, §4.6)
 
 ---
 

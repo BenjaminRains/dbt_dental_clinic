@@ -160,7 +160,16 @@ def test_env_precedence() -> bool:
     print(f"   Host var: {host_var}")
     print(f"   Env file: {env_file}")
 
+    def _seed_non_host_vars_from_file() -> None:
+        """Simulate api-init: creds in OS, only host is under test for Part 1."""
+        if not env_file.exists():
+            return
+        for key, value in dotenv_values(env_file).items():
+            if value and key != host_var and not os.getenv(key):
+                os.environ[key] = value
+
     try:
+        _seed_non_host_vars_from_file()
         os.environ[host_var] = bogus
         reset_config()
         host = APIConfig().get_database_config(DatabaseType.ANALYTICS)["host"]
