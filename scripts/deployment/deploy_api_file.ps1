@@ -5,6 +5,7 @@
 # (systemd .env) as authoritative and no longer reads .env_api_clinic on EC2, so one file wins
 # (see ENVIRONMENT_HANDLING_REVIEW.md, Phase 0).
 #        .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+# Skip post-deploy /health/db check: add -SkipHealthCheck
 # Single file (advanced): .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env"
 
 param(
@@ -18,7 +19,9 @@ param(
     [switch]$ClinicEnv,
     [string]$RemoteFileName = "",
     # Skip systemctl restart (use when batching multiple files; restart on the last deploy only).
-    [switch]$NoRestart
+    [switch]$NoRestart,
+    # After -ClinicEnv deploy + restart, curl /health/db on the instance via SSM (default for -ClinicEnv).
+    [switch]$SkipHealthCheck
 )
 
 $ErrorActionPreference = "Stop"
@@ -66,6 +69,45 @@ function Invoke-AwsSsmRunShellScript {
         Remove-Item -LiteralPath $outF -Force -ErrorAction SilentlyContinue
         Remove-Item -LiteralPath $errF -Force -ErrorAction SilentlyContinue
     }
+}
+
+function Invoke-ApiHealthDbCheck {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstanceId,
+        [int]$ApiPort = 8000
+    )
+    Write-Host "`n🏥 Verifying GET /health/db on instance..." -ForegroundColor Yellow
+    $healthCmds = @(
+        "sleep 3",
+        "HTTP=`$(curl -sf -o /tmp/health_db.json -w '%{http_code}' http://127.0.0.1:${ApiPort}/health/db 2>/dev/null || echo 000)",
+        "echo HTTP: `$HTTP",
+        "cat /tmp/health_db.json 2>/dev/null || true",
+        "test `"`$HTTP`" = 200"
+    )
+    $response = Invoke-AwsSsmRunShellScript -InstanceId $InstanceId -Commands $healthCmds
+    $commandId = $response.Command.CommandId
+    Start-Sleep -Seconds 5
+    $output = aws ssm get-command-invocation `
+        --command-id $commandId `
+        --instance-id $InstanceId `
+        --output json | ConvertFrom-Json
+    if ($output.Status -eq "Success") {
+        Write-Host "✅ /health/db returned 200" -ForegroundColor Green
+        if ($output.StandardOutputContent) {
+            $output.StandardOutputContent -split "`n" | ForEach-Object {
+                if ($_.Trim()) { Write-Host "   $_" -ForegroundColor Gray }
+            }
+        }
+        return $true
+    }
+    Write-Host "❌ /health/db check failed (SSM status: $($output.Status))" -ForegroundColor Red
+    if ($output.StandardErrorContent) {
+        Write-Host $output.StandardErrorContent -ForegroundColor Red
+    }
+    if ($output.StandardOutputContent) {
+        Write-Host $output.StandardOutputContent -ForegroundColor Gray
+    }
+    return $false
 }
 
 Write-Host "`n🚀 Deploying API file to EC2" -ForegroundColor Cyan
@@ -236,6 +278,13 @@ try {
                         $statusLines = $restartOutput.StandardOutputContent -split "`n" | Where-Object { $_.Trim() }
                         if ($statusLines) {
                             Write-Host "   Status: $($statusLines[-1])" -ForegroundColor Gray
+                        }
+                    }
+                    if ($ClinicEnv -and -not $SkipHealthCheck) {
+                        $healthOk = Invoke-ApiHealthDbCheck -InstanceId $InstanceId
+                        if (-not $healthOk) {
+                            Write-Host "`n⚠️  Deploy succeeded but /health/db did not return 200. Check api/.env and RDS connectivity." -ForegroundColor Yellow
+                            exit 1
                         }
                     }
                 } else {

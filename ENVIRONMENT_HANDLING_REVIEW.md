@@ -81,10 +81,8 @@ forward-compatible with §5.
 
 ### Verification
 
-- **EC2:** deploy `.env` only, `curl /health/db` → 200; a deliberately-stale `.env_api_clinic`
-  no longer changes the connection (it is skipped, then retired by the next `-ClinicEnv` deploy).
-- **Local:** with OS `POSTGRES_*` unset the API still loads `.env_api_local`; exporting a bogus
-  OS `POSTGRES_ANALYTICS_HOST` now wins over the file (proves the rule).
+- **Local:** `cd api && python test_config.py` — config load + Phase 0 precedence (OS host wins; file loads when host unset).
+- **EC2:** `deploy_api_file.ps1 -ClinicEnv` curls `/health/db` on the instance after restart (see Phase 0 §Verification).
 
 ### Remaining (folds into later phases)
 
@@ -93,10 +91,15 @@ forward-compatible with §5.
 
 ---
 
-## Phase 1 — Close Phase 0 gaps (in progress)
+## Phase 1 — Close Phase 0 gaps (implemented)
 
-> Status: **in progress** on branch `refactor/environment-handling`.
+> Status: **implemented** (merged via `refactor/environment-handling`).
 > Low-risk cleanup before the `pydantic-settings` migration in §5.
+
+### Verification
+
+- **Local:** `cd api && python test_config.py` — config load + Phase 0 precedence (OS host wins; file loads when host unset).
+- **EC2:** `scripts/deployment/deploy_api_file.ps1 -ClinicEnv` restarts the API and curls `http://127.0.0.1:8000/health/db` on the instance (use `-SkipHealthCheck` to skip).
 
 ### Goals
 
@@ -117,7 +120,9 @@ forward-compatible with §5.
 | **Stale backup** | Removed tracked `analyze_opendental_schema.py.backup` (had old `override=True` / env names). |
 | **`docs/ENVIRONMENT_FILES.md`** | Whitelisted in `.gitignore` and committed — project-wide env inventory and conventions. |
 | **README / `list_env_files.ps1`** | Fixed script path to `scripts/utils/list_env_files.ps1`. |
+| **`api/test_config.py`** | Fixed paths to `api/.env_api_*`; added automated Phase 0 precedence test. |
 | **§2.5 below** | Updated: `profiles.yml.template` now exists. |
+| **Deploy health check** | `-ClinicEnv` runs `GET /health/db` on EC2 after restart; `-SkipHealthCheck` to opt out. |
 
 ### Remaining (Phase 2+)
 

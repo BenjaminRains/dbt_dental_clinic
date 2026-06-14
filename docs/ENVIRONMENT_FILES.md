@@ -240,7 +240,9 @@ dbt itself uses `profiles.yml` and `DBT_PROFILES_DIR`; the env manager only sets
   ```powershell
   .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
   ```
-  This writes `api/.env` (single source of truth), retires any stale `api/.env_api_clinic` on the instance, and restarts the API service. See `ENVIRONMENT_HANDLING_REVIEW.md` (Phase 0).
+  This writes `api/.env` (single source of truth), retires any stale `api/.env_api_clinic` on the instance,
+  restarts the API service, and verifies `GET /health/db` returns 200 (unless `-SkipHealthCheck`).
+  See `ENVIRONMENT_HANDLING_REVIEW.md` (Phase 0).
 - **Root on EC2:** `deployment_credentials.json.template` references `environment_file: ".env_ec2"` and `environment_file_path: "/opt/dbt_dental_clinic/.env"` for context; actual setup is done by your deployment scripts.
 
 ---
