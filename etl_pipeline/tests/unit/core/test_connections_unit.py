@@ -32,7 +32,7 @@ ETL Context:
 import pytest
 from unittest.mock import patch, MagicMock
 import os
-from dotenv import load_dotenv
+from unittest.mock import patch, MagicMock
 
 from etl_pipeline.core.connections import ConnectionFactory, ConnectionManager, create_connection_manager
 from etl_pipeline.config import (
@@ -44,9 +44,6 @@ from etl_pipeline.config import (
 from etl_pipeline.config.providers import DictConfigProvider
 from etl_pipeline.config.settings import Settings
 from etl_pipeline.exceptions.configuration import ConfigurationError, EnvironmentError
-
-# Load environment variables for testing
-load_dotenv()
 
 class TestFailFastSecurity:
     """Unit tests for FAIL FAST security requirements with provider pattern."""

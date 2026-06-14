@@ -78,8 +78,8 @@
 - ⚠️ The demo database (`opendental_demo`) is **NOT** used by the localhost/clinic APIs
 - ✅ Environment variables on EC2 instance configure which database to use
 - ✅ Local development uses `.env_api_local` file
-- ✅ Demo API uses `.env_api_demo` on EC2 (configured for demo database)
-- ✅ Clinic API will use `.env_api_clinic` on EC2 (configured for clinic database with schema routing)
+- ✅ Demo API uses `api/.env` on EC2 (contents from `api/.env_api_demo`; systemd `EnvironmentFile`)
+- ✅ Clinic API uses `api/.env` on EC2 (deploy with `scripts/deployment/deploy_api_file.ps1 -ClinicEnv`; retires stale `api/.env_api_clinic`)
 
 ## 📋 API Endpoints
 
@@ -525,7 +525,11 @@ API_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
 **Clinic API (api-clinic.dbtdentalclinic.com) - Clinic Database:**
-Environment variables will be configured in `.env_api_clinic` file on EC2:
+On EC2, environment variables are in `/opt/dbt_dental_clinic/api/.env` (single source of truth for systemd). Deploy from local `api/.env_api_clinic` with:
+```powershell
+.\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+```
+Example contents:
 ```bash
 # Environment
 API_ENVIRONMENT=clinic
@@ -546,7 +550,7 @@ API_CORS_ORIGINS=https://clinic.dbtdentalclinic.com
 CLINIC_API_KEY=<CLINIC_API_KEY>  # Clinic API key (IP-restricted)
 ```
 
-**Note:** `.env_api_demo` is for the demo API (uses `opendental_demo` with synthetic data). `.env_api_local` is for localhost development with real PHI data. `.env_api_clinic` will be used for clinic deployment (IP-restricted, real PHI).
+**Note:** Local dev uses `api/.env_api_*` by stage. On EC2, both demo and clinic APIs use `api/.env` (systemd `EnvironmentFile`); source files are `api/.env_api_demo` or `api/.env_api_clinic` at deploy time. See `ENVIRONMENT_HANDLING_REVIEW.md` (Phase 0).
 
 **Security Notes:**
 - Database passwords are retrieved from AWS Secrets Manager at startup

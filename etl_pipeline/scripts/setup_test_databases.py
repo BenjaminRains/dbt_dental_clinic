@@ -45,7 +45,8 @@ def load_test_environment():
     """Load environment variables from .env_test file for testing."""
     etl_env_path = Path(__file__).parent.parent / '.env_test'
     if etl_env_path.exists():
-        load_dotenv(etl_env_path, override=True)
+        # override=False: OS env wins over the file (see ENVIRONMENT_HANDLING_REVIEW.md).
+        load_dotenv(etl_env_path, override=False)
         print(f"Loaded environment from: {etl_env_path}")
     else:
         print(f"No .env_test file found at: {etl_env_path}")

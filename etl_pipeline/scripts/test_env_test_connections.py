@@ -37,7 +37,8 @@ def load_test_environment():
     if not env_path.exists():
         print(f"ERROR: {env_path} not found")
         sys.exit(1)
-    load_dotenv(env_path, override=True)
+    # override=False: OS env wins; ETL_ENVIRONMENT=test is set explicitly below.
+    load_dotenv(env_path, override=False)
     os.environ["ETL_ENVIRONMENT"] = "test"
     print(f"Loaded: {env_path}")
 

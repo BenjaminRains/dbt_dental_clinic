@@ -120,6 +120,7 @@ deployment/scripts/*.md
 docs/
 !/docs/
 /docs/*
+!docs/ENVIRONMENT_FILES.md
 /docs/analytics/
 etl_pipeline/docs/
 

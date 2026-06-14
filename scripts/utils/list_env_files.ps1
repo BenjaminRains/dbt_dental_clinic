@@ -3,8 +3,8 @@
 # Reports which expected .env / .env_* files exist in the repo (Present/Missing).
 # Does NOT print file contents or secrets. Use for onboarding and audits.
 #
-# Usage: .\scripts\list_env_files.ps1
-#        .\scripts\list_env_files.ps1 -ProjectRoot "C:\path\to\dbt_dental_clinic"
+# Usage: .\scripts\utils\list_env_files.ps1
+#        .\scripts\utils\list_env_files.ps1 -ProjectRoot "C:\path\to\dbt_dental_clinic"
 
 param(
     [string]$ProjectRoot = ""
