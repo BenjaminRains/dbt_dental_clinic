@@ -74,12 +74,22 @@ function Invoke-AwsSsmRunShellScript {
 function Invoke-ApiHealthDbCheck {
     param(
         [Parameter(Mandatory = $true)][string]$InstanceId,
-        [int]$ApiPort = 8000
+        [int]$ApiPort = 8000,
+        [string]$ServiceName = ""
     )
     Write-Host "`n🏥 Verifying GET /health/db on instance..." -ForegroundColor Yellow
     $healthCmds = @(
-        'sleep 3',
-        ('HTTP=$(curl -sf -o /tmp/health_db.json -w ''%{http_code}'' http://127.0.0.1:{0}/health/db 2>/dev/null || echo 000)' -f $ApiPort),
+        'sleep 3'
+    )
+    if ($ServiceName) {
+        $healthCmds += (
+            'for i in $(seq 1 15); do systemctl is-active {0} >/dev/null 2>&1 && break; sleep 2; done' -f $ServiceName
+        )
+    }
+    # Do not use curl -f with "|| echo 000" — failed connections write 000 via -w AND append 000 (HTTP=000000).
+    # Capture status code only; retry until 200 or attempts exhausted.
+    $healthCmds += @(
+        ('for i in $(seq 1 10); do HTTP=$(curl -s -o /tmp/health_db.json -w ''%{{http_code}}'' http://127.0.0.1:{0}/health/db 2>/dev/null); HTTP=${{HTTP:-000}}; echo attempt $i HTTP=$HTTP; if [ "$HTTP" = 200 ]; then break; fi; sleep 3; done' -f $ApiPort),
         'echo HTTP: $HTTP',
         'cat /tmp/health_db.json 2>/dev/null || true',
         'test "$HTTP" = 200'
@@ -258,8 +268,7 @@ try {
                 $serviceName = if ($Clinic -or $ClinicEnv) { "dental-clinic-api-clinic" } else { "dental-clinic-api" }
                 $restartCmds = @(
                     ('sudo systemctl restart {0}' -f $serviceName),
-                    'sleep 2',
-                    ('sudo systemctl is-active {0} && echo Service is active || echo Service is not active' -f $serviceName)
+                    ('for i in $(seq 1 15); do if systemctl is-active {0} >/dev/null 2>&1; then echo Service is active; exit 0; fi; sleep 2; done; echo Service is not active; exit 0' -f $serviceName)
                 )
                 $restartResponseObj = Invoke-AwsSsmRunShellScript -InstanceId $InstanceId -Commands $restartCmds
                 
@@ -281,7 +290,7 @@ try {
                         }
                     }
                     if ($ClinicEnv -and -not $SkipHealthCheck) {
-                        $healthOk = Invoke-ApiHealthDbCheck -InstanceId $InstanceId
+                        $healthOk = Invoke-ApiHealthDbCheck -InstanceId $InstanceId -ServiceName $serviceName
                         if (-not $healthOk) {
                             Write-Host "`n⚠️  Deploy succeeded but /health/db did not return 200. Check api/.env and RDS connectivity." -ForegroundColor Yellow
                             exit 1

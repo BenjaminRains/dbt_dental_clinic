@@ -9,7 +9,7 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | [environment_manager.ps1](environment_manager.ps1) | Legacy full manager (`-Legacy`): deploy, SSM, frontend. *-init deprecated (Phase 4.6). |
 | [mdc_aliases.ps1](mdc_aliases.ps1) | **Default** thin `mdc` aliases. Load via `load_project.ps1`. |
 | [mdc_invoke.ps1](mdc_invoke.ps1) | Shared `Invoke-MDC` helper used by aliases and environment manager. |
-| [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `environment_manager.ps1` when in project. |
+| [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `load_project.ps1` (mdc aliases) when in project. |
 | [run_dbt.bat](run_dbt.bat) | Convenience wrapper to run dbt on EC2; forwards to `ec2\run_dbt_on_ec2.ps1`. |
 
 ## Directory Layout
@@ -24,6 +24,22 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | **utils/** | One-off tools, exports, metadata, audits |
 
 ## Common Workflows
+
+### Daily dev (mdc — default)
+
+From project root after `.\load_project.ps1`:
+
+```powershell
+status
+api-test
+etl-validate
+mdc api run --env local
+mdc etl run --env clinic --profile full
+mdc dbt run --env clinic
+mdc tunnel clinic-db
+```
+
+Use `.\load_project.ps1 -Legacy` for deploy menus, SSM connect, and frontend deploy.
 
 ### Deploy to clinic EC2
 
