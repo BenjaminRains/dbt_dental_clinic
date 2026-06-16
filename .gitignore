@@ -123,6 +123,7 @@ docs/
 !docs/ENVIRONMENT_FILES.md
 /docs/analytics/
 etl_pipeline/docs/
+etl_pipeline/CODE_REVIEW.md
 
 # Vendor reference material (OpenDental manual mirror, etc.)
 reference/
