@@ -60,6 +60,46 @@ function Reload-EnvironmentManager {
     Write-Host "✅ Environment manager reloaded from disk." -ForegroundColor Green
 }
 
+function Clear-StaleStageEnvVars {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("api", "etl")]
+        [string]$Component
+    )
+
+    # Always clear both API and ETL stage vars — switching components leaves blank POSTGRES_*
+    # / OPENDENTAL_* shell values that override the next stage file in pydantic-settings.
+    $stagePrefixes = @(
+        'API_',
+        'CLINIC_',
+        'DEMO_POSTGRES_',
+        'DEMO_API_',
+        'TEST_POSTGRES_ANALYTICS_',
+        'POSTGRES_ANALYTICS_',
+        'OPENDENTAL_SOURCE_',
+        'GLIC_OPENDENTAL_SOURCE_',
+        'MYSQL_REPLICATION_',
+        'TEST_OPENDENTAL_SOURCE_',
+        'TEST_MYSQL_REPLICATION_',
+        'ETL_',
+        'METRICS_',
+        'ENABLE_METRICS'
+    )
+
+    foreach ($key in @([Environment]::GetEnvironmentVariables('Process').Keys)) {
+        foreach ($prefix in $stagePrefixes) {
+            if ($key.StartsWith($prefix)) {
+                [Environment]::SetEnvironmentVariable($key, $null, 'Process')
+                break
+            }
+        }
+    }
+
+    foreach ($var in @('PGSSLMODE', 'DEMO_API_KEY', 'CLINIC_API_KEY')) {
+        [Environment]::SetEnvironmentVariable($var, $null, 'Process')
+    }
+}
+
 function Import-StageEnvFromPython {
     param(
         [Parameter(Mandatory = $true)]
@@ -69,7 +109,9 @@ function Import-StageEnvFromPython {
         [string]$Stage,
         [Parameter(Mandatory = $true)]
         [string]$ProjectRoot,
-        [string]$PythonExe = "python"
+        [string]$PythonExe = "python",
+        [ValidateSet("", "load", "full")]
+        [string]$Profile = ""
     )
 
     $exportScript = Join-Path $ProjectRoot "scripts\export_env_for_shell.py"
@@ -78,16 +120,43 @@ function Import-StageEnvFromPython {
         return $false
     }
 
+    # Avoid stale shell vars (e.g. api-init leftovers) overriding the selected stage file.
+    Clear-StaleStageEnvVars -Component $Component
+
     if ($Component -eq "api") {
         $env:API_ENVIRONMENT = $Stage
     } else {
         $env:ETL_ENVIRONMENT = $Stage
     }
 
-    $rawOutput = & $PythonExe $exportScript --component $Component --stage $Stage 2>&1
-    if ($LASTEXITCODE -ne 0) {
+    # Keep stderr out of stdout so warnings/errors do not break JSON parsing (2>&1 merges streams).
+    $stderrFile = Join-Path $env:TEMP "env-export-stderr-$PID.txt"
+    if (Test-Path -LiteralPath $stderrFile) {
+        Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
+    }
+
+    $exportArgs = @(
+        $exportScript,
+        "--component", $Component,
+        "--stage", $Stage
+    )
+    if ($Profile) {
+        $exportArgs += @("--profile", $Profile)
+    }
+
+    $rawOutput = & $PythonExe -W "ignore::UserWarning" @exportArgs 2>$stderrFile
+    $exitCode = $LASTEXITCODE
+    $stderrText = if (Test-Path -LiteralPath $stderrFile) {
+        Get-Content -LiteralPath $stderrFile -Raw -ErrorAction SilentlyContinue
+    } else {
+        ""
+    }
+    Remove-Item -LiteralPath $stderrFile -Force -ErrorAction SilentlyContinue
+
+    if ($exitCode -ne 0) {
         Write-Host "❌ Python env export failed ($Component/$Stage):" -ForegroundColor Red
-        Write-Host $rawOutput -ForegroundColor Red
+        if ($stderrText) { Write-Host $stderrText -ForegroundColor Red }
+        if ($rawOutput) { Write-Host $rawOutput -ForegroundColor Red }
         return $false
     }
 
@@ -95,6 +164,7 @@ function Import-StageEnvFromPython {
         $envMap = ($rawOutput | Out-String).Trim() | ConvertFrom-Json
     } catch {
         Write-Host "❌ Failed to parse env export JSON: $_" -ForegroundColor Red
+        if ($stderrText) { Write-Host $stderrText -ForegroundColor Red }
         Write-Host $rawOutput -ForegroundColor Red
         return $false
     }
@@ -688,11 +758,15 @@ function Initialize-ETLEnvironment {
             if (Test-Path -LiteralPath $venvPython) { $etlPython = $venvPython }
         }
 
-        if (-not (Import-StageEnvFromPython -Component "etl" -Stage $choice -ProjectRoot $ProjectPath -PythonExe $etlPython)) {
+        $etlProfile = if ($choice -eq "local") { "load" } else { "full" }
+        if (-not (Import-StageEnvFromPython -Component "etl" -Stage $choice -ProjectRoot $ProjectPath -PythonExe $etlPython -Profile $etlProfile)) {
             return
         }
 
         Write-Host "  Set: ETL_ENVIRONMENT=$choice (from menu choice)" -ForegroundColor Gray
+        if ($etlProfile) {
+            Write-Host "  Set: ETL_PROFILE=$etlProfile (connection validation profile)" -ForegroundColor Gray
+        }
     }
 
     $script:IsETLActive = $true
@@ -731,6 +805,8 @@ function Stop-ETLEnvironment {
         }
         Write-Host "✅ ETL pipenv shell deactivated" -ForegroundColor Green
     }
+
+    Clear-StaleStageEnvVars -Component "etl"
 
     $script:IsETLActive = $false
     $script:ActiveProject = $null
@@ -964,40 +1040,7 @@ function Stop-APIEnvironment {
         Write-Host "✅ API virtual environment deactivated" -ForegroundColor Green
     }
 
-    # Clean up API environment variables
-    $apiEnvVars = @(
-        'API_ENVIRONMENT',
-        'TEST_POSTGRES_ANALYTICS_HOST',
-        'TEST_POSTGRES_ANALYTICS_PORT', 
-        'TEST_POSTGRES_ANALYTICS_DB',
-        'TEST_POSTGRES_ANALYTICS_USER',
-        'TEST_POSTGRES_ANALYTICS_PASSWORD',
-        'POSTGRES_ANALYTICS_HOST',
-        'POSTGRES_ANALYTICS_PORT',
-        'POSTGRES_ANALYTICS_DB', 
-        'POSTGRES_ANALYTICS_USER',
-        'POSTGRES_ANALYTICS_PASSWORD',
-        'DEMO_POSTGRES_HOST',
-        'DEMO_POSTGRES_PORT',
-        'DEMO_POSTGRES_DB',
-        'DEMO_POSTGRES_USER',
-        'DEMO_POSTGRES_PASSWORD',
-        'DEMO_API_KEY',
-        'CLINIC_API_KEY',
-        'POSTGRES_ANALYTICS_SSLMODE',
-        'PGSSLMODE',
-        'API_CORS_ORIGINS',
-        'API_DEBUG',
-        'API_LOG_LEVEL',
-        'API_PORT',
-        'API_HOST',
-        'API_SECRET_KEY',
-        'API_ACCESS_TOKEN_EXPIRE_MINUTES'
-    )
-
-    foreach ($var in $apiEnvVars) {
-        [Environment]::SetEnvironmentVariable($var, $null, 'Process')
-    }
+    Clear-StaleStageEnvVars -Component "api"
 
     $script:IsAPIActive = $false
     $script:APIStage = $null

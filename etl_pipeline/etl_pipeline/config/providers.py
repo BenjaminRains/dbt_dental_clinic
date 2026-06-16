@@ -66,6 +66,7 @@ class FileConfigProvider(ConfigProvider):
             self._connection_settings = load_etl_connection_settings(
                 environment=self.environment,
                 config_dir=self.config_dir,
+                profile="full",
             )
             self._env_vars = load_etl_env_dict(
                 environment=self.environment,

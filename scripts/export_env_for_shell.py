@@ -17,7 +17,7 @@ from pathlib import Path
 REPO_ROOT = Path(__file__).resolve().parent.parent
 
 
-def export_env(component: str, stage: str) -> dict[str, str]:
+def export_env(component: str, stage: str, profile: str | None = None) -> dict[str, str]:
     if component == "api":
         api_dir = REPO_ROOT / "api"
         if str(api_dir) not in sys.path:
@@ -33,7 +33,7 @@ def export_env(component: str, stage: str) -> dict[str, str]:
         os.environ["ETL_ENVIRONMENT"] = stage
         from etl_pipeline.config.settings_v2 import load_etl_env_dict
 
-        return load_etl_env_dict(environment=stage, config_dir=etl_dir)
+        return load_etl_env_dict(environment=stage, config_dir=etl_dir, profile=profile)
 
     raise ValueError(f"Unsupported component: {component}")
 
@@ -51,10 +51,16 @@ def main() -> int:
         required=True,
         help="Stage name (api: local|demo|clinic|test; etl: local|clinic|test)",
     )
+    parser.add_argument(
+        "--profile",
+        choices=("load", "full"),
+        default=None,
+        help="ETL only: connection subset to validate (default: local→load, clinic/test→full)",
+    )
     args = parser.parse_args()
 
     try:
-        data = export_env(args.component, args.stage)
+        data = export_env(args.component, args.stage, profile=args.profile)
         json.dump(data, sys.stdout, sort_keys=True)
         return 0
     except Exception as exc:
