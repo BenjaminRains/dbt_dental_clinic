@@ -229,9 +229,7 @@ forward-compatible with §5.
 |---|---|
 | **`Invoke-MDC`** | Runs `mdc` or `python -m mdc_cli` from repo root |
 | **`api-run`, `etl-run`, `etl-test`, `dbt`** | Thin wrappers — no `$script:Is*Active` guard on migrated run paths |
-| **`api-init` / `etl-init` / `dbt-init`** | Still available for shell export; optional, not required for runs |
-
-Remaining: Phase 4.6 retire `export_env_for_shell.py` and slim `environment_manager.ps1`.
+| **`api-init` / `etl-init` / `dbt-init`** | Deprecated in 4.6 — run `mdc validate` only (see Phase 4.6) |
 
 ## Phase 4.5 — Thin PowerShell layer (implemented)
 
@@ -246,6 +244,19 @@ Remaining: Phase 4.6 retire `export_env_for_shell.py` and slim `environment_mana
 | **4.5b** | `dbt-init` deprecated — runs `mdc dbt validate` only, no shell env |
 | **4.5c** | `mdc tunnel clinic-db\|demo-db\|rds`; `mdc deploy frontend\|api` |
 | **4.5d** | Default load path is mdc aliases, not full env manager |
+
+## Phase 4.6 — Cleanup (implemented)
+
+> Status: **implemented** on branch `refactor/phase4-6-cleanup`.
+
+| Item | Action |
+|---|---|
+| **`export_env_for_shell.py`** | Removed; mdc injects env via pydantic loaders only |
+| **`*-init` / `*-deactivate`** | `api-init`, `etl-init`, `dbt-init` run `mdc validate` only; deactivates are no-ops |
+| **`Import-StageEnvFromPython`** | Removed from `environment_manager.ps1` |
+| **SSM port-forward** | Dot-sources `scripts/ssm_tunnels.ps1` (no duplicate functions) |
+| **`project_profile.ps1`** | Loads default `load_project.ps1` (mdc aliases), not full env manager |
+| **Env manager size** | ~2,100 lines (deploy/SSM/frontend/consult-audio retained for `-Legacy`) |
 
 ---
 

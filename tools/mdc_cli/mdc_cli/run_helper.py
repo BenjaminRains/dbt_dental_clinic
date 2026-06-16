@@ -12,7 +12,7 @@ import typer
 
 from mdc_cli.paths import DBT_DIR, discover_component_python, discover_dbt_python
 
-# Mirrors Clear-StaleStageEnvVars in environment_manager.ps1 (+ dbt prefixes).
+# Stage prefixes cleared before isolated mdc child runs (mirrors legacy env manager behavior).
 STAGE_ENV_PREFIXES = (
     "API_",
     "CLINIC_",

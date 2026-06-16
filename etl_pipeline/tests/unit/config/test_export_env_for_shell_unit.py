@@ -1,15 +1,12 @@
-"""Tests for scripts/export_env_for_shell.py (Phase 3)."""
+"""Tests for pydantic env loaders used by mdc (formerly export_env_for_shell.py)."""
 
-import json
 import os
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
-EXPORT_SCRIPT = REPO_ROOT / "scripts" / "export_env_for_shell.py"
 
 
 @pytest.fixture
@@ -32,40 +29,19 @@ def clean_export_env(monkeypatch):
     yield
 
 
-def _run_export(
-    component: str,
-    stage: str,
-    extra_env: dict[str, str],
-    profile: str | None = None,
-) -> dict[str, str]:
-    env = os.environ.copy()
-    env.update(extra_env)
-    cmd = [sys.executable, str(EXPORT_SCRIPT), "--component", component, "--stage", stage]
-    if profile:
-        cmd.extend(["--profile", profile])
-    result = subprocess.run(
-        cmd,
-        cwd=REPO_ROOT,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    assert result.returncode == 0, result.stderr or result.stdout
-    return json.loads(result.stdout)
-
-
-class TestExportEnvForShell:
+class TestEnvLoaderExports:
     @pytest.mark.unit
-    def test_export_etl_test_from_os_env(self, clean_export_env, monkeypatch, tmp_path):
-        """ETL export validates and returns flat dict (uses tmp env file via monkeypatch on path - skip)."""
-        # Use real .env_test if present, else minimal OS env
+    def test_export_etl_test_from_os_env(self, clean_export_env, monkeypatch):
         env_test = REPO_ROOT / "etl_pipeline" / ".env_test"
         if not env_test.exists():
             pytest.skip(".env_test not present")
 
+        etl_root = REPO_ROOT / "etl_pipeline"
+        sys.path.insert(0, str(etl_root))
+        from etl_pipeline.config.settings_v2 import load_etl_env_dict
+
         monkeypatch.setenv("ETL_ENVIRONMENT", "test")
-        data = _run_export("etl", "test", {"ETL_ENVIRONMENT": "test"})
+        data = load_etl_env_dict(environment="test", config_dir=etl_root)
         assert data["ETL_ENVIRONMENT"] == "test"
         assert "TEST_POSTGRES_ANALYTICS_HOST" in data
 
@@ -75,8 +51,12 @@ class TestExportEnvForShell:
         if not env_local.exists():
             pytest.skip(".env_api_local not present")
 
+        api_dir = REPO_ROOT / "api"
+        sys.path.insert(0, str(api_dir))
+        from settings import export_api_env_dict
+
         monkeypatch.setenv("API_ENVIRONMENT", "local")
-        data = _run_export("api", "local", {"API_ENVIRONMENT": "local"})
+        data = export_api_env_dict(environment="local")
         assert data["API_ENVIRONMENT"] == "local"
 
     @pytest.mark.unit
@@ -85,9 +65,13 @@ class TestExportEnvForShell:
         if not env_local.exists():
             pytest.skip(".env_api_local not present")
 
+        api_dir = REPO_ROOT / "api"
+        sys.path.insert(0, str(api_dir))
+        from settings import export_api_env_dict
+
         monkeypatch.setenv("API_ENVIRONMENT", "local")
         monkeypatch.setenv("POSTGRES_ANALYTICS_PORT", "")
-        data = _run_export("api", "local", {"API_ENVIRONMENT": "local", "POSTGRES_ANALYTICS_PORT": ""})
+        data = export_api_env_dict(environment="local")
         assert data["API_ENVIRONMENT"] == "local"
         assert data.get("POSTGRES_ANALYTICS_PORT") == "5432"
 
@@ -108,7 +92,6 @@ class TestExportEnvForShell:
 
     @pytest.mark.unit
     def test_export_etl_local_load_profile(self, clean_export_env, monkeypatch, tmp_path):
-        """ETL local export with profile=load does not require OPENDENTAL_SOURCE_*."""
         etl_dir = tmp_path
         lines = [
             "MYSQL_REPLICATION_HOST=localhost",

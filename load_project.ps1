@@ -1,5 +1,5 @@
 # Load Project (Environment Manager)
-# Default: thin mdc aliases (Phase 4.5). Use -Legacy for full environment_manager.ps1.
+# Default: thin mdc aliases (Phase 4.5/4.6). Use -Legacy for full environment_manager.ps1.
 # Run from project root: .\load_project.ps1
 
 param(
