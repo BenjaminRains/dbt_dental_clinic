@@ -148,10 +148,15 @@ class Settings:
         # Cache
         self._connection_cache = {}
         
-        # Only validate environment if using FileConfigProvider (production/integration)
-        # Skip validation for DictConfigProvider (testing) to allow injected configuration
-        if provider is None or not hasattr(provider, 'configs'):
+        # Only validate environment if using DictConfigProvider (production uses pydantic in FileConfigProvider)
+        if not self._uses_dict_provider() and not self._typed_connection_settings():
             self._validate_environment()
+
+    def _uses_dict_provider(self) -> bool:
+        return hasattr(self.provider, "configs")
+
+    def _typed_connection_settings(self):
+        return getattr(self.provider, "_connection_settings", None)
     
     @staticmethod
     def _detect_environment() -> str:
@@ -266,7 +271,13 @@ class Settings:
         return self.get_analytics_connection_config(PostgresSchema.MARTS)
     
     def _get_base_config(self, db_type: DatabaseType) -> Dict:
-        """Get base configuration from environment variables using actual variable names."""
+        """Get base configuration from typed settings or environment variables."""
+        typed = self._typed_connection_settings()
+        if typed is not None:
+            from .settings_v2 import connection_config_dict
+
+            return connection_config_dict(typed, db_type.value)
+
         env_mapping = self.ENV_MAPPINGS[self.environment][db_type]
         config = {}
         missing_keys = []
@@ -309,6 +320,9 @@ class Settings:
     
     def validate_configs(self) -> bool:
         """Validate that all required configurations are present."""
+        if self._typed_connection_settings() is not None:
+            return True
+
         missing_vars = []
         
         for db_type, env_mapping in self.ENV_MAPPINGS[self.environment].items():

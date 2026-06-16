@@ -1,5 +1,5 @@
 # api/main.py
-from fastapi import FastAPI, Request, status
+from fastapi import FastAPI, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from fastapi.exceptions import RequestValidationError, HTTPException
@@ -26,6 +26,8 @@ logging.basicConfig(level=logging.INFO, format=_log_format, handlers=[_handler],
 
 from routers import patient, reports, appointment, provider, revenue, dbt_metadata, ar, treatment_acceptance, hygiene
 from config import APIConfig
+from deps import get_api_settings_optional
+from settings import APISettings
 from cors_runtime import apply_cors_to_response, set_allowed_origins
 from middleware.rate_limit import rate_limit_middleware
 from middleware.request_logger import RequestLoggingMiddleware
@@ -259,11 +261,24 @@ def read_root():
     }
 
 @app.get("/health")
-def health_check():
+def health_check(settings: APISettings | None = Depends(get_api_settings_optional)):
     """Health check endpoint - public access for ALB health checks"""
-    env = os.getenv("API_ENVIRONMENT", "").strip().lower()
-    service = "dental-practice-api-demo" if env == "demo" else "dental-practice-api-clinic" if env == "clinic" else "dental-practice-api"
-    return {"status": "healthy", "service": service}
+    env = (
+        settings.stage.value
+        if settings is not None
+        else os.getenv("API_ENVIRONMENT", "").strip().lower() or "unknown"
+    )
+    service = (
+        "dental-practice-api-demo"
+        if env == "demo"
+        else "dental-practice-api-clinic"
+        if env == "clinic"
+        else "dental-practice-api"
+    )
+    payload = {"status": "healthy", "service": service}
+    if settings is not None:
+        payload["environment"] = env
+    return payload
 
 
 @app.get("/health/db")

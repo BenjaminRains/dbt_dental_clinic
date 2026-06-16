@@ -124,9 +124,9 @@ forward-compatible with §5.
 | **§2.5 below** | Updated: `profiles.yml.template` now exists. |
 | **Deploy health check** | `-ClinicEnv` runs `GET /health/db` on EC2 after restart; `-SkipHealthCheck` to opt out. |
 
-## Phase 2 — pydantic-settings for API (in progress)
+## Phase 2 — pydantic-settings for API (implemented)
 
-> Status: **in progress** on branch `refactor/pydantic-settings-api`.
+> Status: **implemented** (merged via PR #5).
 > Typed loader in `api/settings.py`; `api/config.py` remains the public facade.
 
 ### Changes
@@ -137,13 +137,28 @@ forward-compatible with §5.
 | **`api/config.py`** | Delegates to settings; `APIConfig` / `get_config()` signatures unchanged |
 | **`api/test_config.py`** | Precedence test seeds non-host vars when `api-init` was not run |
 
-### Remaining (Phase 2+)
+## Phase 2b — pydantic-settings for ETL (implemented)
 
-- ETL `settings_v2.py` + delegate `FileConfigProvider`
-- Remove redundant hand-rolled validation from config facade once ETL migrated
-- Optional FastAPI `Depends(get_settings)`
+> Status: **implemented** on branch `refactor/pydantic-settings-etl`.
+> Typed loader in `etl_pipeline/etl_pipeline/config/settings_v2.py`; `FileConfigProvider` and `Settings` delegate for env loading.
+
+### Changes
+
+| Item | Action |
+|---|---|
+| **`settings_v2.py`** | Typed source/replication/analytics loaders, Phase 0 env-file skip, `connection_config_dict()` |
+| **`providers.py`** | `FileConfigProvider` stores `_connection_settings`; `get_config('env')` unchanged |
+| **`settings.py`** | `_get_base_config()` / `validate_configs()` delegate when typed settings present |
+| **`tests/unit/config/test_settings_v2_unit.py`** | Precedence, delegation, Settings integration tests |
+| **`Pipfile`** | `pydantic`, `pydantic-settings` |
+| **`api/deps.py`** | `get_api_settings()` / `get_api_settings_optional()` for FastAPI Depends |
+| **`api/main.py`** | `/health` uses `Depends(get_api_settings_optional)` when env is configured |
+
+### Remaining (Phase 3+)
+
 - PowerShell env manager delegates to Python (§4.5)
 - Single venv tool / stale artifact cleanup (§4.4, §4.6)
+- Optional: slim `Settings.ENV_MAPPINGS` once all callers use typed path exclusively
 
 ---
 
