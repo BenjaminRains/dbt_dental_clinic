@@ -97,3 +97,8 @@ See `docs/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
 .\scripts\utils\generate_api_key.ps1 -Clinic
 .\scripts\utils\backup_dbt_dental_clinic.ps1
 ```
+
+### CI
+
+Pull requests that touch `tools/mdc_cli` or API/ETL settings loaders run
+`.github/workflows/mdc_cli.yml` (pytest + `mdc status` smoke, no PowerShell).

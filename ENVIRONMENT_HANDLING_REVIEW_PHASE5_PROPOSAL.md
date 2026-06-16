@@ -13,7 +13,7 @@
 | 5.3 — Frontend via mdc | **done** (0.7.0) | `mdc frontend dev`; `mdc deploy frontend --target` |
 | 5.4 — Consult audio via mdc | **planned** | Stateless venv + child env (no shell activation) |
 | 5.5 — Archive Legacy manager | **planned** | Remove or shrink `environment_manager.ps1`; optional `load_project.ps1` |
-| 5.6 — Docs, CI, polish | **planned** | Onboarding, smoke CI, CLI encoding, alias defaults |
+| 5.6 — Docs, CI, polish | **in progress** | CI: `.github/workflows/mdc_cli.yml` (pytest + `mdc status` smoke) |
 
 **Target daily workflow (no `-Legacy`):**
 

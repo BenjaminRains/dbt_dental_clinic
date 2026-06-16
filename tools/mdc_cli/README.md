@@ -59,3 +59,17 @@ Use `.\load_project.ps1 -Legacy` for frontend deploy and other legacy menus. **S
 `ssm-connect-api`, `ssm-connect-demo-db`.
 
 Stages: `local`, `clinic`, `test`, `demo` (API/dbt). Use `clinic` for live clinic context.
+
+## CI
+
+GitHub Actions workflow `.github/workflows/mdc_cli.yml` runs on PRs and pushes to `main`
+when `tools/mdc_cli` or API/ETL settings loaders change:
+
+```bash
+pip install -e "./tools/mdc_cli[dev]"
+pytest   # from tools/mdc_cli
+mdc status --env local
+```
+
+No `load_project.ps1`, AWS credentials, or runtime `.env` files required — validation rows
+may show `fail` when env files are absent; the command must exit 0.
