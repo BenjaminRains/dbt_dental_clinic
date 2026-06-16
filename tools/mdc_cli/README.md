@@ -9,6 +9,7 @@ From the repository root:
 
 ```powershell
 pip install -e tools/mdc_cli
+.\load_project.ps1
 ```
 
 Then:
@@ -16,40 +17,37 @@ Then:
 ```powershell
 mdc --help
 mdc status
-mdc status --env local
+status
+api-run
 ```
 
-Or without installing:
-
-```powershell
-python -m mdc_cli --help
-```
+Use `.\load_project.ps1 -Legacy` for deploy, SSM port-forward, and frontend commands.
 
 ## Commands
 
-### Validation (Phase 4.2)
+### Validation
 
 - `mdc status` — config paths, validation overview, venv discovery
-- `mdc api test-config --env <stage>` — validate API pydantic settings
-- `mdc api health --env <stage>` — config health (settings load)
-- `mdc etl validate --env <stage> [--profile load|full]` — validate ETL settings
-- `mdc dbt validate --env <stage>` — validate dbt connection env (local/clinic/demo)
+- `mdc api test-config --env <stage>`
+- `mdc etl validate --env <stage> [--profile load|full]`
+- `mdc dbt validate --env <stage>`
 
-### Runtime (Phase 4.3)
+### Runtime (stateless, isolated child env)
 
-Stateless runs inject validated env into an **isolated child process** (parent shell vars do not leak):
-
-- `mdc api run --env <stage> [--host H] [--port P] [--reload/--no-reload]` — uvicorn (`--reload` default on `local` only)
-- `mdc etl run --env <stage> [--profile full] -- [etl cli args]`
-- `mdc etl test-connections --env <stage> [--profile full] -- [args]`
-- `mdc dbt run|test|docs --env <stage> -- [dbt args]`
+- `mdc api run --env <stage>` — uvicorn; `--reload` default on `local` only
+- `mdc etl run|status|test-connections --env <stage> [--profile full] -- [args]`
+- `mdc dbt run|test|docs --env <stage> -- [args]`
 - `mdc dbt invoke --env <stage> -- deps` — arbitrary dbt subcommands
 
-PowerShell aliases `api-run`, `etl-run`, `etl-test`, and `dbt` delegate to `mdc` (Phase 4.4).
+### Infrastructure wrappers (Phase 4.5)
 
-Stages are dev/test targets only: `local`, `clinic`, `test`, and `demo` (API/dbt).
-Use `clinic` for the live clinic deployment context — not a separate `production` stage name.
+- `mdc tunnel clinic-db|demo-db|rds` — SSM port forward via `scripts/ssm_tunnels.ps1`
+- `mdc deploy frontend` — `Deploy-Frontend`
+- `mdc deploy api --env clinic` — `scripts/deployment/deploy_api_file.ps1` when present
 
-## Stub
+### PowerShell aliases (Phase 4.5)
 
-- `mdc tunnel *` — Phase 4.5+ wrappers to existing deployment scripts
+`scripts/mdc_aliases.ps1` (default via `load_project.ps1`): `status`, `api-run`, `api-test`,
+`etl-run`, `etl-validate`, `etl-test`, `etl-status`, `env-status`.
+
+Stages: `local`, `clinic`, `test`, `demo` (API/dbt). Use `clinic` for live clinic context.

@@ -231,7 +231,21 @@ forward-compatible with §5.
 | **`api-run`, `etl-run`, `etl-test`, `dbt`** | Thin wrappers — no `$script:Is*Active` guard on migrated run paths |
 | **`api-init` / `etl-init` / `dbt-init`** | Still available for shell export; optional, not required for runs |
 
-Remaining: Phase 4.5 thin `load_project.ps1` aliases; Phase 4.6 retire `export_env_for_shell.py`.
+Remaining: Phase 4.6 retire `export_env_for_shell.py` and slim `environment_manager.ps1`.
+
+## Phase 4.5 — Thin PowerShell layer (implemented)
+
+> Status: **implemented** on branch `refactor/phase4-mdc-run`.
+
+| Item | Action |
+|---|---|
+| **`scripts/mdc_invoke.ps1`** | Shared `Invoke-MDC` helper |
+| **`scripts/mdc_aliases.ps1`** | Thin daily-dev aliases (default via `load_project.ps1`) |
+| **`load_project.ps1 -Legacy`** | Full `environment_manager.ps1` for deploy/SSM/frontend |
+| **4.5a** | `etl-validate`, `api-test`, `etl-status`, `env-status` → `mdc`; `mdc etl status` |
+| **4.5b** | `dbt-init` deprecated — runs `mdc dbt validate` only, no shell env |
+| **4.5c** | `mdc tunnel clinic-db\|demo-db\|rds`; `mdc deploy frontend\|api` |
+| **4.5d** | Default load path is mdc aliases, not full env manager |
 
 ---
 
