@@ -8,15 +8,17 @@ import typer
 
 from mdc_cli.env import validate_api_stage
 from mdc_cli.output import finish_validation
-from mdc_cli.paths import api_env_file
+from mdc_cli.paths import API_DIR, api_env_file
+from mdc_cli.run_helper import (
+    echo_run_banner,
+    load_env_dict_isolated,
+    require_component_python,
+    run_isolated,
+    venv_root_from_python,
+)
 from mdc_cli.stages import require_api_stage
 
 api_app = typer.Typer(help="API server commands")
-
-
-def _not_implemented(name: str, phase: str) -> None:
-    typer.echo(f"{name} is not implemented yet ({phase}).", err=True)
-    raise typer.Exit(code=2)
 
 
 def _check_api_config(stage: str, *, success_label: str) -> None:
@@ -52,8 +54,57 @@ def test_config(
 @api_app.command("run")
 def run(
     env: str = typer.Option(..., "--env", help="Stage: local, demo, clinic, or test"),
-    host: Optional[str] = typer.Option(None, help="Override API host"),
-    port: Optional[int] = typer.Option(None, help="Override API port"),
+    host: Optional[str] = typer.Option(None, help="Override API host (default from env file)"),
+    port: Optional[int] = typer.Option(None, help="Override API port (default from env file)"),
+    reload: Optional[bool] = typer.Option(
+        None,
+        "--reload/--no-reload",
+        help="Enable uvicorn reload (default: on for local only)",
+    ),
 ) -> None:
-    """Run uvicorn with injected env (Phase 4.3)."""
-    _not_implemented("mdc api run", "Phase 4.3")
+    """Run uvicorn with isolated injected env (no api-init required)."""
+    require_api_stage(env)
+    config_path = api_env_file(env)
+    ok, error = validate_api_stage(env)
+    if not ok:
+        finish_validation(
+            component="api",
+            stage=env,
+            config_path=config_path,
+            ok=False,
+            error=error,
+        )
+
+    settings = load_env_dict_isolated("api", env)
+    python = require_component_python("api")
+    bind_host = host or settings.get("API_HOST", "0.0.0.0")
+    bind_port = str(port or settings.get("API_PORT", "8000"))
+    use_reload = reload if reload is not None else env == "local"
+
+    cmd = [
+        str(python),
+        "-m",
+        "uvicorn",
+        "main:app",
+        "--host",
+        bind_host,
+        "--port",
+        bind_port,
+    ]
+    if use_reload:
+        cmd.append("--reload")
+
+    reload_note = "reload" if use_reload else "no-reload"
+    echo_run_banner(
+        "api",
+        env,
+        config_path,
+        f"→ uvicorn {bind_host}:{bind_port} ({reload_note})",
+    )
+    code = run_isolated(
+        settings=settings,
+        cmd=cmd,
+        cwd=API_DIR,
+        venv_root=venv_root_from_python(python),
+    )
+    raise typer.Exit(code=code)

@@ -200,9 +200,9 @@ forward-compatible with §5.
 | **`mdc etl validate`** | Validate ETL settings with `--profile load\|full` |
 | **`mdc_cli` deps** | `pydantic-settings`, `python-dotenv` for direct loader imports |
 
-## Phase 4.2b — dbt env via Python (in progress)
+## Phase 4.2b — dbt env via Python (implemented)
 
-> Status: **in progress** on branch `refactor/phase4-mdc-dbt-env`.
+> Status: **implemented** (merged).
 
 | Item | Action |
 |---|---|
@@ -210,7 +210,28 @@ forward-compatible with §5.
 | **`mdc dbt validate`** | Validate dbt env for local/clinic/demo; exit 0/1 |
 | **`mdc status`** | dbt rows use real validation; `discover_dbt_python()` for dbt Pipenv |
 
-No change to `dbt-init` in 4.2b.
+## Phase 4.3 — Runtime commands (implemented)
+
+> Status: **implemented** on branch `refactor/phase4-mdc-run`.
+
+| Item | Action |
+|---|---|
+| **`mdc_cli/run_helper.py`** | Isolated child env (`scrub_parent_stage_env`, minimal OS base) |
+| **`mdc api run`** | uvicorn in api venv; `--reload` default on `local` only |
+| **`mdc etl run` / `test-connections`** | ETL CLI via Pipenv python; `--profile` default `full`; passthrough after `--` |
+| **`mdc dbt run` / `test` / `docs` / `invoke`** | dbt executable with injected env; `--target` from `--env` |
+
+## Phase 4.4 — PowerShell delegates to mdc (implemented)
+
+> Status: **implemented** on branch `refactor/phase4-mdc-run`.
+
+| Item | Action |
+|---|---|
+| **`Invoke-MDC`** | Runs `mdc` or `python -m mdc_cli` from repo root |
+| **`api-run`, `etl-run`, `etl-test`, `dbt`** | Thin wrappers — no `$script:Is*Active` guard on migrated run paths |
+| **`api-init` / `etl-init` / `dbt-init`** | Still available for shell export; optional, not required for runs |
+
+Remaining: Phase 4.5 thin `load_project.ps1` aliases; Phase 4.6 retire `export_env_for_shell.py`.
 
 ---
 

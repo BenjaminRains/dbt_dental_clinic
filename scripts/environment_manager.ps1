@@ -100,6 +100,31 @@ function Clear-StaleStageEnvVars {
     }
 }
 
+function Invoke-MDC {
+    <#
+    .SYNOPSIS
+        Run the mdc CLI from repo root (Phase 4.3+ stateless orchestration).
+    #>
+    param(
+        [Parameter(ValueFromRemainingArguments = $true)]
+        [string[]]$Args
+    )
+
+    $projectRoot = Split-Path $script:EnvManagerScriptRoot -Parent
+    Push-Location $projectRoot
+    try {
+        $mdc = Get-Command mdc -ErrorAction SilentlyContinue
+        if ($mdc) {
+            & mdc @Args
+        } else {
+            python -m mdc_cli @Args
+        }
+        return $LASTEXITCODE
+    } finally {
+        Pop-Location
+    }
+}
+
 function Import-StageEnvFromPython {
     param(
         [Parameter(Mandatory = $true)]
@@ -1177,79 +1202,80 @@ function Stop-ConsultAudioEnvironment {
 # COMMAND WRAPPERS - FIXED: Avoid infinite recursion
 # =============================================================================
 
-# DBT Commands - FIXED: Use pipenv run to avoid recursion
+# DBT Commands — Phase 4.4: delegate to mdc (no dbt-init required for run/test/docs/deps)
 function Invoke-DBT {
-    if (-not $script:IsDBTActive) {
-        Write-Host "❌ dbt environment not active. Run 'dbt-init' first." -ForegroundColor Red
+    Write-Host "💡 dbt uses mdc (no dbt-init required). Example: mdc dbt run --env local" -ForegroundColor DarkGray
+
+    if (-not $args -or $args.Count -eq 0) {
+        Write-Host "Usage: dbt run|test|build|deps|docs ... (delegates to mdc dbt)" -ForegroundColor Yellow
         return
     }
-    
-    # Check if target is specified in args, otherwise use DBT_TARGET env var
+
     $target = [Environment]::GetEnvironmentVariable('DBT_TARGET', 'Process')
-    # Default to 'local' if DBT_TARGET is not set or is invalid
     $validTargets = @('local', 'demo', 'clinic')
     if (-not $target -or $target -notin $validTargets) {
         $target = 'local'
     }
-    $targetSpecified = $false
-    $newArgs = @()
+
     foreach ($arg in $args) {
-        if ($arg -match '^--target=(.+)$' -or $arg -eq '--target') {
-            $targetSpecified = $true
-            $newArgs += $arg
-        } elseif ($arg -eq '-t' -or $arg -eq '--target') {
-            $targetSpecified = $true
-            $newArgs += $arg
-        } else {
-            $newArgs += $arg
+        if ($arg -match '^--target=(.+)$') {
+            $target = $Matches[1]
+            break
         }
     }
-    
-    # If no target specified in args, use DBT_TARGET (or default to 'local')
-    if (-not $targetSpecified) {
-        $newArgs += '--target', $target
-        Write-Host "🎯 Using target: $target (from dbt-init)" -ForegroundColor Gray
-    }
-    
-    Write-Host "🚀 dbt $($newArgs -join ' ')" -ForegroundColor Cyan
-    # FIXED: Use pipenv run to avoid infinite recursion with dbt alias
-    # Also change to dbt project directory before running commands
-    $firstSubcommand = $null
-    foreach ($arg in $newArgs) {
-        if ($arg -notmatch '^-') { $firstSubcommand = $arg; break }
-    }
-    $depsWithRetry = ($firstSubcommand -eq 'deps')
 
-    $invokeDbtCommand = {
-        if ($depsWithRetry) {
+    $sub = $args[0]
+    $rest = @()
+    if ($args.Count -gt 1) {
+        $rest = $args[1..($args.Count - 1)]
+    }
+
+    switch ($sub) {
+        'run' {
+            $mdcArgs = @('dbt', 'run', '--env', $target) + $rest
+            Invoke-MDC @mdcArgs
+            return
+        }
+        'test' {
+            $mdcArgs = @('dbt', 'test', '--env', $target) + $rest
+            Invoke-MDC @mdcArgs
+            return
+        }
+        'docs' {
+            if ($rest.Count -gt 0 -and $rest[0] -eq 'serve') {
+                $mdcArgs = @('dbt', 'docs', '--env', $target, '--serve') + $rest[1..($rest.Count - 1)]
+            } else {
+                $extra = $rest
+                if ($rest.Count -gt 0 -and $rest[0] -eq 'generate') {
+                    $extra = $rest[1..($rest.Count - 1)]
+                }
+                $mdcArgs = @('dbt', 'docs', '--env', $target) + $extra
+            }
+            Invoke-MDC @mdcArgs
+            return
+        }
+        'deps' {
             $maxAttempts = 6
             $sleepSeconds = @(3, 5, 8, 12, 15)
             for ($attempt = 1; $attempt -le $maxAttempts; $attempt++) {
                 if ($attempt -gt 1) {
                     $delay = $sleepSeconds[$attempt - 2]
-                    Write-Host "🔄 dbt deps attempt $attempt/$maxAttempts (hub.getdbt.com often resets connections; waiting ${delay}s)..." -ForegroundColor Yellow
+                    Write-Host "🔄 dbt deps attempt $attempt/$maxAttempts (waiting ${delay}s)..." -ForegroundColor Yellow
                     Start-Sleep -Seconds $delay
                 }
-                pipenv run dbt $newArgs
+                $mdcArgs = @('dbt', 'invoke', '--env', $target, '--', 'deps') + $rest
+                Invoke-MDC @mdcArgs
                 if ($LASTEXITCODE -eq 0) { break }
                 if ($attempt -eq $maxAttempts) {
-                    Write-Host "❌ dbt deps failed after $maxAttempts attempts. Try another network/VPN or run again later." -ForegroundColor Red
+                    Write-Host "❌ dbt deps failed after $maxAttempts attempts." -ForegroundColor Red
                 }
             }
-        } else {
-            pipenv run dbt $newArgs
+            return
         }
-    }
-
-    if (Test-Path "dbt_dental_models") {
-        Push-Location "dbt_dental_models"
-        try {
-            & $invokeDbtCommand
-        } finally {
-            Pop-Location
+        default {
+            $mdcArgs = @('dbt', 'invoke', '--env', $target, '--') + $args
+            Invoke-MDC @mdcArgs
         }
-    } else {
-        & $invokeDbtCommand
     }
 }
 
@@ -1335,44 +1361,50 @@ function Test-ETLValidation {
 }
 
 function Start-ETLPipeline {
-    if (-not $script:IsETLActive) {
-        Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
-        return
-    }
-    
-    # Safety check: Prevent ETL operations in demo mode
-    if ($env:ETL_ENVIRONMENT -eq "demo") {
+    param(
+        [string]$Env = "",
+        [ValidateSet("load", "full")]
+        [string]$Profile = "full"
+    )
+
+    Write-Host "💡 etl-run uses mdc (no etl-init required). Prefer: mdc etl run --env clinic --profile full" -ForegroundColor DarkGray
+
+    $stage = if ($Env) { $Env } elseif ($env:ETL_ENVIRONMENT) { $env:ETL_ENVIRONMENT } else { "clinic" }
+    if ($stage -eq "demo") {
         Write-Host "❌ ETL pipeline operations are not available in demo mode." -ForegroundColor Red
-        Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
-        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'clinic' or 'test' for ETL operations." -ForegroundColor Yellow
+        Write-Host "   Use clinic or test: mdc etl run --env clinic --profile full" -ForegroundColor Yellow
         return
     }
-    
-    # FIXED: Use python directly since we're already in pipenv environment
-    python -m etl_pipeline.cli.main run $args
+
+    $mdcArgs = @("etl", "run", "--env", $stage, "--profile", $Profile)
+    if ($args.Count -gt 0) {
+        $mdcArgs += "--"
+        $mdcArgs += $args
+    }
+    Invoke-MDC @mdcArgs
 }
 
 function Test-ETLConnections {
-    if (-not $script:IsETLActive) {
-        Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
-        return
-    }
-    
-    # Safety check: Prevent ETL operations in demo mode
-    if ($env:ETL_ENVIRONMENT -eq "demo") {
+    param(
+        [string]$Env = "",
+        [ValidateSet("load", "full")]
+        [string]$Profile = "full"
+    )
+
+    Write-Host "💡 etl-test uses mdc (no etl-init required). Prefer: mdc etl test-connections --env clinic" -ForegroundColor DarkGray
+
+    $stage = if ($Env) { $Env } elseif ($env:ETL_ENVIRONMENT) { $env:ETL_ENVIRONMENT } else { "clinic" }
+    if ($stage -eq "demo") {
         Write-Host "❌ ETL connection testing is not available in demo mode." -ForegroundColor Red
-        Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
-        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'clinic' or 'test' for ETL operations." -ForegroundColor Yellow
         return
     }
-    
-    if (Test-Path "test_connections.py") {
-        # FIXED: Use python directly since we're already in pipenv environment
-        python test_connections.py
-    } else {
-        # FIXED: Use python directly since we're already in pipenv environment
-        python -m etl_pipeline.cli.main test-connections
+
+    $mdcArgs = @("etl", "test-connections", "--env", $stage, "--profile", $Profile)
+    if ($args.Count -gt 0) {
+        $mdcArgs += "--"
+        $mdcArgs += $args
     }
+    Invoke-MDC @mdcArgs
 }
 
 # API Commands
@@ -1437,83 +1469,20 @@ function Start-APIDocs {
 }
 
 function Start-APIServer {
-    if (-not $script:IsAPIActive) {
-        Write-Host "❌ API environment not active. Run 'api-init' first." -ForegroundColor Red
-        return
-    }
-    
-    $port = $env:API_PORT
-    $apiHost = $env:API_HOST
-    
-    if (-not $port) { $port = "8000" }
-    if (-not $apiHost) { $apiHost = "0.0.0.0" }
-    
-    # Only set API_ENVIRONMENT=local as default if not already set by api-init
-    # (api-init loads it from .env_api_* files, so we should respect that)
-    if (-not $env:API_ENVIRONMENT) {
-        $env:API_ENVIRONMENT = "local"
-        Write-Host "🔧 Set API_ENVIRONMENT=local (default - for opendental_analytics database)" -ForegroundColor Cyan
-    } else {
-        Write-Host "🔧 Using API_ENVIRONMENT=$env:API_ENVIRONMENT (from api-init)" -ForegroundColor Cyan
-    }
-    
-    # Determine database info based on environment
-    $dbInfo = switch ($env:API_ENVIRONMENT) {
-        "demo" {
-            $dbName = $env:DEMO_POSTGRES_DB
-            if (-not $dbName) { $dbName = "opendental_demo" }
-            "opendental_demo (demo database - synthetic data)"
-        }
-        "clinic" {
-            $dbName = $env:POSTGRES_ANALYTICS_DB
-            if (-not $dbName) { $dbName = "opendental_analytics" }
-            $hostHint = $env:POSTGRES_ANALYTICS_HOST
-            if (-not $hostHint) { $hostHint = "(host not set)" }
-            "$dbName @ $hostHint (clinic config — real PHI, CLINIC_API_KEY)"
-        }
-        "test" {
-            $dbName = $env:TEST_POSTGRES_ANALYTICS_DB
-            if (-not $dbName) { $dbName = "test_opendental_analytics" }
-            $sourceDb = $env:TEST_OPENDENTAL_SOURCE_DB
-            if (-not $sourceDb) { $sourceDb = "test_opendental" }
-            "$dbName (test environment - uses TEST_* databases: $sourceDb source, $dbName analytics)"
-        }
-        default {
-            $dbName = $env:POSTGRES_ANALYTICS_DB
-            if (-not $dbName) { $dbName = "opendental_analytics" }
-            "$dbName (local config — .env_api_local)"
-        }
-    }
-    
-    Write-Host "🚀 Starting API server (API_ENVIRONMENT=$($env:API_ENVIRONMENT)) on $apiHost`:$port..." -ForegroundColor Blue
-    Write-Host "   Database: $dbInfo" -ForegroundColor Gray
-    
-    # Check if we're already in the api directory or need to change to it
-    $currentLocation = Get-Location
-    $isInApiDir = (Test-Path "main.py") -and (Test-Path "config.py")
-    
-    if ($isInApiDir) {
-        # We're already in the api directory
-        Write-Host "📁 Running from api directory: $currentLocation" -ForegroundColor Gray
-        try {
-            # Use python from virtual environment if available
-            python -m uvicorn main:app --host $apiHost --port $port --reload
-        } catch {
-            Write-Host "❌ Failed to start API server: $_" -ForegroundColor Red
-        }
-    } elseif (Test-Path "api\main.py") {
-        # We're in the project root, change to api directory
-        Push-Location "api"
-        try {
-            Write-Host "📁 Changed to api directory" -ForegroundColor Gray
-            # Use python from virtual environment if available
-            python -m uvicorn main:app --host $apiHost --port $port --reload
-        } finally {
-            Pop-Location
-        }
-    } else {
-        Write-Host "❌ API directory not found. Expected to find main.py in current directory or api/ subdirectory." -ForegroundColor Red
-    }
+    param(
+        [ValidateSet("local", "demo", "clinic", "test", "")]
+        [string]$Env = "",
+        [string]$BindHost = "",
+        [int]$Port = 0
+    )
+
+    Write-Host "💡 api-run uses mdc (no api-init required). Prefer: mdc api run --env local" -ForegroundColor DarkGray
+
+    $stage = if ($Env) { $Env } elseif ($env:API_ENVIRONMENT) { $env:API_ENVIRONMENT } else { "local" }
+    $mdcArgs = @("api", "run", "--env", $stage)
+    if ($BindHost) { $mdcArgs += @("--host", $BindHost) }
+    if ($Port -gt 0) { $mdcArgs += @("--port", "$Port") }
+    Invoke-MDC @mdcArgs
 }
 
 # =============================================================================
