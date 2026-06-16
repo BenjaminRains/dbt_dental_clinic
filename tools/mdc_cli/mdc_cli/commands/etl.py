@@ -1,4 +1,4 @@
-"""ETL commands (stubs until Phase 4.2–4.3)."""
+"""ETL commands."""
 
 from __future__ import annotations
 
@@ -6,7 +6,10 @@ from typing import Optional
 
 import typer
 
-from mdc_cli.paths import default_etl_profile
+from mdc_cli.env import validate_etl_stage
+from mdc_cli.output import finish_validation
+from mdc_cli.paths import default_etl_profile, etl_env_file
+from mdc_cli.stages import require_etl_profile, require_etl_stage
 
 etl_app = typer.Typer(help="ETL pipeline commands")
 
@@ -25,8 +28,18 @@ def validate(
         help="Connection subset: load (repl+analytics) or full (all three)",
     ),
 ) -> None:
-    """Validate ETL pydantic settings for a stage (Phase 4.2)."""
-    _not_implemented("mdc etl validate", "Phase 4.2")
+    """Validate ETL pydantic settings for a stage."""
+    require_etl_stage(env)
+    resolved_profile = require_etl_profile(profile or default_etl_profile(env))
+    ok, error = validate_etl_stage(env, profile=resolved_profile)
+    finish_validation(
+        component="etl",
+        stage=env,
+        config_path=etl_env_file(env),
+        ok=ok,
+        error=error,
+        profile=resolved_profile,
+    )
 
 
 @etl_app.command("run")
@@ -39,7 +52,6 @@ def run(
     ),
 ) -> None:
     """Run ETL pipeline with injected env (Phase 4.3)."""
-    _ = default_etl_profile(env)
     _not_implemented("mdc etl run", "Phase 4.3")
 
 

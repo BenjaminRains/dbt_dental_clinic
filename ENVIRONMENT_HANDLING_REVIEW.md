@@ -176,9 +176,9 @@ forward-compatible with §5.
 - Single venv tool / stale artifact cleanup (Phase 4.6)
 - Optional: slim `Settings.ENV_MAPPINGS` once all callers use typed path exclusively
 
-## Phase 4.1 — `mdc` CLI skeleton (in progress)
+## Phase 4.1 — `mdc` CLI skeleton (implemented)
 
-> Status: **in progress** on branch `refactor/phase4-mdc-cli`.
+> Status: **implemented** (merged).
 > See `ENVIRONMENT_HANDLING_REVIEW_PHASE4_PROPOSAL.md` for full Phase 4 plan.
 
 | Item | Action |
@@ -189,7 +189,18 @@ forward-compatible with §5.
 | **Stub commands** | `api`, `etl`, `dbt`, `tunnel` subcommands (Phase 4.2+) |
 | **`tools/mdc_cli/tests/`** | CLI and path unit tests |
 
-No change to `environment_manager.ps1` behavior in 4.1.
+## Phase 4.2 — Read-only validation commands (in progress)
+
+> Status: **in progress** on branch `refactor/phase4-mdc-validate`.
+
+| Item | Action |
+|---|---|
+| **`mdc api test-config`** | Validate API pydantic settings; exit 0/1 |
+| **`mdc api health`** | Config-only health (settings load); HTTP `--live` deferred to 4.3 |
+| **`mdc etl validate`** | Validate ETL settings with `--profile load\|full` |
+| **`mdc_cli` deps** | `pydantic-settings`, `python-dotenv` for direct loader imports |
+
+No change to `environment_manager.ps1` in 4.2.
 
 ---
 
