@@ -1,4 +1,4 @@
-# PowerShell script to deploy a single API file to EC2 using AWS Systems Manager
+﻿# PowerShell script to deploy a single API file to EC2 using AWS Systems Manager
 # Usage: .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\services\treatment_acceptance_service.py"
 # Clinic env (recommended): writes api/.env (the single systemd EnvironmentFile source of truth)
 # and RETIRES any stale api/.env_api_clinic on the instance. config.py treats the OS environment
@@ -78,11 +78,11 @@ function Invoke-ApiHealthDbCheck {
     )
     Write-Host "`n🏥 Verifying GET /health/db on instance..." -ForegroundColor Yellow
     $healthCmds = @(
-        "sleep 3",
-        "HTTP=`$(curl -sf -o /tmp/health_db.json -w '%{http_code}' http://127.0.0.1:${ApiPort}/health/db 2>/dev/null || echo 000)",
-        "echo HTTP: `$HTTP",
-        "cat /tmp/health_db.json 2>/dev/null || true",
-        "test `"`$HTTP`" = 200"
+        'sleep 3',
+        ('HTTP=$(curl -sf -o /tmp/health_db.json -w ''%{http_code}'' http://127.0.0.1:{0}/health/db 2>/dev/null || echo 000)' -f $ApiPort),
+        'echo HTTP: $HTTP',
+        'cat /tmp/health_db.json 2>/dev/null || true',
+        'test "$HTTP" = 200'
     )
     $response = Invoke-AwsSsmRunShellScript -InstanceId $InstanceId -Commands $healthCmds
     $commandId = $response.Command.CommandId
@@ -193,27 +193,27 @@ try {
     if ($ClinicEnv) {
         $stale = $clinicEnvSecondPath -replace '\\', '/'
         $commands = @(
-            "ENV1='$remoteFilePath'",
-            "STALE='$stale'",
-            "REMOTE_DIR=`$(dirname `"`$ENV1`")",
-            "sudo mkdir -p `"`$REMOTE_DIR`"",
-            "if [ -f `"`$ENV1`" ]; then BACKUP=`"`${ENV1}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$ENV1`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
-            "echo '$base64Content' | base64 -d | sudo tee `"`$ENV1`" > /dev/null",
-            "sudo chown ec2-user:ec2-user `"`$ENV1`"",
-            "sudo chmod 644 `"`$ENV1`"",
-            "if [ -f `"`$STALE`" ]; then RETIRED=`"`${STALE}.retired.`$(date +%Y%m%d_%H%M%S)`"; sudo mv `"`$STALE`" `"`$RETIRED`"; echo `"Retired stale env file: `$STALE -> `$RETIRED`"; fi",
-            "if [ -f `"`$ENV1`" ]; then SIZE=`$(stat -c%s `"`$ENV1`" 2>/dev/null || stat -f%z `"`$ENV1`" 2>/dev/null); echo `"Deployed .env: `$SIZE bytes (single source of truth)`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
+            ('ENV1=''{0}''' -f $remoteFilePath),
+            ('STALE=''{0}''' -f $stale),
+            'REMOTE_DIR=$(dirname "$ENV1")',
+            'sudo mkdir -p "$REMOTE_DIR"',
+            'if [ -f "$ENV1" ]; then BACKUP="${ENV1}.backup.$(date +%Y%m%d_%H%M%S)"; sudo cp "$ENV1" "$BACKUP"; echo "Backup: $BACKUP"; fi',
+            ('echo ''{0}'' | base64 -d | sudo tee "$ENV1" > /dev/null' -f $base64Content),
+            'sudo chown ec2-user:ec2-user "$ENV1"',
+            'sudo chmod 644 "$ENV1"',
+            'if [ -f "$STALE" ]; then RETIRED="${STALE}.retired.$(date +%Y%m%d_%H%M%S)"; sudo mv "$STALE" "$RETIRED"; echo "Retired stale env file: $STALE -> $RETIRED"; fi',
+            'if [ -f "$ENV1" ]; then SIZE=$(stat -c%s "$ENV1" 2>/dev/null || stat -f%z "$ENV1" 2>/dev/null); echo "Deployed .env: $SIZE bytes (single source of truth)"; else echo "ERROR: Deployment failed"; exit 1; fi'
         )
     } else {
         $commands = @(
-            "REMOTE_FILE='$remoteFilePath'",
-            "REMOTE_DIR=`$(dirname `"`$REMOTE_FILE`")",
-            "if [ -f `"`$REMOTE_FILE`" ]; then BACKUP=`"`${REMOTE_FILE}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$REMOTE_FILE`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
-            "sudo mkdir -p `"`$REMOTE_DIR`"",
-            "echo '$base64Content' | base64 -d | sudo tee `"`$REMOTE_FILE`" > /dev/null",
-            "sudo chown ec2-user:ec2-user `"`$REMOTE_FILE`"",
-            "sudo chmod 644 `"`$REMOTE_FILE`"",
-            "if [ -f `"`$REMOTE_FILE`" ]; then SIZE=`$(stat -c%s `"`$REMOTE_FILE`" 2>/dev/null || stat -f%z `"`$REMOTE_FILE`" 2>/dev/null); echo `"Deployed: `$SIZE bytes`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
+            ('REMOTE_FILE=''{0}''' -f $remoteFilePath),
+            'REMOTE_DIR=$(dirname "$REMOTE_FILE")',
+            'if [ -f "$REMOTE_FILE" ]; then BACKUP="${REMOTE_FILE}.backup.$(date +%Y%m%d_%H%M%S)"; sudo cp "$REMOTE_FILE" "$BACKUP"; echo "Backup: $BACKUP"; fi',
+            'sudo mkdir -p "$REMOTE_DIR"',
+            ('echo ''{0}'' | base64 -d | sudo tee "$REMOTE_FILE" > /dev/null' -f $base64Content),
+            'sudo chown ec2-user:ec2-user "$REMOTE_FILE"',
+            'sudo chmod 644 "$REMOTE_FILE"',
+            'if [ -f "$REMOTE_FILE" ]; then SIZE=$(stat -c%s "$REMOTE_FILE" 2>/dev/null || stat -f%z "$REMOTE_FILE" 2>/dev/null); echo "Deployed: $SIZE bytes"; else echo "ERROR: Deployment failed"; exit 1; fi'
         )
     }
     
@@ -257,9 +257,9 @@ try {
                 # Use simpler status check to avoid Unicode characters in output
                 $serviceName = if ($Clinic -or $ClinicEnv) { "dental-clinic-api-clinic" } else { "dental-clinic-api" }
                 $restartCmds = @(
-                    "sudo systemctl restart $serviceName",
-                    "sleep 2",
-                    "sudo systemctl is-active $serviceName && echo Service is active || echo Service is not active"
+                    ('sudo systemctl restart {0}' -f $serviceName),
+                    'sleep 2',
+                    ('sudo systemctl is-active {0} && echo Service is active || echo Service is not active' -f $serviceName)
                 )
                 $restartResponseObj = Invoke-AwsSsmRunShellScript -InstanceId $InstanceId -Commands $restartCmds
                 
