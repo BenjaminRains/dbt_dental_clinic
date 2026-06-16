@@ -1,4 +1,4 @@
-"""Deploy wrappers to existing PowerShell scripts (Phase 4.5)."""
+"""Deploy wrappers (Phase 4.5 / 5.3)."""
 
 from __future__ import annotations
 
@@ -6,11 +6,12 @@ from pathlib import Path
 
 import typer
 
+from mdc_cli.deploy_frontend import deploy_frontend_target
 from mdc_cli.paths import REPO_ROOT
-from mdc_cli.ps_invoke import invoke_ps_function, invoke_ps_script_file
+from mdc_cli.ps_invoke import invoke_ps_script_file
 from mdc_cli.stages import require_api_stage
 
-deploy_app = typer.Typer(help="Deployment wrappers (PowerShell)")
+deploy_app = typer.Typer(help="Deployment commands")
 
 
 @deploy_app.command("api")
@@ -51,8 +52,16 @@ def deploy_api(
 
 
 @deploy_app.command("frontend")
-def deploy_frontend() -> None:
-    """Deploy frontend via Deploy-Frontend in environment_manager.ps1."""
-    typer.echo("DEPLOY  frontend  -> Deploy-Frontend")
-    code = invoke_ps_function("Deploy-Frontend")
+def deploy_frontend(
+    target: str = typer.Option(
+        "demo",
+        "--target",
+        help="Frontend target: demo (portfolio) or clinic (IP-restricted)",
+    ),
+) -> None:
+    """Build and deploy frontend to S3/CloudFront."""
+    if target not in ("demo", "clinic"):
+        typer.echo("--target must be demo or clinic.", err=True)
+        raise typer.Exit(code=2)
+    code = deploy_frontend_target(target)
     raise typer.Exit(code=code)

@@ -3,6 +3,11 @@
 # Full deploy/SSM/frontend manager: .\load_project.ps1 -Legacy
 
 . (Join-Path $PSScriptRoot "mdc_invoke.ps1")
+. (Join-Path $PSScriptRoot "ssm_tunnels.ps1")
+
+Set-Alias -Name ssm-connect-api -Value Connect-SSMAPI -Scope Global -ErrorAction SilentlyContinue
+Set-Alias -Name ssm-connect-clinic-api -Value Connect-SSMClinicAPI -Scope Global -ErrorAction SilentlyContinue
+Set-Alias -Name ssm-connect-demo-db -Value Connect-SSMDemoDB -Scope Global -ErrorAction SilentlyContinue
 
 function Get-MdcStageDefault {
     param(
@@ -99,6 +104,22 @@ function etl-status {
     Invoke-MDC @mdcArgs
 }
 
+function frontend-dev {
+    Invoke-MDC @("frontend", "dev") + $args
+}
+
+function frontend-status {
+    Invoke-MDC @("frontend", "status") + $args
+}
+
+function demo-frontend-deploy {
+    Invoke-MDC @("deploy", "frontend", "--target", "demo") + $args
+}
+
+function clinic-frontend-deploy {
+    Invoke-MDC @("deploy", "frontend", "--target", "clinic") + $args
+}
+
 function dbt-init {
     param(
         [ValidateSet("local", "demo", "clinic")]
@@ -166,6 +187,10 @@ Write-Host "  etl-run                      mdc etl run --env clinic --profile fu
 Write-Host "  etl-test                     mdc etl test-connections --env clinic" -ForegroundColor Cyan
 Write-Host "  mdc dbt run --env local      dbt via stateless subprocess" -ForegroundColor Cyan
 Write-Host "  mdc tunnel clinic-db         SSM port forward (scripts/ssm_tunnels.ps1)" -ForegroundColor Cyan
+Write-Host "  frontend-dev                 mdc frontend dev (local Vite)" -ForegroundColor Cyan
+Write-Host "  clinic-frontend-deploy       mdc deploy frontend --target clinic" -ForegroundColor Cyan
+Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api" -ForegroundColor Cyan
+Write-Host "  ssm-connect-clinic-api       SSM shell on clinic API EC2" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Deploy / SSM / frontend: .\load_project.ps1 -Legacy" -ForegroundColor DarkGray
+Write-Host "Legacy -Legacy manager: consult-audio-init, dbt-docs-deploy, etc." -ForegroundColor DarkGray
 Write-Host ""

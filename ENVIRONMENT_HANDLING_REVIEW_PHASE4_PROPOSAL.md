@@ -487,7 +487,8 @@ Partially met / deferred:
 
 ### Optional follow-ups (post–Phase 4)
 
-Not required for Phase 4 completion; track separately if desired.
+> **Superseded by Phase 5:** `ENVIRONMENT_HANDLING_REVIEW_PHASE5_PROPOSAL.md` absorbs the items below.
+> Phase 4 optional follow-ups are not required for Phase 4 completion; they are the starting backlog for Phase 5.
 
 | Item | Rationale |
 |------|-----------|

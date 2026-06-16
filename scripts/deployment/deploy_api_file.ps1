@@ -1,10 +1,11 @@
 ﻿# PowerShell script to deploy a single API file to EC2 using AWS Systems Manager
 # Usage: .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\services\treatment_acceptance_service.py"
-# Clinic env (recommended): writes api/.env (the single systemd EnvironmentFile source of truth)
-# and RETIRES any stale api/.env_api_clinic on the instance. config.py treats the OS environment
-# (systemd .env) as authoritative and no longer reads .env_api_clinic on EC2, so one file wins
-# (see ENVIRONMENT_HANDLING_REVIEW.md, Phase 0).
-#        .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+# Clinic env (recommended): writes api/.env (systemd EnvironmentFile source of truth)
+# and RETIRES any stale api/.env_api_clinic on the instance.
+# Preferred entry: mdc deploy api --env clinic  (from repo root)
+# Manual: .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+# Restarts systemd unit dental-clinic-api (NOT the EC2 Name tag dental-clinic-api-clinic).
+# Optional: backend_api.clinic_api.ec2.systemd_service in deployment_credentials.json
 # Skip post-deploy /health/db check: add -SkipHealthCheck
 # Single file (advanced): .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env"
 
@@ -25,6 +26,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$script:DeployRestartSucceeded = $null
 
 # SSM send-command with huge base64 in --parameters exceeds Windows CreateProcess cmdline limits (~8191).
 # Use --cli-input-json via a temp file instead.
@@ -71,6 +73,49 @@ function Invoke-AwsSsmRunShellScript {
     }
 }
 
+function Wait-AwsSsmCommandInvocation {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstanceId,
+        [Parameter(Mandatory = $true)][string]$CommandId,
+        [int]$MaxWaitSeconds = 60,
+        [string]$WaitingLabel = "Waiting for command..."
+    )
+    Write-Host "   $WaitingLabel" -ForegroundColor Gray
+    $waited = 0
+    $output = $null
+    do {
+        Start-Sleep -Seconds 2
+        $waited += 2
+        $output = aws ssm get-command-invocation `
+            --command-id $CommandId `
+            --instance-id $InstanceId `
+            --output json | ConvertFrom-Json
+    } while ($output.Status -eq "InProgress" -and $waited -lt $MaxWaitSeconds)
+    return $output
+}
+
+function Get-ApiSystemdServiceName {
+    param(
+        [switch]$ClinicEnv,
+        [string]$CredentialsFile = ""
+    )
+    if (-not $CredentialsFile) {
+        $CredentialsFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "deployment_credentials.json"
+    }
+    if ($ClinicEnv -and (Test-Path -LiteralPath $CredentialsFile)) {
+        try {
+            $credentials = Get-Content -LiteralPath $CredentialsFile | ConvertFrom-Json
+            if ($credentials.backend_api.clinic_api.ec2.systemd_service) {
+                return [string]$credentials.backend_api.clinic_api.ec2.systemd_service
+            }
+        } catch {
+            # fall through to default
+        }
+    }
+    # Matches api/dental-clinic-api.service on both demo and clinic EC2 instances.
+    return "dental-clinic-api"
+}
+
 function Invoke-ApiHealthDbCheck {
     param(
         [Parameter(Mandatory = $true)][string]$InstanceId,
@@ -96,11 +141,8 @@ function Invoke-ApiHealthDbCheck {
     )
     $response = Invoke-AwsSsmRunShellScript -InstanceId $InstanceId -Commands $healthCmds
     $commandId = $response.Command.CommandId
-    Start-Sleep -Seconds 5
-    $output = aws ssm get-command-invocation `
-        --command-id $commandId `
-        --instance-id $InstanceId `
-        --output json | ConvertFrom-Json
+    Write-Host "   Command ID: $commandId" -ForegroundColor Gray
+    $output = Wait-AwsSsmCommandInvocation -InstanceId $InstanceId -CommandId $commandId -MaxWaitSeconds 120 -WaitingLabel "Waiting for /health/db check..."
     if ($output.Status -eq "Success") {
         Write-Host "✅ /health/db returned 200" -ForegroundColor Green
         if ($output.StandardOutputContent) {
@@ -235,17 +277,7 @@ try {
     Write-Host "   Command ID: $commandId" -ForegroundColor Gray
     
     # Wait for command to complete
-    Write-Host "   Waiting for deployment..." -ForegroundColor Gray
-    $maxWait = 30
-    $waited = 0
-    do {
-        Start-Sleep -Seconds 2
-        $waited += 2
-        $output = aws ssm get-command-invocation `
-            --command-id $commandId `
-            --instance-id $InstanceId `
-            --output json | ConvertFrom-Json
-    } while ($output.Status -eq "InProgress" -and $waited -lt $maxWait)
+    $output = Wait-AwsSsmCommandInvocation -InstanceId $InstanceId -CommandId $commandId -MaxWaitSeconds 30 -WaitingLabel "Waiting for deployment..."
     
     if ($output.Status -eq "Success") {
         Write-Host "`n✅ Deployment successful!" -ForegroundColor Green
@@ -263,26 +295,24 @@ try {
             $originalOutputEncoding = [Console]::OutputEncoding
             [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
             
+            $restartSucceeded = $false
             try {
-                # Use simpler status check to avoid Unicode characters in output
-                $serviceName = if ($Clinic -or $ClinicEnv) { "dental-clinic-api-clinic" } else { "dental-clinic-api" }
+                # systemd unit is dental-clinic-api (see api/dental-clinic-api.service), not the EC2 Name tag.
+                $serviceName = Get-ApiSystemdServiceName -ClinicEnv:($Clinic -or $ClinicEnv)
                 $restartCmds = @(
                     ('sudo systemctl restart {0}' -f $serviceName),
-                    ('for i in $(seq 1 15); do if systemctl is-active {0} >/dev/null 2>&1; then echo Service is active; exit 0; fi; sleep 2; done; echo Service is not active; exit 0' -f $serviceName)
+                    ('for i in $(seq 1 15); do if systemctl is-active {0} >/dev/null 2>&1; then echo Service is active; exit 0; fi; sleep 2; done; echo Service is not active; systemctl status {0} --no-pager -l 2>&1 | tail -15; exit 1' -f $serviceName)
                 )
                 $restartResponseObj = Invoke-AwsSsmRunShellScript -InstanceId $InstanceId -Commands $restartCmds
                 
                 $restartCommandId = $restartResponseObj.Command.CommandId
                 Write-Host "   Command ID: $restartCommandId" -ForegroundColor Gray
-                Start-Sleep -Seconds 3
                 
-                $restartOutput = aws ssm get-command-invocation `
-                    --command-id $restartCommandId `
-                    --instance-id $InstanceId `
-                    --output json | ConvertFrom-Json
+                $restartOutput = Wait-AwsSsmCommandInvocation -InstanceId $InstanceId -CommandId $restartCommandId -MaxWaitSeconds 90 -WaitingLabel "Waiting for service restart..."
                 
                 if ($restartOutput.Status -eq "Success") {
-                    Write-Host "✅ API service restarted" -ForegroundColor Green
+                    $restartSucceeded = $true
+                    Write-Host "✅ API service restarted ($serviceName)" -ForegroundColor Green
                     if ($restartOutput.StandardOutputContent) {
                         $statusLines = $restartOutput.StandardOutputContent -split "`n" | Where-Object { $_.Trim() }
                         if ($statusLines) {
@@ -297,15 +327,24 @@ try {
                         }
                     }
                 } else {
-                    Write-Host "⚠️  Service restart completed with status: $($restartOutput.Status)" -ForegroundColor Yellow
+                    Write-Host "⚠️  Service restart finished with status: $($restartOutput.Status)" -ForegroundColor Yellow
+                    if ($restartOutput.StandardErrorContent) {
+                        Write-Host $restartOutput.StandardErrorContent -ForegroundColor Red
+                    }
+                    if ($ClinicEnv -and -not $SkipHealthCheck) {
+                        exit 1
+                    }
                 }
             } catch {
-                Write-Host "⚠️  Could not parse restart status, but restart command was sent" -ForegroundColor Yellow
-                Write-Host "   Error: $($_.Exception.Message)" -ForegroundColor DarkYellow
+                Write-Host "⚠️  Service restart failed: $($_.Exception.Message)" -ForegroundColor Yellow
+                if ($ClinicEnv -and -not $SkipHealthCheck) {
+                    exit 1
+                }
             } finally {
                 # Restore original encoding
                 [Console]::OutputEncoding = $originalOutputEncoding
             }
+            $script:DeployRestartSucceeded = $restartSucceeded
         } else {
             Write-Host "`n⏭️  Skipping service restart (-NoRestart)" -ForegroundColor Gray
         }
@@ -331,7 +370,13 @@ try {
 
 if ($NoRestart) {
     Write-Host "`n✅ Done! File deployed (restart skipped)." -ForegroundColor Green
+} elseif ($script:DeployRestartSucceeded -eq $true) {
+    if ($ClinicEnv -and -not $SkipHealthCheck) {
+        Write-Host "`n✅ Done! File deployed, service restarted, and /health/db OK." -ForegroundColor Green
+    } else {
+        Write-Host "`n✅ Done! File deployed and service restarted." -ForegroundColor Green
+    }
 } else {
-    Write-Host "`n✅ Done! File deployed and service restarted." -ForegroundColor Green
+    Write-Host "`n✅ Done! File deployed." -ForegroundColor Green
 }
 Write-Host ""

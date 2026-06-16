@@ -23,11 +23,11 @@ def test_tunnel_close_is_informational(mock_invoke):
     mock_invoke.assert_not_called()
 
 
-@patch("mdc_cli.commands.deploy.invoke_ps_function", return_value=0)
-def test_deploy_frontend(mock_invoke):
+@patch("mdc_cli.commands.deploy.deploy_frontend_target", return_value=0)
+def test_deploy_frontend(mock_deploy):
     result = runner.invoke(app, ["deploy", "frontend"])
     assert result.exit_code == 0
-    mock_invoke.assert_called_once_with("Deploy-Frontend")
+    mock_deploy.assert_called_once_with("demo")
 
 
 @patch("mdc_cli.commands.etl.run_isolated", return_value=0)

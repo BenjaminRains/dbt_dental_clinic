@@ -7,8 +7,8 @@
 
 Environment handling has historically been a pain point in this repo. Phases 0–4 migrated
 configuration to typed `pydantic-settings` loaders and daily orchestration to the **`mdc` CLI**
-(stateless child-process env injection). PowerShell remains for deploy, SSM tunnels, and frontend
-via `load_project.ps1 -Legacy` only.
+(stateless child-process env injection). Default `load_project.ps1` includes SSM connect/tunnels
+(`scripts/ssm_tunnels.ps1`). Use `load_project.ps1 -Legacy` for frontend deploy and other legacy menus.
 
 ---
 
@@ -19,7 +19,7 @@ via `load_project.ps1 -Legacy` only.
 | **Secret hygiene** | Strong — templates only in git | Same | — |
 | **Validation** | Fail-fast; hand-rolled loaders | Typed `pydantic-settings` (API + ETL + dbt via mdc) | — |
 | **Stage naming** | Ambiguous per subproject | Documented matrix; `mdc … --env <stage>` per component | Unify edge cases in docs |
-| **Env loading** | Python dotenv **and** ~3,200-line PS shim | Python loaders only; `mdc` injects child env; Legacy PS for deploy/SSM | Slim Legacy manager |
+| **Env loading** | Python dotenv **and** ~3,200-line PS shim | Python loaders only; `mdc` injects child env; SSM in default aliases; Legacy for frontend | Slim Legacy manager |
 | **Virtualenvs** | Pipenv (dbt/ETL) + venv (api/audio) | Same (unchanged) | Single tool (uv/poetry) |
 | **Discoverability** | Fragmented docs | `docs/ENVIRONMENT_FILES.md` tracked; `mdc status` | Refresh onboarding READMEs |
 
@@ -30,11 +30,13 @@ via `load_project.ps1 -Legacy` only.
 mdc status
 mdc api run --env local
 mdc etl validate --env local --profile load
-mdc deploy api --env clinic     # or .\load_project.ps1 -Legacy for full deploy/SSM menu
+mdc deploy api --env clinic     # copies api/.env_api_clinic → EC2 api/.env; restarts dental-clinic-api
+.\load_project.ps1 -Legacy      # frontend deploy and other legacy menus
+ssm-connect-clinic-api          # SSM shell (default aliases)
 ```
 
 **Bottom line:** configuration authority is in Python (`api/settings.py`, `settings_v2.py`,
-`mdc_cli/dbt_env.py`); orchestration is `mdc`; Legacy PowerShell is deploy/tunnels/frontend only.
+`mdc_cli/dbt_env.py`); orchestration is `mdc`; Legacy PowerShell is optional for frontend and unmigrated menus.
 
 ---
 
@@ -70,7 +72,7 @@ forward-compatible with §5.
 |---|---|---|
 | EC2 (clinic/demo API under systemd) | systemd `EnvironmentFile=api/.env` → OS env | none — `config.py` does **not** read a second file here |
 | Local dev (API / ETL / dbt) | stage file `.env_api_<stage>` / `.env_<stage>` | loaded by `mdc` child processes or direct Python |
-| Dev shell | `load_project.ps1` → `mdc` aliases | no shell activation; `-Legacy` for deploy/SSM/frontend |
+| Dev shell | `load_project.ps1` → `mdc` aliases + SSM (`ssm-connect-*`) | no shell activation; `-Legacy` for frontend / legacy menus |
 | CI / tests | `.env_test` / fixtures | the source |
 | Docker / compose / Airflow | container env / root `.env` | the source |
 
@@ -268,17 +270,26 @@ forward-compatible with §5.
 | **`project_profile.ps1`** | Loads default `load_project.ps1` (mdc aliases), not full env manager |
 | **Env manager size** | ~2,170 lines (deploy/SSM/frontend/consult-audio retained for `-Legacy`) |
 
-## Post–Phase 4 (optional)
+## Phase 5 — Python-first orchestration (proposed)
 
-Phase 4 primary goals are met. Remaining work is optional — see
-`ENVIRONMENT_HANDLING_REVIEW_PHASE4_PROPOSAL.md` § Optional follow-ups. Highlights:
+> Status: **proposed** — see `ENVIRONMENT_HANDLING_REVIEW_PHASE5_PROPOSAL.md`.
+> Objective: move deploy, SSM tunnels, frontend, and consult-audio into `mdc`; archive
+> `environment_manager.ps1`; keep PowerShell as an optional thin alias loader only.
 
-| Item | Notes |
+| Sub-phase | Focus |
 |---|---|
-| **Legacy extraction** | Move deploy/frontend/consult-audio out of `environment_manager.ps1` |
-| **Single venv tool** | uv/poetry across API, ETL, consult-audio |
-| **Contributor docs** | Onboarding without `*-init`; CI smoke for `mdc` without `load_project.ps1` |
-| **Polish** | ASCII CLI banners on Windows; rename historical test file; slim `ENV_MAPPINGS` |
+| **5.1** | SSM port-forward in Python (`mdc tunnel *` without PS bridge) |
+| **5.2** | Shared `credentials.py` for `deployment_credentials.json` + env-file keys |
+| **5.3** | `mdc frontend dev`, `mdc deploy frontend`, `mdc deploy dbt-docs` |
+| **5.4** | `mdc consult-audio` (stateless venv + child env) |
+| **5.5** | Archive or shrink `environment_manager.ps1`; optional minimal `load_project.ps1` |
+| **5.6** | Docs, CI smoke without PS, CLI polish |
+
+Phase 4 optional follow-ups (Legacy extraction, consult-audio, CI without `load_project.ps1`)
+are tracked in Phase 5 rather than as ad-hoc tasks.
+
+**Still out of Phase 5 scope:** single venv tool (uv/poetry); porting every `scripts/deployment/*.ps1`;
+slim `Settings.ENV_MAPPINGS` (ETL internal cleanup).
 
 ---
 
@@ -651,4 +662,5 @@ exists — no need to grep the codebase for `os.getenv` calls.
 - `scripts/deployment/deploy_api_file.ps1` — EC2 deploy; `-ClinicEnv`; `/health/db` post-deploy check.
 - `scripts/environment_manager.ps1` — Legacy deploy/SSM/frontend/consult-audio (~2,170 lines).
 - `docs/ENVIRONMENT_FILES.md` — env file inventory and conventions (tracked).
-- `ENVIRONMENT_HANDLING_REVIEW_PHASE4_PROPOSAL.md` — Phase 4 plan, success criteria, optional follow-ups.
+- `ENVIRONMENT_HANDLING_REVIEW_PHASE4_PROPOSAL.md` — Phase 4 plan and success criteria (complete).
+- `ENVIRONMENT_HANDLING_REVIEW_PHASE5_PROPOSAL.md` — Phase 5 plan: Python-first deploy/tunnels/frontend.

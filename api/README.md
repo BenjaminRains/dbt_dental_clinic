@@ -525,11 +525,25 @@ API_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 ```
 
 **Clinic API (api-clinic.dbtdentalclinic.com) - Clinic Database:**
-On EC2, environment variables are in `/opt/dbt_dental_clinic/api/.env` (single source of truth for systemd). Deploy from local `api/.env_api_clinic` with:
+
+| What | Value |
+|------|--------|
+| **You edit (local, gitignored)** | `api/.env_api_clinic` |
+| **Deploy command** | `mdc deploy api --env clinic` |
+| **Written on EC2 (verbatim copy)** | `/opt/dbt_dental_clinic/api/.env` |
+| **Loaded by** | systemd `EnvironmentFile=` → process env (Python does not re-read `.env_api_clinic` on EC2) |
+| **EC2 instance Name tag** | `dental-clinic-api-clinic` (see `deployment_credentials.json` → `backend_api.clinic_api.ec2`) |
+| **systemd unit name** | `dental-clinic-api` (from `api/dental-clinic-api.service`) — **not** the EC2 Name tag |
+
+Deploy copies your local file byte-for-byte; nothing is merged from `deployment_credentials.json` at deploy time:
+
 ```powershell
-.\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+mdc deploy api --env clinic
+# equivalent:
+# .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
 ```
-Example contents:
+
+Example contents of `api/.env_api_clinic`:
 ```bash
 # Environment
 API_ENVIRONMENT=clinic
@@ -564,7 +578,12 @@ CLINIC_API_KEY=<CLINIC_API_KEY>  # Clinic API key (IP-restricted)
 
 ### Service Management
 
-The API runs as a systemd service on the EC2 instance for automatic startup and process management.
+The API runs as a **systemd unit named `dental-clinic-api`** on demo and clinic EC2 instances
+(same unit file: `api/dental-clinic-api.service`). Do not confuse with the clinic EC2 **Name tag**
+`dental-clinic-api-clinic` in AWS — that is not the systemd service name.
+
+After `mdc deploy api --env clinic`, the deploy script restarts `dental-clinic-api` and verifies
+`GET http://127.0.0.1:8000/health/db` on the instance (use `-SkipHealthCheck` to skip).
 
 **Service Management Commands:**
 ```bash
