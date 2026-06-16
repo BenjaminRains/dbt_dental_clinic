@@ -1,4 +1,4 @@
-# Simplified Data Engineering Environment Manager
+﻿# Simplified Data Engineering Environment Manager
 # Focused on dbt and ETL functionality for dental clinic pipelines
 #
 # Nomenclature (consistent across script):
@@ -100,30 +100,7 @@ function Clear-StaleStageEnvVars {
     }
 }
 
-function Invoke-MDC {
-    <#
-    .SYNOPSIS
-        Run the mdc CLI from repo root (Phase 4.3+ stateless orchestration).
-    #>
-    param(
-        [Parameter(ValueFromRemainingArguments = $true)]
-        [string[]]$Args
-    )
-
-    $projectRoot = Split-Path $script:EnvManagerScriptRoot -Parent
-    Push-Location $projectRoot
-    try {
-        $mdc = Get-Command mdc -ErrorAction SilentlyContinue
-        if ($mdc) {
-            & mdc @Args
-        } else {
-            python -m mdc_cli @Args
-        }
-        return $LASTEXITCODE
-    } finally {
-        Pop-Location
-    }
-}
+. (Join-Path $script:EnvManagerScriptRoot "mdc_invoke.ps1")
 
 function Import-StageEnvFromPython {
     param(
@@ -232,310 +209,27 @@ function Initialize-DBTEnvironment {
         [string]$Target = 'local'
     )
 
-    if ($script:IsDBTActive) {
-        Write-Host "❌ dbt environment already active. Use 'dbt-deactivate' first." -ForegroundColor Yellow
-        return
-    }
+    Write-Host "`n⚠️  dbt-init is deprecated (Phase 4.5). dbt no longer requires shell activation." -ForegroundColor Yellow
+    Write-Host '   Use mdc with explicit --env (stateless; no DBT_TARGET in your shell).' -ForegroundColor Gray
+    Write-Host ""
+    Write-Host "   mdc dbt validate --env $Target" -ForegroundColor Cyan
+    Write-Host "   mdc dbt run --env $Target" -ForegroundColor Cyan
+    Write-Host '   dbt run   (PowerShell alias -> mdc dbt run)' -ForegroundColor DarkGray
+    Write-Host ""
 
-    if ($script:IsETLActive) {
-        Write-Host "❌ ETL environment is currently active. Run 'etl-deactivate' first before activating dbt." -ForegroundColor Red
-        return
-    }
-
-    if ($script:IsAPIActive) {
-        Write-Host "❌ API environment is currently active. Run 'api-deactivate' first before activating dbt." -ForegroundColor Red
-        return
-    }
-
-    if ($script:IsConsultAudioActive) {
-        Write-Host "❌ Consult audio pipeline environment is currently active. Run 'consult-audio-deactivate' first before activating dbt." -ForegroundColor Red
-        return
-    }
-
-    $projectName = Split-Path -Leaf $ProjectPath
-    Write-Host "`n🏗️  Initializing dbt environment: $projectName" -ForegroundColor Cyan
-
-    # Verify dbt project
-    $dbtProjectPath = $ProjectPath
-    if (Test-Path "$ProjectPath\dbt_dental_models\dbt_project.yml") {
-        $dbtProjectPath = "$ProjectPath\dbt_dental_models"
-        Write-Host "📁 Found dbt project in: dbt_dental_models/" -ForegroundColor Green
-    } elseif (Test-Path "$ProjectPath\dbt_project.yml") {
-        Write-Host "📁 Found dbt project in: current directory" -ForegroundColor Green
-    } else {
-        Write-Host "❌ No dbt_project.yml found in current directory or dbt_dental_models/" -ForegroundColor Red
-        return
-    }
-
-    # Target selection: if -Target was not passed, prompt first (cancel = no install, no activation)
     if (-not $PSBoundParameters.ContainsKey('Target')) {
-        Write-Host "`n🔧 dbt target selection" -ForegroundColor Cyan
-        Write-Host "  Type 'local' for Local (localhost) [default]" -ForegroundColor Green
-        Write-Host "  Type 'clinic' for Clinic (opendental_analytics on RDS)" -ForegroundColor Yellow
-        Write-Host "  Type 'demo' for Demo (opendental_demo; port forwarding or EC2)" -ForegroundColor Yellow
-        Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
-        $targetChoice = Read-Host "`nEnter target (local/clinic/demo/cancel) [local]"
-        if ([string]::IsNullOrWhiteSpace($targetChoice)) { $targetChoice = "local" }
+        Write-Host '🔧 dbt target (default: local)' -ForegroundColor Cyan
+        $targetChoice = Read-Host "Enter target (local/clinic/demo) [local]"
+        if ([string]::IsNullOrWhiteSpace($targetChoice)) { $targetChoice = 'local' }
         $targetChoice = $targetChoice.ToLower().Trim()
-        if ($targetChoice -eq "cancel") {
-            Write-Host "❌ dbt initialization cancelled" -ForegroundColor Red
-            return
-        }
-        if ($targetChoice -notin @("local", "clinic", "demo")) {
-            Write-Host "❌ Invalid target. Use local, clinic, demo, or cancel." -ForegroundColor Red
+        if ($targetChoice -notin @('local', 'clinic', 'demo')) {
+            Write-Host "❌ Invalid target. Use local, clinic, or demo." -ForegroundColor Red
             return
         }
         $Target = $targetChoice
     }
-    Write-Host "🎯 Target: $Target" -ForegroundColor Cyan
 
-    # Set up dbt pipenv environment (only after target is chosen)
-    if (Test-Path "$dbtProjectPath\Pipfile") {
-        Push-Location $dbtProjectPath
-        try {
-            Write-Host "📦 Installing dbt dependencies..." -ForegroundColor Yellow
-            
-            # Suppress pipenv verbosity and courtesy notices
-            $env:PIPENV_VERBOSITY = -1
-            $env:PIPENV_IGNORE_VIRTUALENVS = 1
-            
-            # Suppress pipenv output since we handle activation manually
-            pipenv install 2>$null | Out-Null
-            
-            if ($LASTEXITCODE -eq 0) {
-                Write-Host "🔧 Activating dbt pipenv shell..." -ForegroundColor Yellow
-                
-                # Get virtual environment path
-                $script:VenvPath = (pipenv --venv 2>$null).Trim()
-                
-                if ($script:VenvPath) {
-                    # Set environment variables to simulate pipenv shell
-                    $env:VIRTUAL_ENV = $script:VenvPath
-                    $env:PIPENV_ACTIVE = 1
-                    
-                    # Update PATH to include virtual environment
-                    $venvScripts = Join-Path $script:VenvPath "Scripts"
-                    if (Test-Path $venvScripts) {
-                        $env:PATH = "$venvScripts;$env:PATH"
-                        Write-Host "✅ dbt pipenv shell activated: $(Split-Path $script:VenvPath -Leaf)" -ForegroundColor Green
-                    } else {
-                        Write-Host "⚠️ Virtual environment found but Scripts directory missing" -ForegroundColor Yellow
-                    }
-                } else {
-                    Write-Host "❌ Failed to get virtual environment path" -ForegroundColor Red
-                    Pop-Location
-                    return
-                }
-            } else {
-                Write-Host "❌ Failed to install dbt dependencies" -ForegroundColor Red
-                Pop-Location
-                return
-            }
-        } catch {
-            Write-Host "❌ Failed to set up dbt pipenv environment: $_" -ForegroundColor Red
-            Pop-Location
-            return
-        }
-        Pop-Location
-    } else {
-        Write-Host "❌ No Pipfile found in project root - dbt environment unavailable" -ForegroundColor Red
-        return
-    }
-
-    # Set DBT_PROFILES_DIR to point to the dbt project directory
-    [Environment]::SetEnvironmentVariable('DBT_PROFILES_DIR', $dbtProjectPath, 'Process')
-    Write-Host "🔧 Set DBT_PROFILES_DIR to: $dbtProjectPath" -ForegroundColor Green
-
-    # Set DBT_TARGET to the chosen target
-    [Environment]::SetEnvironmentVariable('DBT_TARGET', $Target, 'Process')
-    Write-Host "🎯 Set DBT_TARGET to: $Target" -ForegroundColor Green
-
-    # Load environment variables based on target
-    if ($Target -eq 'demo') {
-        # Demo target: Load from deployment_credentials.json
-        Write-Host "📋 Loading demo database credentials from deployment_credentials.json..." -ForegroundColor Yellow
-        $credentialsPath = "$ProjectPath\deployment_credentials.json"
-        if (Test-Path $credentialsPath) {
-            try {
-                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
-                if ($credentials.demo_database.postgresql) {
-                    $demo = $credentials.demo_database
-                    
-                    # Check if we're running locally (need port forwarding) or on EC2 (direct connection)
-                    # For local development, use localhost with forwarded port
-                    # For EC2, use private IP directly
-                    $isLocal = $true  # Assume local unless we detect EC2 environment
-                    $demoHost = "localhost"
-                    $demoPort = "5434"  # Default forwarded port for demo DB
-                    
-                    # Check if we're on EC2 (has AWS metadata service)
-                    try {
-                        $ec2Metadata = Invoke-WebRequest -Uri "http://169.254.169.254/latest/meta-data/instance-id" -TimeoutSec 1 -ErrorAction Stop
-                        if ($ec2Metadata.StatusCode -eq 200) {
-                            $isLocal = $false
-                            $demoHost = $demo.ec2.private_ip
-                            $demoPort = $demo.postgresql.port.ToString()
-                            Write-Host "🌐 Detected EC2 environment - using direct connection" -ForegroundColor Cyan
-                        }
-                    } catch {
-                        # Not on EC2, use port forwarding
-                        Write-Host "💻 Detected local environment - requires port forwarding" -ForegroundColor Cyan
-                        Write-Host "⚠️  IMPORTANT: Start port forwarding first!" -ForegroundColor Yellow
-                        Write-Host "   Run: aws-ssm-init" -ForegroundColor Gray
-                        Write-Host "   Then: ssm-port-forward-demo-db" -ForegroundColor Gray
-                        Write-Host "   (Keep that terminal open in the background)" -ForegroundColor Gray
-                        Write-Host ""
-                    }
-                    
-                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_HOST', $demoHost, 'Process')
-                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_PORT', $demoPort, 'Process')
-                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_DB', $demo.postgresql.database, 'Process')
-                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_USER', $demo.postgresql.user, 'Process')
-                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_PASSWORD', $demo.postgresql.password, 'Process')
-                    [Environment]::SetEnvironmentVariable('DEMO_POSTGRES_SCHEMA', 'raw', 'Process')
-                    Write-Host "✅ Demo database credentials loaded:" -ForegroundColor Green
-                    Write-Host "   Host: $demoHost" -ForegroundColor Gray
-                    Write-Host "   Port: $demoPort" -ForegroundColor Gray
-                    Write-Host "   Database: $($demo.postgresql.database)" -ForegroundColor Gray
-                    Write-Host "   User: $($demo.postgresql.user)" -ForegroundColor Gray
-                    Write-Host "   Target: demo" -ForegroundColor Gray
-                } else {
-                    Write-Host "⚠️ Demo database credentials not found in deployment_credentials.json" -ForegroundColor Yellow
-                }
-            } catch {
-                Write-Host "❌ Failed to load demo credentials: $_" -ForegroundColor Red
-            }
-        } else {
-            Write-Host "⚠️ deployment_credentials.json not found. Demo credentials not loaded." -ForegroundColor Yellow
-        }
-    } elseif ($Target -eq 'clinic') {
-        # Clinic target: Load from deployment_credentials.json or .env_clinic
-        Write-Host "📋 Loading clinic database credentials..." -ForegroundColor Yellow
-        $credentialsPath = "$ProjectPath\deployment_credentials.json"
-        $filesLoaded = $false
-        
-        # Try loading from deployment_credentials.json first
-        if (Test-Path $credentialsPath) {
-            try {
-                $credentials = Get-Content $credentialsPath | ConvertFrom-Json
-                if ($credentials.clinic_database -and $credentials.clinic_database.postgresql) {
-                    $clinic = $credentials.clinic_database.postgresql
-                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_HOST', $clinic.host, 'Process')
-                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_PORT', $clinic.port.ToString(), 'Process')
-                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_DB', $clinic.database, 'Process')
-                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_USER', $clinic.user, 'Process')
-                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_PASSWORD', $clinic.password, 'Process')
-                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_SCHEMA', 'dbt', 'Process')
-                    [Environment]::SetEnvironmentVariable('POSTGRES_ANALYTICS_SSLMODE', 'require', 'Process')
-                    Write-Host "✅ Clinic database credentials loaded from deployment_credentials.json:" -ForegroundColor Green
-                    Write-Host "   Host: $($clinic.host)" -ForegroundColor Gray
-                    Write-Host "   Port: $($clinic.port)" -ForegroundColor Gray
-                    Write-Host "   Database: $($clinic.database)" -ForegroundColor Gray
-                    Write-Host "   User: $($clinic.user)" -ForegroundColor Gray
-                    Write-Host "   Target: clinic" -ForegroundColor Gray
-                    $filesLoaded = $true
-                }
-            } catch {
-                Write-Host "⚠️ Failed to load clinic credentials from deployment_credentials.json: $_" -ForegroundColor Yellow
-            }
-        }
-        
-        # Load from dbt_dental_models/.env_clinic only (no project-root fallback)
-        if (-not $filesLoaded) {
-            $envFile = "$dbtProjectPath\.env_clinic"
-            if (Test-Path $envFile) {
-                Write-Host "   ✓ Found: $envFile" -ForegroundColor Green
-                $filesLoaded = $true
-                $loadedCount = 0
-                Get-Content $envFile | ForEach-Object {
-                    if ($_ -match '^([^#][^=]+)=(.*)$') {
-                        $key = $matches[1].Trim()
-                        $value = $matches[2].Trim()
-                        # Target is set by dbt-init -Target; do not override from file
-                        if ($key -ne 'DBT_TARGET') {
-                            [Environment]::SetEnvironmentVariable($key, $value, 'Process')
-                            $loadedCount++
-                        }
-                    }
-                }
-                Write-Host "   Loaded $loadedCount environment variables from .env_clinic" -ForegroundColor Gray
-            } else {
-                Write-Host "   ✗ Not found: $envFile" -ForegroundColor DarkGray
-            }
-        }
-        
-        if (-not $filesLoaded) {
-            Write-Host "   ⚠️ No .env_clinic (in dbt_dental_models/) or deployment_credentials.json found" -ForegroundColor Yellow
-            Write-Host "   Create dbt_dental_models/.env_clinic or add clinic_database to deployment_credentials.json" -ForegroundColor Gray
-        }
-        
-        # Verify required variables are set
-        $requiredVars = @('POSTGRES_ANALYTICS_HOST', 'POSTGRES_ANALYTICS_PORT', 'POSTGRES_ANALYTICS_DB', 'POSTGRES_ANALYTICS_USER', 'POSTGRES_ANALYTICS_PASSWORD')
-        $missingVars = @()
-        foreach ($var in $requiredVars) {
-            if (-not [Environment]::GetEnvironmentVariable($var, 'Process')) {
-                $missingVars += $var
-            }
-        }
-        if ($missingVars.Count -gt 0) {
-            Write-Host "⚠️ Missing required environment variables: $($missingVars -join ', ')" -ForegroundColor Yellow
-            Write-Host "   Set these in .env_clinic or deployment_credentials.json" -ForegroundColor Gray
-        } else {
-            Write-Host "✅ Clinic database credentials loaded" -ForegroundColor Green
-        }
-    } else {
-        # Local target: Load from dbt_dental_models/.env_local only (no project-root fallback)
-        Write-Host "📋 Loading local database credentials from environment files..." -ForegroundColor Yellow
-        $filesLoaded = $false
-        $envFile = "$dbtProjectPath\.env_local"
-        if (Test-Path $envFile) {
-            Write-Host "   ✓ Found: $envFile" -ForegroundColor Green
-            $filesLoaded = $true
-            $loadedCount = 0
-            Get-Content $envFile | ForEach-Object {
-                if ($_ -match '^([^#][^=]+)=(.*)$') {
-                    $key = $matches[1].Trim()
-                    $value = $matches[2].Trim()
-                    # Target is set by dbt-init (default local); do not override from file
-                    if ($key -ne 'DBT_TARGET') {
-                        [Environment]::SetEnvironmentVariable($key, $value, 'Process')
-                        $loadedCount++
-                    }
-                }
-            }
-            Write-Host "   Loaded $loadedCount environment variables from .env_local" -ForegroundColor Gray
-        } else {
-            Write-Host "   ✗ Not found: $envFile" -ForegroundColor DarkGray
-        }
-        
-        if (-not $filesLoaded) {
-            Write-Host "   ⚠️ No .env_local found in dbt_dental_models/" -ForegroundColor Yellow
-            Write-Host "   Create dbt_dental_models/.env_local (see etl_pipeline/.env_local.template or docs/ENVIRONMENT_FILES.md)" -ForegroundColor Gray
-        }
-        
-        # Verify required variables are set
-        $requiredVars = @('POSTGRES_ANALYTICS_HOST', 'POSTGRES_ANALYTICS_PORT', 'POSTGRES_ANALYTICS_DB', 'POSTGRES_ANALYTICS_USER', 'POSTGRES_ANALYTICS_PASSWORD')
-        $missingVars = @()
-        foreach ($var in $requiredVars) {
-            if (-not [Environment]::GetEnvironmentVariable($var, 'Process')) {
-                $missingVars += $var
-            }
-        }
-        if ($missingVars.Count -gt 0) {
-            Write-Host "⚠️ Missing required environment variables: $($missingVars -join ', ')" -ForegroundColor Yellow
-            Write-Host "   Add them to .env_local (local development only)" -ForegroundColor Gray
-        } else {
-            Write-Host "✅ Local database credentials loaded" -ForegroundColor Green
-        }
-    }
-
-    $script:IsDBTActive = $true
-    $script:ActiveProject = $projectName
-
-    Write-Host "`n✅ dbt environment ready! (target: $Target)" -ForegroundColor Green
-    Write-Host "Commands: dbt, notebook, format, lint, test" -ForegroundColor Cyan
-    Write-Host "Target 'local' is default. For clinic use: dbt-deactivate, then dbt-init -Target clinic" -ForegroundColor Gray
-    Write-Host "To switch to ETL: run 'dbt-deactivate' first, then 'etl-init'`n" -ForegroundColor Gray
+    Invoke-MDC @('dbt', 'validate', '--env', $Target)
 }
 
 function Stop-DBTEnvironment {
@@ -612,12 +306,12 @@ function Initialize-ETLEnvironment {
     # Interactive Environment Selection first (cancel = no install, no activation, no env vars)
     Write-Host "`n🔧 ETL Environment Selection" -ForegroundColor Cyan
     Write-Host "Which environment would you like to use?" -ForegroundColor White
-    Write-Host "  Type 'local' for Local (.env_local) - Localhost only (default; pipeline has not been run on EC2)" -ForegroundColor Green
-    Write-Host "    → Source/destination: localhost (OpenDental source, opendental_analytics)" -ForegroundColor Gray
-    Write-Host "  Type 'clinic' for Clinic (.env_clinic) - Real clinic OpenDental databases (MDC/GLIC)" -ForegroundColor Yellow
-    Write-Host "    → Source: Real clinic OpenDental; destination: opendental_analytics" -ForegroundColor Gray
+    Write-Host '  Type ''local'' for Local (.env_local) - Localhost only (default; pipeline has not been run on EC2)' -ForegroundColor Green
+    Write-Host '    → Source/destination: localhost (OpenDental source, opendental_analytics)' -ForegroundColor Gray
+    Write-Host '  Type ''clinic'' for Clinic (.env_clinic) - Real clinic OpenDental databases (MDC/GLIC)' -ForegroundColor Yellow
+    Write-Host '    → Source: Real clinic OpenDental; destination: opendental_analytics' -ForegroundColor Gray
     Write-Host "  Type 'test' for Test (.env_test) - ETL pipeline operations with test source" -ForegroundColor Yellow
-    Write-Host "    → Uses TEST_* databases: test_opendental (source), test_opendental_analytics (analytics)" -ForegroundColor Gray
+    Write-Host '    → Uses TEST_* databases: test_opendental (source), test_opendental_analytics (analytics)' -ForegroundColor Gray
     Write-Host "  Type 'demo' for Demo (deployment_credentials.json) - Synthetic data generator ONLY" -ForegroundColor Cyan
     Write-Host "    ⚠️  Note: Demo mode is for synthetic data generation only, not ETL operations" -ForegroundColor Gray
     Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
@@ -894,7 +588,7 @@ function Initialize-APIEnvironment {
     Write-Host "    → API key from .ssh/dbt-dental-clinic-api-key.pem (local dev default)" -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Type 'clinic' for Clinic API config (.env_api_clinic)" -ForegroundColor Yellow
-    Write-Host "    → Same database as api-clinic.dbtdentalclinic.com (opendental_analytics on RDS, PHI)" -ForegroundColor Gray
+    Write-Host '    → Same database as api-clinic.dbtdentalclinic.com (opendental_analytics on RDS, PHI)' -ForegroundColor Gray
     Write-Host "    → Uses CLINIC_API_KEY and clinic CORS — mirrors production clinic API settings" -ForegroundColor Gray
     Write-Host "    → If RDS is not reachable, run 'ssm-port-forward-rds-clinic' first (via dental-clinic-api-clinic)" -ForegroundColor Gray
     Write-Host "    → Deploy to EC2: copy this file to api/.env on the clinic instance (see api/README.md)" -ForegroundColor Gray
@@ -906,7 +600,7 @@ function Initialize-APIEnvironment {
     Write-Host ""
     Write-Host "  Type 'test' for Test (.env_api_test)" -ForegroundColor Yellow
     Write-Host "    → Test database configuration (uses TEST_* databases)" -ForegroundColor Gray
-    Write-Host "    → Separate test databases: test_opendental (source), test_opendental_analytics (analytics)" -ForegroundColor Gray
+    Write-Host '    → Separate test databases: test_opendental (source), test_opendental_analytics (analytics)' -ForegroundColor Gray
     Write-Host ""
     Write-Host "  Type 'cancel' to abort" -ForegroundColor Red
     Write-Host ""
@@ -1292,7 +986,8 @@ function Format-Code {
         Write-Host "❌ dbt environment not active. Run 'dbt-init' first." -ForegroundColor Red
         return
     }
-    black . && isort .
+    black .
+    if ($LASTEXITCODE -eq 0) { isort . }
 }
 
 function Test-DBT {
@@ -1303,61 +998,79 @@ function Test-DBT {
     pytest $args
 }
 
-# ETL Commands - FIXED: Use python directly instead of pipenv run
+# ETL Commands — Phase 4.5: primary paths delegate to mdc
 function Invoke-ETL {
-    if (-not $script:IsETLActive) {
-        Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
-        return
-    }
-    
-    # Safety check: Prevent ETL operations in demo mode (except help/status)
-    if ($env:ETL_ENVIRONMENT -eq "demo") {
-        $allowedCommands = @("help", "--help", "-h", "status")
-        $command = $args[0]
-        
-        if ($command -notin $allowedCommands) {
-            Write-Host "❌ ETL pipeline operations are not available in demo mode." -ForegroundColor Red
-            Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
-            Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'clinic' or 'test' for ETL operations." -ForegroundColor Yellow
-            return
-        }
-    }
-    
     if (-not $args -or $args.Count -eq 0) {
         Show-ETLHelp
         return
     }
-    
-    Write-Host "🔄 etl $($args -join ' ')" -ForegroundColor Magenta
-    # FIXED: Use python directly since we're already in pipenv environment
-    python -m etl_pipeline.cli.main $args
+
+    $sub = $args[0]
+    $rest = @()
+    if ($args.Count -gt 1) {
+        $rest = $args[1..($args.Count - 1)]
+    }
+
+    switch ($sub) {
+        'status' {
+            Get-ETLStatus @rest
+            return
+        }
+        'validate' {
+            Test-ETLValidation @rest
+            return
+        }
+        'run' {
+            Start-ETLPipeline @rest
+            return
+        }
+        'test-connections' {
+            Test-ETLConnections @rest
+            return
+        }
+        default {
+            $stage = if ($env:ETL_ENVIRONMENT) { $env:ETL_ENVIRONMENT } else { 'clinic' }
+            $mdcArgs = @('etl', 'invoke', '--env', $stage, '--') + $args
+            Invoke-MDC @mdcArgs
+        }
+    }
 }
 
 function Get-ETLStatus {
-    if (-not $script:IsETLActive) {
-        Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
-        return
+    param(
+        [string]$Env = "",
+        [string]$Profile = ""
+    )
+
+    Write-Host "💡 etl-status uses mdc (no etl-init required). Prefer: mdc etl status --env clinic" -ForegroundColor DarkGray
+
+    $stage = if ($Env) { $Env } elseif ($env:ETL_ENVIRONMENT) { $env:ETL_ENVIRONMENT } else { "clinic" }
+    $mdcArgs = @("etl", "status", "--env", $stage)
+    if ($Profile) {
+        $mdcArgs += @("--profile", $Profile)
     }
-    # FIXED: Use python directly since we're already in pipenv environment
-    python -m etl_pipeline.cli.main status $args
+    if ($args.Count -gt 0) {
+        $mdcArgs += "--"
+        $mdcArgs += $args
+    }
+    Invoke-MDC @mdcArgs
 }
 
 function Test-ETLValidation {
-    if (-not $script:IsETLActive) {
-        Write-Host "❌ ETL environment not active. Run 'etl-init' first." -ForegroundColor Red
-        return
-    }
-    
-    # Safety check: Prevent ETL operations in demo mode
-    if ($env:ETL_ENVIRONMENT -eq "demo") {
+    param(
+        [string]$Env = "",
+        [string]$Profile = ""
+    )
+
+    Write-Host "💡 etl-validate uses mdc (no etl-init required). Prefer: mdc etl validate --env local --profile load" -ForegroundColor DarkGray
+
+    $stage = if ($Env) { $Env } elseif ($env:ETL_ENVIRONMENT) { $env:ETL_ENVIRONMENT } else { "local" }
+    $resolvedProfile = if ($Profile) { $Profile } elseif ($stage -eq "local") { "load" } else { "full" }
+    if ($stage -eq "demo") {
         Write-Host "❌ ETL validation is not available in demo mode." -ForegroundColor Red
-        Write-Host "   Demo mode is for synthetic data generation only." -ForegroundColor Yellow
-        Write-Host "   Use 'etl-deactivate' and run 'etl-init' with 'clinic' or 'test' for ETL operations." -ForegroundColor Yellow
         return
     }
-    
-    # FIXED: Use python directly since we're already in pipenv environment
-    python -m etl_pipeline.cli.main validate $args
+    Invoke-MDC @("etl", "validate", "--env", $stage, "--profile", $resolvedProfile)
 }
 
 function Start-ETLPipeline {
@@ -1436,26 +1149,14 @@ function Invoke-API {
 }
 
 function Test-APIConfig {
-    if (-not $script:IsAPIActive) {
-        Write-Host "❌ API environment not active. Run 'api-init' first." -ForegroundColor Red
-        return
-    }
-    
-    Write-Host "🧪 Testing API configuration..." -ForegroundColor Blue
-    
-    # Change to api directory
-    $currentLocation = Get-Location
-    if (Test-Path "api") {
-        Push-Location "api"
-        try {
-            # Use python from virtual environment if available
-            python test_config.py
-        } finally {
-            Pop-Location
-        }
-    } else {
-        Write-Host "❌ API directory not found" -ForegroundColor Red
-    }
+    param(
+        [ValidateSet("local", "demo", "clinic", "test", "")]
+        [string]$Env = ""
+    )
+
+    $stage = if ($Env) { $Env } elseif ($env:API_ENVIRONMENT) { $env:API_ENVIRONMENT } else { "local" }
+    Write-Host "💡 api-test uses mdc (no api-init required). Prefer: mdc api test-config --env $stage" -ForegroundColor DarkGray
+    Invoke-MDC @("api", "test-config", "--env", $stage)
 }
 
 function Start-APIDocs {
@@ -3136,40 +2837,40 @@ function Show-APIHelp {
 }
 
 function Get-EnvironmentStatus {
-    Write-Host "`n📊 Environment Status:" -ForegroundColor White
-    
+    Write-Host "`n📊 Config status (mdc — stateless, no *-init required):" -ForegroundColor White
+    Invoke-MDC @("status")
+
+    Write-Host "`n📊 Legacy shell activation (optional *-init / *-deactivate):" -ForegroundColor DarkGray
     if ($script:IsDBTActive) {
         Write-Host "  dbt: ✅ Active ($script:ActiveProject)" -ForegroundColor Green
     } else {
         Write-Host "  dbt: ⭕ Inactive" -ForegroundColor Gray
     }
-    
+
     if ($script:IsETLActive) {
         Write-Host "  ETL: ✅ Active ($script:ActiveProject)" -ForegroundColor Green
-        $environment = $env:ETL_ENVIRONMENT
-        if ($environment) {
-            Write-Host "  ETL Environment: $environment" -ForegroundColor Cyan
+        if ($env:ETL_ENVIRONMENT) {
+            Write-Host "  ETL Environment: $($env:ETL_ENVIRONMENT)" -ForegroundColor Cyan
         }
     } else {
         Write-Host "  ETL: ⭕ Inactive" -ForegroundColor Gray
     }
-    
+
     if ($script:IsAPIActive) {
         Write-Host "  API: ✅ Active ($script:ActiveProject)" -ForegroundColor Green
-        $environment = $env:API_ENVIRONMENT
-        if ($environment) {
-            Write-Host "  API Environment: $environment" -ForegroundColor Cyan
+        if ($env:API_ENVIRONMENT) {
+            Write-Host "  API Environment: $($env:API_ENVIRONMENT)" -ForegroundColor Cyan
         }
     } else {
         Write-Host "  API: ⭕ Inactive" -ForegroundColor Gray
     }
-    
+
     if ($script:IsConsultAudioActive) {
         Write-Host "  Consult Audio: ✅ Active ($script:ActiveProject)" -ForegroundColor Green
     } else {
         Write-Host "  Consult Audio: ⭕ Inactive" -ForegroundColor Gray
     }
-    
+
     Write-Host ""
 }
 
@@ -3364,7 +3065,7 @@ Write-Host "║            Dental Clinic ETL & dbt Pipeline             ║" -Fo
 Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkBlue
 
 Write-Host "`n🚀 Quick Start:" -ForegroundColor White
-Write-Host "  dbt-init              - Initialize dbt (default: local = localhost dev)" -ForegroundColor Cyan
+Write-Host '  dbt-init              - Initialize dbt (default: local = localhost dev)' -ForegroundColor Cyan
 Write-Host "  dbt-init -Target clinic - Initialize dbt for AWS production (opendental_analytics)" -ForegroundColor Cyan
 Write-Host "  etl-init       - Initialize ETL environment (interactive)" -ForegroundColor Magenta
 Write-Host "  api-init       - Initialize API (local/demo/clinic/test config on this machine)" -ForegroundColor Blue
@@ -3377,7 +3078,7 @@ Write-Host "  dbt-docs-deploy - Deploy dbt docs to S3/CloudFront" -ForegroundCol
 Write-Host "  env-status     - Check environment status" -ForegroundColor Yellow
 
 Write-Host "`n☁️  AWS (EC2: run aws-ssm-init, then instance IDs load when you run a connect/port-forward command):" -ForegroundColor DarkCyan
-Write-Host "  aws-ssm-init             - Set up SSM (region, PATH, RDS); instance IDs load on first use" -ForegroundColor DarkCyan
+Write-Host '  aws-ssm-init             - Set up SSM (region, PATH, RDS); instance IDs load on first use' -ForegroundColor DarkCyan
 Write-Host "  ssm-connect-api          - Shell on dental-clinic-api-demo (api.dbtdentalclinic.com)" -ForegroundColor Gray
 Write-Host "  ssm-connect-clinic-api   - Shell on dental-clinic-api-clinic (api-clinic.dbtdentalclinic.com)" -ForegroundColor Gray
 Write-Host "  ssm-connect-demo-db      - Shell on dental-clinic-demo-db (demo database host)" -ForegroundColor Gray

@@ -44,6 +44,16 @@ def etl_env_file(stage: str) -> Path:
     return ETL_DIR / f".env_{stage}"
 
 
+def etl_pipeline_config() -> Path:
+    """Default pipeline.yml used by etl_pipeline.cli status."""
+    return ETL_DIR / "etl_pipeline" / "config" / "pipeline.yml"
+
+
+def etl_pipeline_config_arg() -> str:
+    """Config path relative to ETL_DIR (cwd for mdc etl run/status)."""
+    return etl_pipeline_config().relative_to(ETL_DIR).as_posix()
+
+
 def dbt_env_file(stage: str) -> Path:
     return DBT_DIR / f".env_{stage}"
 

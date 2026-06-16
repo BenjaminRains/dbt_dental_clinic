@@ -6,7 +6,9 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 
 | Script | Purpose |
 |--------|---------|
-| [environment_manager.ps1](environment_manager.ps1) | Main env manager: `dbt-init`, `etl-init`, `api-init`, `clinic-frontend-deploy`, `env-status`. Load via `project_profile.ps1` when in project root. |
+| [environment_manager.ps1](environment_manager.ps1) | Legacy full manager: deploy, SSM, frontend, `*-init`. Load via `load_project.ps1 -Legacy`. |
+| [mdc_aliases.ps1](mdc_aliases.ps1) | **Default** thin `mdc` aliases. Load via `load_project.ps1`. |
+| [mdc_invoke.ps1](mdc_invoke.ps1) | Shared `Invoke-MDC` helper used by aliases and environment manager. |
 | [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `environment_manager.ps1` when in project. |
 | [run_dbt.bat](run_dbt.bat) | Convenience wrapper to run dbt on EC2; forwards to `ec2\run_dbt_on_ec2.ps1`. |
 
