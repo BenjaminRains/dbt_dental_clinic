@@ -1,6 +1,6 @@
 ## Phase 5 — Python-first orchestration; retire the Legacy environment manager
 
-> Status: **in progress** (Phase **5.3 done**; mdc **0.7.2**). Remaining: 5.4–5.5, 5.6 polish.
+> Status: **in progress** (Phase **5.4 done**; mdc **0.7.4**). Remaining: 5.5, 5.6 polish.
 > Objective: complete the migration started in Phase 4 by moving **deploy, SSM, frontend, and consult-audio** workflows into the **`mdc` Python CLI**, leaving PowerShell as an **optional thin wrapper** (or none at all after `pip install -e tools/mdc_cli`).
 > Prerequisite: Phase 4 complete (Phases 4.1–4.6 merged; mdc **0.6.0**) — satisfied.
 > Merged: PR #14 (5.3 + 5.1 + deploy docs), PR #15 (main sync); CI workflow on `main`.
@@ -12,7 +12,7 @@
 | 5.1 — SSM tunnels in Python | **done** (0.7.1) | `mdc_cli/ssm.py`; `mdc tunnel` + `mdc ssm connect\|status`; aliases call `mdc` (no `ssm_tunnels` dot-source) |
 | 5.2 — Shared credentials module | **done** | `credentials.py`; `_norm()` coerces numeric JSON fields |
 | 5.3 — Frontend + dbt docs via mdc | **done** (0.7.2) | `mdc frontend dev\|status`; `mdc deploy frontend`; `mdc deploy dbt-docs` |
-| 5.4 — Consult audio via mdc | **planned** | Stateless venv + child env (no shell activation) |
+| 5.4 — Consult audio via mdc | **done** (0.7.4) | `mdc consult-audio install\|validate\|pipeline\|run` |
 | 5.5 — Archive Legacy manager | **planned** | `environment_manager.ps1` still ~2,160 lines under `-Legacy` |
 | 5.6 — Docs, CI, polish | **partial** | **Done:** `.github/workflows/mdc_cli.yml`, README updates. **Remaining:** Unicode CLI polish, rename historical test file, `etl-status` default docs |
 
@@ -33,7 +33,7 @@ mdc deploy dbt-docs
 mdc deploy api --env clinic
 ```
 
-**Still requires `-Legacy`:** `consult-audio-init` and other unmigrated monolith menus.
+**Still requires `-Legacy`:** unmigrated monolith menus only (5.5 teardown).
 
 **Optional Windows shorthand** (after 5.5):
 
@@ -75,12 +75,11 @@ Phase 4 made api/etl/dbt stateless. **Phase 5.1–5.3 addressed most remaining g
 **Still open:**
 
 ```powershell
-.\load_project.ps1 -Legacy   # consult-audio-init, monolith prompt/*-init shims
+.\load_project.ps1 -Legacy   # monolith prompt/*-init shims until 5.5
 ```
 
-1. **`environment_manager.ps1`** (~2,160 lines) — duplicate frontend/SSM/dbt-docs code remains until 5.5 teardown.
-2. **Consult audio** — shell venv activation (`consult-audio-init`) until 5.4.
-3. **`ps_invoke.py`** — still wraps `deploy_api_file.ps1` only (acceptable deferral).
+1. **`environment_manager.ps1`** (~2,160 lines) — duplicate code remains until 5.5 teardown.
+2. **`ps_invoke.py`** — still wraps `deploy_api_file.ps1` only (acceptable deferral).
 
 Phase 5 end state remains: **one CLI entry point** (`mdc`) for validation, runtime, tunnels, and deploy wrappers ops already run.
 
@@ -168,7 +167,7 @@ tools/mdc_cli/mdc_cli/process_util.py  # Windows npm/aws executable resolution
 |------------------|---------------------|--------------|
 | `scripts/deployment/deploy_codebase_to_clinic_ec2.ps1` etc. | `mdc tunnel *`, `mdc ssm connect` (**done**) | Every `scripts/verification/*` script |
 | `mdc deploy api` → `deploy_api_file.ps1` | `mdc frontend dev`, `mdc deploy frontend` (**done**) | EC2 dbt runtime (`scripts/ec2/*`) |
-| Optional `load_project.ps1` aliases | `mdc consult-audio` (**planned**) | Single venv tool (uv) |
+| Optional `load_project.ps1` aliases | — (5.4 done) | Single venv tool (uv) |
 
 “Minimal PS wrapper” means: **no `environment_manager.ps1` dot-sourced into the shell**; only standalone `.ps1` files ops invoke directly, plus optional 20-line alias loader.
 
@@ -189,7 +188,7 @@ Keep `demo-frontend-deploy` etc. as **wrappers** that call `mdc deploy frontend 
 | `Deploy-Frontend`, `Deploy-ClinicFrontend`, `Merge-DemoFrontendFromCredentialsFile` | ~720 | `mdc deploy frontend` | **Done** |
 | `Get-FrontendStatus` | ~150 | `mdc frontend status` | **Done** |
 | `Deploy-DBTDocs` | ~200 | `mdc deploy dbt-docs` | **Done** |
-| `Initialize-ConsultAudioEnvironment` / `Stop-*` | ~120 | `mdc consult-audio` | **Planned** |
+| `Initialize-ConsultAudioEnvironment` / `Stop-*` | ~120 | `mdc consult-audio` | **Done** |
 | `Get-SSMStatus` | ~80 | `mdc ssm status` | **Done** |
 | SSM connect aliases | external | `mdc ssm connect` | **Done** |
 
@@ -286,13 +285,14 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 | Tests | `test_frontend_commands.py`, `test_deploy_dbt_docs.py`, `test_deploy_dbt_docs_module.py` |
 | Alias | `dbt-docs-deploy` → `mdc deploy dbt-docs` |
 
-#### Phase 5.4 — Consult audio via mdc
+#### Phase 5.4 — Consult audio via mdc — **done**
 
-| Item | Action |
+| Item | Result |
 |------|--------|
-| `mdc_cli/commands/consult_audio.py` | Discover `consult_audio_pipe/venv`, `requirements.txt` |
-| `run_helper` pattern | Child env from `consult_audio_pipe/.env` (`override=False` precedence) |
-| `mdc consult-audio validate` | venv + key presence |
+| `consult_audio_env.py` | venv discovery, `.env` child env (OS wins), validate, install |
+| `commands/consult_audio.py` | `install`, `validate`, `run --`, `pipeline run\|status\|validate\|cleanup` |
+| Aliases | `consult-audio-validate`, `consult-audio-run`; deprecated `consult-audio-init` |
+| Tests | `test_consult_audio_env.py`, `test_consult_audio_commands.py` |
 
 #### Phase 5.5 — Archive Legacy environment manager
 
@@ -341,9 +341,9 @@ Phase 5 is **complete** when:
 - [x] `mdc tunnel *` runs without spawning PowerShell.
 - [x] `mdc frontend dev`, `mdc deploy frontend --target demo|clinic`, `mdc deploy dbt-docs` without `environment_manager.ps1`.
 - [x] `deployment_credentials.json` and env-file key parsing in **one** Python module (`credentials.py`).
-- [~] `.\load_project.ps1 -Legacy` not required for **documented daily workflows** — **done** for api/etl/dbt, frontend, tunnels, SSM, dbt-docs; **not** for consult-audio.
+- [~] `.\load_project.ps1 -Legacy` not required for **documented daily workflows** — **done** including consult-audio; **5.5** removes monolith.
 - [ ] `environment_manager.ps1` archived or under **200 lines**.
-- [ ] `mdc consult-audio validate` without shell venv activation.
+- [x] `mdc consult-audio validate` without shell venv activation.
 - [x] CI runs `mdc status` and pytest without PowerShell / `load_project.ps1` (`.github/workflows/mdc_cli.yml`).
 - [~] `scripts/README.md` and main review describe Python-first onboarding — **partial** until 5.5.
 
@@ -380,11 +380,10 @@ Acceptable deferrals (unchanged):
 
 ### Suggested implementation order (remaining)
 
-1. **5.4** — `mdc consult-audio` (if used)
-2. **5.5** — archive / shrink `environment_manager.ps1` after parity checklist
-3. **5.6 remainder** — Unicode polish, test file rename, `etl-status` default docs
+1. **5.5** — archive / shrink `environment_manager.ps1` after parity checklist
+2. **5.6 remainder** — Unicode polish, test file rename, `etl-status` default docs
 
-**Completed order:** 5.2 → 5.1 → 5.3 → 5.6 (CI).
+**Completed order:** 5.2 → 5.1 → 5.3 → 5.6 (CI) → 5.4.
 
 ---
 

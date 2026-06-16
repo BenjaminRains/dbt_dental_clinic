@@ -17,6 +17,7 @@ API_DIR = REPO_ROOT / "api"
 ETL_DIR = REPO_ROOT / "etl_pipeline"
 DBT_DIR = REPO_ROOT / "dbt_dental_models"
 FRONTEND_DIR = REPO_ROOT / "frontend"
+CONSULT_AUDIO_DIR = REPO_ROOT / "consult_audio_pipe"
 DEPLOYMENT_CREDENTIALS = REPO_ROOT / "deployment_credentials.json"
 FRONTEND_DEPLOY_JSON = REPO_ROOT / ".frontend-deploy.json"
 
@@ -150,6 +151,11 @@ def discover_dbt_python() -> Optional[Path]:
     if result.returncode != 0 or not result.stdout.strip():
         return None
     return _venv_python(Path(result.stdout.strip()))
+
+
+def discover_consult_audio_python() -> Optional[Path]:
+    """Return consult_audio_pipe/venv python if present."""
+    return _venv_python(CONSULT_AUDIO_DIR / "venv")
 
 
 def discover_component_python(component: str) -> Optional[Path]:

@@ -21,7 +21,7 @@ status
 api-run
 ```
 
-Use `.\load_project.ps1 -Legacy` for consult-audio and other legacy menus not yet in `mdc`.
+Use `.\load_project.ps1 -Legacy` only for unmigrated monolith menus.
 
 ## Commands
 
@@ -45,6 +45,14 @@ Use `.\load_project.ps1 -Legacy` for consult-audio and other legacy menus not ye
 - `mdc frontend status` — demo/clinic S3/CloudFront/API key resolution
 - `mdc deploy frontend --target demo|clinic` — build + S3 sync + CloudFront invalidation
 - `mdc deploy dbt-docs [--env local] [--skip-generate]` — upload `dbt_dental_models/target` to `s3://…/dbt-docs/`
+
+### Consult audio (Phase 5.4)
+
+- `mdc consult-audio install` — create `consult_audio_pipe/venv` and install requirements
+- `mdc consult-audio validate` — venv, `.env` API keys, ffmpeg warning
+- `mdc consult-audio pipeline run|status|validate|cleanup` — `consult_audio_pipe.pipeline`
+- `mdc consult-audio run -- <cmd>` — arbitrary venv subprocess (cwd `consult_audio_pipe/`)
+- `mdc consult-audio analyze` / `tokens` — `scripts/llm_analysis_integration.py` helpers
 
 ### Infrastructure wrappers
 

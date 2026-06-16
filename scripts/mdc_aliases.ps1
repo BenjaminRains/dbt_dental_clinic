@@ -131,6 +131,23 @@ function dbt-docs-deploy {
     Invoke-MDC @("deploy", "dbt-docs") + $args
 }
 
+function consult-audio-init {
+    Write-Host "`n⚠️  consult-audio-init is deprecated. Use: mdc consult-audio install" -ForegroundColor Yellow
+    Invoke-MDC @("consult-audio", "install") + $args
+}
+
+function consult-audio-deactivate {
+    Write-Host 'consult-audio-deactivate is a no-op (Phase 5.4). mdc runs are stateless - no shell env to clear.' -ForegroundColor DarkGray
+}
+
+function consult-audio-validate {
+    Invoke-MDC @("consult-audio", "validate") + $args
+}
+
+function consult-audio-run {
+    Invoke-MDC @("consult-audio", "pipeline", "run") + $args
+}
+
 function dbt-init {
     param(
         [ValidateSet("local", "demo", "clinic")]
@@ -201,8 +218,10 @@ Write-Host "  mdc tunnel clinic-db         SSM port forward (Python)" -Foregroun
 Write-Host "  frontend-dev                 mdc frontend dev (local Vite)" -ForegroundColor Cyan
 Write-Host "  clinic-frontend-deploy       mdc deploy frontend --target clinic" -ForegroundColor Cyan
 Write-Host "  dbt-docs-deploy              mdc deploy dbt-docs" -ForegroundColor Cyan
+Write-Host "  consult-audio-validate       mdc consult-audio validate" -ForegroundColor Cyan
+Write-Host "  consult-audio-run            mdc consult-audio pipeline run" -ForegroundColor Cyan
 Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api" -ForegroundColor Cyan
 Write-Host "  ssm-connect-clinic-api       SSM shell on clinic API EC2" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Legacy -Legacy manager: consult-audio-init, etc." -ForegroundColor DarkGray
+Write-Host "Legacy -Legacy manager: unmigrated monolith menus only." -ForegroundColor DarkGray
 Write-Host ""
