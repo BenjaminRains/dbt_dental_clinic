@@ -41,7 +41,22 @@ mdc tunnel clinic-db
 ssm-connect-clinic-api    # SSM shell on clinic API EC2 (also in default aliases)
 ```
 
-Use `.\load_project.ps1 -Legacy` for consult-audio and other legacy helpers not yet in `mdc`.
+Use `.\load_project.ps1 -Legacy` only for unmigrated monolith menus.
+
+### Consult audio (Phase 5.4)
+
+Stateless runs in `consult_audio_pipe/venv` with child env from `consult_audio_pipe/.env`:
+
+```bash
+mdc consult-audio install          # once: venv + pip install -r requirements.txt
+mdc consult-audio validate
+mdc consult-audio pipeline run --llm claude
+mdc consult-audio pipeline status
+mdc consult-audio analyze              # LLM analysis on clean transcripts (legacy script)
+mdc consult-audio run -- scripts/llm_analysis_integration.py analyze
+```
+
+Aliases: `consult-audio-validate`, `consult-audio-run`; `consult-audio-init` → `mdc consult-audio install`.
 
 ### Deploy dbt docs to portfolio site
 
