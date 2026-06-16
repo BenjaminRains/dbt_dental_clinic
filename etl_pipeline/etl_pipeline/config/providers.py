@@ -12,7 +12,6 @@ from pathlib import Path
 import os
 import yaml
 import logging
-from dotenv import load_dotenv
 
 logger = logging.getLogger(__name__)
 
@@ -58,51 +57,20 @@ class FileConfigProvider(ConfigProvider):
         return environment
     
     def _load_environment_file(self):
-        """Load environment variables from appropriate .env file."""
-        # Load the specific environment file (.env_local, .env_clinic, or .env_test)
+        """Load environment variables via pydantic-settings (settings_v2.py)."""
         env_file = f".env_{self.environment}"
-        
-        # Environment files are in the etl_pipeline root directory (same as config_dir)
-        env_path = self.config_dir / env_file
-        
-        if env_path.exists():
-            logger.info(f"Loading environment from {env_path}")
-            try:
-                # Load environment variables from the specific environment file.
-                # override=False: the OS process environment is the single source of truth
-                # (vars exported by environment_manager.ps1, Docker, or systemd win); the
-                # .env_<stage> file only fills in vars not already set. Matches api/config.py
-                # and the "OS env wins" rule in ENVIRONMENT_HANDLING_REVIEW.md (Phase 0).
-                load_dotenv(env_path, override=False)
-                
-                # Capture ONLY the environment variables that are relevant to our ETL pipeline
-                # This avoids capturing system variables like CHOCOLATEYINSTALL, APPDATA, etc.
-                self._env_vars = {}
-                
-                # Define the environment variable prefixes we care about
-                env_prefixes = {
-                    'local': ['OPENDENTAL_SOURCE_', 'GLIC_OPENDENTAL_SOURCE_', 'MYSQL_REPLICATION_', 'POSTGRES_ANALYTICS_'],
-                    'clinic': ['OPENDENTAL_SOURCE_', 'MYSQL_REPLICATION_', 'POSTGRES_ANALYTICS_'],
-                    'test': ['TEST_OPENDENTAL_SOURCE_', 'TEST_MYSQL_REPLICATION_', 'TEST_POSTGRES_ANALYTICS_']
-                }
-                
-                # Capture only variables with our prefixes
-                prefixes = env_prefixes.get(self.environment, [])
-                for key, value in os.environ.items():
-                    for prefix in prefixes:
-                        if key.startswith(prefix):
-                            self._env_vars[key] = value
-                            break
-                
-                # Also capture ETL_ENVIRONMENT
-                if 'ETL_ENVIRONMENT' in os.environ:
-                    self._env_vars['ETL_ENVIRONMENT'] = os.environ['ETL_ENVIRONMENT']
-                    
-            except Exception as e:
-                logger.error(f"Failed to load {env_file}: {e}")
-                raise ValueError(f"Failed to load environment file {env_file}: {e}")
-        else:
-            raise ValueError(f"Environment file {env_file} not found. Please create {env_path}")
+        try:
+            from .settings_v2 import load_etl_env_dict
+
+            self._env_vars = load_etl_env_dict(
+                environment=self.environment,
+                config_dir=self.config_dir,
+            )
+        except ValueError:
+            raise
+        except Exception as e:
+            logger.error("Failed to load %s: %s", env_file, e)
+            raise ValueError(f"Failed to load environment file {env_file}: {e}") from e
     
     def get_config(self, config_type: str) -> Dict[str, Any]:
         """Load configuration from files or environment."""

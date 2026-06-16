@@ -124,9 +124,9 @@ forward-compatible with §5.
 | **§2.5 below** | Updated: `profiles.yml.template` now exists. |
 | **Deploy health check** | `-ClinicEnv` runs `GET /health/db` on EC2 after restart; `-SkipHealthCheck` to opt out. |
 
-## Phase 2 — pydantic-settings for API (in progress)
+## Phase 2 — pydantic-settings for API (implemented)
 
-> Status: **in progress** on branch `refactor/pydantic-settings-api`.
+> Status: **implemented** (merged via PR #5).
 > Typed loader in `api/settings.py`; `api/config.py` remains the public facade.
 
 ### Changes
@@ -137,11 +137,24 @@ forward-compatible with §5.
 | **`api/config.py`** | Delegates to settings; `APIConfig` / `get_config()` signatures unchanged |
 | **`api/test_config.py`** | Precedence test seeds non-host vars when `api-init` was not run |
 
+## Phase 2b — pydantic-settings for ETL (in progress)
+
+> Status: **in progress** on branch `refactor/pydantic-settings-etl`.
+> Typed loader in `etl_pipeline/etl_pipeline/config/settings_v2.py`; `FileConfigProvider` delegates for `get_config('env')`.
+
+### Changes
+
+| Item | Action |
+|---|---|
+| **`settings_v2.py`** | New — typed source/replication/analytics loaders, Phase 0 env-file skip |
+| **`providers.py`** | `FileConfigProvider._load_environment_file()` delegates to `load_etl_env_dict()` |
+| **`tests/unit/config/test_settings_v2_unit.py`** | Precedence + delegation tests |
+| **`Pipfile`** | `pydantic`, `pydantic-settings` |
+
 ### Remaining (Phase 2+)
 
-- ETL `settings_v2.py` + delegate `FileConfigProvider`
-- Remove redundant hand-rolled validation from config facade once ETL migrated
-- Optional FastAPI `Depends(get_settings)`
+- Delegate `Settings` class to typed models (drop duplicate `ENV_MAPPINGS` validation)
+- Optional FastAPI `Depends(get_settings)` for API routes
 - PowerShell env manager delegates to Python (§4.5)
 - Single venv tool / stale artifact cleanup (§4.4, §4.6)
 
