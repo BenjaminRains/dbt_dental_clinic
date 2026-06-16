@@ -139,7 +139,7 @@ forward-compatible with §5.
 
 ## Phase 2b — pydantic-settings for ETL (implemented)
 
-> Status: **implemented** on branch `refactor/pydantic-settings-etl`.
+> Status: **implemented** (merged via PR #6).
 > Typed loader in `etl_pipeline/etl_pipeline/config/settings_v2.py`; `FileConfigProvider` and `Settings` delegate for env loading.
 
 ### Changes
@@ -154,9 +154,24 @@ forward-compatible with §5.
 | **`api/deps.py`** | `get_api_settings()` / `get_api_settings_optional()` for FastAPI Depends |
 | **`api/main.py`** | `/health` uses `Depends(get_api_settings_optional)` when env is configured |
 
+## Phase 3 — PowerShell delegates to Python (in progress)
+
+> Status: **in progress** on branch `refactor/phase3-env-export`.
+> `api-init` and `etl-init` load env via `scripts/export_env_for_shell.py` instead of parsing `.env` in PowerShell.
+
+### Changes
+
+| Item | Action |
+|---|---|
+| **`scripts/export_env_for_shell.py`** | JSON export for `--component api|etl` using pydantic loaders |
+| **`api/settings.py`** | `export_api_env_dict()` for shell export after validation |
+| **`environment_manager.ps1`** | `Import-StageEnvFromPython`; `api-init` / `etl-init` use Python export |
+| **`tests/unit/config/test_export_env_for_shell_unit.py`** | Export script smoke tests |
+
 ### Remaining (Phase 3+)
 
-- PowerShell env manager delegates to Python (§4.5)
+- `dbt-init` env loading via Python or documented single path (still parses `.env_local` / `.env_clinic`)
+- Consult audio / other ad-hoc `Get-Content` env loaders in `environment_manager.ps1`
 - Single venv tool / stale artifact cleanup (§4.4, §4.6)
 - Optional: slim `Settings.ENV_MAPPINGS` once all callers use typed path exclusively
 

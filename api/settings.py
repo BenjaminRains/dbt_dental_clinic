@@ -15,7 +15,58 @@ from pathlib import Path
 from typing import Optional
 
 from pydantic import Field, SecretStr, ValidationError
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import (
+    BaseSettings,
+    PydanticBaseSettingsSource,
+    SettingsConfigDict,
+)
+from typing import Any, Tuple, Type
+
+
+class IgnoreBlankEnvSettingsSource(PydanticBaseSettingsSource):
+    """Drop blank env / dotenv values so on-disk defaults are not overridden by stale shell blanks."""
+
+    def __init__(self, settings_cls: Type[BaseSettings], source: PydanticBaseSettingsSource):
+        super().__init__(settings_cls)
+        self.source = source
+
+    def get_field_value(self, field, field_name):
+        return self.source.get_field_value(field, field_name)
+
+    def prepare_field_value(self, field_name, field, value, value_is_complex):
+        return self.source.prepare_field_value(field_name, field, value, value_is_complex)
+
+    def __call__(self) -> dict[str, Any]:
+        data = self.source()
+        return {
+            key: value
+            for key, value in data.items()
+            if not (isinstance(value, str) and not value.strip())
+        }
+
+    @property
+    def field_mapping(self):
+        return self.source.field_mapping
+
+
+class BlankEnvAwareSettings(BaseSettings):
+    """Base settings that ignore empty-string env values (common in .env files and shells)."""
+
+    @classmethod
+    def settings_customise_sources(
+        cls,
+        settings_cls: Type[BaseSettings],
+        init_settings: PydanticBaseSettingsSource,
+        env_settings: PydanticBaseSettingsSource,
+        dotenv_settings: PydanticBaseSettingsSource,
+        file_secret_settings: PydanticBaseSettingsSource,
+    ) -> Tuple[PydanticBaseSettingsSource, ...]:
+        return (
+            init_settings,
+            IgnoreBlankEnvSettingsSource(settings_cls, env_settings),
+            IgnoreBlankEnvSettingsSource(settings_cls, dotenv_settings),
+            file_secret_settings,
+        )
 
 logger = logging.getLogger(__name__)
 
@@ -43,7 +94,7 @@ class Stage(str, Enum):
     LOCAL = "local"
 
 
-class AnalyticsDBSettings(BaseSettings):
+class AnalyticsDBSettings(BlankEnvAwareSettings):
     """Analytics Postgres connection; env prefix is set per stage at load time."""
 
     model_config = SettingsConfigDict(extra="ignore", case_sensitive=False)
@@ -55,7 +106,7 @@ class AnalyticsDBSettings(BaseSettings):
     password: SecretStr
 
 
-class APIRuntimeSettings(BaseSettings):
+class APIRuntimeSettings(BlankEnvAwareSettings):
     """Optional API server settings (API_* env vars)."""
 
     model_config = SettingsConfigDict(
@@ -127,6 +178,17 @@ def _resolve_sslmode(env_file: Optional[Path]) -> str:
         return ""
 
 
+def _analytics_env_complete_in_os(host_key: str, prefix: str) -> bool:
+    """Phase 0: OS env is authoritative only when analytics creds are fully present (non-blank)."""
+    host = (os.getenv(host_key) or "").strip()
+    if not host:
+        return False
+    for suffix in ("DB", "USER", "PASSWORD"):
+        if not (os.getenv(f"{prefix}{suffix}") or "").strip():
+            return False
+    return True
+
+
 def _env_file_for_stage(stage: Stage) -> Optional[Path]:
     """
     Return the stage .env file to load, or None when OS env is authoritative (Phase 0).
@@ -135,7 +197,8 @@ def _env_file_for_stage(stage: Stage) -> Optional[Path]:
     environment_manager.ps1), do not read a second on-disk .env_api_* file.
     """
     host_key = HOST_ENV_KEYS[stage.value]
-    if os.getenv(host_key):
+    prefix = STAGE_PREFIX[stage.value]
+    if _analytics_env_complete_in_os(host_key, prefix):
         logger.info(
             "Analytics DB config already present in OS environment (%s set); "
             "skipping on-disk .env_api_%s so it cannot shadow it.",
@@ -193,3 +256,40 @@ def get_settings() -> APISettings:
 def reset_settings() -> None:
     """Clear cached settings (tests)."""
     get_settings.cache_clear()
+
+
+def export_api_env_dict(*, environment: Optional[str] = None) -> dict[str, str]:
+    """
+    Validate API config and return a flat env dict for PowerShell api-init (Phase 3).
+
+    Runs pydantic validation first, then merges stage file values with OS env (OS wins).
+    """
+    stage = _detect_stage(environment)
+    os.environ["API_ENVIRONMENT"] = stage.value
+    load_api_settings(environment=stage.value)
+
+    env_file = API_DIR / f".env_api_{stage.value}"
+    result: dict[str, str] = {}
+
+    if env_file.exists():
+        from dotenv import dotenv_values
+
+        for key, value in (dotenv_values(env_file) or {}).items():
+            if value is not None and str(value).strip():
+                result[key] = str(value).strip()
+
+    for key in list(result.keys()):
+        os_val = os.getenv(key)
+        if os_val is not None and str(os_val).strip():
+            result[key] = os_val.strip()
+
+    for key, val in os.environ.items():
+        if not val:
+            continue
+        if key in ("API_ENVIRONMENT",) or key.startswith(
+            ("API_", "POSTGRES_", "DEMO_", "TEST_", "CLINIC_", "PGSSL")
+        ):
+            result[key] = val
+
+    result["API_ENVIRONMENT"] = stage.value
+    return result
