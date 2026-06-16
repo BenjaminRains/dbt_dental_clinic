@@ -25,10 +25,13 @@ Or without installing:
 python -m mdc_cli --help
 ```
 
-## Phase 4.1 scope
+## Commands (Phase 4.1–4.2)
 
-- `mdc status` — config paths, validation, venv discovery
-- Stub subcommands for `api`, `etl`, `dbt`, `tunnel` (implemented in later phases)
+- `mdc status` — config paths, validation overview, venv discovery
+- `mdc api test-config --env <stage>` — validate API pydantic settings
+- `mdc api health --env <stage>` — config health (settings load; HTTP checks in Phase 4.3)
+- `mdc etl validate --env <stage> [--profile load|full]` — validate ETL settings
+- Stub: `mdc api run`, `mdc etl run`, `mdc dbt *`, `mdc tunnel *` (later phases)
 
 Stages are dev/test targets only: `local`, `clinic`, `test`, and `demo` (API/dbt).
 Use `clinic` for the live clinic deployment context — not a separate `production` stage name.
