@@ -9,7 +9,7 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | [environment_manager.ps1](environment_manager.ps1) | Legacy full manager (`-Legacy`): deploy, SSM, frontend. *-init deprecated (Phase 4.6). |
 | [mdc_aliases.ps1](mdc_aliases.ps1) | **Default** thin `mdc` aliases. Load via `load_project.ps1`. |
 | [mdc_invoke.ps1](mdc_invoke.ps1) | Shared `Invoke-MDC` helper used by aliases and environment manager. |
-| [ssm_tunnels.ps1](ssm_tunnels.ps1) | SSM port-forward and shell connect (`ssm-connect-clinic-api`, etc.); used by `mdc tunnel` and default aliases. |
+| **ssm_tunnels.ps1** | Dot-source in default aliases replaced by `mdc ssm connect`; file kept for Legacy env manager |
 | [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `load_project.ps1` (mdc aliases) when in project. |
 | [run_dbt.bat](run_dbt.bat) | Convenience wrapper to run dbt on EC2; forwards to `ec2\run_dbt_on_ec2.ps1`. |
 

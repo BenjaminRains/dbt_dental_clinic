@@ -1,36 +1,30 @@
-"""Infrastructure wrappers to existing PowerShell SSM helpers (Phase 4.5)."""
+"""SSM port-forward tunnels (Phase 5.1 — Python implementation)."""
 
 from __future__ import annotations
 
 import typer
 
-from mdc_cli.ps_invoke import invoke_tunnel_function
+from mdc_cli.ssm import tunnel_clinic_db, tunnel_demo_db, tunnel_rds_demo
 
-tunnel_app = typer.Typer(help="SSM port-forward wrappers (PowerShell)")
+tunnel_app = typer.Typer(help="SSM port-forward tunnels")
 
 
 @tunnel_app.command("clinic-db")
 def clinic_db() -> None:
-    """Port-forward clinic RDS via dental-clinic-api-clinic (ssm-port-forward-rds-clinic)."""
-    typer.echo("TUNNEL  clinic-db  -> Start-SSMPortForwardRDSClinic")
-    code = invoke_tunnel_function("Start-SSMPortForwardRDSClinic")
-    raise typer.Exit(code=code)
+    """Port-forward clinic RDS via dental-clinic-api-clinic."""
+    raise typer.Exit(code=tunnel_clinic_db())
 
 
 @tunnel_app.command("demo-db")
 def demo_db() -> None:
-    """Port-forward demo database to localhost (ssm-port-forward-demo-db)."""
-    typer.echo("TUNNEL  demo-db  -> Start-SSMPortForwardDemoDB")
-    code = invoke_tunnel_function("Start-SSMPortForwardDemoDB")
-    raise typer.Exit(code=code)
+    """Port-forward demo database to localhost."""
+    raise typer.Exit(code=tunnel_demo_db())
 
 
 @tunnel_app.command("rds")
 def rds_demo() -> None:
-    """Port-forward RDS via demo API instance (ssm-port-forward-rds)."""
-    typer.echo("TUNNEL  rds  -> Start-SSMPortForwardRDS")
-    code = invoke_tunnel_function("Start-SSMPortForwardRDS")
-    raise typer.Exit(code=code)
+    """Port-forward RDS via dental-clinic-api-demo."""
+    raise typer.Exit(code=tunnel_rds_demo())
 
 
 @tunnel_app.command("close")

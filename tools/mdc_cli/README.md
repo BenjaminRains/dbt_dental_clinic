@@ -47,7 +47,9 @@ Use `.\load_project.ps1 -Legacy` for frontend deploy and other legacy menus. **S
 
 ### Infrastructure wrappers
 
-- `mdc tunnel clinic-db|demo-db|rds` — SSM port forward via `scripts/ssm_tunnels.ps1`
+- `mdc tunnel clinic-db|demo-db|rds` — SSM port forward (Python; no PowerShell bridge)
+- `mdc ssm status` — AWS CLI, plugin, instance IDs from `deployment_credentials.json`
+- `mdc ssm connect api|clinic-api|demo-db` — interactive SSM shell
 - `mdc deploy api --env clinic` — copies `api/.env_api_clinic` to EC2 `api/.env`, restarts **`dental-clinic-api`** systemd unit, `/health/db` check
 
 ### PowerShell aliases (Phase 4.5)

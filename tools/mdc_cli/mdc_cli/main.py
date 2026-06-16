@@ -5,7 +5,7 @@ from __future__ import annotations
 import typer
 
 from mdc_cli import __version__
-from mdc_cli.commands import api, dbt, deploy, etl, frontend, status, tunnel
+from mdc_cli.commands import api, dbt, deploy, etl, frontend, ssm, status, tunnel
 
 app = typer.Typer(
     name="mdc",
@@ -19,6 +19,7 @@ app.add_typer(etl.etl_app, name="etl")
 app.add_typer(dbt.dbt_app, name="dbt")
 app.add_typer(deploy.deploy_app, name="deploy")
 app.add_typer(frontend.frontend_app, name="frontend")
+app.add_typer(ssm.ssm_app, name="ssm")
 app.add_typer(tunnel.tunnel_app, name="tunnel")
 
 

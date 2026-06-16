@@ -8,9 +8,9 @@
 
 | Sub-phase | Status | Notes |
 |-----------|--------|-------|
-| 5.1 — SSM tunnels in Python | **planned** | Replace `mdc_run_ssm_tunnel.ps1` / `ssm_tunnels.ps1` bridge |
-| 5.2 — Shared credentials module | **planned** | `deployment_credentials.json` + env-file key parsing in one place |
-| 5.3 — Frontend via mdc | **planned** | `mdc frontend dev`; `mdc deploy frontend`; `mdc deploy dbt-docs` |
+| 5.1 — SSM tunnels in Python | **done** (0.7.1) | `mdc_cli/ssm.py`; `mdc tunnel` + `mdc ssm connect|status` |
+| 5.2 — Shared credentials module | **done** | `credentials.py` |
+| 5.3 — Frontend via mdc | **done** (0.7.0) | `mdc frontend dev`; `mdc deploy frontend --target` |
 | 5.4 — Consult audio via mdc | **planned** | Stateless venv + child env (no shell activation) |
 | 5.5 — Archive Legacy manager | **planned** | Remove or shrink `environment_manager.ps1`; optional `load_project.ps1` |
 | 5.6 — Docs, CI, polish | **planned** | Onboarding, smoke CI, CLI encoding, alias defaults |

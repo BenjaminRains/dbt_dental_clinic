@@ -1,4 +1,4 @@
-﻿# SSM port-forward helpers for mdc tunnel (standalone; no environment_manager.ps1).
+﻿# SSM port-forward helpers — legacy; prefer mdc tunnel and mdc ssm connect.
 # UTF-8 with BOM so emoji in Write-Host do not break PowerShell 5.1 parsing.
 
 $script:SSMProjectRoot = Split-Path $PSScriptRoot -Parent

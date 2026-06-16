@@ -9,18 +9,18 @@ from mdc_cli.main import app
 runner = CliRunner()
 
 
-@patch("mdc_cli.commands.tunnel.invoke_tunnel_function", return_value=0)
-def test_tunnel_clinic_db(mock_invoke):
+@patch("mdc_cli.commands.tunnel.tunnel_clinic_db", return_value=0)
+def test_tunnel_clinic_db(mock_tunnel):
     result = runner.invoke(app, ["tunnel", "clinic-db"])
     assert result.exit_code == 0
-    mock_invoke.assert_called_once_with("Start-SSMPortForwardRDSClinic")
+    mock_tunnel.assert_called_once()
 
 
-@patch("mdc_cli.commands.tunnel.invoke_tunnel_function", return_value=0)
-def test_tunnel_close_is_informational(mock_invoke):
+@patch("mdc_cli.commands.tunnel.tunnel_rds_demo", return_value=0)
+def test_tunnel_close_is_informational(mock_rds):
     result = runner.invoke(app, ["tunnel", "close"])
     assert result.exit_code == 0
-    mock_invoke.assert_not_called()
+    mock_rds.assert_not_called()
 
 
 @patch("mdc_cli.commands.deploy.deploy_frontend_target", return_value=0)
