@@ -1,21 +1,22 @@
 ## Phase 5 — Python-first orchestration; retire the Legacy environment manager
 
-> Status: **proposed** (not started).
+> Status: **in progress** (Phases 5.1–5.3 and CI **done** on `main`; mdc **0.7.1**).
 > Objective: complete the migration started in Phase 4 by moving **deploy, SSM, frontend, and consult-audio** workflows into the **`mdc` Python CLI**, leaving PowerShell as an **optional thin wrapper** (or none at all after `pip install -e tools/mdc_cli`).
 > Prerequisite: Phase 4 complete (Phases 4.1–4.6 merged; mdc **0.6.0**) — satisfied.
+> Merged: PR #14 (5.3 + 5.1 + deploy docs), PR #15 (main sync); CI workflow on `main`.
 
 ### Implementation status
 
 | Sub-phase | Status | Notes |
 |-----------|--------|-------|
-| 5.1 — SSM tunnels in Python | **done** (0.7.1) | `mdc_cli/ssm.py`; `mdc tunnel` + `mdc ssm connect|status` |
-| 5.2 — Shared credentials module | **done** | `credentials.py` |
-| 5.3 — Frontend via mdc | **done** (0.7.0) | `mdc frontend dev`; `mdc deploy frontend --target` |
+| 5.1 — SSM tunnels in Python | **done** (0.7.1) | `mdc_cli/ssm.py`; `mdc tunnel` + `mdc ssm connect\|status`; aliases call `mdc` (no `ssm_tunnels` dot-source) |
+| 5.2 — Shared credentials module | **done** | `credentials.py`; `_norm()` coerces numeric JSON fields |
+| 5.3 — Frontend via mdc | **mostly done** (0.7.0) | `mdc frontend dev\|status`; `mdc deploy frontend --target demo\|clinic`; **`mdc deploy dbt-docs` still planned** |
 | 5.4 — Consult audio via mdc | **planned** | Stateless venv + child env (no shell activation) |
-| 5.5 — Archive Legacy manager | **planned** | Remove or shrink `environment_manager.ps1`; optional `load_project.ps1` |
-| 5.6 — Docs, CI, polish | **in progress** | CI: `.github/workflows/mdc_cli.yml` (pytest + `mdc status` smoke) |
+| 5.5 — Archive Legacy manager | **planned** | `environment_manager.ps1` still ~2,160 lines under `-Legacy` |
+| 5.6 — Docs, CI, polish | **partial** | **Done:** `.github/workflows/mdc_cli.yml`, README updates. **Remaining:** Unicode CLI polish, rename historical test file, `etl-status` default docs |
 
-**Target daily workflow (no `-Legacy`):**
+**Current daily workflow (no `-Legacy` for these):**
 
 ```bash
 pip install -e tools/mdc_cli    # once per machine / venv
@@ -24,10 +25,14 @@ mdc status
 mdc api run --env local
 mdc etl run --env clinic --profile full
 mdc tunnel clinic-db
+mdc ssm status
+mdc ssm connect clinic-api
 mdc frontend dev
 mdc deploy frontend --target demo
 mdc deploy api --env clinic
 ```
+
+**Still requires `-Legacy`:** `dbt-docs-deploy`, `consult-audio-init`, and other unmigrated monolith menus.
 
 **Optional Windows shorthand** (after 5.5):
 
@@ -54,43 +59,45 @@ Phase 4 optional follow-ups (extract Legacy, consult-audio, CI without PS, contr
 
 ---
 
-### Problem with the current model
+### Problem with the current model (original Phase 5 pain points)
 
-Daily api/etl/dbt work is stateless and Python-driven. **Deploy and frontend still require:**
+Phase 4 made api/etl/dbt stateless. **Phase 5.1–5.3 addressed most remaining glue:**
+
+| Was broken | Now |
+|------------|-----|
+| `mdc tunnel` → PowerShell → `ssm_tunnels.ps1` | `mdc_cli/ssm.py` → `aws ssm start-session` |
+| `mdc deploy frontend` → `Deploy-Frontend` in monolith | `deploy_frontend.py` + `credentials.py` |
+| `frontend-dev` only in Legacy manager | `mdc frontend dev` + alias |
+| Duplicate JSON parsing in PS | `credentials.py` |
+| `ssm-connect-*` dot-sourced `ssm_tunnels.ps1` | `mdc ssm connect` + thin aliases |
+
+**Still open:**
 
 ```powershell
-.\load_project.ps1 -Legacy
-demo-frontend-deploy          # ~400 lines of PS in environment_manager.ps1
-clinic-frontend-deploy        # duplicates credential loading logic
-frontend-dev                  # writes .env.local, runs npm
-mdc tunnel clinic-db          # spawns PowerShell → ssm_tunnels.ps1
-mdc deploy frontend           # spawns PowerShell → Deploy-Frontend in monolith
+.\load_project.ps1 -Legacy   # dbt-docs-deploy, consult-audio-init, monolith prompt/*-init shims
 ```
 
-Pain points:
+1. **`environment_manager.ps1`** (~2,160 lines) — duplicate frontend/SSM code remains until 5.5 teardown.
+2. **`mdc deploy dbt-docs`** — not implemented; `Deploy-DBTDocs` still on Legacy path.
+3. **Consult audio** — shell venv activation (`consult-audio-init`) until 5.4.
+4. **`ps_invoke.py`** — still wraps `deploy_api_file.ps1` only (acceptable deferral).
 
-1. **Two orchestration implementations** — Python `mdc` for runs; PowerShell for deploy/frontend (credential JSON parsing duplicated in PS).
-2. **`ps_invoke.py` bridge** — every tunnel/deploy-frontend call spawns `powershell -File` (slow, hard to test, quoting edge cases).
-3. **`-Legacy` is a misnomer** — required for common workflows, not edge cases.
-4. **Monolith maintenance** — self-reload, custom `prompt`, `$script:Is*Active`, deprecated `*-init` shims, and deploy logic in one file.
-5. **Cross-platform** — Linux/macOS contributors cannot use `-Legacy` ergonomics without PowerShell 7.
-
-Phase 5’s end state: **one CLI entry point** (`mdc`) for configuration validation, runtime, tunnels, and deploy wrappers that ops already run.
+Phase 5 end state remains: **one CLI entry point** (`mdc`) for validation, runtime, tunnels, and deploy wrappers ops already run.
 
 ---
 
 ### Architectural shift
 
-**From:** Python daily dev + PowerShell “second app” for everything else
+**Before Phase 5 (partially still true for Legacy-only commands):**
 
 ```text
 mdc (Python) ──api/etl/dbt──► child subprocess + pydantic env
-mdc tunnel ──► powershell ──► ssm_tunnels.ps1 ──► aws
-mdc deploy frontend ──► powershell ──► environment_manager.ps1 (Deploy-Frontend)
-load_project.ps1 -Legacy ──► full environment_manager.ps1
+mdc tunnel ──► powershell ──► ssm_tunnels.ps1 ──► aws          [fixed in 5.1]
+mdc deploy frontend ──► powershell ──► environment_manager.ps1 [fixed in 5.3]
+load_project.ps1 -Legacy ──► full environment_manager.ps1      [5.5 remaining]
 ```
 
-**To:** Python orchestration everywhere; PowerShell optional
+**Implemented (5.1–5.3):**
 
 ```text
                     ┌─────────────────────────────────────┐
@@ -133,14 +140,12 @@ Each new command:
 
 Phase 5 adds **deployment metadata** loaders (`deployment_credentials.json`, PEM API key path, `DEMO_API_KEY` from `api/.env_api_demo`) — not a second runtime config system for api/etl/dbt.
 
-New module (proposed):
+New module (implemented):
 
 ```text
-tools/mdc_cli/mdc_cli/credentials.py
-  load_deployment_credentials() -> DeploymentCredentials  # typed dataclass or pydantic model
-  resolve_demo_frontend_config()
-  resolve_clinic_frontend_config()
-  read_env_file_key(path, key_name)   # CLINIC_API_KEY, DEMO_API_KEY
+tools/mdc_cli/mdc_cli/credentials.py   # done
+tools/mdc_cli/mdc_cli/ssm.py           # done
+tools/mdc_cli/mdc_cli/process_util.py  # Windows npm/aws executable resolution
 ```
 
 #### 2. Prefer subprocess to existing CLIs over boto3 duplication (initially)
@@ -159,11 +164,11 @@ tools/mdc_cli/mdc_cli/credentials.py
 
 #### 4. PowerShell scope after Phase 5
 
-| Keep (initially) | Migrate in Phase 5 | Out of scope |
-|------------------|-------------------|--------------|
-| `scripts/deployment/deploy_codebase_to_clinic_ec2.ps1` etc. | `mdc tunnel *` | Every verification script under `scripts/verification/` |
-| `mdc deploy api` → `deploy_api_file.ps1` until ported | `mdc deploy frontend`, `mdc frontend dev`, `mdc deploy dbt-docs` | EC2 dbt runtime (`scripts/ec2/*`) |
-| Optional `load_project.ps1` aliases | `mdc consult-audio` | Single venv tool (uv) — separate track |
+| Keep (initially) | Migrated in Phase 5 | Out of scope |
+|------------------|---------------------|--------------|
+| `scripts/deployment/deploy_codebase_to_clinic_ec2.ps1` etc. | `mdc tunnel *`, `mdc ssm connect` (**done**) | Every `scripts/verification/*` script |
+| `mdc deploy api` → `deploy_api_file.ps1` | `mdc frontend dev`, `mdc deploy frontend` (**done**) | EC2 dbt runtime (`scripts/ec2/*`) |
+| Optional `load_project.ps1` aliases | `mdc deploy dbt-docs`, `mdc consult-audio` (**planned**) | Single venv tool (uv) |
 
 “Minimal PS wrapper” means: **no `environment_manager.ps1` dot-sourced into the shell**; only standalone `.ps1` files ops invoke directly, plus optional 20-line alias loader.
 
@@ -175,20 +180,21 @@ Keep `demo-frontend-deploy` etc. as **wrappers** that call `mdc deploy frontend 
 
 ### Inventory: what lives in `environment_manager.ps1` today
 
-| Function / alias | Lines (approx.) | Phase 5 action |
-|------------------|-----------------|----------------|
-| `Sync-EnvironmentManagerScript`, `prompt`, `$script:Is*Active` | ~150 | **Delete** in 5.5 |
-| `Initialize-*` / `Stop-*` (dbt/etl/api) | ~100 | **Delete** (already validate-only / no-op) |
-| `Invoke-DBT`, `Invoke-ETL`, `Invoke-API`, help/status shims | ~350 | **Delete** — use `mdc` / `mdc_aliases.ps1` only |
-| `Start-FrontendDev` | ~90 | **5.3** → `mdc frontend dev` |
-| `Deploy-Frontend`, `Deploy-ClinicFrontend`, `Merge-DemoFrontendFromCredentialsFile` | ~720 | **5.2 + 5.3** → `mdc deploy frontend` |
-| `Get-FrontendStatus` | ~150 | **5.3** → `mdc frontend status` |
-| `Deploy-DBTDocs` | ~200 | **5.3** → `mdc deploy dbt-docs` |
-| `Initialize-ConsultAudioEnvironment` / `Stop-*` | ~120 | **5.4** → `mdc consult-audio` |
-| `Get-SSMStatus` | ~80 | **5.1** → `mdc ssm status` (or extend `mdc status`) |
-| SSM connect aliases (via `ssm_tunnels.ps1` dot-source) | external | **5.1** optional `mdc ssm connect` |
+| Function / alias | Lines (approx.) | Phase 5 action | Status |
+|------------------|-----------------|----------------|--------|
+| `Sync-EnvironmentManagerScript`, `prompt`, `$script:Is*Active` | ~150 | **Delete** in 5.5 | Open |
+| `Initialize-*` / `Stop-*` (dbt/etl/api) | ~100 | **Delete** (validate-only / no-op) | Open |
+| `Invoke-DBT`, `Invoke-ETL`, `Invoke-API`, help/status shims | ~350 | **Delete** — use `mdc` / `mdc_aliases.ps1` | Open |
+| `Start-FrontendDev` | ~90 | `mdc frontend dev` | **Done** |
+| `Deploy-Frontend`, `Deploy-ClinicFrontend`, `Merge-DemoFrontendFromCredentialsFile` | ~720 | `mdc deploy frontend` | **Done** |
+| `Get-FrontendStatus` | ~150 | `mdc frontend status` | **Done** |
+| `Deploy-DBTDocs` | ~200 | `mdc deploy dbt-docs` | **Planned** |
+| `Initialize-ConsultAudioEnvironment` / `Stop-*` | ~120 | `mdc consult-audio` | **Planned** |
+| `Get-SSMStatus` | ~80 | `mdc ssm status` | **Done** |
+| SSM connect aliases | external | `mdc ssm connect` | **Done** |
 
-Already externalized: port-forward functions in `scripts/ssm_tunnels.ps1` (~200 lines) — ported to Python in 5.1.
+`scripts/ssm_tunnels.ps1` — port-forward logic **ported** to `mdc_cli/ssm.py`; file kept for Legacy env manager dot-source with deprecation header.
+`scripts/mdc_run_ssm_tunnel.ps1` — **no longer used** by `mdc tunnel` (safe to remove in 5.5 cleanup).
 
 ---
 
@@ -200,7 +206,7 @@ Already externalized: port-forward functions in `scripts/ssm_tunnels.ps1` (~200 
 | `subprocess` (stdlib) | aws, npm, powershell (transitional deploy scripts) |
 | Optional: `boto3` | Phase 5 stretch — only if `aws` CLI wrapping proves painful |
 
-Bump `mdc-cli` to **0.7.0** when 5.1–5.3 ship; **0.8.0** when Legacy manager is archived.
+Bump `mdc-cli` to **0.7.1** when 5.1–5.3 ship (**done**); **0.8.0** when Legacy manager is archived.
 
 ---
 
@@ -250,46 +256,34 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 
 ### Migration strategy
 
-#### Phase 5.1 — SSM tunnels in Python
+#### Phase 5.1 — SSM tunnels in Python — **done**
 
-**Goal:** `mdc tunnel *` never calls `mdc_run_ssm_tunnel.ps1`.
-
-| Item | Action |
+| Item | Result |
 |------|--------|
-| `mdc_cli/ssm.py` | `load_instance_ids()`, `port_forward_parameters_json()`, `start_port_forward_session()` |
-| `credentials.py` (minimal) | Read `deployment_credentials.json` for instance IDs, RDS endpoint, demo DB host |
-| `commands/tunnel.py` | Call `ssm.py` instead of `invoke_tunnel_function` |
-| Tests | JSON escaping matches PS; mock `subprocess.run`; fixture credentials file |
-| Deprecate | `scripts/mdc_run_ssm_tunnel.ps1`; keep `ssm_tunnels.ps1` one release with warning banner |
+| `mdc_cli/ssm.py` | `load_ssm_context()`, `port_forward_parameters_json()`, tunnel + connect helpers |
+| `credentials.py` | Instance IDs, RDS endpoint, demo DB host from `deployment_credentials.json` |
+| `commands/tunnel.py`, `commands/ssm.py` | No `invoke_tunnel_function` / `mdc_run_ssm_tunnel.ps1` |
+| `mdc_aliases.ps1` | `ssm-connect-*` → `mdc ssm connect`; no dot-source of `ssm_tunnels.ps1` |
+| Tests | `tests/test_ssm.py`; JSON escaping parity with PowerShell |
 
-**Parity requirement:** reproduce `New-SsmPortForwardParametersJson` escaped JSON for Windows AWS CLI (see comment in `ssm_tunnels.ps1`).
+#### Phase 5.2 — Shared credentials module — **done**
 
-#### Phase 5.2 — Shared credentials module
-
-**Goal:** one Python module used by SSM, frontend deploy, and `mdc status`.
-
-| Item | Action |
+| Item | Result |
 |------|--------|
-| `mdc_cli/credentials.py` | Typed load of `deployment_credentials.json`; demo/clinic frontend resolution |
-| `read_env_file_value(path, key)` | Replace PS regex loops for `CLINIC_API_KEY`, `DEMO_API_KEY` |
-| `mdc status` | Optional rows: frontend deploy targets, SSM instance cache |
-| Tests | Golden-file tests against template `deployment_credentials.json` structure |
+| `mdc_cli/credentials.py` | `load_deployment_credentials()`, demo/clinic frontend resolution, `read_env_file_value()` |
+| `_norm()` | Coerces numeric JSON (e.g. demo DB `port: 5432`) |
+| Tests | `tests/test_credentials.py` |
 
-#### Phase 5.3 — Frontend via mdc
+#### Phase 5.3 — Frontend via mdc — **mostly done**
 
-**Goal:** remove largest chunk from `environment_manager.ps1`.
-
-| Item | Action |
+| Item | Result |
 |------|--------|
-| `mdc_cli/commands/frontend.py` | `dev`, `status` subcommands |
-| `mdc_cli/deploy_frontend.py` | Build + S3 sync + invalidation (demo and clinic targets) |
-| `commands/deploy.py` | `deploy frontend --target demo\|clinic`; `deploy dbt-docs` |
-| Prerequisites | Check `aws`, `node`, `npm`, STS identity (same checks as PS today) |
-| Vite env | Child env: `VITE_API_URL`, `VITE_API_KEY`, `VITE_IS_DEMO` |
-| Local dev | Read API key from `.ssh/dbt-dental-clinic-api-key.pem` (optional, same as PS) |
-| Tests | Mock npm/aws; integration test optional (skipped without credentials) |
-
-**Do not** auto-backfill secrets from templates; fail with actionable paths (mirror PS error messages).
+| `commands/frontend.py` | `dev`, `status` |
+| `deploy_frontend.py` | Build + S3 sync + CloudFront invalidation (demo/clinic) |
+| `process_util.py` | Windows `npm.cmd` / `aws` resolution |
+| `commands/deploy.py` | `deploy frontend --target demo\|clinic` |
+| Tests | `tests/test_frontend_commands.py`, `tests/test_process_util.py` |
+| **Remaining** | `mdc deploy dbt-docs` (parity with `Deploy-DBTDocs`) |
 
 #### Phase 5.4 — Consult audio via mdc
 
@@ -312,17 +306,16 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 
 **Stretch:** `environment_manager.ps1` absent from repo; `scripts/README.md` lists `mdc` only.
 
-#### Phase 5.6 — Docs, CI, polish
+#### Phase 5.6 — Docs, CI, polish — **partial**
 
-| Item | Action |
+| Item | Status |
 |------|--------|
-| `ENVIRONMENT_HANDLING_REVIEW.md` | Phase 5 section when sub-phases land |
-| `scripts/README.md` | Remove `-Legacy` as primary path for frontend/deploy |
-| `tools/mdc_cli/README.md` | Full command reference |
-| CI | Job: `pytest tools/mdc_cli/tests` + `mdc status` without `load_project.ps1` |
-| Unicode | ASCII `->` in new commands (cp1252-safe) |
-| `test_export_env_for_shell_unit.py` | Rename to `test_pydantic_loaders_unit.py` |
-| `etl-status` default | Document `clinic` default in aliases or switch to `local` when tunnel active |
+| `.github/workflows/mdc_cli.yml` | **Done** — pytest + `mdc status --env local` on Ubuntu 3.11; path filters |
+| `tools/mdc_cli/README.md`, `scripts/README.md` | **Done** — command reference + CI note |
+| `ENVIRONMENT_HANDLING_REVIEW.md` | **Partial** — Phase 5 section; update on 5.5 completion |
+| Unicode `->` in CLI output (cp1252) | **Open** |
+| Rename `test_export_env_for_shell_unit.py` | **Open** |
+| `etl-status` default stage docs | **Open** |
 
 ---
 
@@ -344,19 +337,19 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 
 Phase 5 is **complete** when:
 
-- [ ] `mdc tunnel *` runs without spawning PowerShell.
-- [ ] `mdc frontend dev`, `mdc deploy frontend --target demo|clinic`, and `mdc deploy dbt-docs` run without `environment_manager.ps1`.
-- [ ] `deployment_credentials.json` and env-file key parsing live in **one** Python module (no duplicate PS `Merge-DemoFrontendFromCredentialsFile`).
-- [ ] `.\load_project.ps1 -Legacy` is **not required** for documented contributor workflows.
-- [ ] `environment_manager.ps1` is archived or under **200 lines** (loader/aliases only, no deploy logic).
-- [ ] `mdc consult-audio validate` covers consult_audio_pipe without shell venv activation.
-- [ ] CI runs `mdc status` and pytest without PowerShell profile / `load_project.ps1`.
-- [ ] `scripts/README.md` and main review doc describe Python-first onboarding.
+- [x] `mdc tunnel *` runs without spawning PowerShell.
+- [~] `mdc frontend dev`, `mdc deploy frontend --target demo|clinic` without `environment_manager.ps1` — **done**; `mdc deploy dbt-docs` — **not yet**.
+- [x] `deployment_credentials.json` and env-file key parsing in **one** Python module (`credentials.py`).
+- [~] `.\load_project.ps1 -Legacy` not required for **documented daily workflows** — **done** for api/etl/dbt, frontend, tunnels, SSM; **not** for dbt-docs / consult-audio.
+- [ ] `environment_manager.ps1` archived or under **200 lines**.
+- [ ] `mdc consult-audio validate` without shell venv activation.
+- [x] CI runs `mdc status` and pytest without PowerShell / `load_project.ps1` (`.github/workflows/mdc_cli.yml`).
+- [~] `scripts/README.md` and main review describe Python-first onboarding — **partial** until 5.5.
 
-Partially acceptable for v0.7.0:
+Acceptable deferrals (unchanged):
 
-- [ ] `mdc deploy api` still wraps `deploy_api_file.ps1` (Python port deferred).
-- [ ] Rare `scripts/deployment/*.ps1` and `scripts/ec2/*` remain standalone for ops.
+- [x] `mdc deploy api` wraps `deploy_api_file.ps1`.
+- [x] Rare `scripts/deployment/*.ps1` and `scripts/ec2/*` remain standalone for ops.
 
 ---
 
@@ -384,14 +377,14 @@ Partially acceptable for v0.7.0:
 
 ---
 
-### Suggested implementation order
+### Suggested implementation order (remaining)
 
-1. **5.2** (credentials module) — small, unblocks 5.1 and 5.3.
-2. **5.1** (SSM tunnels) — daily value, removes PS bridge immediately.
-3. **5.3** (frontend) — largest line-count reduction.
-4. **5.6** (docs + CI) — parallel with 5.3.
-5. **5.4** (consult-audio) — lower frequency workflow.
-6. **5.5** (archive monolith) — after parity checklist green.
+1. **5.3 remainder** — `mdc deploy dbt-docs`
+2. **5.4** — `mdc consult-audio` (if used)
+3. **5.5** — archive / shrink `environment_manager.ps1` after parity checklist
+4. **5.6 remainder** — Unicode polish, test file rename, `etl-status` default docs
+
+**Completed order:** 5.2 → 5.1 → 5.3 (core) → 5.6 (CI).
 
 ---
 
