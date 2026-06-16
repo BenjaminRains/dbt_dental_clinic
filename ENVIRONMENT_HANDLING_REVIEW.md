@@ -137,26 +137,28 @@ forward-compatible with §5.
 | **`api/config.py`** | Delegates to settings; `APIConfig` / `get_config()` signatures unchanged |
 | **`api/test_config.py`** | Precedence test seeds non-host vars when `api-init` was not run |
 
-## Phase 2b — pydantic-settings for ETL (in progress)
+## Phase 2b — pydantic-settings for ETL (implemented)
 
-> Status: **in progress** on branch `refactor/pydantic-settings-etl`.
-> Typed loader in `etl_pipeline/etl_pipeline/config/settings_v2.py`; `FileConfigProvider` delegates for `get_config('env')`.
+> Status: **implemented** on branch `refactor/pydantic-settings-etl`.
+> Typed loader in `etl_pipeline/etl_pipeline/config/settings_v2.py`; `FileConfigProvider` and `Settings` delegate for env loading.
 
 ### Changes
 
 | Item | Action |
 |---|---|
-| **`settings_v2.py`** | New — typed source/replication/analytics loaders, Phase 0 env-file skip |
-| **`providers.py`** | `FileConfigProvider._load_environment_file()` delegates to `load_etl_env_dict()` |
-| **`tests/unit/config/test_settings_v2_unit.py`** | Precedence + delegation tests |
+| **`settings_v2.py`** | Typed source/replication/analytics loaders, Phase 0 env-file skip, `connection_config_dict()` |
+| **`providers.py`** | `FileConfigProvider` stores `_connection_settings`; `get_config('env')` unchanged |
+| **`settings.py`** | `_get_base_config()` / `validate_configs()` delegate when typed settings present |
+| **`tests/unit/config/test_settings_v2_unit.py`** | Precedence, delegation, Settings integration tests |
 | **`Pipfile`** | `pydantic`, `pydantic-settings` |
+| **`api/deps.py`** | `get_api_settings()` / `get_api_settings_optional()` for FastAPI Depends |
+| **`api/main.py`** | `/health` uses `Depends(get_api_settings_optional)` when env is configured |
 
-### Remaining (Phase 2+)
+### Remaining (Phase 3+)
 
-- Delegate `Settings` class to typed models (drop duplicate `ENV_MAPPINGS` validation)
-- Optional FastAPI `Depends(get_settings)` for API routes
 - PowerShell env manager delegates to Python (§4.5)
 - Single venv tool / stale artifact cleanup (§4.4, §4.6)
+- Optional: slim `Settings.ENV_MAPPINGS` once all callers use typed path exclusively
 
 ---
 

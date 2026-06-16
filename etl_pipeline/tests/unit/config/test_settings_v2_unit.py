@@ -141,3 +141,25 @@ class TestSettingsV2:
         env_dict = load_etl_env_dict(environment="local", config_dir=tmp_path)
         assert env_dict["GLIC_OPENDENTAL_SOURCE_HOST"] == "glic.example.com"
         assert env_dict["GLIC_OPENDENTAL_SOURCE_DB"] == "glic_db"
+
+    @pytest.mark.unit
+    @pytest.mark.provider_pattern
+    def test_settings_uses_typed_connections_from_provider(
+        self, clean_etl_env, monkeypatch, tmp_path
+    ):
+        """Settings delegates _get_base_config to pydantic-validated connections."""
+        from etl_pipeline.config.settings import DatabaseType, Settings
+
+        monkeypatch.setenv("ETL_ENVIRONMENT", "test")
+        for key, value in _test_env_vars("test").items():
+            monkeypatch.setenv(key, value)
+
+        provider = FileConfigProvider(tmp_path, environment="test")
+        settings = Settings(environment="test", provider=provider)
+
+        assert settings.validate_configs() is True
+        analytics = settings.get_database_config(DatabaseType.ANALYTICS)
+        assert analytics["host"] == "localhost"
+        assert analytics["database"] == "analytics_db"
+        assert analytics["schema"] == "raw"
+        assert provider._connection_settings is not None

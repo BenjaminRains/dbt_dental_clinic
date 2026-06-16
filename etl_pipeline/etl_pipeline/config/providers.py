@@ -27,10 +27,11 @@ class ConfigProvider(ABC):
 
 class FileConfigProvider(ConfigProvider):
     """File-based configuration provider with environment file support."""
-    
+
     def __init__(self, config_dir: Path, environment: Optional[str] = None):
         self.config_dir = Path(config_dir)
         self.environment = environment or self._detect_environment()
+        self._connection_settings = None
         self._env_vars: Dict[str, Any] = {}
         self._load_environment_file()
     
@@ -60,11 +61,16 @@ class FileConfigProvider(ConfigProvider):
         """Load environment variables via pydantic-settings (settings_v2.py)."""
         env_file = f".env_{self.environment}"
         try:
-            from .settings_v2 import load_etl_env_dict
+            from .settings_v2 import load_etl_connection_settings, load_etl_env_dict
 
+            self._connection_settings = load_etl_connection_settings(
+                environment=self.environment,
+                config_dir=self.config_dir,
+            )
             self._env_vars = load_etl_env_dict(
                 environment=self.environment,
                 config_dir=self.config_dir,
+                connection_settings=self._connection_settings,
             )
         except ValueError:
             raise

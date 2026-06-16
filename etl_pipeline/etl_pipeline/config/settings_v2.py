@@ -200,6 +200,47 @@ def etl_settings_to_env_dict(settings: ETLConnectionSettings) -> dict[str, str]:
     return env_dict
 
 
+def connection_config_dict(settings: ETLConnectionSettings, role: str) -> dict[str, object]:
+    """
+    Map typed connection settings to the dict shape Settings.get_database_config() expects.
+
+    role: 'source' | 'replication' | 'analytics'
+    """
+    if role == "source":
+        conn = settings.source
+    elif role == "replication":
+        conn = settings.replication
+    elif role == "analytics":
+        conn = settings.analytics
+        return {
+            "host": conn.host,
+            "port": conn.port,
+            "database": conn.db,
+            "schema": conn.schema,
+            "user": conn.user,
+            "password": conn.password.get_secret_value(),
+        }
+    else:
+        raise ValueError(f"Unknown connection role: {role}")
+
+    return {
+        "host": conn.host,
+        "port": conn.port,
+        "database": conn.db,
+        "user": conn.user,
+        "password": conn.password.get_secret_value(),
+    }
+
+
+def supplement_env_dict(
+    stage: str,
+    env_dict: dict[str, str],
+    env_path: Optional[Path],
+) -> dict[str, str]:
+    """Public wrapper for supplemental prefixed env vars (GLIC_*, etc.)."""
+    return _supplement_env_dict(stage, env_dict, env_path)
+
+
 def _supplement_env_dict(
     stage: str,
     env_dict: dict[str, str],
@@ -275,17 +316,18 @@ def load_etl_env_dict(
     *,
     environment: Optional[str] = None,
     config_dir: Path,
+    connection_settings: Optional[ETLConnectionSettings] = None,
 ) -> dict[str, str]:
     """
     Load ETL env configuration as a flat dict for FileConfigProvider.get_config('env').
 
     This is the delegation entry point used by providers.py.
     """
-    stage = _detect_stage(environment)
-    settings = load_etl_connection_settings(
-        environment=stage.value,
+    settings = connection_settings or load_etl_connection_settings(
+        environment=environment,
         config_dir=config_dir,
     )
+    stage = settings.stage
     env_dict = etl_settings_to_env_dict(settings)
     env_path = _env_path(config_dir, stage)
     path_for_supplement = env_path if env_path.exists() else None
