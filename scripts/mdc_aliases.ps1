@@ -1,4 +1,4 @@
-# Phase 4.5 — thin PowerShell aliases over mdc (default daily dev workflow).
+﻿# Phase 4.5 — thin PowerShell aliases over mdc (default daily dev workflow).
 # Load via: .\load_project.ps1
 # Full deploy/SSM/frontend manager: .\load_project.ps1 -Legacy
 
@@ -109,7 +109,7 @@ function dbt-init {
 }
 
 function dbt-deactivate {
-    Write-Host "💡 dbt-deactivate is a no-op (Phase 4.5). mdc runs are stateless — no shell env to clear." -ForegroundColor DarkGray
+    Write-Host 'dbt-deactivate is a no-op (Phase 4.5). mdc runs are stateless - no shell env to clear.' -ForegroundColor DarkGray
 }
 
 function dbt {
@@ -153,9 +153,9 @@ function dbt {
     }
 }
 
-Write-Host "`n╔══════════════════════════════════════════════════════════╗" -ForegroundColor DarkBlue
-Write-Host "║     Dental Clinic Dev CLI (mdc aliases — Phase 4.5)      ║" -ForegroundColor Blue
-Write-Host "╚══════════════════════════════════════════════════════════╝" -ForegroundColor DarkBlue
+Write-Host ''
+Write-Host 'Dental Clinic Dev CLI (mdc aliases)' -ForegroundColor Blue
+Write-Host '-----------------------------------' -ForegroundColor DarkBlue
 Write-Host ""
 Write-Host "Quick start (no *-init required):" -ForegroundColor White
 Write-Host "  status / env-status          mdc status" -ForegroundColor Cyan

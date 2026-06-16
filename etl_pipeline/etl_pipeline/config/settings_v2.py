@@ -503,7 +503,7 @@ def load_etl_env_dict(
     """
     Load ETL env configuration as a flat dict for FileConfigProvider.get_config('env').
 
-    This is the delegation entry point used by providers.py and export_env_for_shell.py.
+    Delegation entry point used by providers.py and mdc_cli run_helper (load_etl_env_dict).
     """
     settings = connection_settings or load_etl_connection_settings(
         environment=environment,
