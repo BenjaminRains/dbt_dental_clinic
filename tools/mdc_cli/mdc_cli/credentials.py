@@ -12,9 +12,11 @@ from typing import Any, Optional
 from mdc_cli.paths import API_DIR, DEPLOYMENT_CREDENTIALS, REPO_ROOT
 
 
-def _norm(value: Optional[str]) -> Optional[str]:
+def _norm(value: Any) -> Optional[str]:
     if value is None:
         return None
+    if not isinstance(value, str):
+        value = str(value)
     stripped = value.strip()
     return stripped if stripped else None
 

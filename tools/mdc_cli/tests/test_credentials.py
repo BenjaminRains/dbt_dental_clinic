@@ -6,10 +6,15 @@ from pathlib import Path
 import pytest
 
 from mdc_cli.credentials import (
+    _norm,
     read_env_file_value,
     resolve_clinic_frontend_config,
     resolve_demo_frontend_config,
 )
+
+
+def test_norm_coerces_int_port():
+    assert _norm(5432) == "5432"
 
 
 def test_read_env_file_value(tmp_path: Path):

@@ -49,6 +49,22 @@ def test_load_ssm_context_from_fixture(tmp_path, monkeypatch):
     assert ctx.demo_db_instance_id == "i-demodb"
     assert ctx.rds_endpoint == "rds.example.com"
     assert ctx.demo_db_host == "demo.internal"
+    assert ctx.demo_db_port == "5432"
+
+
+def test_load_ssm_context_numeric_port(tmp_path, monkeypatch):
+    creds = {
+        "backend_api": {"ec2": {"instance_id": "i-demo"}},
+        "demo_database": {
+            "database_connection": {"host": "demo.internal", "port": 5432},
+        },
+    }
+    cred_path = tmp_path / "deployment_credentials.json"
+    cred_path.write_text(json.dumps(creds), encoding="utf-8")
+    monkeypatch.setattr("mdc_cli.credentials.DEPLOYMENT_CREDENTIALS", cred_path)
+
+    ctx = load_ssm_context()
+    assert ctx.demo_db_port == "5432"
 
 
 @patch("mdc_cli.ssm.run_subprocess", return_value=0)

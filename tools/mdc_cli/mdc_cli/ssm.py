@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import os
 from dataclasses import dataclass
 from typing import Optional
@@ -10,7 +11,11 @@ import typer
 
 from mdc_cli.credentials import _dig, _norm, load_deployment_credentials
 from mdc_cli.paths import REPO_ROOT
-from mdc_cli.process_util import find_executable, run_subprocess
+from mdc_cli.process_util import (
+    find_executable,
+    run_subprocess,
+    run_subprocess_completed,
+)
 
 SSM_PORT_FORWARD_DOCUMENT = "AWS-StartPortForwardingSessionToRemoteHost"
 
@@ -225,9 +230,21 @@ def print_ssm_status() -> None:
         f"  Session Manager plugin: {'ok' if plugin else 'missing'}"
     )
     if aws:
-        code = run_subprocess(["aws", "sts", "get-caller-identity"], cwd=REPO_ROOT)
-        if code != 0:
+        completed = run_subprocess_completed(
+            ["aws", "sts", "get-caller-identity"],
+            cwd=REPO_ROOT,
+        )
+        if completed.returncode != 0:
             typer.echo("  AWS credentials: not configured or invalid", err=True)
+        else:
+            try:
+                identity = json.loads(completed.stdout)
+                account = identity.get("Account", "?")
+                arn = identity.get("Arn", "?")
+                typer.echo(f"  AWS credentials: ok (account {account})")
+                typer.echo(f"    {arn}")
+            except json.JSONDecodeError:
+                typer.echo("  AWS credentials: ok")
 
     if not load_deployment_credentials():
         typer.echo("  deployment_credentials.json: missing or invalid", err=True)
