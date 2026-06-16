@@ -1,7 +1,11 @@
 """CLI smoke tests."""
 
+from pathlib import Path
+from unittest.mock import patch
+
 from typer.testing import CliRunner
 
+from mdc_cli import __version__
 from mdc_cli.main import app
 
 runner = CliRunner()
@@ -17,7 +21,7 @@ def test_help():
 def test_version():
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "mdc 0.3.0" in result.stdout
+    assert f"mdc {__version__}" in result.stdout
 
 
 def test_status_runs():
@@ -42,8 +46,18 @@ def test_status_invalid_env():
     assert "Unsupported stage" in combined
 
 
-def test_api_stub_exits_nonzero():
+@patch("mdc_cli.commands.api.run_isolated", return_value=0)
+@patch("mdc_cli.commands.api.require_component_python")
+@patch("mdc_cli.commands.api.load_env_dict_isolated")
+@patch("mdc_cli.commands.api.validate_api_stage", return_value=(True, None))
+def test_api_run_command_registered(
+    mock_validate,
+    mock_load,
+    mock_python,
+    mock_run,
+):
+    mock_load.return_value = {}
+    mock_python.return_value = Path("api/venv/Scripts/python.exe")
     result = runner.invoke(app, ["api", "run", "--env", "local"])
-    assert result.exit_code == 2
-    combined = result.stdout + result.stderr
-    assert "Phase 4.3" in combined
+    assert result.exit_code == 0
+    mock_run.assert_called_once()

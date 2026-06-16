@@ -2,7 +2,6 @@
 
 from __future__ import annotations
 
-import os
 import subprocess
 from pathlib import Path
 from typing import Optional, Sequence
@@ -10,17 +9,11 @@ from typing import Optional, Sequence
 from mdc_cli.paths import (
     ETL_DIR,
     default_etl_profile,
+    discover_component_python,
     ensure_api_importable,
     ensure_etl_importable,
 )
 from mdc_cli.dbt_env import load_dbt_env_dict, validate_dbt_stage
-
-
-def build_child_env(settings: dict[str, str]) -> dict[str, str]:
-    """Merge validated settings into a copy of os.environ for a child process."""
-    env = os.environ.copy()
-    env.update(settings)
-    return env
 
 
 def load_api_env_dict(stage: str) -> dict[str, str]:
@@ -40,6 +33,12 @@ def load_etl_env_dict(stage: str, profile: Optional[str] = None) -> dict[str, st
         config_dir=ETL_DIR,
         profile=resolved_profile,
     )
+
+
+def build_child_env(settings: dict[str, str]) -> dict[str, str]:
+    from mdc_cli.run_helper import build_isolated_child_env
+
+    return build_isolated_child_env(settings)
 
 
 def load_env_dict(
@@ -109,16 +108,25 @@ def run_with_env(
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
     """
-    Run a command with pydantic-validated env injected into the child process only.
+    Run a command with pydantic-validated env injected into an isolated child process.
 
-    The parent shell environment is not modified.
+    The parent shell environment is not modified; stage-scoped parent vars are not inherited.
     """
-    settings = load_env_dict(component, stage, profile=profile)
-    child_env = build_child_env(settings)
-    return subprocess.run(
+    from mdc_cli.run_helper import build_isolated_child_env, load_env_dict_isolated, venv_root_from_python
+
+    settings = load_env_dict_isolated(component, stage, profile=profile)
+    python = discover_component_python(component)
+    venv_root = venv_root_from_python(python) if python else None
+    child_env = build_isolated_child_env(settings, venv_root=venv_root)
+    completed = subprocess.run(
         list(cmd),
         env=child_env,
         cwd=str(cwd) if cwd else None,
-        check=check,
+        check=False,
         text=True,
     )
+    if check and completed.returncode != 0:
+        raise subprocess.CalledProcessError(
+            completed.returncode, list(cmd), output=completed.stdout, stderr=completed.stderr
+        )
+    return completed

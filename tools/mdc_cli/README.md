@@ -25,14 +25,31 @@ Or without installing:
 python -m mdc_cli --help
 ```
 
-## Commands (Phase 4.1–4.2)
+## Commands
+
+### Validation (Phase 4.2)
 
 - `mdc status` — config paths, validation overview, venv discovery
 - `mdc api test-config --env <stage>` — validate API pydantic settings
-- `mdc api health --env <stage>` — config health (settings load; HTTP checks in Phase 4.3)
+- `mdc api health --env <stage>` — config health (settings load)
 - `mdc etl validate --env <stage> [--profile load|full]` — validate ETL settings
 - `mdc dbt validate --env <stage>` — validate dbt connection env (local/clinic/demo)
-- Stub: `mdc api run`, `mdc etl run`, `mdc dbt run`, `mdc tunnel *` (later phases)
+
+### Runtime (Phase 4.3)
+
+Stateless runs inject validated env into an **isolated child process** (parent shell vars do not leak):
+
+- `mdc api run --env <stage> [--host H] [--port P] [--reload/--no-reload]` — uvicorn (`--reload` default on `local` only)
+- `mdc etl run --env <stage> [--profile full] -- [etl cli args]`
+- `mdc etl test-connections --env <stage> [--profile full] -- [args]`
+- `mdc dbt run|test|docs --env <stage> -- [dbt args]`
+- `mdc dbt invoke --env <stage> -- deps` — arbitrary dbt subcommands
+
+PowerShell aliases `api-run`, `etl-run`, `etl-test`, and `dbt` delegate to `mdc` (Phase 4.4).
 
 Stages are dev/test targets only: `local`, `clinic`, `test`, and `demo` (API/dbt).
 Use `clinic` for the live clinic deployment context — not a separate `production` stage name.
+
+## Stub
+
+- `mdc tunnel *` — Phase 4.5+ wrappers to existing deployment scripts
