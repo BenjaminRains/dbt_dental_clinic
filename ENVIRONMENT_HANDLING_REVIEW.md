@@ -189,9 +189,9 @@ forward-compatible with §5.
 | **Stub commands** | `api`, `etl`, `dbt`, `tunnel` subcommands (Phase 4.2+) |
 | **`tools/mdc_cli/tests/`** | CLI and path unit tests |
 
-## Phase 4.2 — Read-only validation commands (in progress)
+## Phase 4.2 — Read-only validation commands (implemented)
 
-> Status: **in progress** on branch `refactor/phase4-mdc-validate`.
+> Status: **implemented** (merged).
 
 | Item | Action |
 |---|---|
@@ -200,7 +200,17 @@ forward-compatible with §5.
 | **`mdc etl validate`** | Validate ETL settings with `--profile load\|full` |
 | **`mdc_cli` deps** | `pydantic-settings`, `python-dotenv` for direct loader imports |
 
-No change to `environment_manager.ps1` in 4.2.
+## Phase 4.2b — dbt env via Python (in progress)
+
+> Status: **in progress** on branch `refactor/phase4-mdc-dbt-env`.
+
+| Item | Action |
+|---|---|
+| **`mdc_cli/dbt_env.py`** | `load_dbt_env_dict()`, `validate_dbt_stage()` mirroring dbt-init rules |
+| **`mdc dbt validate`** | Validate dbt env for local/clinic/demo; exit 0/1 |
+| **`mdc status`** | dbt rows use real validation; `discover_dbt_python()` for dbt Pipenv |
+
+No change to `dbt-init` in 4.2b.
 
 ---
 

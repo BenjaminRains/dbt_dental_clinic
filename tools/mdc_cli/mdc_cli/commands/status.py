@@ -29,11 +29,6 @@ def _relative_config_path(path: Path) -> str:
 
 
 def _validation_cell(component: str, target: ComponentStage) -> tuple[str, str]:
-    if component == "dbt":
-        if target.config_path.exists():
-            return "ok", "file present (loader Phase 4.2b)"
-        return "missing", "config file not found"
-
     ok, err = validate_component_stage(
         component,
         target.stage,

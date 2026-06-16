@@ -76,13 +76,17 @@ def iter_status_targets(env_filter: Optional[str] = None) -> list[ComponentStage
     for stage in DBT_STAGES:
         if env_filter and stage != env_filter:
             continue
-        if stage in ("clinic", "demo"):
-            path = DEPLOYMENT_CREDENTIALS if DEPLOYMENT_CREDENTIALS.exists() else dbt_env_file(stage)
-        else:
-            path = dbt_env_file(stage)
-        targets.append(ComponentStage("dbt", stage, path))
+        targets.append(
+            ComponentStage("dbt", stage, _dbt_status_config_path(stage))
+        )
 
     return targets
+
+
+def _dbt_status_config_path(stage: str) -> Path:
+    from mdc_cli.dbt_env import dbt_config_path
+
+    return dbt_config_path(stage)
 
 
 def _venv_python(venv_root: Path) -> Optional[Path]:
@@ -117,11 +121,32 @@ def discover_etl_python() -> Optional[Path]:
     return _venv_python(Path(result.stdout.strip()))
 
 
+def discover_dbt_python() -> Optional[Path]:
+    """Return Pipenv venv python for dbt_dental_models if discoverable."""
+    if not (DBT_DIR / "Pipfile").exists():
+        return None
+    try:
+        result = subprocess.run(
+            ["pipenv", "--venv"],
+            cwd=DBT_DIR,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+    except FileNotFoundError:
+        return None
+    if result.returncode != 0 or not result.stdout.strip():
+        return None
+    return _venv_python(Path(result.stdout.strip()))
+
+
 def discover_component_python(component: str) -> Optional[Path]:
     if component == "api":
         return discover_api_python()
-    if component in ("etl", "dbt"):
+    if component == "etl":
         return discover_etl_python()
+    if component == "dbt":
+        return discover_dbt_python()
     return None
 
 

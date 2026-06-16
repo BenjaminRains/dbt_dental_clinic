@@ -13,6 +13,7 @@ from mdc_cli.paths import (
     ensure_api_importable,
     ensure_etl_importable,
 )
+from mdc_cli.dbt_env import load_dbt_env_dict, validate_dbt_stage
 
 
 def build_child_env(settings: dict[str, str]) -> dict[str, str]:
@@ -51,6 +52,8 @@ def load_env_dict(
         return load_api_env_dict(stage)
     if component == "etl":
         return load_etl_env_dict(stage, profile=profile)
+    if component == "dbt":
+        return load_dbt_env_dict(stage)
     raise ValueError(f"Unsupported component for env load: {component}")
 
 
@@ -92,7 +95,7 @@ def validate_component_stage(
     if component == "etl":
         return validate_etl_stage(stage, profile=profile)
     if component == "dbt":
-        return True, None
+        return validate_dbt_stage(stage)
     return False, f"Unknown component: {component}"
 
 
