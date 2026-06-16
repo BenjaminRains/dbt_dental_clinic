@@ -193,3 +193,40 @@ def get_settings() -> APISettings:
 def reset_settings() -> None:
     """Clear cached settings (tests)."""
     get_settings.cache_clear()
+
+
+def export_api_env_dict(*, environment: Optional[str] = None) -> dict[str, str]:
+    """
+    Validate API config and return a flat env dict for PowerShell api-init (Phase 3).
+
+    Runs pydantic validation first, then merges stage file values with OS env (OS wins).
+    """
+    stage = _detect_stage(environment)
+    os.environ["API_ENVIRONMENT"] = stage.value
+    load_api_settings(environment=stage.value)
+
+    env_file = API_DIR / f".env_api_{stage.value}"
+    result: dict[str, str] = {}
+
+    if env_file.exists():
+        from dotenv import dotenv_values
+
+        for key, value in (dotenv_values(env_file) or {}).items():
+            if value is not None and str(value).strip():
+                result[key] = str(value).strip()
+
+    for key in list(result.keys()):
+        os_val = os.getenv(key)
+        if os_val is not None and os_val != "":
+            result[key] = os_val
+
+    for key, val in os.environ.items():
+        if not val:
+            continue
+        if key in ("API_ENVIRONMENT",) or key.startswith(
+            ("API_", "POSTGRES_", "DEMO_", "TEST_", "CLINIC_", "PGSSL")
+        ):
+            result[key] = val
+
+    result["API_ENVIRONMENT"] = stage.value
+    return result

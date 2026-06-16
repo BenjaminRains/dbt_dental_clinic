@@ -60,6 +60,55 @@ function Reload-EnvironmentManager {
     Write-Host "✅ Environment manager reloaded from disk." -ForegroundColor Green
 }
 
+function Import-StageEnvFromPython {
+    param(
+        [Parameter(Mandatory = $true)]
+        [ValidateSet("api", "etl")]
+        [string]$Component,
+        [Parameter(Mandatory = $true)]
+        [string]$Stage,
+        [Parameter(Mandatory = $true)]
+        [string]$ProjectRoot,
+        [string]$PythonExe = "python"
+    )
+
+    $exportScript = Join-Path $ProjectRoot "scripts\export_env_for_shell.py"
+    if (-not (Test-Path -LiteralPath $exportScript)) {
+        Write-Host "❌ Missing export script: $exportScript" -ForegroundColor Red
+        return $false
+    }
+
+    if ($Component -eq "api") {
+        $env:API_ENVIRONMENT = $Stage
+    } else {
+        $env:ETL_ENVIRONMENT = $Stage
+    }
+
+    $rawOutput = & $PythonExe $exportScript --component $Component --stage $Stage 2>&1
+    if ($LASTEXITCODE -ne 0) {
+        Write-Host "❌ Python env export failed ($Component/$Stage):" -ForegroundColor Red
+        Write-Host $rawOutput -ForegroundColor Red
+        return $false
+    }
+
+    try {
+        $envMap = ($rawOutput | Out-String).Trim() | ConvertFrom-Json
+    } catch {
+        Write-Host "❌ Failed to parse env export JSON: $_" -ForegroundColor Red
+        Write-Host $rawOutput -ForegroundColor Red
+        return $false
+    }
+
+    foreach ($prop in $envMap.PSObject.Properties) {
+        $name = $prop.Name
+        $value = [string]$prop.Value
+        [Environment]::SetEnvironmentVariable($name, $value, "Process")
+        Write-Host "  Loaded: $name" -ForegroundColor Gray
+    }
+
+    return $true
+}
+
 # Environment state tracking
 $script:IsDBTActive = $false
 $script:IsETLActive = $false
@@ -622,47 +671,28 @@ function Initialize-ETLEnvironment {
             return
         }
     } else {
-        # Local, Clinic, or Test: Load from .env file
+        # Local, Clinic, or Test: load via Python pydantic-settings (Phase 3)
         $envPath = "$etlPath\$envFile"
-        
-        if (Test-Path $envPath) {
-            Write-Host "📄 Loading $envName environment from: $envFile" -ForegroundColor Green
-            $etlEnvSet = $false
-            Get-Content $envPath | ForEach-Object {
-                if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
-                    $name = $matches[1].Trim()
-                    $value = $matches[2].Trim()
-                    [Environment]::SetEnvironmentVariable($name, $value, 'Process')
-                    if ($name -eq "ETL_ENVIRONMENT") {
-                        $etlEnvSet = $true
-                    }
-                    Write-Host "  Loaded: $name" -ForegroundColor Gray
-                }
-            }
-            
-            # Always set ETL_ENVIRONMENT from user's choice (not from file) so init is the single source of truth
-            if ($choice -eq "local") {
-                [Environment]::SetEnvironmentVariable('ETL_ENVIRONMENT', 'local', 'Process')
-                if (-not $etlEnvSet) { Write-Host "  Set: ETL_ENVIRONMENT=local" -ForegroundColor Gray }
-            } elseif ($choice -eq "clinic") {
-                [Environment]::SetEnvironmentVariable('ETL_ENVIRONMENT', 'clinic', 'Process')
-                if (-not $etlEnvSet) {
-                    Write-Host "  Set: ETL_ENVIRONMENT=clinic" -ForegroundColor Gray
-                } else {
-                    Write-Host "  Updated: ETL_ENVIRONMENT=clinic (was 'production')" -ForegroundColor Yellow
-                }
-            } elseif ($choice -eq "test") {
-                [Environment]::SetEnvironmentVariable('ETL_ENVIRONMENT', 'test', 'Process')
-                if (-not $etlEnvSet) {
-                    Write-Host "  Set: ETL_ENVIRONMENT=test" -ForegroundColor Gray
-                }
-            }
-        } else {
+
+        if (-not (Test-Path $envPath)) {
             Write-Host "❌ Environment file not found: $envPath" -ForegroundColor Red
             Write-Host "Please create $envFile from the template" -ForegroundColor Yellow
             Write-Host "Template location: $etlPath\$envFile.template (e.g. $etlPath\.env_clinic.template)" -ForegroundColor Yellow
             return
         }
+
+        Write-Host "📄 Loading $envName environment via Python ($envFile)" -ForegroundColor Green
+        $etlPython = "python"
+        if ($script:VenvPath) {
+            $venvPython = Join-Path $script:VenvPath "Scripts\python.exe"
+            if (Test-Path -LiteralPath $venvPython) { $etlPython = $venvPython }
+        }
+
+        if (-not (Import-StageEnvFromPython -Component "etl" -Stage $choice -ProjectRoot $ProjectPath -PythonExe $etlPython)) {
+            return
+        }
+
+        Write-Host "  Set: ETL_ENVIRONMENT=$choice (from menu choice)" -ForegroundColor Gray
     }
 
     $script:IsETLActive = $true
@@ -860,29 +890,28 @@ function Initialize-APIEnvironment {
         Write-Host "⚠️ No requirements.txt found in api directory - skipping dependency installation" -ForegroundColor Yellow
     }
 
-    # Load the selected API environment file
+    # Load the selected API environment via Python pydantic-settings (Phase 3)
     $apiPath = "$ProjectPath\api"
     $envPath = "$apiPath\$envFile"
-    
-    if (Test-Path $envPath) {
-        Write-Host "📄 Loading $envName API environment from: $envFile" -ForegroundColor Green
-        Get-Content $envPath | ForEach-Object {
-            if ($_ -match '^([^#][^=]+)=(.*)$' -and $_ -notmatch '^\s*#') {
-                $name = $matches[1].Trim()
-                $value = $matches[2].Trim()
-                [Environment]::SetEnvironmentVariable($name, $value, 'Process')
-                Write-Host "  Loaded: $name" -ForegroundColor Gray
-            }
-        }
-    } else {
+
+    if (-not (Test-Path $envPath)) {
         Write-Host "❌ API environment file not found: $envPath" -ForegroundColor Red
         Write-Host "Please create $envFile in the api/ directory" -ForegroundColor Yellow
         return
     }
 
-    # User's menu choice is the source of truth (same pattern as etl-init)
-    [Environment]::SetEnvironmentVariable('API_ENVIRONMENT', $choice, 'Process')
-    Write-Host "  Set: API_ENVIRONMENT=$choice" -ForegroundColor Gray
+    Write-Host "📄 Loading $envName API environment via Python ($envFile)" -ForegroundColor Green
+    $apiPython = "python"
+    if ($script:VenvPath) {
+        $venvPython = Join-Path $script:VenvPath "Scripts\python.exe"
+        if (Test-Path -LiteralPath $venvPython) { $apiPython = $venvPython }
+    }
+
+    if (-not (Import-StageEnvFromPython -Component "api" -Stage $choice -ProjectRoot $ProjectPath -PythonExe $apiPython)) {
+        return
+    }
+
+    Write-Host "  Set: API_ENVIRONMENT=$choice (from menu choice)" -ForegroundColor Gray
 
     $script:IsAPIActive = $true
     $script:APIStage = $choice
