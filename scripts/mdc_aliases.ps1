@@ -3,11 +3,18 @@
 # Full deploy/SSM/frontend manager: .\load_project.ps1 -Legacy
 
 . (Join-Path $PSScriptRoot "mdc_invoke.ps1")
-. (Join-Path $PSScriptRoot "ssm_tunnels.ps1")
 
-Set-Alias -Name ssm-connect-api -Value Connect-SSMAPI -Scope Global -ErrorAction SilentlyContinue
-Set-Alias -Name ssm-connect-clinic-api -Value Connect-SSMClinicAPI -Scope Global -ErrorAction SilentlyContinue
-Set-Alias -Name ssm-connect-demo-db -Value Connect-SSMDemoDB -Scope Global -ErrorAction SilentlyContinue
+function ssm-connect-api {
+    Invoke-MDC @("ssm", "connect", "api") + $args
+}
+
+function ssm-connect-clinic-api {
+    Invoke-MDC @("ssm", "connect", "clinic-api") + $args
+}
+
+function ssm-connect-demo-db {
+    Invoke-MDC @("ssm", "connect", "demo-db") + $args
+}
 
 function Get-MdcStageDefault {
     param(
@@ -120,6 +127,10 @@ function clinic-frontend-deploy {
     Invoke-MDC @("deploy", "frontend", "--target", "clinic") + $args
 }
 
+function dbt-docs-deploy {
+    Invoke-MDC @("deploy", "dbt-docs") + $args
+}
+
 function dbt-init {
     param(
         [ValidateSet("local", "demo", "clinic")]
@@ -186,11 +197,12 @@ Write-Host "  etl-validate                 mdc etl validate --env local --profil
 Write-Host "  etl-run                      mdc etl run --env clinic --profile full" -ForegroundColor Cyan
 Write-Host "  etl-test                     mdc etl test-connections --env clinic" -ForegroundColor Cyan
 Write-Host "  mdc dbt run --env local      dbt via stateless subprocess" -ForegroundColor Cyan
-Write-Host "  mdc tunnel clinic-db         SSM port forward (scripts/ssm_tunnels.ps1)" -ForegroundColor Cyan
+Write-Host "  mdc tunnel clinic-db         SSM port forward (Python)" -ForegroundColor Cyan
 Write-Host "  frontend-dev                 mdc frontend dev (local Vite)" -ForegroundColor Cyan
 Write-Host "  clinic-frontend-deploy       mdc deploy frontend --target clinic" -ForegroundColor Cyan
+Write-Host "  dbt-docs-deploy              mdc deploy dbt-docs" -ForegroundColor Cyan
 Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api" -ForegroundColor Cyan
 Write-Host "  ssm-connect-clinic-api       SSM shell on clinic API EC2" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Legacy -Legacy manager: consult-audio-init, dbt-docs-deploy, etc." -ForegroundColor DarkGray
+Write-Host "Legacy -Legacy manager: consult-audio-init, etc." -ForegroundColor DarkGray
 Write-Host ""

@@ -6,10 +6,11 @@ from pathlib import Path
 
 import typer
 
+from mdc_cli.deploy_dbt_docs import deploy_dbt_docs
 from mdc_cli.deploy_frontend import deploy_frontend_target
 from mdc_cli.paths import REPO_ROOT
 from mdc_cli.ps_invoke import invoke_ps_script_file
-from mdc_cli.stages import require_api_stage
+from mdc_cli.stages import require_api_stage, require_dbt_stage
 
 deploy_app = typer.Typer(help="Deployment commands")
 
@@ -64,4 +65,23 @@ def deploy_frontend(
         typer.echo("--target must be demo or clinic.", err=True)
         raise typer.Exit(code=2)
     code = deploy_frontend_target(target)
+    raise typer.Exit(code=code)
+
+
+@deploy_app.command("dbt-docs")
+def deploy_dbt_docs_cmd(
+    env: str = typer.Option(
+        "local",
+        "--env",
+        help="dbt stage for docs generate when target/ is missing",
+    ),
+    skip_generate: bool = typer.Option(
+        False,
+        "--skip-generate",
+        help="Deploy existing dbt_dental_models/target only (no dbt docs generate)",
+    ),
+) -> None:
+    """Upload dbt docs to demo S3 bucket under dbt-docs/ and invalidate CloudFront."""
+    require_dbt_stage(env)
+    code = deploy_dbt_docs(env, skip_generate=skip_generate)
     raise typer.Exit(code=code)

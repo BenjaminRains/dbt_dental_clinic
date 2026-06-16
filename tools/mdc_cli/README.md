@@ -21,7 +21,7 @@ status
 api-run
 ```
 
-Use `.\load_project.ps1 -Legacy` for frontend deploy and other legacy menus. **SSM connect and `mdc tunnel`** work with the default `load_project.ps1` (via `scripts/ssm_tunnels.ps1`).
+Use `.\load_project.ps1 -Legacy` for consult-audio and other legacy menus not yet in `mdc`.
 
 ## Commands
 
@@ -44,10 +44,13 @@ Use `.\load_project.ps1 -Legacy` for frontend deploy and other legacy menus. **S
 - `mdc frontend dev` — local Vite dev server (writes `frontend/.env.local`)
 - `mdc frontend status` — demo/clinic S3/CloudFront/API key resolution
 - `mdc deploy frontend --target demo|clinic` — build + S3 sync + CloudFront invalidation
+- `mdc deploy dbt-docs [--env local] [--skip-generate]` — upload `dbt_dental_models/target` to `s3://…/dbt-docs/`
 
 ### Infrastructure wrappers
 
-- `mdc tunnel clinic-db|demo-db|rds` — SSM port forward via `scripts/ssm_tunnels.ps1`
+- `mdc tunnel clinic-db|demo-db|rds` — SSM port forward (Python; no PowerShell bridge)
+- `mdc ssm status` — AWS CLI, plugin, instance IDs from `deployment_credentials.json`
+- `mdc ssm connect api|clinic-api|demo-db` — interactive SSM shell
 - `mdc deploy api --env clinic` — copies `api/.env_api_clinic` to EC2 `api/.env`, restarts **`dental-clinic-api`** systemd unit, `/health/db` check
 
 ### PowerShell aliases (Phase 4.5)
@@ -57,3 +60,17 @@ Use `.\load_project.ps1 -Legacy` for frontend deploy and other legacy menus. **S
 `ssm-connect-api`, `ssm-connect-demo-db`.
 
 Stages: `local`, `clinic`, `test`, `demo` (API/dbt). Use `clinic` for live clinic context.
+
+## CI
+
+GitHub Actions workflow `.github/workflows/mdc_cli.yml` runs on PRs and pushes to `main`
+when `tools/mdc_cli` or API/ETL settings loaders change:
+
+```bash
+pip install -e "./tools/mdc_cli[dev]"
+pytest   # from tools/mdc_cli
+mdc status --env local
+```
+
+No `load_project.ps1`, AWS credentials, or runtime `.env` files required — validation rows
+may show `fail` when env files are absent; the command must exit 0.

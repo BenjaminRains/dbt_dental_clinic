@@ -9,7 +9,7 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | [environment_manager.ps1](environment_manager.ps1) | Legacy full manager (`-Legacy`): deploy, SSM, frontend. *-init deprecated (Phase 4.6). |
 | [mdc_aliases.ps1](mdc_aliases.ps1) | **Default** thin `mdc` aliases. Load via `load_project.ps1`. |
 | [mdc_invoke.ps1](mdc_invoke.ps1) | Shared `Invoke-MDC` helper used by aliases and environment manager. |
-| [ssm_tunnels.ps1](ssm_tunnels.ps1) | SSM port-forward and shell connect (`ssm-connect-clinic-api`, etc.); used by `mdc tunnel` and default aliases. |
+| **ssm_tunnels.ps1** | Dot-source in default aliases replaced by `mdc ssm connect`; file kept for Legacy env manager |
 | [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `load_project.ps1` (mdc aliases) when in project. |
 | [run_dbt.bat](run_dbt.bat) | Convenience wrapper to run dbt on EC2; forwards to `ec2\run_dbt_on_ec2.ps1`. |
 
@@ -41,7 +41,17 @@ mdc tunnel clinic-db
 ssm-connect-clinic-api    # SSM shell on clinic API EC2 (also in default aliases)
 ```
 
-Use `.\load_project.ps1 -Legacy` for frontend deploy menus and other legacy helpers not yet in `mdc`.
+Use `.\load_project.ps1 -Legacy` for consult-audio and other legacy helpers not yet in `mdc`.
+
+### Deploy dbt docs to portfolio site
+
+Uploads `dbt_dental_models/target` to demo frontend bucket under `dbt-docs/`:
+
+```powershell
+dbt-docs-deploy
+# or: mdc deploy dbt-docs
+# optional: mdc deploy dbt-docs --skip-generate  (deploy existing target/ only)
+```
 
 ### Deploy clinic API env to EC2
 
@@ -97,3 +107,8 @@ See `docs/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
 .\scripts\utils\generate_api_key.ps1 -Clinic
 .\scripts\utils\backup_dbt_dental_clinic.ps1
 ```
+
+### CI
+
+Pull requests that touch `tools/mdc_cli` or API/ETL settings loaders run
+`.github/workflows/mdc_cli.yml` (pytest + `mdc status` smoke, no PowerShell).

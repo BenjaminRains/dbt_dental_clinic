@@ -1,0 +1,44 @@
+# Phase 5.6 — mdc CLI unit tests and smoke commands (no PowerShell / load_project.ps1).
+name: mdc CLI
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/mdc_cli.yml"
+      - "tools/mdc_cli/**"
+      - "api/settings.py"
+      - "api/config.py"
+      - "etl_pipeline/etl_pipeline/config/**"
+  pull_request:
+    paths:
+      - ".github/workflows/mdc_cli.yml"
+      - "tools/mdc_cli/**"
+      - "api/settings.py"
+      - "api/config.py"
+      - "etl_pipeline/etl_pipeline/config/**"
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+
+      - name: Install mdc CLI (editable) with test deps
+        run: pip install -e "./tools/mdc_cli[dev]"
+
+      - name: Pytest
+        run: pytest
+        working-directory: tools/mdc_cli
+
+      - name: Smoke CLI (no load_project.ps1)
+        run: |
+          mdc --help
+          mdc version
+          mdc status --env local
