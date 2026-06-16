@@ -178,7 +178,7 @@ Each component should have a single config entrypoint that:
 - **Driver:** `API_ENVIRONMENT` (must be set before or when the API starts).
 - **Loader:** `api/config.py` → `_load_environment_file()` loads `api/.env_api_<environment>` **only when** the stage’s analytics host var is not already in the OS environment (Phase 0). On EC2, systemd `EnvironmentFile=api/.env` populates the process env first, so a stale `api/.env_api_clinic` on disk is ignored.
 - **On EC2:** systemd uses `EnvironmentFile=/opt/dbt_dental_clinic/api/.env`. Deploy with `scripts/deployment/deploy_api_file.ps1 -ClinicEnv` (writes `api/.env` and retires stale `api/.env_api_clinic`). See `api/dental-clinic-api.service`.
-- **Local:** Use `scripts/environment_manager.ps1` → `api-init`, then choose local/demo/clinic/test; it loads the matching `api/.env_api_*` into the current PowerShell process, and `api-run` starts the API with that environment.
+- **Local:** `mdc api test-config --env local` (or `api-test` after `.\load_project.ps1`). Run with `mdc api run --env local` / `api-run` — no shell activation required.
 
 See **[ENVIRONMENT_HANDLING_REVIEW.md](../ENVIRONMENT_HANDLING_REVIEW.md)** (Phase 0) and `api/config.py` for API loading details.
 
@@ -236,14 +236,46 @@ dbt itself uses `profiles.yml` and `DBT_PROFILES_DIR`; the env manager only sets
 
 ### 4.8 EC2 deployment
 
-- **API on EC2:** systemd expects one file: `/opt/dbt_dental_clinic/api/.env`. Deploy clinic env with:
-  ```powershell
-  .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
-  ```
-  This writes `api/.env` (single source of truth), retires any stale `api/.env_api_clinic` on the instance,
-  restarts the API service, and verifies `GET /health/db` returns 200 (unless `-SkipHealthCheck`).
-  See `ENVIRONMENT_HANDLING_REVIEW.md` (Phase 0).
-- **Root on EC2:** `deployment_credentials.json.template` references `environment_file: ".env_ec2"` and `environment_file_path: "/opt/dbt_dental_clinic/.env"` for context; actual setup is done by your deployment scripts.
+#### Clinic API env (`.env` on EC2)
+
+| Step | Detail |
+|------|--------|
+| **Source (you maintain)** | Local gitignored file `api/.env_api_clinic` (see `api/README.md` for variable list) |
+| **Deploy** | `mdc deploy api --env clinic` from repo root (after `pip install -e tools/mdc_cli` and `.\load_project.ps1`) |
+| **Mechanism** | `scripts/deployment/deploy_api_file.ps1 -FilePath api\.env_api_clinic -ClinicEnv` — reads local file, base64 over SSM, writes **`/opt/dbt_dental_clinic/api/.env`** |
+| **Not generated at deploy** | Credentials are **not** pulled from `deployment_credentials.json` during deploy; that file holds AWS resource IDs and reference values only |
+| **Post-deploy** | Restarts systemd unit, curls `/health/db` on the instance (unless `-SkipHealthCheck`) |
+
+#### AWS naming vs systemd (common confusion)
+
+| Name | Example | Meaning |
+|------|---------|---------|
+| EC2 **Name tag** | `dental-clinic-api-clinic` | AWS console / `deployment_credentials.json` → `backend_api.clinic_api.ec2.name` |
+| **systemd unit** | `dental-clinic-api` | `systemctl restart dental-clinic-api`; unit file `api/dental-clinic-api.service` |
+| Target group | `dental-clinic-api-clinic-tg` | ALB routing for `api-clinic.dbtdentalclinic.com` |
+| IAM role | `dental-clinic-api-clinic-role` | Clinic EC2 instance profile |
+
+Optional override in `deployment_credentials.json` → `backend_api.clinic_api.ec2.systemd_service` (default: `dental-clinic-api`).
+
+#### SSM shell on clinic API EC2
+
+After `.\load_project.ps1` (default aliases, not `-Legacy`):
+
+```powershell
+ssm-connect-clinic-api
+```
+
+Requires `deployment_credentials.json` → `backend_api.clinic_api.ec2.instance_id` and AWS CLI + Session Manager plugin.
+
+#### Manual deploy (equivalent)
+
+```powershell
+.\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+```
+
+This backs up the previous `.env`, retires any stale `api/.env_api_clinic` on the instance, restarts the API, and verifies `/health/db` (unless `-SkipHealthCheck`). See `ENVIRONMENT_HANDLING_REVIEW.md` (Phase 0).
+
+- **Root on EC2:** `deployment_credentials.json.template` references `environment_file: ".env_ec2"` and `environment_file_path: "/opt/dbt_dental_clinic/.env"` for dbt on EC2; that is separate from `api/.env`.
 
 ---
 

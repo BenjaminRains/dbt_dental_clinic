@@ -16,6 +16,7 @@ REPO_ROOT = MDC_CLI_ROOT.parent.parent
 API_DIR = REPO_ROOT / "api"
 ETL_DIR = REPO_ROOT / "etl_pipeline"
 DBT_DIR = REPO_ROOT / "dbt_dental_models"
+FRONTEND_DIR = REPO_ROOT / "frontend"
 DEPLOYMENT_CREDENTIALS = REPO_ROOT / "deployment_credentials.json"
 
 

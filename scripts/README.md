@@ -9,7 +9,8 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | [environment_manager.ps1](environment_manager.ps1) | Legacy full manager (`-Legacy`): deploy, SSM, frontend. *-init deprecated (Phase 4.6). |
 | [mdc_aliases.ps1](mdc_aliases.ps1) | **Default** thin `mdc` aliases. Load via `load_project.ps1`. |
 | [mdc_invoke.ps1](mdc_invoke.ps1) | Shared `Invoke-MDC` helper used by aliases and environment manager. |
-| [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `environment_manager.ps1` when in project. |
+| [ssm_tunnels.ps1](ssm_tunnels.ps1) | SSM port-forward and shell connect (`ssm-connect-clinic-api`, etc.); used by `mdc tunnel` and default aliases. |
+| [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `load_project.ps1` (mdc aliases) when in project. |
 | [run_dbt.bat](run_dbt.bat) | Convenience wrapper to run dbt on EC2; forwards to `ec2\run_dbt_on_ec2.ps1`. |
 
 ## Directory Layout
@@ -25,7 +26,35 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 
 ## Common Workflows
 
-### Deploy to clinic EC2
+### Daily dev (mdc — default)
+
+From project root after `.\load_project.ps1`:
+
+```powershell
+status
+api-test
+etl-validate
+mdc api run --env local
+mdc etl run --env clinic --profile full
+mdc dbt run --env clinic
+mdc tunnel clinic-db
+ssm-connect-clinic-api    # SSM shell on clinic API EC2 (also in default aliases)
+```
+
+Use `.\load_project.ps1 -Legacy` for frontend deploy menus and other legacy helpers not yet in `mdc`.
+
+### Deploy clinic API env to EC2
+
+Copies local `api/.env_api_clinic` → `/opt/dbt_dental_clinic/api/.env`, restarts systemd unit `dental-clinic-api`, verifies `/health/db`:
+
+```powershell
+.\load_project.ps1
+mdc deploy api --env clinic
+```
+
+See `docs/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
+
+### Deploy other assets to clinic EC2
 
 ```powershell
 .\scripts\deployment\deploy_codebase_to_clinic_ec2.ps1

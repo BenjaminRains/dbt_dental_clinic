@@ -1,10 +1,11 @@
-# PowerShell script to deploy a single API file to EC2 using AWS Systems Manager
+﻿# PowerShell script to deploy a single API file to EC2 using AWS Systems Manager
 # Usage: .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\services\treatment_acceptance_service.py"
-# Clinic env (recommended): writes api/.env (the single systemd EnvironmentFile source of truth)
-# and RETIRES any stale api/.env_api_clinic on the instance. config.py treats the OS environment
-# (systemd .env) as authoritative and no longer reads .env_api_clinic on EC2, so one file wins
-# (see ENVIRONMENT_HANDLING_REVIEW.md, Phase 0).
-#        .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+# Clinic env (recommended): writes api/.env (systemd EnvironmentFile source of truth)
+# and RETIRES any stale api/.env_api_clinic on the instance.
+# Preferred entry: mdc deploy api --env clinic  (from repo root)
+# Manual: .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
+# Restarts systemd unit dental-clinic-api (NOT the EC2 Name tag dental-clinic-api-clinic).
+# Optional: backend_api.clinic_api.ec2.systemd_service in deployment_credentials.json
 # Skip post-deploy /health/db check: add -SkipHealthCheck
 # Single file (advanced): .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env"
 
@@ -25,6 +26,7 @@ param(
 )
 
 $ErrorActionPreference = "Stop"
+$script:DeployRestartSucceeded = $null
 
 # SSM send-command with huge base64 in --parameters exceeds Windows CreateProcess cmdline limits (~8191).
 # Use --cli-input-json via a temp file instead.
@@ -71,26 +73,76 @@ function Invoke-AwsSsmRunShellScript {
     }
 }
 
+function Wait-AwsSsmCommandInvocation {
+    param(
+        [Parameter(Mandatory = $true)][string]$InstanceId,
+        [Parameter(Mandatory = $true)][string]$CommandId,
+        [int]$MaxWaitSeconds = 60,
+        [string]$WaitingLabel = "Waiting for command..."
+    )
+    Write-Host "   $WaitingLabel" -ForegroundColor Gray
+    $waited = 0
+    $output = $null
+    do {
+        Start-Sleep -Seconds 2
+        $waited += 2
+        $output = aws ssm get-command-invocation `
+            --command-id $CommandId `
+            --instance-id $InstanceId `
+            --output json | ConvertFrom-Json
+    } while ($output.Status -eq "InProgress" -and $waited -lt $MaxWaitSeconds)
+    return $output
+}
+
+function Get-ApiSystemdServiceName {
+    param(
+        [switch]$ClinicEnv,
+        [string]$CredentialsFile = ""
+    )
+    if (-not $CredentialsFile) {
+        $CredentialsFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "deployment_credentials.json"
+    }
+    if ($ClinicEnv -and (Test-Path -LiteralPath $CredentialsFile)) {
+        try {
+            $credentials = Get-Content -LiteralPath $CredentialsFile | ConvertFrom-Json
+            if ($credentials.backend_api.clinic_api.ec2.systemd_service) {
+                return [string]$credentials.backend_api.clinic_api.ec2.systemd_service
+            }
+        } catch {
+            # fall through to default
+        }
+    }
+    # Matches api/dental-clinic-api.service on both demo and clinic EC2 instances.
+    return "dental-clinic-api"
+}
+
 function Invoke-ApiHealthDbCheck {
     param(
         [Parameter(Mandatory = $true)][string]$InstanceId,
-        [int]$ApiPort = 8000
+        [int]$ApiPort = 8000,
+        [string]$ServiceName = ""
     )
     Write-Host "`n🏥 Verifying GET /health/db on instance..." -ForegroundColor Yellow
     $healthCmds = @(
-        "sleep 3",
-        "HTTP=`$(curl -sf -o /tmp/health_db.json -w '%{http_code}' http://127.0.0.1:${ApiPort}/health/db 2>/dev/null || echo 000)",
-        "echo HTTP: `$HTTP",
-        "cat /tmp/health_db.json 2>/dev/null || true",
-        "test `"`$HTTP`" = 200"
+        'sleep 3'
+    )
+    if ($ServiceName) {
+        $healthCmds += (
+            'for i in $(seq 1 15); do systemctl is-active {0} >/dev/null 2>&1 && break; sleep 2; done' -f $ServiceName
+        )
+    }
+    # Do not use curl -f with "|| echo 000" — failed connections write 000 via -w AND append 000 (HTTP=000000).
+    # Capture status code only; retry until 200 or attempts exhausted.
+    $healthCmds += @(
+        ('for i in $(seq 1 10); do HTTP=$(curl -s -o /tmp/health_db.json -w ''%{{http_code}}'' http://127.0.0.1:{0}/health/db 2>/dev/null); HTTP=${{HTTP:-000}}; echo attempt $i HTTP=$HTTP; if [ "$HTTP" = 200 ]; then break; fi; sleep 3; done' -f $ApiPort),
+        'echo HTTP: $HTTP',
+        'cat /tmp/health_db.json 2>/dev/null || true',
+        'test "$HTTP" = 200'
     )
     $response = Invoke-AwsSsmRunShellScript -InstanceId $InstanceId -Commands $healthCmds
     $commandId = $response.Command.CommandId
-    Start-Sleep -Seconds 5
-    $output = aws ssm get-command-invocation `
-        --command-id $commandId `
-        --instance-id $InstanceId `
-        --output json | ConvertFrom-Json
+    Write-Host "   Command ID: $commandId" -ForegroundColor Gray
+    $output = Wait-AwsSsmCommandInvocation -InstanceId $InstanceId -CommandId $commandId -MaxWaitSeconds 120 -WaitingLabel "Waiting for /health/db check..."
     if ($output.Status -eq "Success") {
         Write-Host "✅ /health/db returned 200" -ForegroundColor Green
         if ($output.StandardOutputContent) {
@@ -193,27 +245,27 @@ try {
     if ($ClinicEnv) {
         $stale = $clinicEnvSecondPath -replace '\\', '/'
         $commands = @(
-            "ENV1='$remoteFilePath'",
-            "STALE='$stale'",
-            "REMOTE_DIR=`$(dirname `"`$ENV1`")",
-            "sudo mkdir -p `"`$REMOTE_DIR`"",
-            "if [ -f `"`$ENV1`" ]; then BACKUP=`"`${ENV1}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$ENV1`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
-            "echo '$base64Content' | base64 -d | sudo tee `"`$ENV1`" > /dev/null",
-            "sudo chown ec2-user:ec2-user `"`$ENV1`"",
-            "sudo chmod 644 `"`$ENV1`"",
-            "if [ -f `"`$STALE`" ]; then RETIRED=`"`${STALE}.retired.`$(date +%Y%m%d_%H%M%S)`"; sudo mv `"`$STALE`" `"`$RETIRED`"; echo `"Retired stale env file: `$STALE -> `$RETIRED`"; fi",
-            "if [ -f `"`$ENV1`" ]; then SIZE=`$(stat -c%s `"`$ENV1`" 2>/dev/null || stat -f%z `"`$ENV1`" 2>/dev/null); echo `"Deployed .env: `$SIZE bytes (single source of truth)`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
+            ('ENV1=''{0}''' -f $remoteFilePath),
+            ('STALE=''{0}''' -f $stale),
+            'REMOTE_DIR=$(dirname "$ENV1")',
+            'sudo mkdir -p "$REMOTE_DIR"',
+            'if [ -f "$ENV1" ]; then BACKUP="${ENV1}.backup.$(date +%Y%m%d_%H%M%S)"; sudo cp "$ENV1" "$BACKUP"; echo "Backup: $BACKUP"; fi',
+            ('echo ''{0}'' | base64 -d | sudo tee "$ENV1" > /dev/null' -f $base64Content),
+            'sudo chown ec2-user:ec2-user "$ENV1"',
+            'sudo chmod 644 "$ENV1"',
+            'if [ -f "$STALE" ]; then RETIRED="${STALE}.retired.$(date +%Y%m%d_%H%M%S)"; sudo mv "$STALE" "$RETIRED"; echo "Retired stale env file: $STALE -> $RETIRED"; fi',
+            'if [ -f "$ENV1" ]; then SIZE=$(stat -c%s "$ENV1" 2>/dev/null || stat -f%z "$ENV1" 2>/dev/null); echo "Deployed .env: $SIZE bytes (single source of truth)"; else echo "ERROR: Deployment failed"; exit 1; fi'
         )
     } else {
         $commands = @(
-            "REMOTE_FILE='$remoteFilePath'",
-            "REMOTE_DIR=`$(dirname `"`$REMOTE_FILE`")",
-            "if [ -f `"`$REMOTE_FILE`" ]; then BACKUP=`"`${REMOTE_FILE}.backup.`$(date +%Y%m%d_%H%M%S)`"; sudo cp `"`$REMOTE_FILE`" `"`$BACKUP`"; echo `"Backup: `$BACKUP`"; fi",
-            "sudo mkdir -p `"`$REMOTE_DIR`"",
-            "echo '$base64Content' | base64 -d | sudo tee `"`$REMOTE_FILE`" > /dev/null",
-            "sudo chown ec2-user:ec2-user `"`$REMOTE_FILE`"",
-            "sudo chmod 644 `"`$REMOTE_FILE`"",
-            "if [ -f `"`$REMOTE_FILE`" ]; then SIZE=`$(stat -c%s `"`$REMOTE_FILE`" 2>/dev/null || stat -f%z `"`$REMOTE_FILE`" 2>/dev/null); echo `"Deployed: `$SIZE bytes`"; else echo `"ERROR: Deployment failed`"; exit 1; fi"
+            ('REMOTE_FILE=''{0}''' -f $remoteFilePath),
+            'REMOTE_DIR=$(dirname "$REMOTE_FILE")',
+            'if [ -f "$REMOTE_FILE" ]; then BACKUP="${REMOTE_FILE}.backup.$(date +%Y%m%d_%H%M%S)"; sudo cp "$REMOTE_FILE" "$BACKUP"; echo "Backup: $BACKUP"; fi',
+            'sudo mkdir -p "$REMOTE_DIR"',
+            ('echo ''{0}'' | base64 -d | sudo tee "$REMOTE_FILE" > /dev/null' -f $base64Content),
+            'sudo chown ec2-user:ec2-user "$REMOTE_FILE"',
+            'sudo chmod 644 "$REMOTE_FILE"',
+            'if [ -f "$REMOTE_FILE" ]; then SIZE=$(stat -c%s "$REMOTE_FILE" 2>/dev/null || stat -f%z "$REMOTE_FILE" 2>/dev/null); echo "Deployed: $SIZE bytes"; else echo "ERROR: Deployment failed"; exit 1; fi'
         )
     }
     
@@ -225,17 +277,7 @@ try {
     Write-Host "   Command ID: $commandId" -ForegroundColor Gray
     
     # Wait for command to complete
-    Write-Host "   Waiting for deployment..." -ForegroundColor Gray
-    $maxWait = 30
-    $waited = 0
-    do {
-        Start-Sleep -Seconds 2
-        $waited += 2
-        $output = aws ssm get-command-invocation `
-            --command-id $commandId `
-            --instance-id $InstanceId `
-            --output json | ConvertFrom-Json
-    } while ($output.Status -eq "InProgress" -and $waited -lt $maxWait)
+    $output = Wait-AwsSsmCommandInvocation -InstanceId $InstanceId -CommandId $commandId -MaxWaitSeconds 30 -WaitingLabel "Waiting for deployment..."
     
     if ($output.Status -eq "Success") {
         Write-Host "`n✅ Deployment successful!" -ForegroundColor Green
@@ -253,27 +295,24 @@ try {
             $originalOutputEncoding = [Console]::OutputEncoding
             [Console]::OutputEncoding = [System.Text.Encoding]::UTF8
             
+            $restartSucceeded = $false
             try {
-                # Use simpler status check to avoid Unicode characters in output
-                $serviceName = if ($Clinic -or $ClinicEnv) { "dental-clinic-api-clinic" } else { "dental-clinic-api" }
+                # systemd unit is dental-clinic-api (see api/dental-clinic-api.service), not the EC2 Name tag.
+                $serviceName = Get-ApiSystemdServiceName -ClinicEnv:($Clinic -or $ClinicEnv)
                 $restartCmds = @(
-                    "sudo systemctl restart $serviceName",
-                    "sleep 2",
-                    "sudo systemctl is-active $serviceName && echo Service is active || echo Service is not active"
+                    ('sudo systemctl restart {0}' -f $serviceName),
+                    ('for i in $(seq 1 15); do if systemctl is-active {0} >/dev/null 2>&1; then echo Service is active; exit 0; fi; sleep 2; done; echo Service is not active; systemctl status {0} --no-pager -l 2>&1 | tail -15; exit 1' -f $serviceName)
                 )
                 $restartResponseObj = Invoke-AwsSsmRunShellScript -InstanceId $InstanceId -Commands $restartCmds
                 
                 $restartCommandId = $restartResponseObj.Command.CommandId
                 Write-Host "   Command ID: $restartCommandId" -ForegroundColor Gray
-                Start-Sleep -Seconds 3
                 
-                $restartOutput = aws ssm get-command-invocation `
-                    --command-id $restartCommandId `
-                    --instance-id $InstanceId `
-                    --output json | ConvertFrom-Json
+                $restartOutput = Wait-AwsSsmCommandInvocation -InstanceId $InstanceId -CommandId $restartCommandId -MaxWaitSeconds 90 -WaitingLabel "Waiting for service restart..."
                 
                 if ($restartOutput.Status -eq "Success") {
-                    Write-Host "✅ API service restarted" -ForegroundColor Green
+                    $restartSucceeded = $true
+                    Write-Host "✅ API service restarted ($serviceName)" -ForegroundColor Green
                     if ($restartOutput.StandardOutputContent) {
                         $statusLines = $restartOutput.StandardOutputContent -split "`n" | Where-Object { $_.Trim() }
                         if ($statusLines) {
@@ -281,22 +320,31 @@ try {
                         }
                     }
                     if ($ClinicEnv -and -not $SkipHealthCheck) {
-                        $healthOk = Invoke-ApiHealthDbCheck -InstanceId $InstanceId
+                        $healthOk = Invoke-ApiHealthDbCheck -InstanceId $InstanceId -ServiceName $serviceName
                         if (-not $healthOk) {
                             Write-Host "`n⚠️  Deploy succeeded but /health/db did not return 200. Check api/.env and RDS connectivity." -ForegroundColor Yellow
                             exit 1
                         }
                     }
                 } else {
-                    Write-Host "⚠️  Service restart completed with status: $($restartOutput.Status)" -ForegroundColor Yellow
+                    Write-Host "⚠️  Service restart finished with status: $($restartOutput.Status)" -ForegroundColor Yellow
+                    if ($restartOutput.StandardErrorContent) {
+                        Write-Host $restartOutput.StandardErrorContent -ForegroundColor Red
+                    }
+                    if ($ClinicEnv -and -not $SkipHealthCheck) {
+                        exit 1
+                    }
                 }
             } catch {
-                Write-Host "⚠️  Could not parse restart status, but restart command was sent" -ForegroundColor Yellow
-                Write-Host "   Error: $($_.Exception.Message)" -ForegroundColor DarkYellow
+                Write-Host "⚠️  Service restart failed: $($_.Exception.Message)" -ForegroundColor Yellow
+                if ($ClinicEnv -and -not $SkipHealthCheck) {
+                    exit 1
+                }
             } finally {
                 # Restore original encoding
                 [Console]::OutputEncoding = $originalOutputEncoding
             }
+            $script:DeployRestartSucceeded = $restartSucceeded
         } else {
             Write-Host "`n⏭️  Skipping service restart (-NoRestart)" -ForegroundColor Gray
         }
@@ -322,7 +370,13 @@ try {
 
 if ($NoRestart) {
     Write-Host "`n✅ Done! File deployed (restart skipped)." -ForegroundColor Green
+} elseif ($script:DeployRestartSucceeded -eq $true) {
+    if ($ClinicEnv -and -not $SkipHealthCheck) {
+        Write-Host "`n✅ Done! File deployed, service restarted, and /health/db OK." -ForegroundColor Green
+    } else {
+        Write-Host "`n✅ Done! File deployed and service restarted." -ForegroundColor Green
+    }
 } else {
-    Write-Host "`n✅ Done! File deployed and service restarted." -ForegroundColor Green
+    Write-Host "`n✅ Done! File deployed." -ForegroundColor Green
 }
 Write-Host ""

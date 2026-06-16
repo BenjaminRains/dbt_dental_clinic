@@ -163,3 +163,57 @@ function Start-SSMPortForwardDemoDB {
         -HostName $script:DemoDBHost `
         -LocalPort $localPort
 }
+
+function Connect-SSMSession {
+    param(
+        [Parameter(Mandatory = $true)][string]$TargetInstanceId,
+        [Parameter(Mandatory = $true)][string]$Label
+    )
+    if (-not (Get-Command aws -CommandType Application -ErrorAction SilentlyContinue)) {
+        Write-Host 'AWS CLI not found.' -ForegroundColor Red
+        return 1
+    }
+    $plugin = Get-Command session-manager-plugin -ErrorAction SilentlyContinue
+    if (-not $plugin) {
+        Write-Host 'Session Manager plugin not found. Install: winget install Amazon.SessionManagerPlugin' -ForegroundColor Yellow
+    }
+    Write-Host "Starting SSM session: $Label ($TargetInstanceId)" -ForegroundColor Cyan
+    & aws ssm start-session --target $TargetInstanceId
+    return $LASTEXITCODE
+}
+
+function Connect-SSMAPI {
+    if (-not (Ensure-SSMInstanceIdsLoaded)) {
+        Write-Host 'Could not load deployment_credentials.json from project root.' -ForegroundColor Red
+        return 1
+    }
+    if (-not $script:APIInstanceId) {
+        Write-Host 'Demo API instance ID missing (backend_api.ec2.instance_id).' -ForegroundColor Red
+        return 1
+    }
+    return Connect-SSMSession -TargetInstanceId $script:APIInstanceId -Label 'dental-clinic-api-demo'
+}
+
+function Connect-SSMClinicAPI {
+    if (-not (Ensure-SSMInstanceIdsLoaded)) {
+        Write-Host 'Could not load deployment_credentials.json from project root.' -ForegroundColor Red
+        return 1
+    }
+    if (-not $script:ClinicAPIInstanceId) {
+        Write-Host 'Clinic API instance ID missing (backend_api.clinic_api.ec2.instance_id).' -ForegroundColor Red
+        return 1
+    }
+    return Connect-SSMSession -TargetInstanceId $script:ClinicAPIInstanceId -Label 'dental-clinic-api-clinic'
+}
+
+function Connect-SSMDemoDB {
+    if (-not (Ensure-SSMInstanceIdsLoaded)) {
+        Write-Host 'Could not load deployment_credentials.json from project root.' -ForegroundColor Red
+        return 1
+    }
+    if (-not $script:DemoDBInstanceId) {
+        Write-Host 'Demo DB instance ID missing (demo_database.ec2.instance_id).' -ForegroundColor Red
+        return 1
+    }
+    return Connect-SSMSession -TargetInstanceId $script:DemoDBInstanceId -Label 'dental-clinic-demo-db'
+}

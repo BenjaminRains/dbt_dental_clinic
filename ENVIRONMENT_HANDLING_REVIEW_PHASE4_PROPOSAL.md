@@ -1,8 +1,32 @@
 ## Phase 4 — Project CLI (`mdc`) replaces environment activation
 
-> Status: **proposed** (gaps closed in this revision).
+> Status: **complete** (Phases 4.1–4.6 merged to `main`; mdc **0.6.0**).
 > Objective: replace `environment_manager.ps1` as the **primary developer workflow** while keeping `pydantic-settings` as the **sole configuration authority** established in Phases 0–3.
-> Prerequisite: Phase 3 merged and stable (`api-init` / `etl-init` export via Python).
+> Prerequisite: Phase 3 merged and stable — satisfied.
+
+### Implementation status (merged)
+
+| Sub-phase | Status | Notes |
+|-----------|--------|-------|
+| 3.5 — ETL profiles (`load` / `full`) | **done** | `settings_v2.py`; default `mdc etl validate --env local` uses `load` |
+| 4.1 — CLI skeleton | **done** | `tools/mdc_cli/`; `mdc status`; CI pytest |
+| 4.2 — Read-only commands | **done** | `mdc api test-config`, `mdc etl validate`, `mdc api health` |
+| 4.2b — dbt env via Python | **done** | `mdc_cli/dbt_env.py`; `mdc dbt validate` |
+| 4.3 — Runtime commands | **done** | `run_helper.py` child env; `mdc api/etl/dbt run` |
+| 4.4 — PS delegates | **done** | `Invoke-MDC`; run aliases without `$script:Is*Active` guards |
+| 4.5 — Thin PowerShell layer | **done** | `load_project.ps1` → `mdc_aliases.ps1`; `-Legacy` for deploy/SSM |
+| 4.6 — Cleanup | **done** | `export_env_for_shell.py` removed; `*-init` validate-only; SSM deduped |
+
+**Default daily workflow:**
+
+```powershell
+.\load_project.ps1          # mdc aliases — no shell activation
+status / api-run / etl-validate / etl-status
+mdc tunnel clinic-db
+.\load_project.ps1 -Legacy  # deploy, SSM, frontend, consult-audio only
+```
+
+See `ENVIRONMENT_HANDLING_REVIEW.md` § Phase 4.1–4.6 for per-phase detail.
 
 ---
 
@@ -19,8 +43,8 @@ Phase 0–3 accomplishments:
 
 - OS environment wins over on-disk `.env` (Phase 0 precedence).
 - Typed loaders via `pydantic-settings` (API + ETL).
-- PowerShell `api-init` / `etl-init` delegate validation to Python (`export_env_for_shell.py`).
-- Blank-env and cross-component stale var handling in settings + `Clear-StaleStageEnvVars`.
+- PowerShell `api-init` / `etl-init` delegated validation to Python (Phase 3 bridge; **removed in 4.6**).
+- Blank-env and cross-component stale var handling in settings (Phase 3; `Clear-StaleStageEnvVars` removed in 4.6).
 
 Configuration is no longer the primary architectural risk. Remaining pain:
 
@@ -43,7 +67,7 @@ api-deactivate    # clears some vars; easy to miss edge cases
 
 Phase 3 improved **how** env gets into the shell but still treats the **parent shell as the config store**. Phase 4’s end state must **not** depend on that.
 
-`export_env_for_shell.py` is a **bridge**, not the target architecture.
+`export_env_for_shell.py` was a **bridge** (Phase 3); **removed in Phase 4.6**. mdc injects env via pydantic loaders only.
 
 ---
 
@@ -110,7 +134,8 @@ Configuration entry points (unchanged):
 ```text
 api/settings.py                          → load_api_settings(), export_api_env_dict()
 etl_pipeline/etl_pipeline/config/settings_v2.py  → load_etl_env_dict(), load_etl_connection_settings()
-scripts/export_env_for_shell.py          → transitional; retired when mdc injects env directly
+tools/mdc_cli/mdc_cli/dbt_env.py         → load_dbt_env_dict() (dbt shell vars)
+tools/mdc_cli/mdc_cli/run_helper.py      → child-process env injection (no parent shell mutation)
 ```
 
 The CLI imports these modules and calls them. New shared helper (Phase 4.1):
@@ -149,14 +174,14 @@ subprocess.run(
 )
 ```
 
-**Not the end state:**
+**Not the end state (removed in 4.6):**
 
 ```powershell
 Import-StageEnvFromPython   # parent shell pollution
-etl-run                     # depends on parent state
+etl-run                     # depends on parent state (Legacy run path now calls mdc)
 ```
 
-`export_env_for_shell.py` remains until Phase 4.3 migrates runtime commands; then it becomes optional for interactive PS users only, and is removed in Phase 4.5.
+**Implemented:** runtime commands use `run_helper.py` child env from Phase 4.3; export bridge removed in 4.6.
 
 #### 4. Capabilities, not just stage names
 
@@ -332,7 +357,7 @@ Before `mdc etl run`:
 | Tests | Local validate with replication+PG only passes under `--profile load` |
 | Docs | Stage × component × capability matrix in `docs/ENVIRONMENT_FILES.md` |
 
-#### Phase 4.1 — CLI skeleton
+#### Phase 4.1 — CLI skeleton (done)
 
 Create:
 
@@ -360,7 +385,7 @@ mdc --help
 
 No change to `environment_manager.ps1` behavior yet. Add CI job: `pytest tools/mdc_cli/tests`.
 
-#### Phase 4.2 — Read-only commands
+#### Phase 4.2 — Read-only commands (done)
 
 ```bash
 mdc status
@@ -371,12 +396,12 @@ mdc etl validate --env <stage> --profile load|full
 
 PowerShell aliases optional; old init paths still work.
 
-#### Phase 4.2b — dbt env via Python
+#### Phase 4.2b — dbt env via Python (done)
 
 - Add `load_dbt_env_dict(target)` (new small module or under `tools/mdc_cli/`).
 - Replace `dbt-init` `.env` parsing with Python export or direct `mdc dbt` subprocess injection.
 
-#### Phase 4.3 — Runtime commands (stateless)
+#### Phase 4.3 — Runtime commands (done)
 
 ```bash
 mdc api run --env <stage>
@@ -393,7 +418,7 @@ function api-run { param([string]$Env = 'local') mdc api run --env $Env }
 
 Child-process env injection replaces `Import-StageEnvFromPython` for these commands.
 
-#### Phase 4.4 — Retire shell export for primary workflow
+#### Phase 4.4 — Retire shell export for primary workflow (done)
 
 Remove from primary path:
 
@@ -403,7 +428,7 @@ Remove from primary path:
 
 Keep export script temporarily for users who want `eval $(mdc env export …)` style (optional).
 
-#### Phase 4.5 — Thin PowerShell layer
+#### Phase 4.5 — Thin PowerShell layer (done)
 
 `load_project.ps1` loads:
 
@@ -415,11 +440,18 @@ function api-run { mdc api run @args }
 
 Target: **orchestration logic in Python**; PS for Windows deployment/tunnels and backward-compatible aliases.
 
-#### Phase 4.6 — Cleanup (optional)
+#### Phase 4.6 — Cleanup (implemented)
 
-- Remove `export_env_for_shell.py` if unused
-- Slim `environment_manager.ps1` to &lt;500 lines or archive
-- Unify venv tool (uv/poetry) — separate proposal
+| Item | Result |
+|------|--------|
+| `export_env_for_shell.py` | **Removed** |
+| `Import-StageEnvFromPython` / `Clear-StaleStageEnvVars` | **Removed** from env manager |
+| `*-init` / `*-deactivate` | Validate-only / no-op (Legacy path) |
+| SSM port-forward | Dot-sources `scripts/ssm_tunnels.ps1` (deduped) |
+| `project_profile.ps1` | Loads default `load_project.ps1` (mdc aliases) |
+| Env manager size | ~2,170 lines — deploy/SSM/frontend/consult-audio retained for `-Legacy` |
+
+Stretch goal “&lt;500 lines” **deferred** — see optional follow-ups below.
 
 ---
 
@@ -431,21 +463,45 @@ Target: **orchestration logic in Python**; PS for Windows deployment/tunnels and
 | Integration | `mdc etl validate --env test` against `.env_test` (if present) |
 | No shell | CI runs `mdc` commands without `load_project.ps1` |
 
-Regression: existing `test_settings_v2_unit.py`, `test_export_env_for_shell_unit.py`, `api/test_config.py` remain; add `tools/mdc_cli/tests/`.
+Regression: existing `test_settings_v2_unit.py`, `test_export_env_for_shell_unit.py` (pydantic loaders), `api/test_config.py`, and `tools/mdc_cli/tests/`.
 
 ---
 
 ### Success criteria
 
-Phase 4 is complete when:
+Phase 4 primary goals — **met** (merged):
 
-- [ ] Configuration defined only in `api/settings.py` + `settings_v2.py` (no duplicate parsers).
-- [ ] Primary dev workflow uses `mdc … --env <stage>` without `*-init` / `*-deactivate`.
-- [ ] Runtime commands inject env into **child processes**, not parent shell state.
-- [ ] ETL `local` works with `--profile load` without source creds; full pipeline requires `--profile full` + source in file.
-- [ ] `mdc status` shows stage, config path, and profile expectations.
-- [ ] `environment_manager.ps1` is wrappers + tunnels/deploy only (or deprecated with migration note).
-- [ ] New contributor can run API/ETL/dbt from docs without understanding shell activation flags.
+- [x] Configuration defined only in `api/settings.py` + `settings_v2.py` (+ `mdc_cli/dbt_env.py` for dbt shell vars); no duplicate parsers on daily dev path.
+- [x] Primary dev workflow uses `mdc … --env <stage>` without `*-init` / `*-deactivate` (default `load_project.ps1` loads mdc aliases only).
+- [x] Runtime commands inject env into **child processes**, not parent shell state (`run_helper.py`).
+- [x] ETL `local` works with `--profile load` without source creds; full pipeline requires `--profile full` + source in file.
+- [x] `mdc status` shows stage, config path, and validation state.
+- [x] New contributor can run API/ETL/dbt from docs without understanding shell activation flags.
+
+Partially met / deferred:
+
+- [~] `environment_manager.ps1` is wrappers + tunnels/deploy only — **behavior** matches (daily dev out of band); **size** still ~2,170 lines under `-Legacy` (deploy, SSM, frontend, consult-audio).
+- [~] CI runs `mdc` without `load_project.ps1` — unit tests cover CLI; full integration in CI optional.
+
+---
+
+### Optional follow-ups (post–Phase 4)
+
+> **Superseded by Phase 5:** `ENVIRONMENT_HANDLING_REVIEW_PHASE5_PROPOSAL.md` absorbs the items below.
+> Phase 4 optional follow-ups are not required for Phase 4 completion; they are the starting backlog for Phase 5.
+
+| Item | Rationale |
+|------|-----------|
+| **Extract Legacy scripts** | Move deploy, frontend, consult-audio, SSM connect from `environment_manager.ps1` into `scripts/deployment/` (or similar); target &lt;500-line Legacy loader or archive the monolith. |
+| **Single venv tool (uv/poetry)** | Unify API venv + ETL Pipenv + consult-audio venv — separate proposal; not a Phase 4 gate. |
+| **Remove `*-init` from Legacy banners** | Commands still exist as validate-only shims; could rename or drop after one release cycle. |
+| **Unicode in CLI banners** | Replace `→` with `->` in `run_helper.py` / command output for cp1252 Windows consoles (same class of fix as 4.5 BOM work). |
+| **`etl-status` default stage** | Aliases default to `clinic`; consider `local` when tunneling or document explicit `--env`. |
+| **Contributor docs** | Update `scripts/README.md`, onboarding, and any personal notes still referencing required `api-init` / `etl-init`. |
+| **CI: mdc without PS** | Add job running `pytest tools/mdc_cli/tests` + smoke `mdc status` from clean shell (no `load_project.ps1`). |
+| **Consult-audio via mdc** | Add `mdc consult-audio …` when that workflow is worth migrating off Legacy. |
+| **Slim `Settings.ENV_MAPPINGS`** | Once all callers use typed loaders exclusively (main review § remaining). |
+| **Rename `test_export_env_for_shell_unit.py`** | Tests pydantic loaders directly; filename is historical. |
 
 ---
 
@@ -471,11 +527,11 @@ Separate **what** (pydantic settings), **how** (`mdc` orchestration), and **wher
 
 ### Relationship to `ENVIRONMENT_HANDLING_REVIEW.md`
 
-| Main review phase | Phase 4 action |
-|-------------------|----------------|
-| Phase 3 (PS delegates to Python) | Merge; bridge until 4.3 |
+| Main review phase | Phase 4 outcome |
+|-------------------|-----------------|
+| Phase 3 (PS delegates to Python) | Bridge removed in 4.6 |
 | Phase 3+ remaining items | Absorbed into 4.2b, 4.4, 4.6 |
-| §4.4 single venv tool | Deferred to 4.6 |
+| §4.4 single venv tool | **Deferred** — optional follow-up |
 | §2.2 stage naming | Documented in stage matrix above; CLI enforces per-component |
 
-After Phase 4 ships, update main review: Phase 4 **implemented**, mark `environment_manager.ps1` deprecated.
+Main review § Phase 4.1–4.6 records implementation detail. Default path: **`load_project.ps1` → mdc aliases**; **`environment_manager.ps1` is Legacy-only** (deploy / SSM / frontend / consult-audio).
