@@ -127,6 +127,10 @@ function clinic-frontend-deploy {
     Invoke-MDC @("deploy", "frontend", "--target", "clinic") + $args
 }
 
+function dbt-docs-deploy {
+    Invoke-MDC @("deploy", "dbt-docs") + $args
+}
+
 function dbt-init {
     param(
         [ValidateSet("local", "demo", "clinic")]
@@ -196,8 +200,9 @@ Write-Host "  mdc dbt run --env local      dbt via stateless subprocess" -Foregr
 Write-Host "  mdc tunnel clinic-db         SSM port forward (Python)" -ForegroundColor Cyan
 Write-Host "  frontend-dev                 mdc frontend dev (local Vite)" -ForegroundColor Cyan
 Write-Host "  clinic-frontend-deploy       mdc deploy frontend --target clinic" -ForegroundColor Cyan
+Write-Host "  dbt-docs-deploy              mdc deploy dbt-docs" -ForegroundColor Cyan
 Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api" -ForegroundColor Cyan
 Write-Host "  ssm-connect-clinic-api       SSM shell on clinic API EC2" -ForegroundColor Cyan
 Write-Host ""
-Write-Host "Legacy -Legacy manager: consult-audio-init, dbt-docs-deploy, etc." -ForegroundColor DarkGray
+Write-Host "Legacy -Legacy manager: consult-audio-init, etc." -ForegroundColor DarkGray
 Write-Host ""

@@ -10,6 +10,7 @@ from mdc_cli.credentials import (
     read_env_file_value,
     resolve_clinic_frontend_config,
     resolve_demo_frontend_config,
+    resolve_demo_hosting_config,
 )
 
 
@@ -39,6 +40,7 @@ def test_resolve_demo_frontend_config_from_json(tmp_path: Path, monkeypatch):
     (api_dir / ".env_api_demo").write_text("DEMO_API_KEY=demo-key\n", encoding="utf-8")
 
     monkeypatch.setattr("mdc_cli.credentials.DEPLOYMENT_CREDENTIALS", cred_path)
+    monkeypatch.setattr("mdc_cli.credentials.FRONTEND_DEPLOY_JSON", tmp_path / "missing.json")
     monkeypatch.setattr("mdc_cli.credentials.API_DIR", api_dir)
     monkeypatch.delenv("FRONTEND_BUCKET_NAME", raising=False)
     monkeypatch.delenv("FRONTEND_DIST_ID", raising=False)
@@ -49,6 +51,54 @@ def test_resolve_demo_frontend_config_from_json(tmp_path: Path, monkeypatch):
     assert config.distribution_id == "EDEMO123"
     assert config.api_key == "demo-key"
     assert config.vite_is_demo is True
+
+
+def test_resolve_demo_hosting_from_demo_frontend_section(tmp_path: Path, monkeypatch):
+    creds = {
+        "demo_frontend": {
+            "domain": "dbtdentalclinic.com",
+            "s3_buckets": {"frontend": {"bucket_name": "live-bucket"}},
+            "cloudfront": {"distribution_id": "ELIVE123"},
+        },
+    }
+    cred_path = tmp_path / "deployment_credentials.json"
+    cred_path.write_text(json.dumps(creds), encoding="utf-8")
+
+    monkeypatch.setattr("mdc_cli.credentials.DEPLOYMENT_CREDENTIALS", cred_path)
+    monkeypatch.setattr("mdc_cli.credentials.FRONTEND_DEPLOY_JSON", tmp_path / "missing.json")
+    monkeypatch.delenv("FRONTEND_BUCKET_NAME", raising=False)
+    monkeypatch.delenv("FRONTEND_DIST_ID", raising=False)
+
+    hosting = resolve_demo_hosting_config()
+    assert hosting.bucket_name == "live-bucket"
+    assert hosting.distribution_id == "ELIVE123"
+    assert hosting.domain == "https://dbtdentalclinic.com"
+
+
+def test_resolve_demo_hosting_from_frontend_deploy_json(tmp_path: Path, monkeypatch):
+    deploy_json = tmp_path / ".frontend-deploy.json"
+    deploy_json.write_text(
+        json.dumps(
+            {
+                "BucketName": "json-bucket",
+                "DistributionId": "EJSON123",
+                "Domain": "https://dbtdentalclinic.com",
+            }
+        ),
+        encoding="utf-8",
+    )
+
+    monkeypatch.setattr(
+        "mdc_cli.credentials.DEPLOYMENT_CREDENTIALS",
+        tmp_path / "missing-credentials.json",
+    )
+    monkeypatch.setattr("mdc_cli.credentials.FRONTEND_DEPLOY_JSON", deploy_json)
+    monkeypatch.delenv("FRONTEND_BUCKET_NAME", raising=False)
+    monkeypatch.delenv("FRONTEND_DIST_ID", raising=False)
+
+    hosting = resolve_demo_hosting_config()
+    assert hosting.bucket_name == "json-bucket"
+    assert hosting.distribution_id == "EJSON123"
 
 
 def test_resolve_clinic_frontend_config_requires_api_key(tmp_path: Path, monkeypatch):

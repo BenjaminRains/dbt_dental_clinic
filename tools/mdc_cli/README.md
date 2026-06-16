@@ -21,7 +21,7 @@ status
 api-run
 ```
 
-Use `.\load_project.ps1 -Legacy` for frontend deploy and other legacy menus. **SSM connect and `mdc tunnel`** work with the default `load_project.ps1` (via `scripts/ssm_tunnels.ps1`).
+Use `.\load_project.ps1 -Legacy` for consult-audio and other legacy menus not yet in `mdc`.
 
 ## Commands
 
@@ -44,6 +44,7 @@ Use `.\load_project.ps1 -Legacy` for frontend deploy and other legacy menus. **S
 - `mdc frontend dev` — local Vite dev server (writes `frontend/.env.local`)
 - `mdc frontend status` — demo/clinic S3/CloudFront/API key resolution
 - `mdc deploy frontend --target demo|clinic` — build + S3 sync + CloudFront invalidation
+- `mdc deploy dbt-docs [--env local] [--skip-generate]` — upload `dbt_dental_models/target` to `s3://…/dbt-docs/`
 
 ### Infrastructure wrappers
 

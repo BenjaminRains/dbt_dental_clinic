@@ -18,6 +18,7 @@ ETL_DIR = REPO_ROOT / "etl_pipeline"
 DBT_DIR = REPO_ROOT / "dbt_dental_models"
 FRONTEND_DIR = REPO_ROOT / "frontend"
 DEPLOYMENT_CREDENTIALS = REPO_ROOT / "deployment_credentials.json"
+FRONTEND_DEPLOY_JSON = REPO_ROOT / ".frontend-deploy.json"
 
 
 @dataclass(frozen=True)

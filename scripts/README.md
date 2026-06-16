@@ -41,7 +41,17 @@ mdc tunnel clinic-db
 ssm-connect-clinic-api    # SSM shell on clinic API EC2 (also in default aliases)
 ```
 
-Use `.\load_project.ps1 -Legacy` for frontend deploy menus and other legacy helpers not yet in `mdc`.
+Use `.\load_project.ps1 -Legacy` for consult-audio and other legacy helpers not yet in `mdc`.
+
+### Deploy dbt docs to portfolio site
+
+Uploads `dbt_dental_models/target` to demo frontend bucket under `dbt-docs/`:
+
+```powershell
+dbt-docs-deploy
+# or: mdc deploy dbt-docs
+# optional: mdc deploy dbt-docs --skip-generate  (deploy existing target/ only)
+```
 
 ### Deploy clinic API env to EC2
 
