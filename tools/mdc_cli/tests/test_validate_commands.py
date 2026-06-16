@@ -1,5 +1,6 @@
 """Tests for Phase 4.2 validation commands."""
 
+from pathlib import Path
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -49,6 +50,17 @@ def test_etl_validate_full_profile(mock_validate):
     result = runner.invoke(app, ["etl", "validate", "--env", "clinic", "--profile", "full"])
     assert result.exit_code == 0
     mock_validate.assert_called_once_with("clinic", profile="full")
+
+
+@patch("mdc_cli.commands.dbt.validate_dbt_stage", return_value=(True, None))
+@patch("mdc_cli.commands.dbt.dbt_config_path")
+def test_dbt_validate_success(mock_config_path, mock_validate):
+    mock_config_path.return_value = Path("dbt_dental_models/.env_local")
+    result = runner.invoke(app, ["dbt", "validate", "--env", "local"])
+    assert result.exit_code == 0
+    assert "DBT" in result.stdout
+    assert "ok" in result.stdout
+    mock_validate.assert_called_once_with("local")
 
 
 def test_api_test_config_invalid_stage():

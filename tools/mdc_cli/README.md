@@ -31,7 +31,8 @@ python -m mdc_cli --help
 - `mdc api test-config --env <stage>` — validate API pydantic settings
 - `mdc api health --env <stage>` — config health (settings load; HTTP checks in Phase 4.3)
 - `mdc etl validate --env <stage> [--profile load|full]` — validate ETL settings
-- Stub: `mdc api run`, `mdc etl run`, `mdc dbt *`, `mdc tunnel *` (later phases)
+- `mdc dbt validate --env <stage>` — validate dbt connection env (local/clinic/demo)
+- Stub: `mdc api run`, `mdc etl run`, `mdc dbt run`, `mdc tunnel *` (later phases)
 
 Stages are dev/test targets only: `local`, `clinic`, `test`, and `demo` (API/dbt).
 Use `clinic` for the live clinic deployment context — not a separate `production` stage name.

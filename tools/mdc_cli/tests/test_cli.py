@@ -17,7 +17,7 @@ def test_help():
 def test_version():
     result = runner.invoke(app, ["version"])
     assert result.exit_code == 0
-    assert "mdc 0.2.0" in result.stdout
+    assert "mdc 0.3.0" in result.stdout
 
 
 def test_status_runs():

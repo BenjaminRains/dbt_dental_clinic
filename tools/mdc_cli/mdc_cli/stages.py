@@ -4,7 +4,7 @@ from __future__ import annotations
 
 import typer
 
-from mdc_cli.paths import API_STAGES, ETL_STAGES
+from mdc_cli.paths import API_STAGES, DBT_STAGES, ETL_STAGES
 
 ETL_PROFILES = ("load", "full")
 
@@ -31,3 +31,11 @@ def require_etl_profile(profile: str) -> str:
             f"Unsupported ETL profile '{profile}'. Expected one of: {list(ETL_PROFILES)}"
         )
     return profile
+
+
+def require_dbt_stage(stage: str) -> str:
+    if stage not in DBT_STAGES:
+        raise typer.BadParameter(
+            f"Unsupported dbt stage '{stage}'. Expected one of: {list(DBT_STAGES)}"
+        )
+    return stage
