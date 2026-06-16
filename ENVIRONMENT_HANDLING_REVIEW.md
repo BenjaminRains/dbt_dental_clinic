@@ -154,9 +154,9 @@ forward-compatible with §5.
 | **`api/deps.py`** | `get_api_settings()` / `get_api_settings_optional()` for FastAPI Depends |
 | **`api/main.py`** | `/health` uses `Depends(get_api_settings_optional)` when env is configured |
 
-## Phase 3 — PowerShell delegates to Python (in progress)
+## Phase 3 — PowerShell delegates to Python (implemented)
 
-> Status: **in progress** on branch `refactor/phase3-env-export`.
+> Status: **implemented** (merged).
 > `api-init` and `etl-init` load env via `scripts/export_env_for_shell.py` instead of parsing `.env` in PowerShell.
 
 ### Changes
@@ -167,13 +167,29 @@ forward-compatible with §5.
 | **`api/settings.py`** | `export_api_env_dict()` for shell export after validation |
 | **`environment_manager.ps1`** | `Import-StageEnvFromPython`; `api-init` / `etl-init` use Python export |
 | **`tests/unit/config/test_export_env_for_shell_unit.py`** | Export script smoke tests |
+| **Phase 3.5** | ETL `load`/`full` profiles; blank-env handling; `Clear-StaleStageEnvVars` |
 
-### Remaining (Phase 3+)
+### Remaining (Phase 4+)
 
-- `dbt-init` env loading via Python or documented single path (still parses `.env_local` / `.env_clinic`)
+- `dbt-init` env loading via Python or `mdc dbt` (Phase 4.2b)
 - Consult audio / other ad-hoc `Get-Content` env loaders in `environment_manager.ps1`
-- Single venv tool / stale artifact cleanup (§4.4, §4.6)
+- Single venv tool / stale artifact cleanup (Phase 4.6)
 - Optional: slim `Settings.ENV_MAPPINGS` once all callers use typed path exclusively
+
+## Phase 4.1 — `mdc` CLI skeleton (in progress)
+
+> Status: **in progress** on branch `refactor/phase4-mdc-cli`.
+> See `ENVIRONMENT_HANDLING_REVIEW_PHASE4_PROPOSAL.md` for full Phase 4 plan.
+
+| Item | Action |
+|---|---|
+| **`tools/mdc_cli/`** | Typer CLI package; `pip install -e tools/mdc_cli` |
+| **`mdc status`** | Config paths, pydantic validation, venv discovery (stateless) |
+| **`mdc_cli/env.py`** | `run_with_env()`, `load_*_env_dict()` delegating to existing loaders |
+| **Stub commands** | `api`, `etl`, `dbt`, `tunnel` subcommands (Phase 4.2+) |
+| **`tools/mdc_cli/tests/`** | CLI and path unit tests |
+
+No change to `environment_manager.ps1` behavior in 4.1.
 
 ---
 
