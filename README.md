@@ -52,14 +52,52 @@ Both use synthetic data only; no database or code required.
    ```powershell
    mdc api run --env local
    ```
-3. **Frontend:** in another terminal:
+3. **Frontend:** in another terminal (from repo root):
    ```powershell
-   cd frontend && npm install && npm run dev
+   mdc frontend dev
    ```
-   Open [http://localhost:3000](http://localhost:3000); set `VITE_API_URL=http://localhost:8000` and your API key in `frontend/.env` or `.env.local`.
+   Writes `frontend/.env.local` (API URL + key) and starts Vite. Open [http://localhost:3000](http://localhost:3000).
 
 **Option C — Full local pipeline (synthetic data)**  
 To run ETL + dbt + API + frontend on synthetic data, see [etl_pipeline/synthetic_data_generator/QUICKSTART.md](etl_pipeline/synthetic_data_generator/QUICKSTART.md). You’ll create a demo DB, generate data, run dbt, then start the API and frontend as above.
+
+---
+
+## Environment configuration
+
+Configuration is **component-scoped** and loaded by **typed Python settings** (`api/settings.py`, ETL `settings_v2.py`, `mdc_cli/dbt_env.py`)—not a single root `.env` for API/ETL/dbt. The **`mdc` CLI** runs each component with an **isolated child-process env** for the `--env` stage you pass. There are no shell `*-init` scripts and no dot-sourcing `environment_manager.ps1` (legacy archived under `scripts/archive/`).
+
+| Stage | Meaning | API | ETL | dbt |
+|-------|---------|-----|-----|-----|
+| `local` | Local dev (localhost) | ✅ | ✅ | ✅ |
+| `demo` | Portfolio / synthetic (public) | ✅ | — | ✅ |
+| `clinic` | Real clinic (PHI) | ✅ | ✅ | ✅ |
+| `test` | Test DBs (CI) | ✅ | ✅ | — |
+
+**Env files (by component):**
+
+| Component | Files | Loaded when |
+|-----------|-------|-------------|
+| API | `api/.env_api_<stage>` | `mdc api … --env <stage>` (file skipped if OS env already set) |
+| ETL | `etl_pipeline/.env_<stage>` | `mdc etl … --env <stage>` |
+| dbt | `dbt_dental_models/.env_<stage>` or `deployment_credentials.json` | `mdc dbt … --env <stage>` |
+| Frontend | `frontend/.env.local` (dev) | `mdc frontend dev` or Vite |
+| Docker / Airflow | `/.env` (from `/.env.template`) | `docker-compose` only |
+
+Root `/.env_local`, `/.env_clinic`, and `/.env_test` are **not used**—each component reads only from its own directory.
+
+**Precedence:** process environment (shell, systemd on EC2) → component env file → safe defaults for optional vars.
+
+**Validate before you run:**
+
+```powershell
+mdc status
+mdc api test-config --env local
+mdc etl validate --env local --profile load
+mdc dbt validate --env local
+```
+
+**Reference:** [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md) (full inventory and loaders), [tools/mdc_cli/README.md](tools/mdc_cli/README.md) (commands and aliases). Run `.\scripts\utils\list_env_files.ps1` to see which env files exist on disk.
 
 ---
 
@@ -163,6 +201,8 @@ dbt_dental_clinic/
 ├── dbt_dental_models/         # Transformation: staging → intermediate → marts
 ├── api/                       # FastAPI (routers, models, services)
 ├── frontend/                  # React app (src/pages, components, services)
+├── tools/
+│   └── mdc_cli/                   # mdc CLI — env orchestration, validate, run (pip install -e)
 ├── scripts/
 │   ├── mdc_aliases.ps1             # optional PowerShell aliases (load_project.ps1)
 │   ├── archive/                    # legacy environment_manager (Phase 5.5 reference)
@@ -177,10 +217,12 @@ dbt_dental_clinic/
 ```
 
 **Component READMEs:**  
+- [tools/mdc_cli/README.md](tools/mdc_cli/README.md) — `mdc` CLI: validate, run, deploy, env orchestration  
 - [etl_pipeline/README.md](etl_pipeline/README.md) — ETL architecture and run instructions  
 - [dbt_dental_models/README.md](dbt_dental_models/README.md) — dbt layers and development  
 - [api/README.md](api/README.md) — API env, security, deployment  
 - [frontend/README.md](frontend/README.md) — Frontend setup and env vars  
+- [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md) — env file inventory and loading rules  
 
 ## Synthetic data
 
@@ -194,5 +236,5 @@ Deployment is optional; the app can run locally against a PostgreSQL warehouse.
 
 **Backend (EC2 + ALB):** API can be run on EC2 behind an ALB with RDS PostgreSQL; see `docs/DEPLOYMENT_WORKFLOW.md` and deployment scripts in [`scripts/deployment/`](scripts/deployment/) (see [`scripts/README.md`](scripts/README.md)). Hosted sample API: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com); frontend: [https://dbtdentalclinic.com](https://dbtdentalclinic.com). Demo uses synthetic data only; no production OpenDental connection.
 
-**Environment files:** The repo uses many `.env` and `.env_*` files (API, ETL, dbt, frontend, Docker). For a single reference and inventory script, see [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md). Run `.\scripts\utils\list_env_files.ps1` to see which env files exist.
+**Environment:** Use `mdc … --env <stage>` for API, ETL, and dbt; see [Environment configuration](#environment-configuration) and [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md). On EC2, `mdc deploy api --env clinic` copies `api/.env_api_clinic` to the instance as `api/.env` for systemd.
 
