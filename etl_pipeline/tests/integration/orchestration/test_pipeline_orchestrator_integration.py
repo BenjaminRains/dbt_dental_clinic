@@ -6,7 +6,7 @@ Test Strategy:
     - Safety, error handling, actual data flow, all methods
     - Coverage: Integration scenarios and edge cases
     - Execution: < 10 seconds per component
-    - Environment: Real test databases, no production connections with FileConfigProvider
+    - Environment: Real test databases, no clinic connections with FileConfigProvider
     - Order Markers: Proper test execution order for data flow validation
     - Provider Usage: FileConfigProvider with real test configuration files
     - Settings Injection: Uses Settings with FileConfigProvider for real test environment
@@ -29,7 +29,7 @@ ETL Pipeline Context:
     - Manages complete data processing lifecycle with real databases
     - Coordinates between extraction, transformation, and loading stages
     - Provides monitoring and metrics collection with real data
-    - Implements FAIL FAST security to prevent accidental production usage
+    - Implements FAIL FAST security to prevent using the wrong ETL stage
     - Uses provider pattern for clean dependency injection with real configs
     - Optimized for dental clinic data processing workflows with real data
 """
@@ -401,7 +401,7 @@ class TestPipelineOrchestratorIntegration:
             - FAIL FAST behavior works correctly for all scenarios with real environment
             - Security measures are enforced with real environment validation
             - Clear error messages are provided for real environment issues
-            - No dangerous defaults to production with real environment
+            - No dangerous defaults to clinic with real environment
             - Environment validation works correctly with real .env_test file
             - Configuration validation works properly with real configuration files
             - Settings injection works with real environment validation

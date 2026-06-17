@@ -49,15 +49,15 @@ class GeneratorConfig:
     db_schema: str = "raw"
     
     # Data volumes
-    # Updated to match production ratios (based on opendental_analytics analysis)
-    # Production: 34,445 patients, 2.34 appts/patient, 22.84 procs/patient
-    # Demo: 10,000 patients (29% of production) with same ratios
-    num_clinics: int = 5  # Multi-clinic demo (production has 1 clinic)
-    num_providers: int = 12  # Demo size (production has 57)
-    num_operatories: int = 50  # 10 per clinic for multi-clinic demo (production has 16)
-    num_patients: int = 10000  # 29% of production (34,445)
-    num_appointments: int = 23379  # 2.34 per patient (production ratio)
-    num_procedures: int = 228365  # 22.84 per patient (production ratio)
+    # Updated to match clinic data ratios (based on opendental_analytics analysis)
+    # Clinic baseline: 34,445 patients, 2.34 appts/patient, 22.84 procs/patient
+    # Demo: 10,000 patients (29% of clinic volume) with same ratios
+    num_clinics: int = 5  # Multi-clinic demo (clinic stage has 1 clinic)
+    num_providers: int = 12  # Demo size (clinic stage has 57)
+    num_operatories: int = 50  # 10 per clinic for multi-clinic demo (clinic stage has 16)
+    num_patients: int = 10000  # 29% of clinic volume (34,445)
+    num_appointments: int = 23379  # 2.34 per patient (clinic ratio)
+    num_procedures: int = 228365  # 22.84 per patient (clinic ratio)
     
     # Date range (CRITICAL: dbt models filter to >= 2023-01-01)
     start_date: datetime = datetime(2023, 1, 1)
@@ -400,20 +400,20 @@ def main():
     
     # Get defaults from environment variables (if set)
     # Priority: CLI args > Environment variables > Hardcoded defaults
-    # SAFETY: Only use DEMO_POSTGRES_* variables, NEVER use POSTGRES_ANALYTICS_* (production database)
+    # SAFETY: Only use DEMO_POSTGRES_* variables, NEVER use POSTGRES_ANALYTICS_* (clinic warehouse)
     default_db_host = os.environ.get('DEMO_POSTGRES_HOST', 'localhost')
     default_db_port = int(os.environ.get('DEMO_POSTGRES_PORT', '5432'))
     default_db_name = os.environ.get('DEMO_POSTGRES_DB', 'opendental_demo')
     default_db_user = os.environ.get('DEMO_POSTGRES_USER', 'postgres')
     default_db_password = os.environ.get('DEMO_POSTGRES_PASSWORD', 'postgres')
     
-    # SAFETY CHECK: Warn if POSTGRES_ANALYTICS_* variables are set (production database)
+    # SAFETY CHECK: Warn if POSTGRES_ANALYTICS_* variables are set (clinic analytics warehouse)
     # This indicates we're in ETL clinic environment, which should NOT be used for synthetic data
     if os.environ.get('POSTGRES_ANALYTICS_DB'):
         logger.warning("⚠️  WARNING: POSTGRES_ANALYTICS_* environment variables detected!")
         logger.warning("   You appear to be in ETL clinic environment.")
         logger.warning("   This script ONLY writes to opendental_demo (synthetic data).")
-        logger.warning("   Make sure you're not accidentally targeting production database.")
+        logger.warning("   Make sure you're not accidentally targeting the clinic analytics warehouse.")
         logger.warning("   Using DEMO_POSTGRES_* variables or command-line arguments.")
     
     parser = argparse.ArgumentParser(

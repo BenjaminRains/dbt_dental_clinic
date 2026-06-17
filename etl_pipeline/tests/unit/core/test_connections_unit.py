@@ -27,7 +27,7 @@ ETL Context:
     - Supports MariaDB v11.6 source and PostgreSQL analytics warehouse
     - Uses provider pattern for clean dependency injection and test isolation
     - Implements Settings injection for environment-agnostic connections
-    - Enforces FAIL FAST security to prevent accidental production usage
+    - Enforces FAIL FAST security to prevent using the wrong ETL stage
 """
 import pytest
 from unittest.mock import patch, MagicMock
@@ -43,6 +43,7 @@ from etl_pipeline.config import (
 )
 from etl_pipeline.config.providers import DictConfigProvider
 from etl_pipeline.config.settings import Settings
+from tests.fixtures.env_fixtures import COMPLETE_TEST_ENV, COMPLETE_CLINIC_ENV
 from etl_pipeline.exceptions.configuration import ConfigurationError, EnvironmentError
 
 class TestFailFastSecurity:
@@ -133,18 +134,16 @@ class TestFailFastSecurity:
             - Validates Settings injection maintains safety in connection logic
             - Tests provider pattern integration with connection security
         """
-        # Create test provider without ETL_ENVIRONMENT
         test_provider = DictConfigProvider(
             env={
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_db',
                 'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
-                # Missing ETL_ENVIRONMENT and TEST_OPENDENTAL_SOURCE_HOST
-            }
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+            },
+            environment='test',
         )
-        
+        settings = Settings(environment='test', provider=test_provider)
         with pytest.raises(ConfigurationError, match="Missing or invalid required environment variables"):
-            settings = Settings(provider=test_provider)
             ConnectionFactory.get_source_connection(settings)
 
 
@@ -174,12 +173,11 @@ class TestConnectionFactoryUnit:
             # Create test provider with test environment configuration
             test_provider = DictConfigProvider(
                 env={
-                    'ETL_ENVIRONMENT': 'test',
+                    **COMPLETE_TEST_ENV,
                     'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
-                    'TEST_OPENDENTAL_SOURCE_PORT': '3306',
                     'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                     'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-                    'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass'
+                    'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
                 }
             )
             
@@ -196,15 +194,14 @@ class TestConnectionFactoryUnit:
         """
         Test source connection with missing environment variables using provider pattern.
         """
-        # Create test provider with missing required variables
         test_provider = DictConfigProvider(
             env={
                 'ETL_ENVIRONMENT': 'test',
-                # All required source vars missing
-            }
+            },
+            environment='test',
         )
-        with pytest.raises(ConfigurationError, match="Missing or invalid required environment variables") as exc_info:
-            settings = Settings(provider=test_provider)
+        settings = Settings(environment='test', provider=test_provider)
+        with pytest.raises(ConfigurationError, match="Missing or invalid required environment variables"):
             ConnectionFactory.get_source_connection(settings)
 
     def test_get_replication_connection_test_environment_with_provider(self):
@@ -230,12 +227,12 @@ class TestConnectionFactoryUnit:
             # Create test provider with test environment configuration
             test_provider = DictConfigProvider(
                 env={
-                    'ETL_ENVIRONMENT': 'test',
+                    **COMPLETE_TEST_ENV,
                     'TEST_MYSQL_REPLICATION_HOST': 'localhost',
                     'TEST_MYSQL_REPLICATION_PORT': '3306',
                     'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
                     'TEST_MYSQL_REPLICATION_USER': 'test_replication_user',
-                    'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass'
+                    'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
                 }
             )
             
@@ -252,15 +249,14 @@ class TestConnectionFactoryUnit:
         """
         Test replication connection with missing environment variables using provider pattern.
         """
-        # Create test provider with missing required variables
         test_provider = DictConfigProvider(
             env={
                 'ETL_ENVIRONMENT': 'test',
-                # All required replication vars missing
-            }
+            },
+            environment='test',
         )
-        with pytest.raises(ConfigurationError, match="Missing or invalid required environment variables") as exc_info:
-            settings = Settings(provider=test_provider)
+        settings = Settings(environment='test', provider=test_provider)
+        with pytest.raises(ConfigurationError, match="Missing or invalid required environment variables"):
             ConnectionFactory.get_replication_connection(settings)
 
     def test_get_analytics_connection_test_environment_with_provider(self):
@@ -286,13 +282,11 @@ class TestConnectionFactoryUnit:
             # Create test provider with test environment configuration
             test_provider = DictConfigProvider(
                 env={
-                    'ETL_ENVIRONMENT': 'test',
+                    **COMPLETE_TEST_ENV,
                     'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
-                    'TEST_POSTGRES_ANALYTICS_PORT': '5432',
                     'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                    'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
                     'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-                    'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
+                    'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass',
                 }
             )
             
@@ -328,12 +322,11 @@ class TestConnectionFactoryUnit:
             # Create test provider
             test_provider = DictConfigProvider(
                 env={
+                    **COMPLETE_TEST_ENV,
                     'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
-                    'TEST_POSTGRES_ANALYTICS_PORT': '5432',
                     'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
                     'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
                     'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass',
-                    'ETL_ENVIRONMENT': 'test'
                 }
             )
             
@@ -373,7 +366,7 @@ class TestConnectionFactoryUnit:
             - Environment-specific configuration loading
             
         ETL Pipeline Context:
-            - Production: Uses non-prefixed variables (OPENDENTAL_SOURCE_HOST)
+            - Clinic: Uses non-prefixed variables (OPENDENTAL_SOURCE_HOST)
             - Test: Uses TEST_ prefixed variables (TEST_OPENDENTAL_SOURCE_HOST)
             - Provider pattern ensures complete environment isolation
             - Settings injection maintains environment-agnostic connections
@@ -382,37 +375,36 @@ class TestConnectionFactoryUnit:
             mock_engine = MagicMock()
             mock_create_engine.return_value = mock_engine
             
-            # Production environment variables with provider pattern
-            prod_provider = DictConfigProvider(
+            # Clinic environment variables with provider pattern
+            clinic_provider = DictConfigProvider(
                 env={
-                    'OPENDENTAL_SOURCE_HOST': 'prod-host',
-                    'OPENDENTAL_SOURCE_PORT': '3306',
-                    'OPENDENTAL_SOURCE_DB': 'opendental',
+                    **COMPLETE_CLINIC_ENV,
+                    'OPENDENTAL_SOURCE_HOST': 'clinic-host',
                     'OPENDENTAL_SOURCE_USER': 'readonly_user',
                     'OPENDENTAL_SOURCE_PASSWORD': 'readonly_pass',
-                    'ETL_ENVIRONMENT': 'clinic'
-                }
+                },
+                environment='clinic',
             )
             
             # Test environment variables with provider pattern
             test_provider = DictConfigProvider(
                 env={
+                    **COMPLETE_TEST_ENV,
                     'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
-                    'TEST_OPENDENTAL_SOURCE_PORT': '3306',
                     'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
                     'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
                     'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                    'ETL_ENVIRONMENT': 'test'
-                }
+                },
+                environment='test',
             )
             
-            # Test production method with provider pattern
-            prod_settings = Settings(environment='clinic', provider=prod_provider)
-            ConnectionFactory.get_source_connection(prod_settings)
-            prod_call_args = mock_create_engine.call_args[0][0]
-            assert 'prod-host' in prod_call_args
-            assert 'readonly_user' in prod_call_args
-            assert 'opendental' in prod_call_args
+            # Test clinic stage with provider pattern
+            clinic_settings = Settings(environment='clinic', provider=clinic_provider)
+            ConnectionFactory.get_source_connection(clinic_settings)
+            clinic_call_args = mock_create_engine.call_args[0][0]
+            assert 'clinic-host' in clinic_call_args
+            assert 'readonly_user' in clinic_call_args
+            assert 'opendental' in clinic_call_args
             
             # Reset mock
             mock_create_engine.reset_mock()
@@ -443,7 +435,7 @@ class TestConnectionFactoryUnit:
         ETL Pipeline Context:
             - Prevents invalid database type usage in dental clinic ETL
             - Ensures only valid schemas are used for PostgreSQL analytics
-            - Type safety prevents configuration errors in production
+            - Type safety prevents configuration errors in clinic stage
             - Enables IDE support for database type autocomplete
         """
         # Test valid enum usage
@@ -492,18 +484,8 @@ class TestConnectionFactoryUnit:
         """
         test_provider = DictConfigProvider(
             env={
-                'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
-                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                **COMPLETE_TEST_ENV,
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_db',
-                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
-                'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-                'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-                'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-                'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass',
-                'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
-                'ETL_ENVIRONMENT': 'test'
             }
         )
         
@@ -540,11 +522,8 @@ class TestConnectionFactoryUnit:
         """
         test_provider = DictConfigProvider(
             env={
-                'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
+                **COMPLETE_TEST_ENV,
                 'TEST_OPENDENTAL_SOURCE_DB': 'test_db',
-                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
-                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
-                'ETL_ENVIRONMENT': 'test'
             }
         )
         

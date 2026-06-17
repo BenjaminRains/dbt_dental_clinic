@@ -1,20 +1,20 @@
 # tests/integration/scripts/analyze_opendental_schema/test_dbt_integration_integration.py
 
 """
-Integration tests for DBT model discovery with real production database connections.
+Integration tests for DBT model discovery with real clinic database connections.
 
-This module tests DBT model discovery against the actual production OpenDental database
+This module tests DBT model discovery against the actual clinic OpenDental database
 to validate real DBT model discovery, project structure analysis, and model categorization.
 
-Production Test Strategy:
-- Uses production database connections with readonly access
+Clinic integration test strategy:
+- Uses clinic database connections with readonly access
 - Tests real DBT model discovery with actual project structure
 - Validates model categorization with real project structure
 - Tests project structure analysis with real DBT project
 - Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
-- Real production DBT model discovery from actual project structure
+- Real clinic DBT model discovery from actual project structure
 - Staging model discovery from real project
 - Mart model discovery from real project
 - Intermediate model discovery from real project
@@ -23,10 +23,10 @@ Coverage Areas:
 - Project structure validation with real DBT project
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
-- Validates actual production database connections and DBT model discovery
+- Validates actual clinic database connections and DBT model discovery
 """
 
 import pytest
@@ -46,9 +46,9 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestDbtIntegrationIntegration:
-    """Integration tests for DBT model discovery with real production database connections."""
+    """Integration tests for DBT model discovery with real clinic database connections."""
     
     @classmethod
     def setup_class(cls):
@@ -77,10 +77,10 @@ class TestDbtIntegrationIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip("Production database connection failed")
+                    pytest.skip("Clinic database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"Production databases not available: {str(e)}")
+            pytest.skip(f"Clinic databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -96,29 +96,29 @@ class TestDbtIntegrationIntegration:
         elif 'OPENDENTAL_SOURCE_DB' in os.environ:
             del os.environ['OPENDENTAL_SOURCE_DB']
 
-    def test_production_dbt_model_discovery(self, production_settings_with_file_provider):
+    def test_clinic_dbt_model_discovery(self, clinic_settings_with_file_provider):
         """
-        Test production DBT model discovery with actual project structure.
+        Test clinic DBT model discovery with actual project structure.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and real project structure
+            Arrange: Set up real clinic database connection and real project structure
             Act: Call discover_dbt_models() method with real project
-            Assert: Verify DBT models are correctly discovered for production
+            Assert: Verify DBT models are correctly discovered for clinic stage
             
         Validates:
-            - Real production DBT model discovery from actual project structure
+            - Real clinic DBT model discovery from actual project structure
             - Staging model discovery from real project
             - Mart model discovery from real project
             - Intermediate model discovery from real project
             - Error handling for real project structure
         """
-        # Arrange: Set up real production database connection and real project structure
+        # Arrange: Set up real clinic database connection and real project structure
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Act: Call discover_dbt_models() method with real project
         dbt_models = analyzer.discover_dbt_models()
         
-        # Assert: Verify DBT models are correctly discovered for production
+        # Assert: Verify DBT models are correctly discovered for clinic stage
         assert isinstance(dbt_models, dict)
         assert 'staging' in dbt_models
         assert 'mart' in dbt_models

@@ -53,13 +53,13 @@ from etl_pipeline.exceptions.configuration import ConfigurationError, Environmen
 from tests.fixtures.connection_fixtures import (
     mock_connection_factory_with_settings,
     test_connection_settings,
-    production_connection_settings
+    clinic_connection_settings
 )
 from tests.fixtures.env_fixtures import (
     test_settings,
-    production_settings,
+    clinic_settings,
     test_env_provider,
-    production_env_provider
+    clinic_env_provider
 )
 from tests.fixtures.config_fixtures import (
     test_pipeline_config,

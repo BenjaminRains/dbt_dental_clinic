@@ -1,11 +1,11 @@
 """
-Production Data Fixtures for E2E Testing
+Clinic Data Fixtures for E2E Testing
 
 This module provides fixtures for safely working with clinic data in E2E tests.
 All fixtures ensure readonly access to clinic and complete isolation of test data.
 
 Features:
-- Safe production data sampling with readonly access
+- Safe clinic data sampling with readonly access
 - Data anonymization for privacy protection
 - Pipeline validation across all stages
 - Automatic cleanup of test databases only
@@ -23,12 +23,12 @@ logger = logging.getLogger(__name__)
 
 
 @pytest.fixture(scope="session")
-def production_settings():
+def clinic_settings():
     """
-    Production settings for readonly access to source database.
+    Clinic settings for readonly access to source database.
     
     Uses .env_clinic file with non-prefixed environment variables (replaces legacy .env_production).
-    Provides readonly access to production OpenDental database.
+    Provides readonly access to clinic OpenDental database.
     """
     return Settings(environment='clinic')
 
@@ -44,7 +44,7 @@ def test_settings():
     return Settings(environment='test')
 
 
-# Removed production_data_sampler fixture - ProductionDataSampler class no longer exists
+# Removed clinic_data_sampler fixture - ClinicDataSampler class no longer exists
 
 
 # Removed data_anonymizer fixture - DataAnonymizer class no longer exists
@@ -60,7 +60,7 @@ def pipeline_validator(test_settings):
     - Test analytics database
     - Cross-database consistency
     """
-    from ..e2e.test_production_data_pipeline_e2e import PipelineDataValidator
+    from ..e2e.test_clinic_data_pipeline_e2e import PipelineDataValidator
     return PipelineDataValidator(test_settings)
 
 
@@ -69,10 +69,10 @@ def test_data_cleanup(test_settings):
     """
     Fixture for cleaning up test data.
     
-    SAFETY: Only cleans test databases, never touches production.
+    SAFETY: Only cleans test databases, never touches clinic source.
     Automatically cleans up after test session completion.
     """
-    from ..e2e.test_production_data_pipeline_e2e import TestDataCleanup
+    from ..e2e.test_clinic_data_pipeline_e2e import TestDataCleanup
     
     cleanup = TestDataCleanup(test_settings)
     yield cleanup
@@ -82,15 +82,15 @@ def test_data_cleanup(test_settings):
 
 
 @pytest.fixture(scope="session")
-def production_database_engines(production_settings):
+def clinic_database_engines(clinic_settings):
     """
-    Fixture providing production database engines for readonly access.
+    Fixture providing clinic database engines for readonly access.
     
     Returns:
-        Dict with readonly engines for production databases
+        Dict with readonly engines for clinic databases
     """
     return {
-        'source': ConnectionFactory.get_source_connection(production_settings)
+        'source': ConnectionFactory.get_source_connection(clinic_settings)
     }
 
 
@@ -111,10 +111,10 @@ def test_database_engines(test_settings):
     }
 
 
-# Removed sampled_dental_clinic_data fixture - depends on ProductionDataSampler
+# Removed sampled_dental_clinic_data fixture - depends on ClinicDataSampler
 
 
-# Removed large_sampled_dental_clinic_data fixture - depends on ProductionDataSampler
+# Removed large_sampled_dental_clinic_data fixture - depends on ClinicDataSampler
 
 
 @pytest.fixture(scope="function")

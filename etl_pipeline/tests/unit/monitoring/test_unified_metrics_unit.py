@@ -26,7 +26,7 @@ ETL Context:
 - Supports dental clinic data processing metrics
 - Uses provider pattern for clean dependency injection
 - Implements Settings injection for environment-agnostic connections
-- Enforces FAIL FAST security to prevent accidental production usage
+- Enforces FAIL FAST security to prevent using the wrong ETL stage
 - Optimized for dental clinic data volumes and processing patterns
 """
 
@@ -676,7 +676,7 @@ class TestUnifiedMetricsCollectorUnit:
         Validates:
             - System fails fast when ETL_ENVIRONMENT not set
             - Clear error message is provided
-            - No dangerous defaults to production
+            - No dangerous defaults to clinic
             - Security requirement is enforced
         """
         import os

@@ -194,8 +194,8 @@ def test_env_vars():
 
 
 @pytest.fixture
-def production_env_vars():
-    """Clinic (production-like) environment variables following connection architecture.
+def clinic_env_vars():
+    """Clinic stage environment variables following connection architecture.
     
     This fixture provides clinic environment variables that conform to the connection architecture:
     - Uses non-prefixed variables for clinic environment (replaces legacy production)
@@ -207,22 +207,22 @@ def production_env_vars():
         # Environment declaration (required for fail-fast validation)
         'ETL_ENVIRONMENT': 'clinic',
         
-        # OpenDental Source (Production) - following architecture naming
-        'OPENDENTAL_SOURCE_HOST': 'prod-source-host',
+        # OpenDental Source (Clinic) - following architecture naming
+        'OPENDENTAL_SOURCE_HOST': 'clinic-source-host',
         'OPENDENTAL_SOURCE_PORT': '3306',
         'OPENDENTAL_SOURCE_DB': 'opendental',
         'OPENDENTAL_SOURCE_USER': 'source_user',
         'OPENDENTAL_SOURCE_PASSWORD': 'source_pass',
         
-        # MySQL Replication (Production) - following architecture naming
-        'MYSQL_REPLICATION_HOST': 'prod-repl-host',
+        # MySQL Replication (Clinic) - following architecture naming
+        'MYSQL_REPLICATION_HOST': 'clinic-repl-host',
         'MYSQL_REPLICATION_PORT': '3306',
         'MYSQL_REPLICATION_DB': 'opendental_replication',
         'MYSQL_REPLICATION_USER': 'repl_user',
         'MYSQL_REPLICATION_PASSWORD': 'repl_pass',
         
-        # PostgreSQL Analytics (Production) - following architecture naming
-        'POSTGRES_ANALYTICS_HOST': 'prod-analytics-host',
+        # PostgreSQL Analytics (Clinic) - following architecture naming
+        'POSTGRES_ANALYTICS_HOST': 'clinic-analytics-host',
         'POSTGRES_ANALYTICS_PORT': '5432',
         'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
         'POSTGRES_ANALYTICS_SCHEMA': 'raw',
@@ -249,18 +249,18 @@ def test_config_provider(test_pipeline_config, test_tables_config, test_env_vars
 
 
 @pytest.fixture
-def production_config_provider(valid_pipeline_config, complete_tables_config, production_env_vars):
-    """Production configuration provider following the provider pattern.
+def clinic_config_provider(valid_pipeline_config, complete_tables_config, clinic_env_vars):
+    """Clinic configuration provider following the provider pattern.
     
     This fixture implements the DictConfigProvider pattern for clinic-like testing:
-    - Uses DictConfigProvider with production-like configuration
+    - Uses DictConfigProvider with clinic configuration
     - Provides injected configuration for integration testing
     - Supports dependency injection for configuration swapping
     """
     return DictConfigProvider(
         pipeline=valid_pipeline_config,
         tables=complete_tables_config,
-        env=production_env_vars
+        env=clinic_env_vars
     )
 
 
@@ -278,15 +278,15 @@ def test_settings(test_config_provider):
 
 
 @pytest.fixture
-def production_settings(production_config_provider):
-    """Production settings with provider injection following connection architecture.
+def clinic_settings(clinic_config_provider):
+    """Clinic settings with provider injection following connection architecture.
     
     This fixture implements the Settings injection pattern for clinic-like testing:
     - Uses Settings with provider injection for environment-agnostic operation
-    - Uses DictConfigProvider with production-like configuration
+    - Uses DictConfigProvider with clinic configuration
     - Supports dependency injection for integration testing
     """
-    return Settings(environment='clinic', provider=production_config_provider)
+    return Settings(environment='clinic', provider=clinic_config_provider)
 
 
 @pytest.fixture

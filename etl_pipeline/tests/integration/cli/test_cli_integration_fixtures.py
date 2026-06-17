@@ -9,7 +9,7 @@ TEST STRATEGY: Three-tier testing approach with provider pattern dependency inje
 - Settings Injection: All configuration via Settings(environment='test') for type safety and real test environment
 - Type Safety: Uses DatabaseType and PostgresSchema enums for all database config access
 - FAIL FAST: Tests validate system fails if ETL_ENVIRONMENT is not set (critical security requirement)
-- Real Connections: Uses real test database connections (not production)
+- Real Connections: Uses real test database connections (not clinic stage)
 - Dental Clinic Context: All tests assume OpenDental schema and typical dental clinic data flows
 - Order Markers: Proper test execution order for ETL data flow validation
 
@@ -244,7 +244,7 @@ class TestCLIIntegrationWithFixtures:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic stage)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Order markers for proper ETL data flow validation
     """
@@ -604,7 +604,7 @@ class TestCLIConfigurationIntegrationWithFixtures:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic stage)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Order markers for proper ETL data flow validation
     """

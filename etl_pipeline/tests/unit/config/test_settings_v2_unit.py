@@ -13,6 +13,7 @@ from etl_pipeline.config.settings_v2 import (
     ETLProfile,
     connection_config_dict,
     load_etl_connection_settings,
+    load_etl_connection_settings_from_env,
     load_etl_env_dict,
     resolve_etl_profile,
 )
@@ -173,6 +174,24 @@ class TestSettingsV2:
         assert analytics["database"] == "analytics_db"
         assert analytics["schema"] == "raw"
         assert provider._connection_settings is not None
+
+    @pytest.mark.unit
+    @pytest.mark.provider_pattern
+    def test_dict_provider_uses_typed_connections_from_env(self):
+        """DictConfigProvider validates injected env via settings_v2."""
+        from etl_pipeline.config.providers import DictConfigProvider
+        from etl_pipeline.config.settings import DatabaseType, Settings
+
+        env = _test_env_vars("test")
+        provider = DictConfigProvider(env=env, environment="test")
+        settings = Settings(environment="test", provider=provider)
+
+        assert settings.validate_configs() is True
+        assert provider._connection_settings is not None
+        assert load_etl_connection_settings_from_env(env, environment="test").stage.value == "test"
+        analytics = settings.get_database_config(DatabaseType.ANALYTICS)
+        assert analytics["host"] == "localhost"
+        assert analytics["database"] == "analytics_db"
 
     @pytest.mark.unit
     @pytest.mark.provider_pattern

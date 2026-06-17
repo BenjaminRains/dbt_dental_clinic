@@ -26,6 +26,69 @@ from etl_pipeline.config import (
 from etl_pipeline.config.providers import DictConfigProvider
 
 
+COMPLETE_TEST_ENV = {
+    'ETL_ENVIRONMENT': 'test',
+    'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
+    'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+    'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
+    'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
+    'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
+    'TEST_MYSQL_REPLICATION_HOST': 'localhost',
+    'TEST_MYSQL_REPLICATION_PORT': '3305',
+    'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
+    'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+    'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
+    'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
+    'TEST_POSTGRES_ANALYTICS_PORT': '5432',
+    'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
+    'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
+    'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
+    'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass',
+}
+
+
+COMPLETE_LOCAL_ENV = {
+    'ETL_ENVIRONMENT': 'local',
+    'OPENDENTAL_SOURCE_HOST': 'local-source.example.com',
+    'OPENDENTAL_SOURCE_PORT': '3306',
+    'OPENDENTAL_SOURCE_DB': 'opendental',
+    'OPENDENTAL_SOURCE_USER': 'local_source_user',
+    'OPENDENTAL_SOURCE_PASSWORD': 'local_source_pass',
+    'MYSQL_REPLICATION_HOST': 'localhost',
+    'MYSQL_REPLICATION_PORT': '3305',
+    'MYSQL_REPLICATION_DB': 'opendental_replication',
+    'MYSQL_REPLICATION_USER': 'local_repl_user',
+    'MYSQL_REPLICATION_PASSWORD': 'local_repl_pass',
+    'POSTGRES_ANALYTICS_HOST': 'localhost',
+    'POSTGRES_ANALYTICS_PORT': '5432',
+    'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+    'POSTGRES_ANALYTICS_SCHEMA': 'raw',
+    'POSTGRES_ANALYTICS_USER': 'local_analytics_user',
+    'POSTGRES_ANALYTICS_PASSWORD': 'local_analytics_pass',
+}
+
+
+COMPLETE_CLINIC_ENV = {
+    'ETL_ENVIRONMENT': 'clinic',
+    'OPENDENTAL_SOURCE_HOST': 'clinic-source.example.com',
+    'OPENDENTAL_SOURCE_PORT': '3306',
+    'OPENDENTAL_SOURCE_DB': 'opendental',
+    'OPENDENTAL_SOURCE_USER': 'clinic_source_user',
+    'OPENDENTAL_SOURCE_PASSWORD': 'clinic_source_pass',
+    'MYSQL_REPLICATION_HOST': 'localhost',
+    'MYSQL_REPLICATION_PORT': '3305',
+    'MYSQL_REPLICATION_DB': 'opendental_replication',
+    'MYSQL_REPLICATION_USER': 'clinic_repl_user',
+    'MYSQL_REPLICATION_PASSWORD': 'clinic_repl_pass',
+    'POSTGRES_ANALYTICS_HOST': 'localhost',
+    'POSTGRES_ANALYTICS_PORT': '5432',
+    'POSTGRES_ANALYTICS_DB': 'opendental_analytics',
+    'POSTGRES_ANALYTICS_SCHEMA': 'raw',
+    'POSTGRES_ANALYTICS_USER': 'clinic_analytics_user',
+    'POSTGRES_ANALYTICS_PASSWORD': 'clinic_analytics_pass',
+}
+
+
 @pytest.fixture(autouse=True)
 def reset_global_settings():
     """Reset global settings before and after each test for proper isolation."""
@@ -44,32 +107,7 @@ def test_env_vars():
     - Matches the .env_test file structure
     - Supports the provider pattern for dependency injection
     """
-    return {
-        # Environment declaration (required for fail-fast validation)
-        'ETL_ENVIRONMENT': 'test',
-        
-        # OpenDental Source (Test) - following architecture naming
-        'TEST_OPENDENTAL_SOURCE_HOST': 'localhost',
-        'TEST_OPENDENTAL_SOURCE_PORT': '3306',
-        'TEST_OPENDENTAL_SOURCE_DB': 'test_opendental',
-        'TEST_OPENDENTAL_SOURCE_USER': 'test_source_user',
-        'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_source_pass',
-        
-        # MySQL Replication (Test) - following architecture naming
-        'TEST_MYSQL_REPLICATION_HOST': 'localhost',
-        'TEST_MYSQL_REPLICATION_PORT': '3305',
-        'TEST_MYSQL_REPLICATION_DB': 'test_opendental_replication',
-        'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
-        'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
-        
-        # PostgreSQL Analytics (Test) - following architecture naming
-        'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
-        'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-        'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-        'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
-        'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-        'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
-    }
+    return dict(COMPLETE_TEST_ENV)
 
 
 
@@ -93,8 +131,8 @@ def test_env_provider(test_env_vars):
 
 
 @pytest.fixture
-def production_env_provider(production_env_vars):
-    """Production environment provider following the provider pattern.
+def clinic_env_provider(clinic_env_vars):
+    """Clinic environment provider following the provider pattern.
     
     This fixture implements the DictConfigProvider pattern for clinic environment:
     - Uses DictConfigProvider with clinic environment variables
@@ -104,7 +142,7 @@ def production_env_provider(production_env_vars):
     return DictConfigProvider(
         pipeline={},
         tables={'tables': {}},
-        env=production_env_vars
+        env=clinic_env_vars
     )
 
 
@@ -122,15 +160,15 @@ def test_settings(test_env_provider):
 
 
 @pytest.fixture
-def production_settings(production_env_provider):
-    """Production settings with provider injection following connection architecture.
+def clinic_settings(clinic_env_provider):
+    """Clinic settings with provider injection following connection architecture.
     
     This fixture implements the Settings injection pattern for clinic environment:
     - Uses Settings with provider injection for environment-agnostic operation
     - Uses DictConfigProvider with clinic environment variables
     - Supports dependency injection for integration testing
     """
-    return Settings(environment='clinic', provider=production_env_provider)
+    return Settings(environment='clinic', provider=clinic_env_provider)
 
 
 @pytest.fixture
@@ -164,31 +202,31 @@ def mock_env_test_settings(test_env_provider):
 
 
 @pytest.fixture
-def production_settings_with_config(production_env_vars, valid_pipeline_config, complete_tables_config):
-    """Create production settings with configuration using provider pattern.
+def clinic_settings_with_config(clinic_env_vars, valid_pipeline_config, complete_tables_config):
+    """Create clinic settings with configuration using provider pattern.
     
-    This fixture demonstrates the provider pattern for production configuration:
-    - Uses DictConfigProvider with production-like configuration
+    This fixture demonstrates the provider pattern for clinic configuration:
+    - Uses DictConfigProvider with clinic configuration
     - Provides injected configuration for integration testing
     - Supports dependency injection for configuration swapping
     """
-    production_provider = DictConfigProvider(
+    clinic_provider = DictConfigProvider(
         pipeline=valid_pipeline_config,
         tables=complete_tables_config,
-        env=production_env_vars
+        env=clinic_env_vars
     )
-    return Settings(environment='clinic', provider=production_provider)
+    return Settings(environment='clinic', provider=clinic_provider)
 
 
 @pytest.fixture
-def production_settings_with_file_provider(load_production_environment_file):
-    """Production-like settings with FileConfigProvider using loaded .env_clinic file.
+def clinic_settings_with_file_provider(load_clinic_environment_file):
+    """Clinic settings with FileConfigProvider using loaded .env_clinic file.
     
     This fixture creates settings using FileConfigProvider with the actual
     .env_clinic file, which is what integration tests need for real clinic
     database connections (replaces legacy .env_production).
     
-    This is different from the production_settings fixture which uses DictConfigProvider
+    This is different from the clinic_settings fixture which uses DictConfigProvider
     with hardcoded values for unit testing.
     """
     from etl_pipeline.config.providers import FileConfigProvider
@@ -281,12 +319,12 @@ def load_test_environment_file():
 
 
 @pytest.fixture
-def load_production_environment_file():
+def load_clinic_environment_file():
     """Load environment variables from .env_clinic file for clinic integration tests.
     
     This fixture loads the actual .env_clinic file and sets the environment variables
     in os.environ for integration tests that need real clinic database connections
-    (replaces legacy .env_production). Fixture name kept for backward compatibility.
+    (replaces legacy .env_production).
     """
     from pathlib import Path
     from dotenv import load_dotenv
@@ -406,7 +444,7 @@ def environment_detection_test_cases():
     
     This fixture provides test cases that follow the connection architecture:
     - Uses ETL_ENVIRONMENT for environment detection
-    - Follows fail-fast validation (no defaults to production)
+    - Follows fail-fast validation (no defaults to clinic)
     - Supports provider pattern for configuration loading
     """
     return [

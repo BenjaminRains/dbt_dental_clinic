@@ -34,90 +34,6 @@ class PostgresSchema(Enum):
 
 class Settings:
     """Clean configuration settings manager with fail-fast validation."""
-    
-    # Environment variable mappings for each database type and environment
-    # These map to the actual variable names in the .env files
-    ENV_MAPPINGS = {
-        'local': {
-            DatabaseType.SOURCE: {
-                'host': 'OPENDENTAL_SOURCE_HOST',
-                'port': 'OPENDENTAL_SOURCE_PORT',
-                'database': 'OPENDENTAL_SOURCE_DB',
-                'user': 'OPENDENTAL_SOURCE_USER',
-                'password': 'OPENDENTAL_SOURCE_PASSWORD'
-            },
-            DatabaseType.REPLICATION: {
-                'host': 'MYSQL_REPLICATION_HOST',
-                'port': 'MYSQL_REPLICATION_PORT',
-                'database': 'MYSQL_REPLICATION_DB',
-                'user': 'MYSQL_REPLICATION_USER',
-                'password': 'MYSQL_REPLICATION_PASSWORD'
-            },
-            DatabaseType.ANALYTICS: {
-                'host': 'POSTGRES_ANALYTICS_HOST',
-                'port': 'POSTGRES_ANALYTICS_PORT',
-                'database': 'POSTGRES_ANALYTICS_DB',
-                'schema': 'POSTGRES_ANALYTICS_SCHEMA',
-                'user': 'POSTGRES_ANALYTICS_USER',
-                'password': 'POSTGRES_ANALYTICS_PASSWORD'
-            }
-        },
-        'clinic': {
-            DatabaseType.SOURCE: {
-                'host': 'OPENDENTAL_SOURCE_HOST',
-                'port': 'OPENDENTAL_SOURCE_PORT',
-                'database': 'OPENDENTAL_SOURCE_DB',
-                'user': 'OPENDENTAL_SOURCE_USER',
-                'password': 'OPENDENTAL_SOURCE_PASSWORD'
-            },
-            DatabaseType.REPLICATION: {
-                'host': 'MYSQL_REPLICATION_HOST',
-                'port': 'MYSQL_REPLICATION_PORT',
-                'database': 'MYSQL_REPLICATION_DB',
-                'user': 'MYSQL_REPLICATION_USER',
-                'password': 'MYSQL_REPLICATION_PASSWORD'
-            },
-            DatabaseType.ANALYTICS: {
-                'host': 'POSTGRES_ANALYTICS_HOST',
-                'port': 'POSTGRES_ANALYTICS_PORT',
-                'database': 'POSTGRES_ANALYTICS_DB',
-                'schema': 'POSTGRES_ANALYTICS_SCHEMA',
-                'user': 'POSTGRES_ANALYTICS_USER',
-                'password': 'POSTGRES_ANALYTICS_PASSWORD'
-            }
-        },
-        'test': {
-            DatabaseType.SOURCE: {
-                'host': 'TEST_OPENDENTAL_SOURCE_HOST',
-                'port': 'TEST_OPENDENTAL_SOURCE_PORT',
-                'database': 'TEST_OPENDENTAL_SOURCE_DB',
-                'user': 'TEST_OPENDENTAL_SOURCE_USER',
-                'password': 'TEST_OPENDENTAL_SOURCE_PASSWORD'
-            },
-            DatabaseType.REPLICATION: {
-                'host': 'TEST_MYSQL_REPLICATION_HOST',
-                'port': 'TEST_MYSQL_REPLICATION_PORT',
-                'database': 'TEST_MYSQL_REPLICATION_DB',
-                'user': 'TEST_MYSQL_REPLICATION_USER',
-                'password': 'TEST_MYSQL_REPLICATION_PASSWORD'
-            },
-            DatabaseType.ANALYTICS: {
-                'host': 'TEST_POSTGRES_ANALYTICS_HOST',
-                'port': 'TEST_POSTGRES_ANALYTICS_PORT',
-                'database': 'TEST_POSTGRES_ANALYTICS_DB',
-                'schema': 'TEST_POSTGRES_ANALYTICS_SCHEMA',
-                'user': 'TEST_POSTGRES_ANALYTICS_USER',
-                'password': 'TEST_POSTGRES_ANALYTICS_PASSWORD'
-            }
-        }
-    }
-    
-    # Required variable structure for each database type
-    REQUIRED_VARS = {
-        DatabaseType.SOURCE: ['host', 'port', 'database', 'user', 'password'],
-        DatabaseType.REPLICATION: ['host', 'port', 'database', 'user', 'password'],
-        DatabaseType.ANALYTICS: ['host', 'port', 'database', 'schema', 'user', 'password']
-    }
 
     @staticmethod
     def etl_pipeline_root() -> Path:
@@ -153,12 +69,10 @@ class Settings:
         # Cache
         self._connection_cache = {}
         
-        # Only validate environment if using DictConfigProvider (production uses pydantic in FileConfigProvider)
-        if not self._uses_dict_provider() and not self._typed_connection_settings():
-            self._validate_environment()
+        from .providers import DictConfigProvider
 
-    def _uses_dict_provider(self) -> bool:
-        return hasattr(self.provider, "configs")
+        if not isinstance(self.provider, DictConfigProvider) and not self._typed_connection_settings():
+            self._validate_environment()
 
     def _typed_connection_settings(self):
         return getattr(self.provider, "_connection_settings", None)
@@ -284,40 +198,21 @@ class Settings:
         return self.get_analytics_connection_config(PostgresSchema.MARTS)
     
     def _get_base_config(self, db_type: DatabaseType) -> Dict:
-        """Get base configuration from typed settings or environment variables."""
+        """Get base configuration from pydantic-validated connection settings."""
         typed = self._typed_connection_settings()
         if typed is not None:
             from .settings_v2 import connection_config_dict
 
             return connection_config_dict(typed, db_type.value)
 
-        env_mapping = self.ENV_MAPPINGS[self.environment][db_type]
-        config = {}
-        missing_keys = []
-        invalid_values = {}
-        
-        for config_key, env_var in env_mapping.items():
-            value = self._env_vars.get(env_var)
-            if not value:
-                missing_keys.append(env_var)
-                continue
-            if config_key == 'port' and value:
-                try:
-                    value = int(value)
-                except ValueError:
-                    invalid_values[env_var] = value
-                    continue
-            config[config_key] = value
-        
-        if missing_keys or invalid_values:
-            raise ConfigurationError(
-                message=f"Missing or invalid required environment variables for {db_type.value} database in {self.environment} environment.",
-                config_file=f".env_{self.environment}",
-                missing_keys=missing_keys if missing_keys else None,
-                invalid_values=invalid_values if invalid_values else None,
-                details={"db_type": db_type.value, "environment": self.environment}
-            )
-        return config
+        raise ConfigurationError(
+            message=(
+                f"Missing or invalid required environment variables for "
+                f"{db_type.value} database in {self.environment} environment."
+            ),
+            config_file=f".env_{self.environment}",
+            details={"db_type": db_type.value, "environment": self.environment},
+        )
     
     def _add_connection_defaults(self, config: Dict, db_type: DatabaseType):
         """Add default connection parameters based on database type."""
@@ -336,24 +231,13 @@ class Settings:
         if self._typed_connection_settings() is not None:
             return True
 
-        missing_vars = []
-        
-        for db_type, env_mapping in self.ENV_MAPPINGS[self.environment].items():
-            for env_var in env_mapping.values():
-                # Use the variable name as defined in the loaded .env file
-                value = self._env_vars.get(env_var)
-                
-                if not value:
-                    missing_vars.append(f"{db_type.value}: {env_var}")
-        
-        if missing_vars:
-            logger.error(f"Missing required variables for {self.environment} environment:")
-            for var in missing_vars:
-                logger.error(f"  - {var}")
-            logger.error(f"Please check your .env_{self.environment} file")
-            return False
-        
-        return True
+        logger.error(
+            "Missing required connection settings for %s environment. "
+            "Check .env_%s or injected env dict.",
+            self.environment,
+            self.environment,
+        )
+        return False
     
     # Table configuration methods (keep existing functionality)
     def get_pipeline_setting(self, key: str, default=None):

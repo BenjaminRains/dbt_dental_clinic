@@ -30,7 +30,7 @@ ETL Context:
 - Supports dental clinic data structure adaptation
 - Uses provider pattern for clean dependency injection
 - Implements Settings injection for environment-agnostic connections
-- Enforces FAIL FAST security to prevent accidental production usage
+- Enforces FAIL FAST security to prevent using the wrong ETL stage
 - Optimized for dental clinic data structure patterns
 - Handles complex type conversions and schema validation
 
@@ -265,13 +265,13 @@ class TestPostgresSchemaInitialization:
         Validates:
             - FAIL FAST behavior when ETL_ENVIRONMENT not set
             - Clear error message for missing environment
-            - No dangerous defaults to production
+            - No dangerous defaults to clinic
             - Security requirement enforcement
             - Multiple initialization attempts
             
         ETL Pipeline Context:
             - Critical security requirement for ETL pipeline
-            - Prevents accidental production usage
+            - Prevents using the wrong ETL stage
             - Enforces explicit environment declaration
             - Uses FAIL FAST for safety
         """

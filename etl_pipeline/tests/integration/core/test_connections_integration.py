@@ -51,7 +51,7 @@ from etl_pipeline.core.connections import (
 # Import fixtures for test data
 from tests.fixtures.connection_fixtures import (
     test_connection_config,
-    production_connection_config
+    clinic_connection_config
 )
 
 # Import custom exceptions
@@ -378,7 +378,7 @@ class TestConnectionFactoryIntegration:
             - Test environment variable loading (.env_test)
             
         ETL Pipeline Context:
-            - Error handling for production ETL reliability
+            - Error handling for clinic ETL reliability
             - Clear error messages for troubleshooting
             - Graceful degradation for connection failures
             - Uses FileConfigProvider for real test environment
@@ -571,7 +571,7 @@ class TestConnectionManagerIntegration:
             
         ETL Pipeline Context:
             - Rate limiting prevents overwhelming source databases
-            - Respectful behavior for production ETL operations
+            - Respectful behavior for clinic ETL operations
             - Configurable for different database environments
             - Uses FileConfigProvider for real test environment
         """
@@ -658,7 +658,7 @@ class TestConnectionManagerIntegration:
             - Test environment variable loading (.env_test)
             
         ETL Pipeline Context:
-            - Error recovery for production ETL reliability
+            - Error recovery for clinic ETL reliability
             - Resource cleanup prevents connection leaks
             - Fresh connections prevent stale connection issues
             - Uses FileConfigProvider for real test environment
@@ -761,7 +761,7 @@ class TestConnectionArchitectureIntegration:
             - Enums provide compile-time validation
             - Prevents runtime errors from invalid types
             - IDE support for autocomplete and refactoring
-            - Type safety for production ETL reliability
+            - Type safety for clinic ETL reliability
         """
         try:
             # Get settings for environment-agnostic connections
@@ -853,7 +853,7 @@ class TestConnectionArchitectureIntegration:
         ETL Pipeline Context:
             - Environment separation prevents configuration pollution
             - Test environment uses TEST_ prefixed variables
-            - Production environment uses non-prefixed variables
+            - Clinic stage uses non-prefixed variables
             - FAIL FAST if ETL_ENVIRONMENT not set
         """
         try:
@@ -887,14 +887,14 @@ class TestConnectionArchitectureIntegration:
         Validates:
             - System fails immediately if ETL_ENVIRONMENT not set
             - Clear error message for missing environment
-            - No defaulting to production when environment undefined
+            - No defaulting to clinic when environment undefined
             - Security requirement enforcement
             - Provider pattern integration with FAIL FAST
             
         ETL Pipeline Context:
-            - FAIL FAST prevents dangerous defaults to production
+            - FAIL FAST prevents dangerous defaults to clinic
             - Clear error messages for troubleshooting
-            - Security requirement for production ETL operations
+            - Security requirement for clinic ETL operations
             - Provider pattern integration with FAIL FAST
         """
         import os

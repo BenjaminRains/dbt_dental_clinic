@@ -8,7 +8,7 @@ logging-related test data.
 Follows the connection architecture patterns:
 - Uses provider pattern for dependency injection
 - Uses Settings integration for environment-specific logging
-- Uses environment separation for test vs production logging
+- Uses environment separation for test vs clinic logging
 - Uses unified interface with get_logger and ETLLogger
 """
 
