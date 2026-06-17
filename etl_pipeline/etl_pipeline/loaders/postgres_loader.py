@@ -42,6 +42,7 @@ import os
 from dataclasses import dataclass
 from enum import Enum
 import time
+from concurrent.futures import ThreadPoolExecutor, as_completed
 from sqlalchemy import text
 from sqlalchemy.engine import Engine
 
@@ -568,49 +569,170 @@ class ParallelLoadStrategy(LoadStrategy):
     - Process chunks in parallel using ThreadPoolExecutor
     - Aggregate results from all threads
     
-    BEST FOR:
-    - Massive tables > 50M rows
-    - Systems with multiple CPU cores
-    - When load time is critical
-    
-    PERFORMANCE:
-    - Fastest for massive datasets (if CPU/network allows)
-    - Memory usage: O(num_workers × chunk_size)
-    - Complexity: Requires coordination between threads
-    - Risk: Can overwhelm source/target databases
+    Falls back to the configured strategy when incremental load, no primary key,
+    or PK bounds cannot be determined.
     """
     
+    def __init__(
+        self,
+        source_engine: Engine,
+        target_engine: Engine,
+        target_schema: str,
+        bulk_insert_method: Any = None,
+        fallback_strategy: Optional[LoadStrategy] = None,
+        num_workers: int = 4,
+    ):
+        super().__init__(source_engine, target_engine, target_schema, bulk_insert_method)
+        self.fallback_strategy = fallback_strategy
+        self.num_workers = max(1, min(num_workers, 16))
+
+    def _replication_db(self) -> str:
+        return self.source_engine.url.database
+
+    def _get_pk_bounds(self, table_name: str, pk_col: str) -> Tuple[Optional[int], Optional[int]]:
+        db = self._replication_db()
+        with self.source_engine.connect() as conn:
+            row = conn.execute(
+                text(
+                    f"SELECT MIN(`{pk_col}`), MAX(`{pk_col}`) "
+                    f"FROM `{db}`.`{table_name}` WHERE `{pk_col}` IS NOT NULL"
+                )
+            ).fetchone()
+        if not row or row[0] is None or row[1] is None:
+            return None, None
+        return int(row[0]), int(row[1])
+
+    @staticmethod
+    def _split_pk_ranges(min_pk: int, max_pk: int, num_workers: int) -> List[Tuple[int, int]]:
+        span = max_pk - min_pk + 1
+        if span <= num_workers:
+            return [(pk, pk) for pk in range(min_pk, max_pk + 1)]
+        chunk_size = max(1, span // num_workers)
+        ranges: List[Tuple[int, int]] = []
+        start = min_pk
+        for idx in range(num_workers):
+            end = start + chunk_size - 1 if idx < num_workers - 1 else max_pk
+            ranges.append((start, end))
+            start = end + 1
+        return ranges
+
+    def _load_chunk(
+        self,
+        load_prep: LoadPreparation,
+        pk_col: str,
+        low: int,
+        high: int,
+        batch_size: int,
+    ) -> int:
+        db = self._replication_db()
+        chunk_query = (
+            f"SELECT * FROM `{db}`.`{load_prep.table_name}` "
+            f"WHERE `{pk_col}` >= {low} AND `{pk_col}` <= {high}"
+        )
+        rows_loaded = 0
+        pending: List[Dict[str, Any]] = []
+        with self.source_engine.connect() as src_conn:
+            result = src_conn.execution_options(stream_results=True).execute(text(chunk_query))
+            column_names = list(result.keys())
+            for row in result:
+                pending.append(self._convert_row_to_dict(row, column_names))
+                if len(pending) >= batch_size:
+                    if not self.bulk_insert(
+                        load_prep.table_name, pending, chunk_size=batch_size, use_upsert=False
+                    ):
+                        raise RuntimeError("bulk_insert_optimized returned False")
+                    rows_loaded += len(pending)
+                    pending.clear()
+        if pending:
+            if not self.bulk_insert(
+                load_prep.table_name, pending, chunk_size=batch_size, use_upsert=False
+            ):
+                raise RuntimeError("bulk_insert_optimized returned False")
+            rows_loaded += len(pending)
+        return rows_loaded
+
     def execute(self, load_prep: LoadPreparation) -> LoadResult:
-        """
-        Execute parallel loading strategy with thread pool.
-        
-        IMPLEMENTATION NOTES:
-        - Calculate primary key ranges for chunks
-        - Use ThreadPoolExecutor with 4-8 workers
-        - Each worker processes one chunk
-        - Aggregate rows_loaded from all workers
-        - Handle partial failures (some chunks succeed, some fail)
-        """
+        """Execute parallel loading by PK range, or delegate to fallback strategy."""
         start_time = time.time()
         rows_loaded = 0
-        
+
+        if self.fallback_strategy is None:
+            return LoadResult(
+                success=False,
+                rows_loaded=0,
+                strategy_used="parallel",
+                duration=time.time() - start_time,
+                error="Parallel strategy has no fallback configured",
+            )
+
+        if not load_prep.should_truncate:
+            logger.info(
+                f"[ParallelStrategy] Incremental load for {load_prep.table_name}; using fallback"
+            )
+            return self.fallback_strategy.execute(load_prep)
+
+        pk_col = load_prep.primary_column
+        if not pk_col:
+            logger.warning(
+                f"[ParallelStrategy] No primary column for {load_prep.table_name}; using fallback"
+            )
+            return self.fallback_strategy.execute(load_prep)
+
         try:
-            logger.info(f"[ParallelStrategy] Loading {load_prep.table_name} with parallel workers")
-            
-            # TODO: Implement parallel loading logic
-            # 1. Determine primary key ranges
-            # 2. Split into N chunks (N = num_workers)
-            # 3. ThreadPoolExecutor: executor.submit(process_chunk, chunk_range)
-            # 4. Wait for all futures: as_completed(futures)
-            # 5. Aggregate results
-            
+            logger.info(
+                f"[ParallelStrategy] Loading {load_prep.table_name} with "
+                f"{self.num_workers} workers on `{pk_col}`"
+            )
+
+            if load_prep.should_truncate:
+                with self.target_engine.begin() as tgt_conn:
+                    tgt_conn.execute(
+                        text(f"TRUNCATE TABLE {self.target_schema}.{load_prep.table_name}")
+                    )
+
+            min_pk, max_pk = self._get_pk_bounds(load_prep.table_name, pk_col)
+            if min_pk is None:
+                logger.warning(
+                    f"[ParallelStrategy] No PK bounds for {load_prep.table_name}; using fallback"
+                )
+                return self.fallback_strategy.execute(load_prep)
+
+            ranges = self._split_pk_ranges(min_pk, max_pk, self.num_workers)
+            batch_size = max(1000, min(load_prep.batch_size, 25000))
+            errors: List[str] = []
+
+            with ThreadPoolExecutor(max_workers=self.num_workers) as executor:
+                futures = {
+                    executor.submit(
+                        self._load_chunk, load_prep, pk_col, low, high, batch_size
+                    ): (low, high)
+                    for low, high in ranges
+                }
+                for future in as_completed(futures):
+                    low, high = futures[future]
+                    try:
+                        rows_loaded += future.result()
+                    except Exception as exc:
+                        msg = f"chunk {low}-{high}: {exc}"
+                        logger.error(f"[ParallelStrategy] {load_prep.table_name} {msg}")
+                        errors.append(msg)
+
+            if errors:
+                return LoadResult(
+                    success=False,
+                    rows_loaded=rows_loaded,
+                    strategy_used="parallel",
+                    duration=time.time() - start_time,
+                    error="; ".join(errors),
+                )
+
             return LoadResult(
                 success=True,
                 rows_loaded=rows_loaded,
                 strategy_used="parallel",
-                duration=time.time() - start_time
+                duration=time.time() - start_time,
             )
-            
+
         except Exception as e:
             logger.error(f"[ParallelStrategy] Error loading {load_prep.table_name}: {str(e)}")
             return LoadResult(
@@ -618,7 +740,7 @@ class ParallelLoadStrategy(LoadStrategy):
                 rows_loaded=rows_loaded,
                 strategy_used="parallel",
                 duration=time.time() - start_time,
-                error=str(e)
+                error=str(e),
             )
 
 
@@ -707,33 +829,60 @@ class PostgresLoader:
         
         Strategies are stateless and reusable, so we create them once.
         """
+        standard = StandardLoadStrategy(
+            self.replication_engine,
+            self.analytics_engine,
+            self.analytics_schema,
+            self.bulk_insert_optimized,
+        )
+        streaming = StreamingLoadStrategy(
+            self.replication_engine,
+            self.analytics_engine,
+            self.analytics_schema,
+            self.bulk_insert_optimized,
+        )
+        copy_csv = CopyCSVLoadStrategy(
+            self.replication_engine,
+            self.analytics_engine,
+            self.analytics_schema,
+            self.bulk_insert_optimized,
+            self.schema_adapter,
+        )
+        parallel = ParallelLoadStrategy(
+            self.replication_engine,
+            self.analytics_engine,
+            self.analytics_schema,
+            self.bulk_insert_optimized,
+            fallback_strategy=copy_csv,
+            num_workers=self._get_parallel_workers(),
+        )
         self.strategies = {
-            LoadStrategyType.STANDARD: StandardLoadStrategy(
-                self.replication_engine,
-                self.analytics_engine,
-                self.analytics_schema,
-                self.bulk_insert_optimized  # Pass reference to bulk insert method
-            ),
-            LoadStrategyType.STREAMING: StreamingLoadStrategy(
-                self.replication_engine,
-                self.analytics_engine,
-                self.analytics_schema,
-                self.bulk_insert_optimized
-            ),
-            LoadStrategyType.COPY_CSV: CopyCSVLoadStrategy(
-                self.replication_engine,
-                self.analytics_engine,
-                self.analytics_schema,
-                self.bulk_insert_optimized,
-                self.schema_adapter,
-            ),
-            LoadStrategyType.PARALLEL: ParallelLoadStrategy(
-                self.replication_engine,
-                self.analytics_engine,
-                self.analytics_schema,
-                self.bulk_insert_optimized
-            ),
+            LoadStrategyType.STANDARD: standard,
+            LoadStrategyType.STREAMING: streaming,
+            LoadStrategyType.COPY_CSV: copy_csv,
+            LoadStrategyType.PARALLEL: parallel,
         }
+
+    def _parallel_loading_enabled(self) -> bool:
+        """Whether parallel load strategy is enabled in pipeline config."""
+        return bool(self.settings.get_pipeline_setting("stages.load.enable_parallel_loading", False))
+
+    def _get_parallel_workers(self) -> int:
+        """Worker count for parallel load strategy (clamped 1–16)."""
+        raw = self.settings.get_pipeline_setting("stages.load.parallel_workers", 4)
+        try:
+            workers = int(raw)
+        except (TypeError, ValueError):
+            workers = 4
+        return max(1, min(workers, 16))
+
+    def _get_parallel_min_rows(self) -> int:
+        """Minimum estimated rows before parallel strategy is considered."""
+        raw = self.settings.get_pipeline_setting("stages.load.parallel_min_rows", 1_000_000)
+        try:
+            return int(raw)
+        except (TypeError, ValueError):
+            return 1_000_000
     
     # ========================================================================
     # MAIN LOADING METHOD (Called by TableProcessor)
@@ -977,12 +1126,9 @@ class PostgresLoader:
         size_mb = load_prep.estimated_size_mb
         rows = load_prep.estimated_rows
         
-        # Priority: Parallel for massive tables (if enabled)
-        if rows > 1_000_000:
-            # TODO: Check if parallel is enabled in config
-            # if self.settings.get('enable_parallel_loading', False):
-            #     return LoadStrategyType.PARALLEL
-            pass
+        # Priority: Parallel for massive tables when enabled in pipeline config
+        if rows >= self._get_parallel_min_rows() and self._parallel_loading_enabled():
+            return LoadStrategyType.PARALLEL
         
         # Size-based selection: use copy_csv for large tables (>200MB) for best throughput
         if size_mb > 200:
@@ -1075,10 +1221,9 @@ class PostgresLoader:
             # ============================================================
             # 3. RUN VALIDATION CHECKS
             # ============================================================
-            # TODO: Implement post-load validation
-            # - Compare row counts: replication vs analytics
-            # - Check for data quality issues
-            # - Verify primary key integrity
+            validation = self._validate_post_load(table_name, load_prep, load_result)
+            for warning in validation.get("warnings", []):
+                logger.warning(f"[Finalization] {table_name}: {warning}")
             
             # ============================================================
             # 4. CREATE RESULT METADATA
@@ -1092,7 +1237,8 @@ class PostgresLoader:
                 'force_full_applied': load_prep.force_full,
                 'primary_column': load_prep.primary_column,
                 'estimated_rows': load_prep.estimated_rows,
-                'estimated_size_mb': load_prep.estimated_size_mb
+                'estimated_size_mb': load_prep.estimated_size_mb,
+                'post_load_validation': validation,
             }
             
             if load_result.error:
@@ -1557,6 +1703,97 @@ class PostgresLoader:
         except Exception as e:
             logger.error(f"Error getting row count for {table_name} in analytics: {str(e)}")
             return 0
+
+    def _get_replication_row_count(self, table_name: str) -> int:
+        """Get total row count for a table in the replication database."""
+        if self.replication_engine is None:
+            return 0
+        try:
+            replication_db = self.replication_engine.url.database
+            with self.replication_engine.connect() as conn:
+                result = conn.execute(
+                    text(f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`")
+                ).scalar()
+                return result or 0
+        except Exception as e:
+            logger.error(f"Error getting row count for {table_name} in replication: {str(e)}")
+            return 0
+
+    def _count_null_primary_keys(self, table_name: str, primary_column: str) -> int:
+        """Count NULL primary-key values in the analytics table after load."""
+        try:
+            with self.analytics_engine.connect() as conn:
+                result = conn.execute(
+                    text(
+                        f'SELECT COUNT(*) FROM {self.analytics_schema}.{table_name} '
+                        f'WHERE "{primary_column}" IS NULL'
+                    )
+                ).scalar()
+                return int(result or 0)
+        except Exception as e:
+            logger.warning(
+                f"Could not check NULL primary keys for {table_name}.{primary_column}: {e}"
+            )
+            return 0
+
+    def _validate_post_load(
+        self,
+        table_name: str,
+        load_prep: LoadPreparation,
+        load_result: LoadResult,
+    ) -> Dict[str, Any]:
+        """
+        Post-load validation: replication vs analytics row counts and PK integrity.
+
+        Full loads expect analytics row count to match replication. Incremental loads
+        only warn when analytics exceeds replication. Warnings are logged and returned
+        in metadata; they do not fail the load.
+        """
+        validation: Dict[str, Any] = {
+            "row_count_match": None,
+            "replication_rows": None,
+            "analytics_rows": None,
+            "primary_key_nulls": None,
+            "warnings": [],
+        }
+        if not load_result.success:
+            return validation
+
+        analytics_rows = self._get_analytics_row_count(table_name)
+        validation["analytics_rows"] = analytics_rows
+
+        if self.replication_engine is None:
+            return validation
+
+        replication_rows = self._get_replication_row_count(table_name)
+        validation["replication_rows"] = replication_rows
+
+        if load_prep.should_truncate:
+            validation["row_count_match"] = analytics_rows == replication_rows
+            if not validation["row_count_match"]:
+                validation["warnings"].append(
+                    f"Full load row count mismatch: replication={replication_rows:,}, "
+                    f"analytics={analytics_rows:,}"
+                )
+        elif analytics_rows > replication_rows:
+            validation["row_count_match"] = False
+            validation["warnings"].append(
+                f"Analytics row count ({analytics_rows:,}) exceeds replication "
+                f"({replication_rows:,}) after incremental load"
+            )
+        else:
+            validation["row_count_match"] = True
+
+        if load_prep.primary_column:
+            null_pks = self._count_null_primary_keys(table_name, load_prep.primary_column)
+            validation["primary_key_nulls"] = null_pks
+            if null_pks > 0:
+                validation["warnings"].append(
+                    f"Found {null_pks:,} NULL values in primary column "
+                    f"{load_prep.primary_column}"
+                )
+
+        return validation
 
     def _get_last_primary_value(self, table_name: str) -> Optional[str]:
         """
@@ -2315,55 +2552,37 @@ EXAMPLE DATA FLOW FOR MEDICATION TABLE:
 # MIGRATION NOTES
 # ============================================================================
 """
-MIGRATION PLAN FROM OLD postgres_loader.py:
+MIGRATION HISTORY — strategy-pattern refactor (postgres_loader_deprecated.py removed 2026-06-17)
 
-PHASE 1: Structure Setup ✅ (This file)
-- Define Strategy Pattern classes
-- Create high-level orchestration flow
-- Document responsibilities clearly
+PHASE 1: Structure setup ✅
+- LoadStrategy ABC, LoadPreparation / LoadResult, PostgresLoader orchestration
+- load_table() → prepare → select strategy → execute → finalize
 
-PHASE 2: Migrate Helper Methods
-From postgres_loader.py, migrate:
-- _get_cached_schema() - Line 438
-- _build_load_query() - Line 2381
-- _build_enhanced_load_query() - Line 2153
-- _check_analytics_needs_updating() - Line 3508
-- _get_primary_incremental_column() - Line 3001
-- _filter_valid_incremental_columns() - Line 1238
-- bulk_insert_optimized() - Line 583
-- _update_load_status_hybrid() - Line 3565
-- _update_load_status() - Line 3001
+PHASE 2: Helper migration ✅
+- Query building, incremental fallback, schema cache, bulk insert, tracking tables
+- Stale-state detection (_check_analytics_needs_updating) and column validation
 
-PHASE 3: Implement Strategies
-Priority order (based on usage):
-1. StandardLoadStrategy - 95% of loads
-2. StreamingLoadStrategy - 5% of loads
-3. CopyCSVLoadStrategy - large tables (>200MB); chunked strategy removed
-4. ParallelLoadStrategy - 0% usage (future)
+PHASE 3: Strategy implementation
+- StandardLoadStrategy ✅  — small tables (< 50 MB est.)
+- StreamingLoadStrategy ✅ — medium tables (50–200 MB)
+- CopyCSVLoadStrategy ✅   — large tables (> 200 MB)
+- ParallelLoadStrategy 🚧  — branch feature/postgres-loader-parallel-validation
+  - PK-range chunks + ThreadPoolExecutor; falls back to CopyCSV
+  - Gated by pipeline.yml stages.load.enable_parallel_loading (default: false)
+  - Post-load validation in _finalize_table_load (row counts, PK nulls → warnings)
 
-PHASE 4: Testing
-- Unit tests for each strategy
-- Integration tests with test database
-- Performance benchmarks
-- Stale state recovery tests (incremental fallback detection)
+PHASE 4: Testing 🚧
+- Existing unit/integration loader tests cover standard/streaming/copy paths
+- test_postgres_loader_todos_unit.py — parallel selection, fallback, post-load validation
+- Remaining: integration tests with real DB, parallel end-to-end, benchmarks
 
-PHASE 5: Deployment
-- Run side-by-side with old loader
-- Compare results
-- Gradual rollout
-- Deprecate old loader
+PHASE 5: Deployment ✅ (main loader path)
+- postgres_loader_deprecated.py removed; clinic ETL uses this module
+- Parallel + post-load validation: merge only after Phase 4 passes on feature branch
 
-ESTIMATED EFFORT:
-- Phase 1: 2 hours (DONE)
-- Phase 2: 4-6 hours
-- Phase 3: 8-12 hours
-- Phase 4: 6-8 hours
-- Phase 5: 2-4 hours
-Total: 22-32 hours (~3-4 days)
-
-CODE REDUCTION:
-Current: ~1,250 lines across 5 methods
-Target: ~600 lines in organized structure
-Savings: ~650 lines (52% reduction)
+CONFIG (pipeline.yml → stages.load):
+- enable_parallel_loading: false   # must be true to select parallel strategy
+- parallel_workers: 4
+- parallel_min_rows: 1000000
 """
 

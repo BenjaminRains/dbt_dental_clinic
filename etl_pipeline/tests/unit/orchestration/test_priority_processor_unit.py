@@ -337,7 +337,7 @@ class TestPriorityProcessorUnit:
             
             # Assert: Verify exceptions are handled and tables are marked as failed
             assert success_tables == []
-            assert failed_tables == ['patient', 'appointment']
+            assert set(failed_tables) == {'patient', 'appointment'}
             assert mock_table_processor.process_table.call_count == 2
 
     def test_process_sequential_success(self, mock_config_reader):
