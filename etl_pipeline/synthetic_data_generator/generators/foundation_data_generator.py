@@ -292,11 +292,11 @@ class FoundationGenerator:
         self.data_store['counts']['operatory'] = len(operatories)
     
     def _generate_procedure_codes(self, db):
-        """Generate procedure codes (CDT codes) - uses production codes if available"""
+        """Generate procedure codes (CDT codes) - uses clinic extraction if available"""
         import json
         import os
         
-        # Try to load procedure codes from production extraction
+        # Try to load procedure codes from clinic analytics extraction
         proc_codes_file = os.path.join(
             os.path.dirname(__file__), 
             '../data/procedure_codes.json'
@@ -305,12 +305,12 @@ class FoundationGenerator:
         if os.path.exists(proc_codes_file):
             logger.info(f"Loading procedure codes from production: {proc_codes_file}")
             with open(proc_codes_file, 'r') as f:
-                prod_codes = json.load(f)
+                source_procedure_codes = json.load(f)
             
             proc_codes = []
             code_mapping = {}
             
-            for code_data in prod_codes:
+            for code_data in source_procedure_codes:
                 descript = code_data.get('Descript') or ''
                 abbr_desc = code_data.get('AbbrDesc') or (descript[:50] if descript else '')
                 proc_codes.append((
@@ -328,7 +328,7 @@ class FoundationGenerator:
             logger.info(f"Loaded {len(proc_codes)} procedure codes from production")
         else:
             # Fallback to hardcoded CDT codes
-            logger.info("Production procedure codes not found, using hardcoded CDT codes")
+            logger.info("Clinic procedure codes not found, using hardcoded CDT codes")
             proc_codes = []
             code_mapping = {}
             

@@ -3,10 +3,10 @@
 """
 Integration tests for table discovery with real clinic database connections.
 
-This module tests table discovery against the actual production OpenDental database
+This module tests table discovery against the actual clinic OpenDental database
 to validate real table discovery, filtering, and database inspection.
 
-Production Test Strategy:
+Clinic integration test strategy:
 - Uses clinic database connections with readonly access
 - Tests real table discovery with actual clinic database structure
 - Validates table filtering with real clinic database patterns
@@ -15,7 +15,7 @@ Production Test Strategy:
 
 Coverage Areas:
 - Real clinic table discovery from actual database
-- Proper filtering of excluded patterns in production
+- Proper filtering of excluded patterns in clinic stage
 - Real clinic database schema analysis
 - Error handling for real clinic database operations
 - Settings injection with real clinic database connections
@@ -23,8 +23,8 @@ Coverage Areas:
 - Database inspector functionality with real clinic database
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
 - Validates actual clinic database connections and table discovery
 """
@@ -46,13 +46,13 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestTableDiscoveryIntegration:
     """Integration tests for table discovery with real clinic database connections."""
     
 
 
-    def test_production_table_discovery(self, production_settings_with_file_provider):
+    def test_clinic_table_discovery(self, clinic_settings_with_file_provider):
         """
         Test clinic table discovery with actual clinic database structure.
         
@@ -63,7 +63,7 @@ class TestTableDiscoveryIntegration:
             
         Validates:
             - Real clinic table discovery from actual database
-            - Proper filtering of excluded patterns in production
+            - Proper filtering of excluded patterns in clinic stage
             - Real clinic database schema analysis
             - Error handling for real clinic database operations
             - Settings injection with real clinic database connections
@@ -83,9 +83,9 @@ class TestTableDiscoveryIntegration:
         for table in tables:
             assert not any(pattern in table.lower() for pattern in excluded_patterns)
         
-        # Verify that common dental clinic tables are present in production
+        # Verify that common dental clinic tables are present in clinic stage
         common_tables = ['patient', 'appointment', 'procedurelog', 'claimproc']
         found_common_tables = [table for table in tables if table.lower() in common_tables]
-        assert len(found_common_tables) > 0, f"Expected dental clinic tables not found in production. Available: {tables}"
+        assert len(found_common_tables) > 0, f"Expected dental clinic tables not found in clinic stage. Available: {tables}"
 
  

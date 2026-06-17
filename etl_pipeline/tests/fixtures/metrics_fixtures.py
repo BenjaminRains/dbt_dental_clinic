@@ -10,7 +10,7 @@ This module contains fixtures related to:
 Follows the connection architecture patterns:
 - Uses provider pattern for dependency injection
 - Uses Settings injection for environment-agnostic metrics
-- Uses environment separation for test vs production metrics
+- Uses environment separation for test vs clinic metrics
 - Uses unified interface with ConnectionFactory
 """
 
@@ -22,6 +22,7 @@ from datetime import datetime, timedelta
 from etl_pipeline.config import create_test_settings
 from etl_pipeline.config.providers import DictConfigProvider
 from etl_pipeline.core import ConnectionFactory
+from tests.fixtures.env_fixtures import COMPLETE_TEST_ENV
 
 
 @pytest.fixture
@@ -104,15 +105,8 @@ def test_metrics_settings():
             }
         },
         env={
-            # Test environment variables for metrics
+            **COMPLETE_TEST_ENV,
             'ETL_ENVIRONMENT': 'test',
-            # PostgreSQL Analytics (Test) - following architecture naming
-            'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
-            'TEST_POSTGRES_ANALYTICS_PORT': '5432',
-            'TEST_POSTGRES_ANALYTICS_DB': 'test_opendental_analytics',
-            'TEST_POSTGRES_ANALYTICS_SCHEMA': 'raw',
-            'TEST_POSTGRES_ANALYTICS_USER': 'test_analytics_user',
-            'TEST_POSTGRES_ANALYTICS_PASSWORD': 'test_analytics_pass'
         }
     )
     

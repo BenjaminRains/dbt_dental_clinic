@@ -13,6 +13,7 @@ from etl_pipeline.config.script_env import (
 )
 from etl_pipeline.config.providers import DictConfigProvider
 from etl_pipeline.config.settings import Settings, reset_settings
+from tests.fixtures.env_fixtures import COMPLETE_LOCAL_ENV
 
 
 @pytest.mark.unit
@@ -52,9 +53,12 @@ class TestApplySupplementalEnv:
         monkeypatch.setenv("OPENDENTAL_SOURCE_HOST", "from-os")
         provider = DictConfigProvider(
             env={
+                **COMPLETE_LOCAL_ENV,
                 "MYSQL_ROOT_HOST": "from-file",
                 "OPENDENTAL_SOURCE_HOST": "from-file",
-            }
+            },
+            environment="local",
+            profile="load",
         )
         settings = Settings(environment="local", provider=provider)
         apply_supplemental_env(settings)

@@ -32,7 +32,7 @@ ETL Pipeline Context:
     - Manages complete data processing lifecycle
     - Coordinates between extraction, transformation, and loading stages
     - Provides monitoring and metrics collection
-    - Implements FAIL FAST security to prevent accidental production usage
+    - Implements FAIL FAST security to prevent using the wrong ETL stage
     - Uses provider pattern for clean dependency injection
     - Optimized for dental clinic data processing workflows
 """
@@ -540,7 +540,7 @@ class TestPipelineOrchestratorComprehensive:
             - FAIL FAST behavior works correctly for all scenarios
             - Security measures are enforced
             - Clear error messages are provided
-            - No dangerous defaults to production
+            - No dangerous defaults to clinic
             - Environment validation works correctly
             - Configuration validation works properly
         """

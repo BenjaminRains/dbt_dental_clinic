@@ -1,33 +1,33 @@
 # tests/integration/scripts/analyze_opendental_schema/test_data_quality_integration.py
 
 """
-Integration tests for data quality validation with real production database connections.
+Integration tests for data quality validation with real clinic database connections.
 
-This module tests data quality validation against the actual production OpenDental database
+This module tests data quality validation against the actual clinic OpenDental database
 to validate real data quality checks, timestamp column validation, and sampling approaches.
 
-Production Test Strategy:
-- Uses production database connections with readonly access
-- Tests real data quality validation with actual production database data
-- Validates date range validation for production timestamp columns
-- Tests non-null value validation for production columns
+Clinic integration test strategy:
+- Uses clinic database connections with readonly access
+- Tests real data quality validation with actual clinic database data
+- Validates date range validation for clinic timestamp columns
+- Tests non-null value validation for clinic columns
 - Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
-- Real production data quality validation with actual database data
-- Date range validation for production timestamp columns
-- Non-null value validation for production columns
-- Sampling approach for data quality checks in production
+- Real clinic data quality validation with actual database data
+- Date range validation for clinic timestamp columns
+- Non-null value validation for clinic columns
+- Sampling approach for data quality checks in clinic stage
 - Data quality validation integration in discovery process
 - Column prioritization based on predefined priority order
 - Limiting to top 3 most reliable columns
 - Filtering of poor quality columns
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
-- Validates actual production database connections and data quality validation
+- Validates actual clinic database connections and data quality validation
 """
 
 import pytest
@@ -47,9 +47,9 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestDataQualityIntegration:
-    """Integration tests for data quality validation with real production database connections."""
+    """Integration tests for data quality validation with real clinic database connections."""
     
     @classmethod
     def setup_class(cls):
@@ -78,10 +78,10 @@ class TestDataQualityIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip("Production database connection failed")
+                    pytest.skip("Clinic database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"Production databases not available: {str(e)}")
+            pytest.skip(f"Clinic databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -97,22 +97,22 @@ class TestDataQualityIntegration:
         elif 'OPENDENTAL_SOURCE_DB' in os.environ:
             del os.environ['OPENDENTAL_SOURCE_DB']
 
-    def test_production_validate_incremental_column_data_quality(self, production_settings_with_file_provider):
+    def test_clinic_validate_incremental_column_data_quality(self, clinic_settings_with_file_provider):
         """
-        Test production validate_incremental_column_data_quality method with actual production database data.
+        Test clinic validate_incremental_column_data_quality method with actual clinic database data.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and get real schema data
-            Act: Call validate_incremental_column_data_quality() method with production data
-            Assert: Verify data quality validation works correctly for production columns
+            Arrange: Set up real clinic database connection and get real schema data
+            Act: Call validate_incremental_column_data_quality() method with clinic data
+            Assert: Verify data quality validation works correctly for clinic columns
             
         Validates:
-            - Real production data quality validation with actual database data
-            - Date range validation for production timestamp columns
-            - Non-null value validation for production columns
-            - Sampling approach for data quality checks in production
+            - Real clinic data quality validation with actual database data
+            - Date range validation for clinic timestamp columns
+            - Non-null value validation for clinic columns
+            - Sampling approach for data quality checks in clinic stage
         """
-        # Arrange: Set up real production database connection and get real schema data
+        # Arrange: Set up real clinic database connection and get real schema data
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
@@ -121,7 +121,7 @@ class TestDataQualityIntegration:
         found_tables = [table for table in test_tables if table in tables]
         
         if not found_tables:
-            pytest.skip("No suitable test tables found in production database")
+            pytest.skip("No suitable test tables found in clinic stage database")
         
         for table_name in found_tables:
             schema_info = analyzer.get_table_schema(table_name)
@@ -135,10 +135,10 @@ class TestDataQualityIntegration:
             
             # Test data quality validation for each timestamp column
             for col_name in timestamp_columns[:2]:  # Test first 2 columns to avoid long test times
-                # Act: Call validate_incremental_column_data_quality() method with production data
+                # Act: Call validate_incremental_column_data_quality() method with clinic data
                 is_valid = analyzer.validate_incremental_column_data_quality(table_name, col_name)
                 
-                # Assert: Verify data quality validation works correctly for production columns
+                # Assert: Verify data quality validation works correctly for clinic columns
                 assert isinstance(is_valid, bool)
                 
                 # Log the results for debugging

@@ -137,7 +137,7 @@ The Python script (`create_missing_tracking_records.py`) includes:
 ## Recommendation
 
 **Use the Python script** (`create_missing_tracking_records.py`) for:
-- Production environments
+- Clinic stage environments
 - Automated deployments
 - Better error handling and logging
 - Dynamic configuration from `tables.yml`

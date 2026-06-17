@@ -117,10 +117,50 @@ class FileConfigProvider(ConfigProvider):
 class DictConfigProvider(ConfigProvider):
     """Dictionary-based configuration provider for testing."""
     
-    def __init__(self, environment: Optional[str] = None, **configs):
+    def __init__(
+        self,
+        environment: Optional[str] = None,
+        profile: Optional[str] = None,
+        **configs,
+    ):
         """Initialize with configuration dictionaries."""
         self.environment = environment
-        self._env_vars = configs.get('env', {})
+        self._connection_settings = None
+        raw_env = configs.get("env", {})
+        self._env_vars = dict(raw_env)
+
+        if raw_env:
+            from .settings_v2 import (
+                STAGE_PREFIXES,
+                etl_settings_to_env_dict,
+                load_etl_connection_settings_from_env,
+            )
+
+            stage_env = raw_env.get("ETL_ENVIRONMENT") or environment or "test"
+            prefixes = STAGE_PREFIXES.get(stage_env, STAGE_PREFIXES["test"])
+            analytics_host = raw_env.get(f"{prefixes['analytics']}HOST")
+            if analytics_host and str(analytics_host).strip():
+                try:
+                    self._connection_settings = load_etl_connection_settings_from_env(
+                        raw_env,
+                        environment=stage_env,
+                        profile=profile,
+                    )
+                except ValueError:
+                    logger.debug(
+                        "DictConfigProvider: skipping typed env validation "
+                        "(incomplete injected env for %s)",
+                        stage_env,
+                    )
+
+            if self._connection_settings is not None:
+                self.environment = self._connection_settings.stage.value
+                self._env_vars = {
+                    **raw_env,
+                    **etl_settings_to_env_dict(self._connection_settings),
+                }
+                self._env_vars.setdefault("ETL_ENVIRONMENT", self.environment)
+
         self.configs = {
             'pipeline': configs.get('pipeline', {}),
             'tables': configs.get('tables', {'tables': {}}),

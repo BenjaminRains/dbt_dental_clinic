@@ -30,7 +30,7 @@ ETL Context:
     - Supports MariaDB v11.6 source and MySQL replication database
     - Uses provider pattern for clean dependency injection and test isolation
     - Implements Settings injection for environment-agnostic connections
-    - Enforces FAIL FAST security to prevent accidental production usage
+    - Enforces FAIL FAST security to prevent using the wrong ETL stage
     - Optimized for dental clinic data volumes and processing patterns
 """
 import pytest
@@ -61,13 +61,13 @@ from etl_pipeline.exceptions.base import ETLException
 from tests.fixtures.connection_fixtures import (
     mock_connection_factory_with_settings,
     test_connection_settings,
-    production_connection_settings
+    clinic_connection_settings
 )
 from tests.fixtures.env_fixtures import (
     test_settings,
-    production_settings,
+    clinic_settings,
     test_env_provider,
-    production_env_provider
+    clinic_env_provider
 )
 from tests.fixtures.config_fixtures import (
     test_pipeline_config,
@@ -762,14 +762,14 @@ class TestSimpleMySQLReplicatorComprehensive:
         # Verify the method was called
         replicator_with_settings.copy_table.assert_called_with('patient')
 
-    def test_environment_separation_with_provider_pattern(self, replicator_with_comprehensive_config, test_env_vars, production_env_vars):
+    def test_environment_separation_with_provider_pattern(self, replicator_with_comprehensive_config, test_env_vars, clinic_env_vars):
         """
         Test environment separation with provider pattern dependency injection.
         
         Validates:
             - Environment separation with provider pattern
             - Settings injection for environment-agnostic connections
-            - Production vs test environment handling
+            - Clinic vs test environment handling
             - Provider pattern configuration isolation
             - FAIL FAST behavior for missing environment
             - Environment-specific configuration loading
@@ -786,7 +786,7 @@ class TestSimpleMySQLReplicatorComprehensive:
         # Test provider pattern configuration isolation
         test_config = replicator_with_comprehensive_config.settings.provider.get_config('env')
         assert 'TEST_OPENDENTAL_SOURCE_HOST' in test_config
-        assert 'OPENDENTAL_SOURCE_HOST' not in test_config  # No production variables
+        assert 'OPENDENTAL_SOURCE_HOST' not in test_config  # No clinic-stage variables
         
         # Test FAIL FAST behavior
         import os

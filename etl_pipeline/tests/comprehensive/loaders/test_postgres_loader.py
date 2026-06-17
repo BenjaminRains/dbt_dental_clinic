@@ -33,7 +33,7 @@ ETL Context:
     - Provider pattern for clean dependency injection
     - Settings injection for environment-agnostic connections
     - Type safety with DatabaseType and PostgresSchema enums
-    - Comprehensive error handling for production reliability
+    - Comprehensive error handling for operational reliability
 """
 
 import pytest
@@ -72,16 +72,16 @@ from tests.fixtures.loader_fixtures import (
 from tests.fixtures.connection_fixtures import (
     mock_connection_factory_with_settings,
     test_connection_settings,
-    production_connection_settings,
+    clinic_connection_settings,
     database_types,
     postgres_schemas
 )
 from tests.fixtures.env_fixtures import (
     test_env_vars,
     test_env_provider,
-    production_env_provider,
+    clinic_env_provider,
     test_settings as env_test_settings,
-    production_settings as env_production_settings
+    clinic_settings as env_clinic_settings
 )
 
 

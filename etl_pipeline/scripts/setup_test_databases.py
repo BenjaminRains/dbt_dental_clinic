@@ -8,7 +8,7 @@ Run this script once to create the test databases and load sample data.
 IMPORTANT SAFETY FEATURES:
 - Only runs in test environments (ETL_ENVIRONMENT=test or ENVIRONMENT=test)
 - Requires explicit confirmation for database creation
-- Validates all database names contain 'test' to prevent production accidents
+- Validates all database names contain 'test' to prevent clinic-source accidents
 - Uses test-specific environment variables (TEST_*)
 - Uses new ConnectionFactory with unified API
 - Integrates with new Settings architecture
@@ -88,7 +88,7 @@ def validate_test_environment():
 
 def validate_database_names():
     """
-    Validate that all database names contain 'test' to prevent production accidents.
+    Validate that all database names contain 'test' to prevent clinic-source accidents.
     
     Returns:
         bool: True if all database names are safe, False otherwise
@@ -104,7 +104,7 @@ def validate_database_names():
     if unsafe_dbs:
         logger.error("SAFETY CHECK FAILED: Database names must contain 'test'!")
         logger.error(f"Unsafe database names: {unsafe_dbs}")
-        logger.error("This prevents accidental modification of production databases.")
+        logger.error("This prevents accidental modification of clinic or non-test databases.")
         return False
     
     logger.info("Database name validation passed - all names contain 'test'")

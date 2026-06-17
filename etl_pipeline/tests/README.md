@@ -40,7 +40,7 @@ tests/
 ├── unit/                    # Pure unit tests (mocked with DictConfigProvider)
 ├── comprehensive/           # Comprehensive tests (mocked dependencies)
 ├── integration/             # Real test database integration (FileConfigProvider)
-├── e2e/                    # Production connection E2E tests
+├── e2e/                    # Clinic connection E2E tests
 ├── fixtures/               # Test data and configuration fixtures
 └── docs/                   # Test documentation
 ```

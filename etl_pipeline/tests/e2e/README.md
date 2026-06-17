@@ -174,7 +174,7 @@ Tests use standardized test data:
 
 ## Migration from Old Structure
 
-The original `test_production_data_pipeline_e2e.py` file has been refactored:
+The original `test_clinic_data_pipeline_e2e.py` file has been refactored:
 
 - **PipelineDataValidator**: Moved to `pipeline_data_validator.py`
 - **Basic Tests**: Moved to `test_basic_pipeline_e2e.py`

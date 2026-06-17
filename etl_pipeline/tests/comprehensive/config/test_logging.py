@@ -152,12 +152,12 @@ class TestComprehensiveLogging:
         mock_logger.info.assert_called_with("[PERF] batch_processing completed in 3600.00s | 1000000 records | 278 records/sec")
 
     def test_logging_environment_separation(self, test_settings, mock_logger):
-        """Test that logging respects environment separation (test vs production)."""
+        """Test that logging respects environment separation (test vs clinic)."""
         config = test_settings.pipeline_config['logging']
         assert config['log_level'] == 'DEBUG'
         assert config['log_file'] == 'test.log'
         assert config['log_dir'] == 'logs'
-        # No production variables should be present
+        # No clinic-stage variables should be present
         for key in test_settings._env_vars:
             assert key.startswith('TEST_')
 

@@ -20,7 +20,7 @@ Coverage Areas:
 - Real clinic database performance analysis
 - Actual clinic table performance characteristics
 - Real clinic processing priority calculation
-- Production performance category determination
+- Clinic performance category determination
 - Real performance monitoring requirements analysis
 - Error handling with real clinic database scenarios
 - Settings injection for clinic environment-agnostic performance analysis
@@ -70,7 +70,7 @@ def ensure_logs_directory():
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 @pytest.mark.performance_analysis
 class TestPerformanceAnalysisIntegration:
     """Performance analysis integration tests for OpenDentalSchemaAnalyzer with real clinic database connections."""
@@ -97,10 +97,10 @@ class TestPerformanceAnalysisIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip("Production database connection failed")
+                    pytest.skip("Clinic database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"Production databases not available: {str(e)}")
+            pytest.skip(f"Clinic databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -116,7 +116,7 @@ class TestPerformanceAnalysisIntegration:
         elif 'OPENDENTAL_SOURCE_DB' in os.environ:
             del os.environ['OPENDENTAL_SOURCE_DB']
 
-    def test_production_table_performance_analysis(self, production_settings_with_file_provider):
+    def test_clinic_table_performance_analysis(self, clinic_settings_with_file_provider):
         """
         Test table performance analysis with clinic data.
         
@@ -182,7 +182,7 @@ class TestPerformanceAnalysisIntegration:
         # Verify needs_performance_monitoring is a boolean
         assert isinstance(performance_chars['needs_performance_monitoring'], bool)
 
-    def test_production_multiple_table_performance_comparison(self, production_settings_with_file_provider):
+    def test_clinic_multiple_table_performance_comparison(self, clinic_settings_with_file_provider):
         """
         Test performance analysis comparison across multiple clinic tables.
         
@@ -242,7 +242,7 @@ class TestPerformanceAnalysisIntegration:
         print(f"Processing priorities found: {processing_priorities}")
         print(f"Monitoring requirements found: {monitoring_requirements}")
 
-    def test_production_performance_analysis_error_handling(self, production_settings_with_file_provider):
+    def test_clinic_performance_analysis_error_handling(self, clinic_settings_with_file_provider):
         """
         Test performance analysis error handling with invalid table names.
         
@@ -289,7 +289,7 @@ class TestPerformanceAnalysisIntegration:
             # If an exception is raised, it should be a specific type, not a generic error
             assert "non_existent_table" in str(e) or "does not exist" in str(e)
 
-    def test_production_performance_analysis_with_empty_schema(self, production_settings_with_file_provider):
+    def test_clinic_performance_analysis_with_empty_schema(self, clinic_settings_with_file_provider):
         """
         Test performance analysis behavior with minimal schema information.
         

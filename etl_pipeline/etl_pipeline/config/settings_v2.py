@@ -9,9 +9,10 @@ from __future__ import annotations
 
 import logging
 import os
+from contextlib import contextmanager
 from enum import Enum
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 from pydantic import Field, SecretStr, ValidationError
 from pydantic_settings import (
@@ -433,6 +434,98 @@ def _try_load_source(
         return None
 
 
+@contextmanager
+def _overlay_os_environ(overlay: dict[str, str]) -> Iterator[None]:
+    """Temporarily set overlay keys in os.environ (used for injected test env dicts)."""
+    previous: dict[str, Optional[str]] = {}
+    for key, value in overlay.items():
+        previous[key] = os.environ.get(key)
+        os.environ[key] = str(value)
+    try:
+        yield
+    finally:
+        for key, old in previous.items():
+            if old is None:
+                os.environ.pop(key, None)
+            else:
+                os.environ[key] = old
+
+
+def _load_connection_settings_models(
+    *,
+    stage: ETLStage,
+    resolved_profile: ETLProfile,
+    env_file: Optional[Path],
+    env_path_hint: Optional[Path] = None,
+) -> ETLConnectionSettings:
+    """Build validated connection models from pydantic env sources."""
+    prefixes = STAGE_PREFIXES[stage.value]
+    source_required = resolved_profile == ETLProfile.FULL
+    try:
+        source = _try_load_source(
+            env_file,
+            prefixes["source"],
+            required=source_required,
+        )
+        replication = MySQLConnSettings(
+            _env_file=env_file,
+            _env_prefix=prefixes["replication"],
+        )
+        analytics = PostgresAnalyticsSettings(
+            _env_file=env_file,
+            _env_prefix=prefixes["analytics"],
+        )
+    except ValidationError as exc:
+        hint = ""
+        if env_path_hint is not None:
+            hint = _missing_env_hint(stage, env_path_hint, prefixes, resolved_profile)
+        raise ValueError(
+            f"Invalid ETL configuration for {stage.value} environment "
+            f"(profile={resolved_profile.value}): {exc}{hint}"
+        ) from exc
+
+    if source is None and resolved_profile == ETLProfile.LOAD:
+        logger.info(
+            "ETL profile 'load': OPENDENTAL_SOURCE_* not configured (optional for this profile)"
+        )
+
+    return ETLConnectionSettings(
+        stage,
+        source,
+        replication,
+        analytics,
+        profile=resolved_profile,
+    )
+
+
+def load_etl_connection_settings_from_env(
+    env: dict[str, str],
+    *,
+    environment: Optional[str] = None,
+    profile: Optional[str] = None,
+) -> ETLConnectionSettings:
+    """Load and validate typed ETL connection settings from an injected env dict."""
+    stage = _detect_stage(env.get("ETL_ENVIRONMENT") or environment)
+    resolved_profile = resolve_etl_profile(stage, env.get("ETL_PROFILE") or profile)
+    merged = dict(env)
+    merged.setdefault("ETL_ENVIRONMENT", stage.value)
+    merged.setdefault("ETL_PROFILE", resolved_profile.value)
+
+    logger.info(
+        "Validating injected ETL environment: %s (profile=%s)",
+        stage.value,
+        resolved_profile.value,
+    )
+    with _overlay_os_environ(merged):
+        settings = _load_connection_settings_models(
+            stage=stage,
+            resolved_profile=resolved_profile,
+            env_file=None,
+        )
+    logger.info("ETL environment validation passed")
+    return settings
+
+
 def load_etl_connection_settings(
     *,
     environment: Optional[str] = None,
@@ -451,48 +544,20 @@ def load_etl_connection_settings(
         )
 
     env_file = _env_file_for_pydantic(config_dir, stage)
-    prefixes = STAGE_PREFIXES[stage.value]
 
     logger.info(
         "Validating ETL environment: %s (profile=%s)",
         stage.value,
         resolved_profile.value,
     )
-    source_required = resolved_profile == ETLProfile.FULL
-    try:
-        source = _try_load_source(
-            env_file,
-            prefixes["source"],
-            required=source_required,
-        )
-        replication = MySQLConnSettings(
-            _env_file=env_file,
-            _env_prefix=prefixes["replication"],
-        )
-        analytics = PostgresAnalyticsSettings(
-            _env_file=env_file,
-            _env_prefix=prefixes["analytics"],
-        )
-    except ValidationError as exc:
-        hint = _missing_env_hint(stage, env_path, prefixes, resolved_profile)
-        raise ValueError(
-            f"Invalid ETL configuration for {stage.value} environment "
-            f"(profile={resolved_profile.value}): {exc}{hint}"
-        ) from exc
-
-    if source is None and resolved_profile == ETLProfile.LOAD:
-        logger.info(
-            "ETL profile 'load': OPENDENTAL_SOURCE_* not configured (optional for this profile)"
-        )
-
-    logger.info("ETL environment validation passed")
-    return ETLConnectionSettings(
-        stage,
-        source,
-        replication,
-        analytics,
-        profile=resolved_profile,
+    settings = _load_connection_settings_models(
+        stage=stage,
+        resolved_profile=resolved_profile,
+        env_file=env_file,
+        env_path_hint=env_path,
     )
+    logger.info("ETL environment validation passed")
+    return settings
 
 
 def load_etl_env_dict(

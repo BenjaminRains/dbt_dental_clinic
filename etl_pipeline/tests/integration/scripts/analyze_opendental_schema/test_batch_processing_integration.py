@@ -1,33 +1,33 @@
 # tests/integration/scripts/analyze_opendental_schema/test_batch_processing_integration.py
 
 """
-Integration tests for batch processing operations with real production database connections.
+Integration tests for batch processing operations with real clinic database connections.
 
-This module tests batch processing against the actual production OpenDental database
+This module tests batch processing against the actual clinic OpenDental database
 to validate real batch operations, multiple table processing, and connection management.
 
-Production Test Strategy:
-- Uses production database connections with readonly access
-- Tests real batch processing with actual production database data
-- Validates multiple table processing in single connection for production
-- Tests connection management for batch operations with production database
+Clinic integration test strategy:
+- Uses clinic database connections with readonly access
+- Tests real batch processing with actual clinic database data
+- Validates multiple table processing in single connection for clinic stage
+- Tests connection management for batch operations with clinic database
 - Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
-- Real production batch schema processing with actual database
-- Multiple table schema extraction in single connection for production
-- Error handling for individual tables in batch with production data
-- ConnectionManager usage for batch operations with production database
-- Settings injection with real production database connections
-- Real production batch size processing with actual database
-- Multiple table size extraction in single connection for production
-- Batch operations validation with real production data
+- Real clinic batch schema processing with actual database
+- Multiple table schema extraction in single connection for clinic stage
+- Error handling for individual tables in batch with clinic data
+- ConnectionManager usage for batch operations with clinic database
+- Settings injection with real clinic database connections
+- Real clinic batch size processing with actual database
+- Multiple table size extraction in single connection for clinic stage
+- Batch operations validation with real clinic data
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
-- Validates actual production database connections and batch processing
+- Validates actual clinic database connections and batch processing
 """
 
 import pytest
@@ -48,9 +48,9 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestBatchProcessingIntegration:
-    """Integration tests for batch processing operations with real production database connections."""
+    """Integration tests for batch processing operations with real clinic database connections."""
     
     @classmethod
     def setup_class(cls):
@@ -79,10 +79,10 @@ class TestBatchProcessingIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip("Production database connection failed")
+                    pytest.skip("Clinic database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"Production databases not available: {str(e)}")
+            pytest.skip(f"Clinic databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -98,23 +98,23 @@ class TestBatchProcessingIntegration:
         elif 'OPENDENTAL_SOURCE_DB' in os.environ:
             del os.environ['OPENDENTAL_SOURCE_DB']
 
-    def test_production_batch_schema_info_processing(self, production_settings_with_file_provider):
+    def test_clinic_batch_schema_info_processing(self, clinic_settings_with_file_provider):
         """
-        Test production batch schema information processing with actual production database.
+        Test clinic batch schema information processing with actual clinic database.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and discover tables
-            Act: Call get_batch_schema_info() method with production tables
-            Assert: Verify batch schema information is correctly processed for production
+            Arrange: Set up real clinic database connection and discover tables
+            Act: Call get_batch_schema_info() method with clinic tables
+            Assert: Verify batch schema information is correctly processed for clinic stage
             
         Validates:
-            - Real production batch schema processing with actual database
-            - Multiple table schema extraction in single connection for production
-            - Error handling for individual tables in batch with production data
-            - ConnectionManager usage for batch operations with production database
-            - Settings injection with real production database connections
+            - Real clinic batch schema processing with actual database
+            - Multiple table schema extraction in single connection for clinic stage
+            - Error handling for individual tables in batch with clinic data
+            - ConnectionManager usage for batch operations with clinic database
+            - Settings injection with real clinic database connections
         """
-        # Arrange: Set up real production database connection and discover tables
+        # Arrange: Set up real clinic database connection and discover tables
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
@@ -122,12 +122,12 @@ class TestBatchProcessingIntegration:
         test_tables = tables[:3] if len(tables) >= 3 else tables
         
         if not test_tables:
-            pytest.skip("No tables found in production database")
+            pytest.skip("No tables found in clinic stage database")
         
-        # Act: Call get_batch_schema_info() method with production tables
+        # Act: Call get_batch_schema_info() method with clinic tables
         batch_schema_info = analyzer.get_batch_schema_info(test_tables)
         
-        # Assert: Verify batch schema information is correctly processed for production
+        # Assert: Verify batch schema information is correctly processed for clinic stage
         assert isinstance(batch_schema_info, dict)
         assert len(batch_schema_info) == len(test_tables)
         
@@ -151,23 +151,23 @@ class TestBatchProcessingIntegration:
                 assert 'nullable' in col_info
                 assert 'primary_key' in col_info
 
-    def test_production_batch_size_info_processing(self, production_settings_with_file_provider):
+    def test_clinic_batch_size_info_processing(self, clinic_settings_with_file_provider):
         """
-        Test production batch size information processing with actual production database.
+        Test clinic batch size information processing with actual clinic database.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and discover tables
-            Act: Call get_batch_size_info() method with production tables
-            Assert: Verify batch size information is correctly processed for production
+            Arrange: Set up real clinic database connection and discover tables
+            Act: Call get_batch_size_info() method with clinic tables
+            Assert: Verify batch size information is correctly processed for clinic stage
             
         Validates:
-            - Real production batch size processing with actual database
-            - Multiple table size extraction in single connection for production
-            - Error handling for individual tables in batch with production data
-            - ConnectionManager usage for batch operations with production database
-            - Settings injection with real production database connections
+            - Real clinic batch size processing with actual database
+            - Multiple table size extraction in single connection for clinic stage
+            - Error handling for individual tables in batch with clinic data
+            - ConnectionManager usage for batch operations with clinic database
+            - Settings injection with real clinic database connections
         """
-        # Arrange: Set up real production database connection and discover tables
+        # Arrange: Set up real clinic database connection and discover tables
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
@@ -175,12 +175,12 @@ class TestBatchProcessingIntegration:
         test_tables = tables[:3] if len(tables) >= 3 else tables
         
         if not test_tables:
-            pytest.skip("No tables found in production database")
+            pytest.skip("No tables found in clinic stage database")
         
-        # Act: Call get_batch_size_info() method with production tables
+        # Act: Call get_batch_size_info() method with clinic tables
         batch_size_info = analyzer.get_batch_size_info(test_tables)
         
-        # Assert: Verify batch size information is correctly processed for production
+        # Assert: Verify batch size information is correctly processed for clinic stage
         assert isinstance(batch_size_info, dict)
         assert len(batch_size_info) == len(test_tables)
         

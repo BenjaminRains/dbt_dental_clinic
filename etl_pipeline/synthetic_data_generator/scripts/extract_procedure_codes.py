@@ -1,8 +1,8 @@
 """
-Extract Procedure Codes from Production Database
-================================================
+Extract Procedure Codes from Clinic Analytics Database
+======================================================
 
-Extracts procedure codes from opendental_analytics production database
+Extracts procedure codes from opendental_analytics (clinic stage)
 and saves them to a JSON file for use in synthetic data generation.
 
 Procedure codes (CDT codes) are standardized dental codes, not PII.
@@ -17,8 +17,8 @@ from typing import List, Dict
 # Add parent directory to path
 sys.path.insert(0, os.path.abspath(os.path.join(os.path.dirname(__file__), '../..')))
 
-# Default production database connection (can be overridden via environment variables)
-PROD_DB_CONFIG = {
+# Default clinic analytics database connection (can be overridden via environment variables)
+CLINIC_DB_CONFIG = {
     'host': os.getenv('POSTGRES_HOST', 'localhost'),
     'port': int(os.getenv('POSTGRES_PORT', '5432')),
     'database': os.getenv('POSTGRES_DB', 'opendental_analytics'),
@@ -30,13 +30,13 @@ OUTPUT_FILE = os.path.join(os.path.dirname(__file__), '../data/procedure_codes.j
 
 
 def extract_procedure_codes() -> List[Dict]:
-    """Extract procedure codes from production database"""
-    print("Connecting to production database...")
-    print(f"  Host: {PROD_DB_CONFIG['host']}:{PROD_DB_CONFIG['port']}")
-    print(f"  Database: {PROD_DB_CONFIG['database']}")
+    """Extract procedure codes from clinic analytics database."""
+    print("Connecting to clinic analytics database...")
+    print(f"  Host: {CLINIC_DB_CONFIG['host']}:{CLINIC_DB_CONFIG['port']}")
+    print(f"  Database: {CLINIC_DB_CONFIG['database']}")
     
     try:
-        conn = psycopg2.connect(**PROD_DB_CONFIG)
+        conn = psycopg2.connect(**CLINIC_DB_CONFIG)
         cur = conn.cursor()
         
         query = """

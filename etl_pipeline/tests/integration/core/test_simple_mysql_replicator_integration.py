@@ -46,7 +46,7 @@ ETL Context:
 - Supports MariaDB v11.6 source and MySQL replication database
 - Uses provider pattern for clean dependency injection and test isolation
 - Implements Settings injection for environment-agnostic connections
-- Enforces FAIL FAST security to prevent accidental production usage
+- Enforces FAIL FAST security to prevent using the wrong ETL stage
 - Optimized for dental clinic data volumes and processing patterns
 """
 

@@ -270,7 +270,7 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 ## Database Architecture
 
 ### **Source MySQL (OpenDental)**
-- Production OpenDental database
+- Clinic OpenDental source database
 - Read-only access for safety
 - Used for initial data extraction
 

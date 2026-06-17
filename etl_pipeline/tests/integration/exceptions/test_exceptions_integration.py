@@ -11,7 +11,7 @@ Integration Test Strategy:
     - Real exception scenarios through actual operations that can fail
     - Coverage: Integration scenarios and edge cases with real databases
     - Execution: < 10 seconds per component
-    - Environment: Real test databases, no production connections with FileConfigProvider
+    - Environment: Real test databases, no clinic connections with FileConfigProvider
     - Order Markers: Proper test execution order for data flow validation
     - Provider Usage: FileConfigProvider with real test configuration files
     - Settings Injection: Uses Settings with FileConfigProvider for real test environment
@@ -107,7 +107,7 @@ class TestExceptionRealDatabaseIntegration:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic stage)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Structured error handling with custom exceptions
     """
@@ -280,7 +280,7 @@ class TestExceptionRealDataIntegration:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic stage)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Structured error handling with custom exceptions
     """
@@ -458,7 +458,7 @@ class TestExceptionRealConfigurationIntegration:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic stage)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Structured error handling with custom exceptions
     """
@@ -479,7 +479,7 @@ class TestExceptionRealConfigurationIntegration:
         ETL Pipeline Context:
             - Critical for dental clinic ETL pipeline security
             - Uses provider pattern for clean dependency injection
-            - Implements FAIL FAST behavior to prevent production accidents
+            - Implements FAIL FAST behavior to prevent wrong-stage ETL accidents
             - Supports environment error recovery for dental clinic data processing
         """
         # Store original environment
@@ -539,7 +539,7 @@ class TestExceptionRealConfigurationIntegration:
             - Critical for integration test environment isolation
             - Uses provider pattern for clean dependency injection
             - Implements Settings injection for environment-agnostic connections
-            - Ensures test environment separation from production
+            - Ensures test environment separation from clinic stage
         """
         try:
             # Use the existing fixtures that validate .env_test usage
@@ -654,7 +654,7 @@ class TestExceptionRealSchemaIntegration:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic stage)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Structured error handling with custom exceptions
     """
@@ -840,7 +840,7 @@ class TestExceptionComprehensiveIntegration:
         - All config via provider pattern (FileConfigProvider with .env_test)
         - All connections/config via Settings injection (environment='test')
         - Type safety with DatabaseType/PostgresSchema enums
-        - Real test database connections (not production)
+        - Real test database connections (not clinic stage)
         - FAIL FAST on missing ETL_ENVIRONMENT
         - Structured error handling with custom exceptions
     """
