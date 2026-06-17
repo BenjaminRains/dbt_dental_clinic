@@ -30,8 +30,6 @@ cli/commands.py (actual commands) ← This file
 PipelineOrchestrator (framework)
     ↓
 main.py (pipeline execution)
-
-TODO: Remove entry.py (argparse-based) as it's not used in current flow
 """
 
 import logging
