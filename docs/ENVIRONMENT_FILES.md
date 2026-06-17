@@ -246,6 +246,7 @@ Development for clinic infra is often done locally before deploy, so **`.env_loc
   - **demo:** `deployment_credentials.json` only (no `.env_demo` file)
 - **Validate:** `mdc dbt validate --env local`
 - **Run:** `mdc dbt run --env clinic -- --select …` (passthrough after `--`)
+- **Clinic from laptop:** RDS is private — see [CLINIC_ANALYTICS_WORKFLOW.md](CLINIC_ANALYTICS_WORKFLOW.md) (local dbt + tunnel + publish, or EC2 dbt)
 - **Profiles:** `dbt_dental_models/profiles.yml` (from `profiles.yml.template`); `DBT_PROFILES_DIR` set in child env by `mdc`.
 
 ### 4.4 Docker / Airflow

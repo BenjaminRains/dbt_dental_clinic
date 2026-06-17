@@ -41,8 +41,9 @@ mdc etl status --env clinic   # etl-status alias defaults to clinic + full
 mdc api run --env local
 mdc api run --env clinic --tunnel-db   # with mdc tunnel clinic-db
 mdc etl run --env clinic --profile full
-mdc dbt run --env clinic
-mdc tunnel clinic-db
+mdc dbt run --env local
+mdc tunnel clinic-db                  # separate terminal; see docs/CLINIC_ANALYTICS_WORKFLOW.md
+mdc publish analytics --env clinic
 ssm-connect-clinic-api
 ```
 
@@ -58,6 +59,16 @@ mdc consult-audio pipeline status
 ```
 
 Aliases: `consult-audio-validate`, `consult-audio-run`.
+
+### Publish local marts to clinic RDS
+
+See **[docs/CLINIC_ANALYTICS_WORKFLOW.md](../docs/CLINIC_ANALYTICS_WORKFLOW.md)** for the full local dbt → tunnel → RDS workflow.
+
+```powershell
+mdc dbt run --env local
+mdc tunnel clinic-db                    # separate terminal, keep open
+mdc publish analytics --env clinic
+```
 
 ### Deploy dbt docs to portfolio site
 

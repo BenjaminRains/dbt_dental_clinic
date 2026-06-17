@@ -121,6 +121,7 @@ docs/
 !/docs/
 /docs/*
 !docs/ENVIRONMENT_FILES.md
+!docs/CLINIC_ANALYTICS_WORKFLOW.md
 /docs/analytics/
 etl_pipeline/docs/
 etl_pipeline/CODE_REVIEW.md

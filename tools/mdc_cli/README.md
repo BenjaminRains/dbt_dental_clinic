@@ -40,6 +40,7 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 - `mdc etl run|status|test-connections --env <stage> [--profile full] -- [args]`
 - `mdc dbt run|test|docs --env <stage> -- [args]`
 - `mdc dbt invoke --env <stage> -- deps` — arbitrary dbt subcommands
+- `mdc publish analytics --env clinic` — local marts → clinic RDS (see [docs/CLINIC_ANALYTICS_WORKFLOW.md](../../docs/CLINIC_ANALYTICS_WORKFLOW.md))
 
 ### Frontend (Phase 5.3)
 
