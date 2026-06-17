@@ -107,7 +107,8 @@ try {
     $envScriptLegacy = "$remoteProjectRoot/scripts/setup_ec2_dbt_env.sh"
 
     # bash -lc + sudo -u ec2-user loads ~/.bash_profile so PATH includes ~/.local/bin; fix wrong env path (repo uses scripts/ec2/).
-    $inner = "cd '$DbtPath' && if [ -f '$envScriptRepo' ]; then . '$envScriptRepo'; elif [ -f '$envScriptLegacy' ]; then . '$envScriptLegacy'; fi && export PATH=`$HOME/.local/bin:/usr/local/bin:`$PATH && if command -v pipenv >/dev/null 2>&1 && [ -f Pipfile ]; then exec pipenv run dbt $escapedCommand; elif command -v dbt >/dev/null 2>&1; then exec dbt $escapedCommand; elif python3 -m dbt --version >/dev/null 2>&1; then exec python3 -m dbt $escapedCommand; else echo 'dbt not found. On instance as ec2-user: python3 -m pip install --user dbt-postgres' >&2; exit 127; fi"
+    # Prefer api/.env on clinic EC2 (deployed via mdc deploy api --env clinic); fall back to setup_ec2_dbt_env.sh + deployment_credentials.json.
+    $inner = "cd '$DbtPath' && if [ -f '$remoteProjectRoot/api/.env' ]; then set -a; . '$remoteProjectRoot/api/.env'; set +a; elif [ -f '$envScriptRepo' ]; then . '$envScriptRepo'; elif [ -f '$envScriptLegacy' ]; then . '$envScriptLegacy'; fi && export PATH=`$HOME/.local/bin:/usr/local/bin:`$PATH && if command -v pipenv >/dev/null 2>&1 && [ -f Pipfile ]; then exec pipenv run dbt $escapedCommand; elif command -v dbt >/dev/null 2>&1; then exec dbt $escapedCommand; elif [ -x `$HOME/.local/bin/dbt ]; then exec `$HOME/.local/bin/dbt $escapedCommand; elif python3 -m dbt --version >/dev/null 2>&1; then exec python3 -m dbt $escapedCommand; else echo 'dbt not found. On instance as ec2-user: python3 -m pip install --user dbt-postgres' >&2; exit 127; fi"
     $bashCommand = 'sudo -u ec2-user -H /bin/bash -lc ' + "'" + ($inner -replace "'", "'\''") + "'"
     $bashCommand = $bashCommand -replace "`r`n", "" -replace "`r", ""
     

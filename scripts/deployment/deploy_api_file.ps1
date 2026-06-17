@@ -4,7 +4,8 @@
 # and RETIRES any stale api/.env_api_clinic on the instance.
 # Preferred entry: mdc deploy api --env clinic  (from repo root)
 # Manual: .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
-# Restarts systemd unit dental-clinic-api (NOT the EC2 Name tag dental-clinic-api-clinic).
+# Restarts systemd unit dental-clinic-api-clinic on clinic EC2 (see api/dental-clinic-api-clinic.service).
+# Demo EC2 uses dental-clinic-api-demo or dental-clinic-api.
 # Optional: backend_api.clinic_api.ec2.systemd_service in deployment_credentials.json
 # Skip post-deploy /health/db check: add -SkipHealthCheck
 # Single file (advanced): .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env"
@@ -102,17 +103,26 @@ function Get-ApiSystemdServiceName {
     if (-not $CredentialsFile) {
         $CredentialsFile = Join-Path (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent) "deployment_credentials.json"
     }
-    if ($ClinicEnv -and (Test-Path -LiteralPath $CredentialsFile)) {
-        try {
-            $credentials = Get-Content -LiteralPath $CredentialsFile | ConvertFrom-Json
-            if ($credentials.backend_api.clinic_api.ec2.systemd_service) {
-                return [string]$credentials.backend_api.clinic_api.ec2.systemd_service
+    # Clinic EC2 uses dental-clinic-api-clinic.service (see api/dental-clinic-api-clinic.service).
+    if ($ClinicEnv -or $Clinic) {
+        if (Test-Path -LiteralPath $CredentialsFile) {
+            try {
+                $credentials = Get-Content -LiteralPath $CredentialsFile | ConvertFrom-Json
+                $fromCreds = [string]$credentials.backend_api.clinic_api.ec2.systemd_service
+                if ($fromCreds) {
+                    # Legacy credentials used demo unit name "dental-clinic-api" before clinic unit existed.
+                    if ($fromCreds -eq 'dental-clinic-api') {
+                        return 'dental-clinic-api-clinic'
+                    }
+                    return $fromCreds
+                }
+            } catch {
+                # fall through
             }
-        } catch {
-            # fall through to default
         }
+        return "dental-clinic-api-clinic"
     }
-    # Matches api/dental-clinic-api.service on both demo and clinic EC2 instances.
+    # Demo EC2 uses dental-clinic-api-demo or legacy dental-clinic-api.
     return "dental-clinic-api"
 }
 
@@ -193,6 +203,15 @@ if (-not (Test-Path $localFile)) {
 
 # Determine the remote file path(s)
 $relativePath = $FilePath -replace "^api\\", "" -replace "^api/", ""
+if ($relativePath -match '^[A-Za-z]:') {
+    # Absolute Windows path passed; derive api-relative path from repo layout
+    $relFromRoot = $localFile.Path
+    $repoRootGuess = (Split-Path (Split-Path $PSScriptRoot -Parent) -Parent)
+    if ($relFromRoot.StartsWith($repoRootGuess, [StringComparison]::OrdinalIgnoreCase)) {
+        $relativePath = $relFromRoot.Substring($repoRootGuess.Length).TrimStart('\', '/')
+        $relativePath = $relativePath -replace "^api[/\\]", ""
+    }
+}
 if ($ClinicEnv) {
     if ($RemoteFileName) {
         Write-Host "⚠️  -ClinicEnv ignores -RemoteFileName; writing .env and retiring stale .env_api_clinic." -ForegroundColor Yellow

@@ -66,16 +66,19 @@ def port_forward_parameters_json(
     local_port: str,
 ) -> str:
     """
-    Escaped JSON for AWS CLI --parameters on Windows (matches ssm_tunnels.ps1).
+    JSON string for ``aws ssm start-session --parameters``.
+
+    Use ``json.dumps`` (valid JSON). The legacy PowerShell helper in
+    ``scripts/ssm_tunnels.ps1`` uses backslash-escaped quotes because the
+    Windows shell strips ``ConvertTo-Json`` output; Python ``subprocess`` passes
+    argv directly to ``aws.exe`` and requires normal JSON.
     """
-    return (
-        '{\\"host\\":[\\"'
-        + hostname
-        + '\\"],\\"portNumber\\":[\\"'
-        + remote_port
-        + '\\"],\\"localPortNumber\\":[\\"'
-        + local_port
-        + '\\"]}'
+    return json.dumps(
+        {
+            "host": [hostname],
+            "portNumber": [remote_port],
+            "localPortNumber": [local_port],
+        }
     )
 
 

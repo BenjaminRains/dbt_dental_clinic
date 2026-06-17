@@ -1,4 +1,7 @@
 # api/main.py
+from __future__ import annotations
+
+from typing import Optional
 from fastapi import FastAPI, Request, status, Depends
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
@@ -261,7 +264,7 @@ def read_root():
     }
 
 @app.get("/health")
-def health_check(settings: APISettings | None = Depends(get_api_settings_optional)):
+def health_check(settings: Optional[APISettings] = Depends(get_api_settings_optional)):
     """Health check endpoint - public access for ALB health checks"""
     env = (
         settings.stage.value

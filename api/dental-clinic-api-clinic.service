@@ -1,0 +1,20 @@
+[Unit]
+Description=Dental Clinic FastAPI (Clinic)
+After=network.target
+
+[Service]
+Type=simple
+User=ec2-user
+Group=ec2-user
+WorkingDirectory=/opt/dbt_dental_clinic/api
+# Single source of truth: api/.env (deployed via mdc deploy api --env clinic).
+# Do not use .env_api_clinic here — deploy retires that file to prevent drift.
+EnvironmentFile=/opt/dbt_dental_clinic/api/.env
+ExecStart=/opt/dbt_dental_clinic/api/venv/bin/python -m uvicorn main:app --host 0.0.0.0 --port 8000
+Restart=always
+RestartSec=5
+StandardOutput=append:/var/log/dental-clinic-api-clinic.log
+StandardError=append:/var/log/dental-clinic-api-clinic.log
+
+[Install]
+WantedBy=multi-user.target

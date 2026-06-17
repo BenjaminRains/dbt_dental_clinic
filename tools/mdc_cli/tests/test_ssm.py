@@ -11,18 +11,16 @@ from mdc_cli.ssm import load_ssm_context, port_forward_parameters_json, tunnel_c
 runner = CliRunner()
 
 
-def test_port_forward_parameters_json_matches_powershell_escaping():
+def test_port_forward_parameters_json_is_valid_for_aws_cli():
     raw = port_forward_parameters_json("db.example.com", "5432", "5433")
-    assert raw == (
-        '{\\"host\\":[\\"db.example.com\\"],'
-        '\\"portNumber\\":[\\"5432\\"],'
-        '\\"localPortNumber\\":[\\"5433\\"]}'
-    )
-    # AWS CLI receives this string; inner JSON after unescape
-    inner = raw.replace("\\", "")
-    payload = json.loads(inner)
+    payload = json.loads(raw)
     assert payload["host"] == ["db.example.com"]
+    assert payload["portNumber"] == ["5432"]
     assert payload["localPortNumber"] == ["5433"]
+    assert raw == (
+        '{"host": ["db.example.com"], "portNumber": ["5432"], '
+        '"localPortNumber": ["5433"]}'
+    )
 
 
 def test_load_ssm_context_from_fixture(tmp_path, monkeypatch):

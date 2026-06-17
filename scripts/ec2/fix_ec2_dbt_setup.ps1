@@ -98,7 +98,7 @@ if ($LASTEXITCODE -ne 0) {
 
 Write-Host "`nAll fixes completed successfully!" -ForegroundColor Green
 Write-Host "`nNext steps:" -ForegroundColor Cyan
-Write-Host "   1. Connect to EC2: aws ssm start-session --target $InstanceId" -ForegroundColor Gray
-Write-Host "   2. Source the setup script: source /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh" -ForegroundColor Gray
-Write-Host "   3. Source bashrc for PATH: source ~/.bashrc" -ForegroundColor Gray
-Write-Host "   4. Test dbt: cd /opt/dbt_dental_clinic/dbt_dental_models && dbt debug --target clinic" -ForegroundColor Gray
+Write-Host ('   1. Connect to EC2: aws ssm start-session --target ' + $InstanceId) -ForegroundColor Gray
+Write-Host '   2. Source the setup script: source /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh' -ForegroundColor Gray
+Write-Host '   3. Source bashrc for PATH: source ~/.bashrc' -ForegroundColor Gray
+Write-Host '   4. Test dbt: cd /opt/dbt_dental_clinic/dbt_dental_models; dbt debug --target clinic' -ForegroundColor Gray
