@@ -271,7 +271,10 @@ class TestCLIComprehensive:
             assert "Pipeline completed successfully" in result.output
             
             # Verify orchestrator was called correctly
-            mock_orchestrator_class.assert_called_once_with(config_path=config_path)
+            mock_orchestrator_class.assert_called_once_with(
+                config_path=config_path,
+                environment='test',
+            )
             assert mock_orchestrator.run_pipeline_for_table.call_count == 2
             mock_orchestrator.run_pipeline_for_table.assert_any_call('patient', force_full=True)
             mock_orchestrator.run_pipeline_for_table.assert_any_call('appointment', force_full=True)
@@ -316,7 +319,10 @@ class TestCLIComprehensive:
             assert "Pipeline completed successfully" in result.output
             
             # Verify orchestrator was called with config file
-            mock_orchestrator_class.assert_called_once_with(config_path=config_path)
+            mock_orchestrator_class.assert_called_once_with(
+                config_path=config_path,
+                environment='test',
+            )
             
         finally:
             # Clean up temporary file
@@ -479,16 +485,6 @@ class TestCLIDryRunComprehensive:
             mock_orchestrator_class.return_value = mock_orchestrator
             mock_orchestrator.initialize_connections.return_value = True
             
-            # Mock settings for comprehensive table information
-            mock_settings = MagicMock()
-            mock_orchestrator.settings = mock_settings
-            mock_settings.get_tables_by_importance.side_effect = lambda importance: {
-                'critical': ['patient', 'appointment'],
-                'important': ['procedurelog', 'payment'],
-                'audit': ['audit_log'],
-                'reference': ['zipcode', 'carrier']
-            }.get(importance, [])
-            
             # Test dry run with all options
             result = self.runner.invoke(cli, [
                 'run', '--dry-run', 
@@ -553,15 +549,14 @@ class TestCLIDryRunComprehensive:
         mock_orchestrator_class.return_value = mock_orchestrator
         mock_orchestrator.initialize_connections.return_value = True
         
-        # Mock settings with errors
+        # Mock settings with errors when listing tables for dry run
         mock_settings = MagicMock()
         mock_orchestrator.settings = mock_settings
-        mock_settings.get_tables_by_importance.side_effect = Exception("Settings error")
-        
+        mock_settings.list_tables.side_effect = Exception("Settings error")
+
         result = self.runner.invoke(cli, ['run', '--dry-run'])
-        assert result.exit_code == 0
-        assert "DRY RUN MODE - No changes will be made" in result.output
-        assert "Error getting tables - Settings error" in result.output
+        assert result.exit_code != 0
+        assert "❌ Unexpected Error: Settings error" in result.output
 
 
 class TestCLIStatusComprehensive:

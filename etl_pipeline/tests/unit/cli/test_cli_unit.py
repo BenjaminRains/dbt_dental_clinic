@@ -166,7 +166,10 @@ class TestCLIUnit:
         assert "Pipeline completed successfully" in result.output
         
         # Verify orchestrator was called correctly
-        mock_orchestrator_class.assert_called_once_with(config_path=None)
+        mock_orchestrator_class.assert_called_once_with(
+            config_path=None,
+            environment='test',
+        )
         mock_orchestrator.initialize_connections.assert_called_once()
         mock_orchestrator.process_tables_by_priority.assert_called_once_with(
             max_workers=4,
@@ -582,28 +585,30 @@ class TestCLIDryRunUnit:
         mock_orchestrator_class.return_value = mock_orchestrator
         mock_orchestrator.initialize_connections.return_value = True
         
-        # Mock settings for table information
+        # Mock settings for size-based table grouping in dry run output
         mock_settings = MagicMock()
         mock_orchestrator.settings = mock_settings
-        mock_settings.get_tables_by_importance.side_effect = lambda importance: {
-            'critical': ['patient'],
-            'important': ['appointment'],
-            'audit': ['procedurelog'],
-            'reference': ['payment']
-        }.get(importance, [])
-        
+        mock_settings.list_tables.return_value = [
+            'patient', 'appointment', 'procedurelog', 'payment'
+        ]
+        mock_settings.get_table_config.side_effect = lambda name: {
+            'patient': {'estimated_rows': 50000},
+            'appointment': {'estimated_rows': 100000},
+            'procedurelog': {'estimated_rows': 25000},
+            'payment': {'estimated_rows': 5000},
+        }.get(name, {})
+
         # Act: Execute dry run command
         result = self.runner.invoke(cli, ['run', '--dry-run'])
-        
+
         # Assert: Verify dry run output matches expected format
         assert result.exit_code == 0
         assert "DRY RUN MODE - No changes will be made" in result.output
         assert "All connections successful" in result.output
         assert "Would process all tables by priority" in result.output
-        # Check for actual table counts from mock (not hardcoded values)
-        assert "IMPORTANT: 1 tables" in result.output
-        assert "AUDIT: 1 tables" in result.output
-        assert "Total tables to process: 2" in result.output
+        assert "MEDIUM (10K-1M rows): 3 tables" in result.output
+        assert "SMALL (<10K rows): 1 tables" in result.output
+        assert "Total tables to process: 4" in result.output
         assert "Dry run completed - no changes made" in result.output
         
         # Verify that process_tables_by_priority was NOT called (dry run mode)
@@ -711,11 +716,6 @@ class TestCLIDryRunUnit:
         mock_orchestrator = MagicMock()
         mock_orchestrator_class.return_value = mock_orchestrator
         mock_orchestrator.initialize_connections.return_value = True
-        
-        # Mock settings for table information
-        mock_settings = MagicMock()
-        mock_orchestrator.settings = mock_settings
-        mock_settings.get_tables_by_importance.return_value = ['patient']
         
         # Test dry run command with --full flag
         result = self.runner.invoke(cli, ['run', '--dry-run', '--full'])
