@@ -24,7 +24,7 @@ import time
 sys.path.append(str(Path(__file__).parent.parent))
 
 from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.config import get_settings
+from etl_pipeline.config.script_env import add_stage_argument, load_script_settings
 from etl_pipeline.config.logging import setup_run_logging, get_logger
 
 # Create logs/compare_databases directory if it doesn't exist
@@ -1322,15 +1322,19 @@ def main():
                        help='Compare ETL tracking tables across databases')
     parser.add_argument('--tracking-details', type=str,
                        help='Get detailed tracking information for a specific table')
+    add_stage_argument(parser)
     
     args = parser.parse_args()
     
     logger.info("Starting database comparison analysis...")
     
     try:
-        # Get settings for connections
-        settings = get_settings()
-        
+        settings = load_script_settings(args.stage)
+    except ValueError as exc:
+        logger.error("Failed to load settings: %s", exc)
+        return 1
+    
+    try:
         # Create connections to all three databases
         logger.info("Creating database connections...")
         

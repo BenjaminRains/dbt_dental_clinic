@@ -5,6 +5,8 @@ import os
 import pytest
 
 from etl_pipeline.config.script_env import (
+    VALID_ETL_STAGES,
+    add_stage_argument,
     apply_supplemental_env,
     load_script_settings,
     resolve_script_stage,
@@ -71,3 +73,15 @@ class TestLoadScriptSettings:
             assert os.environ["ETL_ENVIRONMENT"] == "test"
         finally:
             reset_settings()
+
+
+@pytest.mark.unit
+class TestAddStageArgument:
+    def test_adds_stage_choices(self):
+        import argparse
+
+        parser = argparse.ArgumentParser()
+        add_stage_argument(parser)
+        args = parser.parse_args(["--stage", "clinic"])
+        assert args.stage == "clinic"
+        assert set(VALID_ETL_STAGES) == {"local", "clinic", "test"}

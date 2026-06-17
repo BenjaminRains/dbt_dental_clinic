@@ -15,6 +15,7 @@ import logging
 # Import modern connection handling
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.config import get_settings
+from etl_pipeline.config.script_env import add_stage_argument, load_script_settings
 from sqlalchemy import text
 
 # Configure logging
@@ -336,8 +337,15 @@ def main():
     parser.add_argument('--priority', choices=['high', 'medium', 'low'], help='Set table priority')
     parser.add_argument('--validate-connections', action='store_true', help='Validate all connection configurations')
     parser.add_argument('--validate-test', action='store_true', help='Validate test environment configuration')
+    add_stage_argument(parser)
     
     args = parser.parse_args()
+
+    try:
+        load_script_settings(args.stage)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 1
     
     # Load configuration
     try:
