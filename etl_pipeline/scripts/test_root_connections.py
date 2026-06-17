@@ -7,7 +7,7 @@ Connects to MySQL as root user and runs a simple test query on:
   2. Local MySQL replication - for granting privileges to replication_user
 
 Use this script to verify root connectivity before running grant scripts.
-Loads environment from .env_local or .env_clinic based on ETL_ENVIRONMENT.
+Loads environment via create_settings (settings_v2 / FileConfigProvider).
 
 Usage:
     set ETL_ENVIRONMENT=local   # or clinic
@@ -23,26 +23,13 @@ Environment variables:
     MYSQL_ROOT_HOST, MYSQL_ROOT_PORT, MYSQL_ROOT_DB, MYSQL_ROOT_USER, MYSQL_ROOT_PASSWORD
 """
 
+import argparse
 import os
 import sys
-from pathlib import Path
+
 from sqlalchemy import create_engine, text
 
-# Add etl_pipeline to path
-script_dir = Path(__file__).resolve().parent
-etl_dir = script_dir.parent
-sys.path.insert(0, str(etl_dir.parent))
-
-# Load env from .env_local or .env_clinic
-env_name = os.getenv('ETL_ENVIRONMENT', 'local')
-env_file = etl_dir / f'.env_{env_name}'
-if env_file.exists():
-    from dotenv import load_dotenv
-    # override=False: OS env (e.g. from environment_manager.ps1) wins over the file.
-    load_dotenv(env_file, override=False)
-    print(f"Loaded {env_file.name}")
-else:
-    print(f"Warning: {env_file} not found, using current environment")
+from etl_pipeline.scripts.script_env import load_script_settings
 
 
 def test_mysql_root(host: str, port: int, database: str, user: str, password: str) -> bool:
@@ -64,9 +51,27 @@ def test_mysql_root(host: str, port: int, database: str, user: str, password: st
         return False
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Test MySQL root connectivity for ETL setup.")
+    parser.add_argument(
+        "--stage",
+        choices=("local", "clinic"),
+        default=None,
+        help="ETL stage (default: ETL_ENVIRONMENT or local)",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    try:
+        settings = load_script_settings(args.stage, default_stage="local")
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+
     print("=" * 70)
-    print("MySQL Root Connection Tests")
+    print(f"MySQL Root Connection Tests (ETL_ENVIRONMENT={settings.environment})")
     print("=" * 70)
 
     ok_count = 0

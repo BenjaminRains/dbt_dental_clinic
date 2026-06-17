@@ -19,28 +19,12 @@ Usage:
     python -m etl_pipeline.scripts.test_env_test_connections
 """
 
-import os
 import sys
-from pathlib import Path
-from dotenv import load_dotenv
+
 from sqlalchemy import text
 
-# Ensure etl_pipeline package is on path
-script_dir = Path(__file__).resolve().parent
-etl_root = script_dir.parent
-sys.path.insert(0, str(etl_root.parent))
-
-
-def load_test_environment():
-    """Load .env_test so Settings uses test env and TEST_* vars."""
-    env_path = etl_root / ".env_test"
-    if not env_path.exists():
-        print(f"ERROR: {env_path} not found")
-        sys.exit(1)
-    # override=False: OS env wins; ETL_ENVIRONMENT=test is set explicitly below.
-    load_dotenv(env_path, override=False)
-    os.environ["ETL_ENVIRONMENT"] = "test"
-    print(f"Loaded: {env_path}")
+from etl_pipeline.core.connections import ConnectionFactory
+from etl_pipeline.scripts.script_env import load_script_settings
 
 
 def test_engine(engine, label: str) -> bool:
@@ -56,14 +40,12 @@ def test_engine(engine, label: str) -> bool:
 
 
 def main():
-    load_test_environment()
+    try:
+        settings = load_script_settings("test")
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
 
-    # Use the same Settings/ConnectionFactory as the pipeline
-    from etl_pipeline.config.settings import reset_settings, get_settings
-    from etl_pipeline.core.connections import ConnectionFactory
-
-    reset_settings()
-    settings = get_settings()
     if settings.environment != "test":
         print(f"ERROR: Expected environment 'test', got '{settings.environment}'")
         sys.exit(1)
