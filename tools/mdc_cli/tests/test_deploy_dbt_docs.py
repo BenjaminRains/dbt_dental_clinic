@@ -1,5 +1,6 @@
 """Tests for mdc deploy dbt-docs (Phase 5.3)."""
 
+import re
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -9,11 +10,17 @@ from mdc_cli.main import app
 runner = CliRunner()
 
 
+def _plain_cli_output(text: str) -> str:
+    """Strip Rich ANSI codes so help text assertions are stable in CI."""
+    return re.sub(r"\x1b\[[0-9;]*m", "", text)
+
+
 def test_deploy_dbt_docs_help():
     result = runner.invoke(app, ["deploy", "dbt-docs", "--help"])
     assert result.exit_code == 0
-    assert "dbt-docs" in result.output
-    assert "skip-generate" in result.output
+    plain = _plain_cli_output(result.output)
+    assert "dbt-docs" in plain
+    assert "skip-generate" in plain
 
 
 @patch("mdc_cli.commands.deploy.deploy_dbt_docs", return_value=0)
