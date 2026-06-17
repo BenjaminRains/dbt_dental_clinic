@@ -107,6 +107,25 @@ def build_child_env(settings: dict[str, str]) -> dict[str, str]:
     return build_isolated_child_env(settings)
 
 
+def apply_tunnel_db_overrides(
+    settings: dict[str, str],
+    *,
+    local_host: str = "127.0.0.1",
+    local_port: Optional[int] = None,
+) -> dict[str, str]:
+    """
+    Point clinic/local API runs at an SSM port-forward (mdc tunnel clinic-db).
+
+    ``mdc api run`` loads RDS host from the stage env file and ignores parent-shell
+    POSTGRES_* vars; use ``--tunnel-db`` instead of exporting host/port manually.
+    """
+    port = str(local_port if local_port is not None else os.environ.get("POSTGRES_PORT") or "5433")
+    merged = dict(settings)
+    merged["POSTGRES_ANALYTICS_HOST"] = local_host
+    merged["POSTGRES_ANALYTICS_PORT"] = port
+    return merged
+
+
 def load_env_dict_isolated(
     component: str,
     stage: str,

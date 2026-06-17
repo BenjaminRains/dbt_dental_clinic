@@ -52,6 +52,33 @@ def test_api_run_clinic_no_reload_by_default(
     assert "--reload" not in cmd
 
 
+@patch("mdc_cli.commands.api.run_isolated", return_value=0)
+@patch("mdc_cli.commands.api.require_component_python")
+@patch("mdc_cli.commands.api.load_env_dict_isolated")
+@patch("mdc_cli.commands.api.validate_api_stage", return_value=(True, None))
+def test_api_run_clinic_tunnel_db_overrides_postgres(
+    mock_validate,
+    mock_load,
+    mock_python,
+    mock_run,
+):
+    mock_load.return_value = {
+        "POSTGRES_ANALYTICS_HOST": "dental-clinic-analytics.example.rds.amazonaws.com",
+        "POSTGRES_ANALYTICS_PORT": "5432",
+    }
+    mock_python.return_value = Path("api/venv/Scripts/python.exe")
+
+    result = runner.invoke(
+        app,
+        ["api", "run", "--env", "clinic", "--tunnel-db", "--port", "8001"],
+    )
+
+    assert result.exit_code == 0
+    settings = mock_run.call_args.kwargs["settings"]
+    assert settings["POSTGRES_ANALYTICS_HOST"] == "127.0.0.1"
+    assert settings["POSTGRES_ANALYTICS_PORT"] == "5433"
+
+
 @patch("mdc_cli.commands.etl.run_isolated", return_value=0)
 @patch("mdc_cli.commands.etl.require_component_python")
 @patch("mdc_cli.commands.etl.load_env_dict_isolated")
