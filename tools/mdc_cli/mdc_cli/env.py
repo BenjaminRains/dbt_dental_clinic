@@ -79,6 +79,8 @@ def validate_etl_stage(stage: str, profile: Optional[str] = None) -> tuple[bool,
             profile=resolved_profile,
         )
         return True, None
+    except ModuleNotFoundError as exc:
+        return False, f"ETL dependencies missing ({exc.name}); use etl_pipeline Pipenv venv"
     except ValueError as exc:
         return False, str(exc)
 

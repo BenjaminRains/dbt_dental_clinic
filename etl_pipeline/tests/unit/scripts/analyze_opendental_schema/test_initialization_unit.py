@@ -103,8 +103,7 @@ class TestOpenDentalSchemaAnalyzerInitialization:
             - Settings injection validation
         """
         with patch('scripts.analyze_opendental_schema.ConnectionFactory') as mock_factory, \
-             patch('scripts.analyze_opendental_schema.inspect') as mock_inspect, \
-             patch('scripts.analyze_opendental_schema.get_settings') as mock_get_settings:
+             patch('scripts.analyze_opendental_schema.inspect') as mock_inspect:
             
             # Create mock engine
             mock_engine = Mock()
@@ -116,9 +115,9 @@ class TestOpenDentalSchemaAnalyzerInitialization:
             
             # Mock Settings to return None for database (simulate missing config)
             mock_settings = Mock()
-            mock_settings.get_source_connection_config.return_value = {'database': None}  # Missing database!
-            mock_get_settings.return_value = mock_settings
+            mock_settings.environment = 'test'
+            mock_settings.get_source_connection_config.return_value = {'database': None}
             
             # Act & Assert: Verify system fails fast
             with pytest.raises(ValueError, match="Source database is not configured"):
-                analyzer = OpenDentalSchemaAnalyzer() 
+                OpenDentalSchemaAnalyzer(settings=mock_settings) 
