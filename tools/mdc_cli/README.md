@@ -21,7 +21,7 @@ status
 api-run
 ```
 
-Use `.\load_project.ps1 -Legacy` only for unmigrated monolith menus.
+Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, etc.).
 
 ## Commands
 
@@ -34,7 +34,7 @@ Use `.\load_project.ps1 -Legacy` only for unmigrated monolith menus.
 
 ### Runtime (stateless, isolated child env)
 
-- `mdc api run --env <stage>` — uvicorn; `--reload` default on `local` only
+- `mdc api run --env <stage>` — uvicorn; `--reload` default on `local` only; `--tunnel-db` for clinic + `mdc tunnel clinic-db`
 - `mdc etl run|status|test-connections --env <stage> [--profile full] -- [args]`
 - `mdc dbt run|test|docs --env <stage> -- [args]`
 - `mdc dbt invoke --env <stage> -- deps` — arbitrary dbt subcommands

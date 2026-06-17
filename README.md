@@ -42,14 +42,15 @@ Both use synthetic data only; no database or code required.
 
 **Option B — Run locally (2–3 steps)**  
 
-1. **One-time setup:** clone repo, then use the environment manager so API + ETL + dbt point at your DBs:
+1. **One-time setup:** clone repo, install `mdc`, load optional aliases:
    ```powershell
-   .\scripts\environment_manager.ps1
-   # Choose api-init (then local/demo), or etl-init, or dbt-init as needed
+   pip install -e tools/mdc_cli
+   .\load_project.ps1
+   mdc status
    ```
-2. **Backend:** from repo root, start the API (after `api-init`):
+2. **Backend:** from repo root:
    ```powershell
-   cd api && uvicorn main:app --reload
+   mdc api run --env local
    ```
 3. **Frontend:** in another terminal:
    ```powershell
@@ -163,8 +164,9 @@ dbt_dental_clinic/
 ├── api/                       # FastAPI (routers, models, services)
 ├── frontend/                  # React app (src/pages, components, services)
 ├── scripts/
-│   ├── environment_manager.ps1   # dbt-init, etl-init, api-init, frontend-deploy, env-status
-│   ├── deployment/               # Deploy to EC2, deploy dbt/api files, credentials
+│   ├── mdc_aliases.ps1             # optional PowerShell aliases (load_project.ps1)
+│   ├── archive/                    # legacy environment_manager (Phase 5.5 reference)
+│   ├── deployment/                 # Deploy to EC2, deploy dbt/api files, credentials
 │   ├── ec2/                      # Run dbt on EC2, setup, fixes
 │   ├── verification/             # Verify AWS resources
 │   ├── database/                 # Local demo DB setup, query
@@ -188,7 +190,7 @@ The `etl_pipeline/synthetic_data_generator/` creates synthetic OpenDental-like d
 
 Deployment is optional; the app can run locally against a PostgreSQL warehouse.
 
-**Frontend (S3 + CloudFront):** Use the `frontend-deploy` command from `scripts/environment_manager.ps1`. It builds the React app, uploads to S3, and invalidates CloudFront. Set `FRONTEND_BUCKET_NAME`, `FRONTEND_DIST_ID`, and `FRONTEND_DOMAIN` (env or `.frontend-deploy.json`). Other commands: `dbt-init`, `etl-init`, `api-init`, `frontend-status`, `env-status`.
+**Frontend (S3 + CloudFront):** `mdc deploy frontend --target demo|clinic` or alias `demo-frontend-deploy`. `mdc frontend dev` for local Vite. `mdc deploy dbt-docs` for portfolio dbt docs site.
 
 **Backend (EC2 + ALB):** API can be run on EC2 behind an ALB with RDS PostgreSQL; see `docs/DEPLOYMENT_WORKFLOW.md` and deployment scripts in [`scripts/deployment/`](scripts/deployment/) (see [`scripts/README.md`](scripts/README.md)). Hosted sample API: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com); frontend: [https://dbtdentalclinic.com](https://dbtdentalclinic.com). Demo uses synthetic data only; no production OpenDental connection.
 

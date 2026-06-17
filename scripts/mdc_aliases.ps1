@@ -1,6 +1,6 @@
-﻿# Phase 4.5 — thin PowerShell aliases over mdc (default daily dev workflow).
+﻿# Phase 5.5 — thin PowerShell aliases over mdc (default daily dev workflow).
 # Load via: .\load_project.ps1
-# Full deploy/SSM/frontend manager: .\load_project.ps1 -Legacy
+# One-time: pip install -e tools/mdc_cli
 
 . (Join-Path $PSScriptRoot "mdc_invoke.ps1")
 
@@ -221,7 +221,6 @@ Write-Host "  dbt-docs-deploy              mdc deploy dbt-docs" -ForegroundColor
 Write-Host "  consult-audio-validate       mdc consult-audio validate" -ForegroundColor Cyan
 Write-Host "  consult-audio-run            mdc consult-audio pipeline run" -ForegroundColor Cyan
 Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api" -ForegroundColor Cyan
+Write-Host "  mdc api run --env clinic --tunnel-db  clinic API via mdc tunnel clinic-db" -ForegroundColor Cyan
 Write-Host "  ssm-connect-clinic-api       SSM shell on clinic API EC2" -ForegroundColor Cyan
-Write-Host ""
-Write-Host "Legacy -Legacy manager: unmigrated monolith menus only." -ForegroundColor DarkGray
 Write-Host ""

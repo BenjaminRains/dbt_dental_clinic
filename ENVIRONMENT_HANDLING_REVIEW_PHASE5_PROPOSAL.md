@@ -1,9 +1,9 @@
 ## Phase 5 — Python-first orchestration; retire the Legacy environment manager
 
-> Status: **in progress** (Phases **5.1–5.4 done**; mdc **0.7.4** on feature branch). Remaining: **5.5** (archive monolith), **5.6** polish.
+> Status: **in progress** (Phases **5.1–5.5 done**; mdc **0.8.0**). Remaining: **5.6** polish.
 > Objective: complete the migration started in Phase 4 by moving **deploy, SSM, frontend, consult-audio, and dbt-docs** workflows into the **`mdc` Python CLI**, leaving PowerShell as an **optional thin wrapper** (or none at all after `pip install -e tools/mdc_cli`).
 > Prerequisite: Phase 4 complete (Phases 4.1–4.6 merged; mdc **0.6.0**) — satisfied.
-> Merged to `main`: PR #14 (5.1 SSM + 5.3 frontend), #15 (sync), #16 (5.3 dbt-docs + demo hosting config, **0.7.3**). **5.4 (0.7.4)** + CI test fix on `refactor/phase5-mdc-frontend` after green CI (PR #17 sync).
+> Merged to `main`: PR #14–#16 (5.1–5.3), #18 (5.4 **0.7.4**), #19 (`--tunnel-db`). **5.5** on `refactor/phase5-5-archive-legacy-manager`.
 
 ### Implementation status
 
@@ -13,8 +13,8 @@
 | 5.2 — Shared credentials module | **done** | `credentials.py`; `_norm()` coerces numeric JSON fields |
 | 5.3 — Frontend + dbt docs via mdc | **done** (0.7.3) | `mdc frontend dev\|status`; `mdc deploy frontend`; `mdc deploy dbt-docs`; `demo_frontend` + `.frontend-deploy.json` resolution |
 | 5.4 — Consult audio via mdc | **done** (0.7.4) | `mdc consult-audio install\|validate\|pipeline\|analyze\|run` |
-| 5.5 — Archive Legacy manager | **planned** | `environment_manager.ps1` still ~2,160 lines under `-Legacy` |
-| 5.6 — Docs, CI, polish | **partial** | **Done:** CI workflow (86 tests, Ubuntu-safe frontend mocks). **Open:** Unicode CLI, test file rename, `etl-status` docs |
+| 5.5 — Archive Legacy manager | **done** (0.8.0) | Monolith → `scripts/archive/`; thin `load_project.ps1`; deprecation stub |
+| 5.6 — Docs, CI, polish | **partial** | **Done:** CI workflow. **Open:** Unicode CLI, test file rename, `etl-status` docs, `ENVIRONMENT_HANDLING_REVIEW.md` |
 
 **Current daily workflow (no `-Legacy` for these):**
 
@@ -35,12 +35,13 @@ mdc consult-audio pipeline run --llm claude
 mdc deploy api --env clinic
 ```
 
-**Still requires `-Legacy`:** only until **5.5** tears down `environment_manager.ps1` (no daily workflow needs it).
+**Still requires `-Legacy`:** none for documented daily workflows (`-Legacy` loads archived monolith with deprecation warning only).
 
-**Optional Windows shorthand** (after 5.5):
+**Optional Windows shorthand:**
 
 ```powershell
-.\load_project.ps1   # ~20 lines: ensure mdc on PATH + optional aliases only
+.\load_project.ps1   # optional aliases: api-run → mdc api run ...
+pip install -e tools/mdc_cli   # once per machine / venv
 ```
 
 See `ENVIRONMENT_HANDLING_REVIEW.md` for Phases 0–4 history; Phase 4 detail in `ENVIRONMENT_HANDLING_REVIEW_PHASE4_PROPOSAL.md`.
@@ -76,14 +77,9 @@ Phase 4 made api/etl/dbt stateless. **Phase 5.1–5.4 addressed remaining glue:*
 | Duplicate JSON parsing in PS | `credentials.py` (+ `demo_frontend`, `.frontend-deploy.json`) |
 | `ssm-connect-*` dot-sourced `ssm_tunnels.ps1` | `mdc ssm connect` + thin aliases |
 
-**Still open:**
+**Still open (5.6):** Unicode CLI polish, test file rename, `etl-status` docs.
 
-```powershell
-.\load_project.ps1 -Legacy   # monolith prompt/*-init shims until 5.5
-```
-
-1. **`environment_manager.ps1`** (~2,160 lines) — duplicate code remains until 5.5 teardown.
-2. **`ps_invoke.py`** — still wraps `deploy_api_file.ps1` only (acceptable deferral).
+1. **`ps_invoke.py`** — wraps `deploy_api_file.ps1` only (acceptable deferral).
 
 Phase 5 end state remains: **one CLI entry point** (`mdc`) for validation, runtime, tunnels, and deploy wrappers ops already run.
 
@@ -308,18 +304,16 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 | Tests | `test_consult_audio_env.py`, `test_consult_audio_commands.py` |
 | Verified | Operator: `validate`, `pipeline run`, `pipeline status` on Windows |
 
-#### Phase 5.5 — Archive Legacy environment manager
+#### Phase 5.5 — Archive Legacy environment manager — **done**
 
-| Item | Action |
+| Item | Result |
 |------|--------|
-| `environment_manager.ps1` | Move to `scripts/archive/environment_manager.ps1` or delete after parity checklist |
-| `load_project.ps1` | Default: message pointing to `pip install -e tools/mdc_cli`; optional dot-source **only** `mdc_aliases.ps1` |
-| Remove `-Legacy` flag | Or keep as alias that prints "deprecated; use mdc" |
-| `mdc_invoke.ps1` | Keep for aliases; remove `Invoke-MDC` dependency on monolith |
-| `ps_invoke.py` | Remove `invoke_ps_function` for frontend; keep `invoke_ps_script_file` for deploy API |
-| `project_profile.ps1` | Load thin aliases only |
-
-**Stretch:** `environment_manager.ps1` absent from repo; `scripts/README.md` lists `mdc` only.
+| `environment_manager.ps1` | Moved to `scripts/archive/`; deprecation stub at `scripts/environment_manager.ps1` |
+| `load_project.ps1` | Default → `mdc_aliases.ps1`; `-Legacy` deprecated (loads archive with warning) |
+| `mdc_run_ps_function.ps1`, `mdc_run_ssm_tunnel.ps1` | Archived; removed from active `scripts/` |
+| `ps_invoke.py` | `invoke_ps_script_file` only (deploy API) |
+| `project_profile.ps1`, `load_env.ps1`, `.ps1_profile` | Thin alias loaders only |
+| mdc version | **0.8.0** |
 
 #### Phase 5.6 — Docs, CI, polish — **partial**
 
@@ -357,10 +351,10 @@ Phase 5 is **complete** when:
 - [x] `mdc frontend dev`, `mdc deploy frontend --target demo|clinic`, `mdc deploy dbt-docs` without `environment_manager.ps1`.
 - [x] `deployment_credentials.json` and env-file key parsing in **one** Python module (`credentials.py`).
 - [x] `.\load_project.ps1 -Legacy` not required for **documented daily workflows** (api/etl/dbt, frontend, tunnels, SSM, dbt-docs, consult-audio).
-- [ ] `environment_manager.ps1` archived or under **200 lines**.
+- [x] `environment_manager.ps1` archived (`scripts/archive/`); active path is deprecation stub.
 - [x] `mdc consult-audio validate` without shell venv activation.
 - [x] CI runs `mdc status` and pytest without PowerShell / `load_project.ps1` (`.github/workflows/mdc_cli.yml`).
-- [~] `scripts/README.md` and main review describe Python-first onboarding — **partial** until 5.5.
+- [x] `scripts/README.md` and main review describe Python-first onboarding.
 
 Acceptable deferrals (unchanged):
 
@@ -395,10 +389,9 @@ Acceptable deferrals (unchanged):
 
 ### Suggested implementation order (remaining)
 
-1. **5.5** — archive / shrink `environment_manager.ps1` after parity checklist
-2. **5.6 remainder** — Unicode polish, test file rename, `etl-status` default docs
+1. **5.6 remainder** — Unicode polish, test file rename, `etl-status` default docs, `ENVIRONMENT_HANDLING_REVIEW.md`
 
-**Completed order:** 5.2 → 5.1 → 5.3 (0.7.3 hosting fix) → 5.6 (CI) → 5.4 (0.7.4) → CI frontend test fix.
+**Completed order:** 5.2 → 5.1 → 5.3 → 5.6 (CI) → 5.4 → CI frontend fix → 5.5 (0.8.0).
 
 ---
 
