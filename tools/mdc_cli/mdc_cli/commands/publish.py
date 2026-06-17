@@ -6,9 +6,29 @@ import typer
 
 from mdc_cli.paths import REPO_ROOT
 from mdc_cli.ps_invoke import invoke_ps_script_file
+from mdc_cli.run_helper import is_local_tcp_port_open
 from mdc_cli.stages import require_api_stage
 
-publish_app = typer.Typer(help="Publish local analytics data to clinic RDS")
+publish_app = typer.Typer(help="Publish local marts schema to clinic RDS")
+
+WORKFLOW_DOC = "docs/CLINIC_ANALYTICS_WORKFLOW.md"
+
+
+def _echo_tunnel_missing(tunnel_port: int) -> None:
+    typer.echo(
+        f"\nClinic RDS is in a private VPC. Publish needs an SSM tunnel on "
+        f"127.0.0.1:{tunnel_port} — nothing is listening there yet.\n",
+        err=True,
+    )
+    typer.echo("In a separate terminal (leave it open):", err=True)
+    typer.echo("  mdc tunnel clinic-db", err=True)
+    typer.echo(
+        "\nWait until you see:  Port 5433 opened ... Waiting for connections...",
+        err=True,
+    )
+    typer.echo("Then rerun:", err=True)
+    typer.echo(f"  mdc publish analytics --env clinic --tunnel-port {tunnel_port}", err=True)
+    typer.echo(f"\nFull workflow: {WORKFLOW_DOC}", err=True)
 
 
 @publish_app.command("analytics")
@@ -21,8 +41,13 @@ def publish_analytics(
         help="Connect to RDS endpoint from env (skip localhost tunnel port)",
     ),
     tunnel_port: int = typer.Option(5433, "--tunnel-port", help="Local tunnel port when not direct"),
+    skip_tunnel_check: bool = typer.Option(
+        False,
+        "--skip-tunnel-check",
+        help="Skip localhost tunnel preflight (script still checks before restore)",
+    ),
 ) -> None:
-    """Copy local marts/int/staging to clinic RDS via pg_dump + pg_restore."""
+    """Copy local marts schema to clinic RDS via pg_dump + pg_restore."""
     require_api_stage(env)
     if env != "clinic":
         typer.echo("mdc publish analytics currently supports --env clinic only.", err=True)
@@ -33,14 +58,23 @@ def publish_analytics(
         typer.echo(f"Publish script not found: {script.relative_to(REPO_ROOT)}", err=True)
         raise typer.Exit(code=2)
 
+    typer.echo(f"PUBLISH  analytics  clinic  -> {script.relative_to(REPO_ROOT)}")
+    if use_direct_rds:
+        typer.echo("  Mode: direct RDS endpoint from api/.env_api_clinic")
+    else:
+        typer.echo(f"  Mode: local tunnel 127.0.0.1:{tunnel_port} (mdc tunnel clinic-db)")
+        if not skip_tunnel_check:
+            if is_local_tcp_port_open("127.0.0.1", tunnel_port):
+                typer.echo(f"  Tunnel OK: 127.0.0.1:{tunnel_port}")
+            else:
+                _echo_tunnel_missing(tunnel_port)
+                raise typer.Exit(code=1)
+
     args: list[str] = ["-TunnelPort", str(tunnel_port)]
     if dry_run:
         args.append("-DryRun")
     if use_direct_rds:
         args.append("-UseDirectRds")
 
-    typer.echo(f"PUBLISH  analytics  clinic  -> {script.relative_to(REPO_ROOT)}")
-    if not use_direct_rds:
-        typer.echo(f"  Expect tunnel on 127.0.0.1:{tunnel_port} (mdc tunnel clinic-db)")
     code = invoke_ps_script_file(script, args)
     raise typer.Exit(code=code)
