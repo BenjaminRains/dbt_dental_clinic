@@ -23,7 +23,7 @@ ETL Context:
     - Critical for ETL pipeline orchestration and coordination
     - Supports dental clinic data processing workflows
     - Uses Settings injection for environment-agnostic connections
-    - Enforces FAIL FAST security to prevent accidental production usage
+    - Enforces FAIL FAST security to prevent using the wrong ETL stage
     - Optimized for dental clinic data volumes and processing patterns
 """
 
@@ -493,7 +493,7 @@ class TestPipelineOrchestratorUnit:
         Validates:
             - FAIL FAST behavior is maintained
             - Clear error messages are provided
-            - No dangerous defaults to production
+            - No dangerous defaults to clinic
         """
         import os
         

@@ -1,7 +1,7 @@
 # ETL Pipeline Code Review
 
-**Date:** 2026-06-16 (updated 2026-06-17)  
-**Scope:** `etl_pipeline/` — config authority migration, `Settings` class, legacy env loading  
+**Date:** 2026-06-16 (updated 2026-06-17 — dotenv audit)  
+**Scope:** `etl_pipeline/` — config authority migration, `Settings` class, legacy env loading; **§2** includes project-wide `python-dotenv` audit (`api/`, `dbt/`, `mdc`, consult audio)  
 **Current env reference:** [docs/ENVIRONMENT_FILES.md](../../docs/ENVIRONMENT_FILES.md)  
 **Refactor history (archived):** [docs/_archive/ENVIRONMENT_HANDLING_REVIEW.md](../../docs/_archive/ENVIRONMENT_HANDLING_REVIEW.md)
 
@@ -11,7 +11,7 @@
 
 The **Python config authority** for ETL connections is `settings_v2.py` → `FileConfigProvider` → `Settings`. Production library code (`get_settings()`, orchestration, loaders) is on that path when run via `mdc` or with `ETL_ENVIRONMENT` set.
 
-**Remaining gaps:** `Settings` is still a **hybrid facade** (env router + YAML reader) with a **dual validation path** (pydantic for production, legacy `ENV_MAPPINGS` for unit tests). Stage detection is duplicated between `Settings` and `settings_v2`. Loader TODOs and missing architecture docs are tracked below.
+**Remaining gaps:** `Settings` is still a **hybrid facade** (env router + YAML reader) with a **dual validation path** (pydantic for production, legacy `ENV_MAPPINGS` for unit tests). Stage detection is duplicated between `Settings` and `settings_v2`. **ETL integration test fixtures** still use `load_dotenv(override=True)` — see §2.4. Loader TODOs and missing architecture docs are tracked below.
 
 **Completed since initial review (2026-06-17):**
 - `config/script_env.py` — shared `load_script_settings()` / `--stage` for standalone scripts
@@ -57,11 +57,57 @@ For scripts that need only connection testing: `load_etl_env_dict(environment=st
 
 ---
 
-## 2. Legacy `load_dotenv` Audit
+## 2. `python-dotenv` Audit (project-wide)
 
-### 2.1 Scripts — migrated ✅
+**Audited:** 2026-06-17  
+**Scope:** `api/`, `etl_pipeline/`, `dbt_dental_models/`, `tools/mdc_cli/`, `consult_audio_pipe/`  
+**Reference:** [docs/ENVIRONMENT_FILES.md](../../docs/ENVIRONMENT_FILES.md) §3.4 — one loader per component, no scattered `load_dotenv`, OS env wins (Phase 0).
 
-All standalone scripts under `scripts/` now use `config/script_env.py` (`load_script_settings` / `resolve_script_stage`). No `load_dotenv` in production script paths.
+### 2.1 What the new model expects
+
+| Principle | Intent |
+|-----------|--------|
+| **One loader per component** | `api/settings.py`, `etl_pipeline/.../settings_v2.py`, `tools/mdc_cli/mdc_cli/dbt_env.py` |
+| **No scattered `load_dotenv`** | Avoid mutating `os.environ` from many import sites |
+| **OS env wins** | Process / systemd / `mdc` child env beats on-disk `.env_*` files |
+| **`mdc` isolated child env** | `run_isolated` + flat env dicts, not shell dot-sourcing |
+| **Fail fast + log source** | Typed pydantic settings, one startup log line |
+
+The anti-pattern is **`load_dotenv()` at module import**, especially with `override=True`, which can shadow production/systemd values or fight `mdc`'s scrub-and-inject flow.
+
+**Acceptable dotenv usage:** `dotenv_values()` for read-only file parsing (no `os.environ` mutation); pydantic-settings `_env_file` / `dotenv_settings` source with custom precedence ordering.
+
+### 2.2 Summary by component
+
+| Location | API used | Mutates `os.environ`? | Aligned? |
+|----------|----------|------------------------|----------|
+| `api/settings.py` | `dotenv_values` + pydantic `dotenv_settings` | No direct `load_dotenv` | ✅ Canonical API loader |
+| `api/test_config.py` | `dotenv_values` | No (test harness only) | ✅ |
+| `etl_pipeline/.../settings_v2.py` | `dotenv_values` + pydantic `dotenv_settings` | No direct `load_dotenv` | ✅ Canonical ETL loader |
+| `etl_pipeline/.../script_env.py` | None | Seeds OS only where empty | ✅ |
+| `tools/mdc_cli/mdc_cli/dbt_env.py` | `dotenv_values` | No | ✅ Canonical dbt loader |
+| `tools/mdc_cli/mdc_cli/credentials.py` | Hand-rolled parser | No | ✅ (not python-dotenv) |
+| `tools/mdc_cli/mdc_cli/consult_audio_env.py` | Hand-rolled `_parse_dotenv_file` | No | ✅ |
+| `etl_pipeline/tests/fixtures/env_fixtures.py` | **`load_dotenv(..., override=True)`** | **Yes** | ⚠️ Conflict / legacy test pattern |
+| `consult_audio_pipe/` (several files) | `load_dotenv(..., override=False)` at import | Yes | ⚠️ Redundant with `mdc` |
+| `dbt_dental_models/` | None | — | N/A (dbt uses `env_var()` + mdc) |
+
+### 2.3 API (`api/`)
+
+**Production — aligned.** `api/settings.py` does not call `load_dotenv()`.
+
+- **`dotenv_values`** in `_resolve_sslmode()` — reads `POSTGRES_ANALYTICS_SSLMODE` from the stage file without touching `os.environ` (comment: "without load_dotenv").
+- **`dotenv_values`** in `export_api_env_dict()` — flat dict for `mdc api run` / `mdc_cli/env.py` child-process injection.
+- **Pydantic** `dotenv_settings` source when `_env_file` is passed to `AnalyticsDBSettings` / `APIRuntimeSettings` — internal read with `IgnoreBlankEnvSettingsSource` so OS env beats file and blanks are dropped.
+- **Phase 0:** `_env_file_for_stage()` returns `None` when analytics creds are complete in `os.environ`, so stale on-disk `api/.env_api_*` cannot shadow systemd/EC2 `api/.env`.
+
+`api/config.py` delegates to settings — no dotenv usage. Dependency: `api/requirements.txt` lists `python-dotenv>=1.0.0` (pydantic-settings + `dotenv_values` helpers).
+
+### 2.4 ETL (`etl_pipeline/`)
+
+#### Scripts — migrated ✅
+
+All standalone scripts under `scripts/` use `config/script_env.py` (`load_script_settings` / `resolve_script_stage`). No `load_dotenv` in production script paths.
 
 | Script | Status |
 |--------|--------|
@@ -78,21 +124,87 @@ All standalone scripts under `scripts/` now use `config/script_env.py` (`load_sc
 | `initialize_etl_tracking_tables.py` | ✅ `--stage` + `load_script_settings` |
 | `run_loader_smoke.py` | ✅ `resolve_script_stage` (no silent default; requires stage or env) |
 
-### 2.2 Test fixtures — acceptable but improvable
-
-| Location | Pattern | Notes |
-|----------|---------|-------|
-| `tests/fixtures/env_fixtures.py` | `load_dotenv(..., override=True)` for integration | Intentional override for tests; could migrate to `load_etl_env_dict` + `os.environ.update` |
-| `tests/fixtures/env_fixtures.py` | `DictConfigProvider` / `create_test_settings` for unit tests | ✅ Correct pattern |
-
-### 2.3 Library code — correct
+#### Library code — correct ✅
 
 | Location | Role |
 |----------|------|
-| `etl_pipeline/config/settings_v2.py` | Authority; `dotenv_values` only for supplemental GLIC_* merge |
-| `etl_pipeline/config/script_env.py` | Script bootstrap → `create_settings` |
+| `etl_pipeline/config/settings_v2.py` | Authority; `dotenv_values` for supplemental `GLIC_*` merge and error hints only |
+| `etl_pipeline/config/script_env.py` | Script bootstrap → `create_settings`; `apply_supplemental_env` fills OS gaps only |
 | `etl_pipeline/config/providers.py` | Delegates to `settings_v2` |
 | `etl_pipeline/orchestration/*`, `loaders/*`, `core/connections.py` | Use injected / `get_settings()` — no direct dotenv |
+
+`settings_v2.py` mirrors API: pydantic `_env_file` for connection models; `dotenv_values` in `_missing_env_hint()` and `_supplement_env_dict()`; Phase 0 via `_env_file_for_pydantic()` skips file when analytics creds are in OS env.
+
+#### Test fixtures — main tension ⚠️
+
+`tests/fixtures/env_fixtures.py` calls `load_dotenv(..., override=True)` in:
+
+- `load_test_environment_file` — used by integration/comprehensive tests (e.g. `test_postgres_loader.py`, `test_exceptions_integration.py`)
+- `load_clinic_environment_file` → `clinic_settings_with_file_provider`
+
+| New practice | Fixture behavior |
+|--------------|------------------|
+| OS env wins | `override=True` → **file wins** over existing shell vars |
+| Single loader (`settings_v2`) | Fixture pre-seeds `os.environ`, then `FileConfigProvider` loads again via `settings_v2` |
+| `mdc` child isolation | Tests bypass `mdc`'s scrub + `load_etl_env_dict()` |
+
+The comment in the fixture says override is intentional so tests load `.env_test` even if the shell is polluted — but that **inverts production precedence** and can hide stale-shell bugs Phase 0 was meant to catch. Most unit tests use `DictConfigProvider` + `test_env_vars` and never touch dotenv.
+
+**Recommended migration:** replace fixture `load_dotenv` with `load_etl_env_dict()` + `_overlay_os_environ`, or inject via `DictConfigProvider` / `load_etl_connection_settings_from_env`.
+
+### 2.5 dbt (`dbt_dental_models/` + `tools/mdc_cli/`)
+
+No Python dotenv in `dbt_dental_models/`. dbt reads vars via `profiles.yml` `env_var()`.
+
+**`tools/mdc_cli/mdc_cli/dbt_env.py`** — `_read_env_file()` uses `dotenv_values` (read-only), then `_overlay_os_env()` applies Phase 0 (OS wins). No `load_dotenv`.
+
+`mdc_cli/env.py` wires API / ETL / dbt loaders into `build_child_env()` / `run_isolated()` — the intended runtime path.
+
+### 2.6 Consult audio pipe (related)
+
+| File | Pattern |
+|------|---------|
+| `consult_audio_pipe/analysis.py` | `load_dotenv(..., override=False)` at **module import** |
+| `consult_audio_pipe/scripts/llm_analysis_integration.py` | Same |
+| `consult_audio_pipe/tests/test_*_api.py` | Same |
+
+When run via **`mdc consult-audio`**, `consult_audio_env.py` already builds a child env dict and `run_isolated` injects it — import-time `load_dotenv` is **redundant**. `override=False` means mdc's injected env still wins (no precedence bug), but it violates "load once, no scattered calls." Direct `python -m consult_audio_pipe...` without mdc still depends on that import-time load.
+
+### 2.7 Indirect dotenv via pydantic-settings
+
+Both `api/settings.py` and `settings_v2.py` pass `_env_file=...` into pydantic `BaseSettings`. **pydantic-settings uses python-dotenv under the hood** for that file source. This is expected and controlled:
+
+- Custom source order: init → env (OS) → dotenv (file) → secrets
+- `IgnoreBlankEnvSettingsSource` strips empty strings
+- File path can be `None` when OS is authoritative
+
+`python-dotenv` remains a dependency even where `load_dotenv` is never called directly.
+
+### 2.8 Dependency footprint
+
+| Package | Declares `python-dotenv` |
+|---------|--------------------------|
+| `api/requirements.txt` | Yes |
+| `etl_pipeline/Pipfile` | Yes |
+| Root `pyproject.toml` | Yes |
+| `tools/mdc_cli/pyproject.toml` | Yes |
+| `consult_audio_pipe/requirements.txt` / `pyproject.toml` | Yes |
+
+### 2.9 Conflicts vs acceptable use
+
+**Not conflicts (by design):**
+
+1. `dotenv_values` for read-only parsing — API export, dbt env dict, ETL supplemental vars, SSL mode.
+2. Pydantic `dotenv_settings` source — controlled, single entrypoint, OS-wins ordering.
+3. `script_env.apply_supplemental_env` — only fills gaps in `os.environ`.
+
+**Actual or potential conflicts:**
+
+1. **ETL test fixtures** (`load_dotenv(..., override=True)`) — biggest mismatch; integration tests don't exercise the same path as `mdc etl run --env test`.
+2. **Consult audio import-time `load_dotenv`** — scattered, redundant when using mdc.
+3. **Double-loading in clinic integration tests** — `load_clinic_environment_file` → `load_dotenv` → `FileConfigProvider` → `settings_v2` obscures value provenance.
+
+**Already clean:** no `load_dotenv` in API or ETL production code; ETL scripts use `script_env` → `settings_v2`; dbt path is entirely mdc + `dotenv_values`.
 
 ---
 
@@ -150,6 +262,7 @@ All standalone scripts under `scripts/` now use `config/script_env.py` (`load_sc
 | `postgres_loader.py` TODOs (parallel load, post-load validation) | ❌ Open — track as issues |
 | Deduplicate stage validation (`Settings` → `settings_v2._detect_stage`) | ❌ Open |
 | Deprecate `Settings.ENV_MAPPINGS` after test migration | ❌ Open |
+| Migrate integration fixtures from `load_dotenv` to `load_etl_env_dict` (§2.4) | ❌ Open |
 | Architecture docs referenced by tests (`docs/PIPELINE_ARCHITECTURE.md`, etc.) | ❌ Missing from repo |
 
 ---
@@ -166,7 +279,8 @@ All standalone scripts under `scripts/` now use `config/script_env.py` (`load_sc
 
 1. Resolve or ticket `postgres_loader.py` TODOs.
 2. Add or restore architecture docs referenced by tests.
-3. Optional: migrate integration fixtures from `load_dotenv` to `load_etl_env_dict`.
+3. Migrate integration fixtures from `load_dotenv(override=True)` to `load_etl_env_dict` + overlay (§2.4, §2.9).
+4. Optional (consult audio): remove import-time `load_dotenv` when entry is always via `mdc consult-audio` (§2.6).
 
 ---
 
@@ -177,6 +291,7 @@ All standalone scripts under `scripts/` now use `config/script_env.py` (`load_sc
 - `tests/unit/config/test_settings_v2_unit.py` covers profiles, precedence, and provider delegation well.
 - `create_test_settings()` widely adopted — good unit-test isolation.
 - Orchestration and loaders do not import `dotenv` directly.
+- Production paths for API, ETL, and dbt follow Phase 0: no `load_dotenv`, `dotenv_values` for dict export, pydantic for typed load, `mdc` for child env (§2).
 
 ---
 
@@ -187,5 +302,5 @@ All standalone scripts under `scripts/` now use `config/script_env.py` (`load_sc
 | Daily dev | `mdc etl run …` / `mdc etl schema …` | `python scripts/…` without env |
 | Standalone script | `load_script_settings(stage)` or `--stage` | `load_dotenv` + first-file-wins loop |
 | Unit test | `create_test_settings(env_vars=…)` | `load_dotenv` in test code |
-| Integration test (real DB) | `load_etl_env_dict` or fixture that sets env once | Scattered `load_dotenv` per test file |
+| Integration test (real DB) | `load_etl_env_dict` or fixture via `settings_v2` / `load_etl_connection_settings_from_env` | `load_dotenv(override=True)` in fixtures (§2.4) |
 | Shell export | `scripts/export_env_for_shell.py --component etl --stage …` | PowerShell parsing `.env` files |

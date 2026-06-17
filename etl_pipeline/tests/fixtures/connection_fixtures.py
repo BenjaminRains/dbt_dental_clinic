@@ -18,6 +18,7 @@ from typing import Dict, Any
 # Import new configuration system components
 from etl_pipeline.config import DatabaseType, PostgresSchema, Settings
 from etl_pipeline.config.providers import DictConfigProvider
+from tests.fixtures.env_fixtures import COMPLETE_TEST_ENV, COMPLETE_CLINIC_ENV
 
 
 @pytest.fixture
@@ -126,10 +127,10 @@ def test_connection_config():
 
 
 @pytest.fixture
-def production_connection_config():
-    """Production connection configuration following connection architecture naming convention.
+def clinic_connection_config():
+    """Clinic connection configuration following connection architecture naming convention.
     
-    This fixture provides production connection configuration that conforms to the connection architecture:
+    This fixture provides clinic connection configuration that conforms to the connection architecture:
     - Uses non-prefixed variables for clinic environment
     - Follows the environment-specific variable naming convention
     - Matches the .env_clinic file structure
@@ -137,7 +138,7 @@ def production_connection_config():
     """
     return {
         'source': {
-            'host': 'prod-source-host',
+            'host': 'clinic-source-host',
             'port': 3306,
             'database': 'opendental',
             'user': 'source_user',
@@ -147,7 +148,7 @@ def production_connection_config():
             'connect_timeout': 60
         },
         'replication': {
-            'host': 'prod-repl-host',
+            'host': 'clinic-repl-host',
             'port': 3306,
             'database': 'opendental_replication',
             'user': 'repl_user',
@@ -157,7 +158,7 @@ def production_connection_config():
             'connect_timeout': 60
         },
         'analytics': {
-            'host': 'prod-analytics-host',
+            'host': 'clinic-analytics-host',
             'port': 5432,
             'database': 'opendental_analytics',
             'user': 'analytics_user',
@@ -182,23 +183,24 @@ def test_connection_provider(test_connection_config):
     return DictConfigProvider(
         pipeline={'connections': test_connection_config},
         tables={'tables': {}},
-        env={'ETL_ENVIRONMENT': 'test'}
+        env=COMPLETE_TEST_ENV,
     )
 
 
 @pytest.fixture
-def production_connection_provider(production_connection_config):
-    """Production connection configuration provider following the provider pattern.
+def clinic_connection_provider(clinic_connection_config):
+    """Clinic connection configuration provider following the provider pattern.
     
     This fixture implements the DictConfigProvider pattern for clinic-like connection testing:
-    - Uses DictConfigProvider with production-like configuration
+    - Uses DictConfigProvider with clinic configuration
     - Provides injected configuration for integration testing
     - Supports dependency injection for configuration swapping
     """
     return DictConfigProvider(
-        pipeline={'connections': production_connection_config},
+        pipeline={'connections': clinic_connection_config},
         tables={'tables': {}},
-        env={'ETL_ENVIRONMENT': 'clinic'}
+        env=COMPLETE_CLINIC_ENV,
+        environment='clinic',
     )
 
 
@@ -216,15 +218,15 @@ def test_connection_settings(test_connection_provider):
 
 
 @pytest.fixture
-def production_connection_settings(production_connection_provider):
-    """Production connection settings with provider injection following connection architecture.
+def clinic_connection_settings(clinic_connection_provider):
+    """Clinic connection settings with provider injection following connection architecture.
     
     This fixture implements the Settings injection pattern for clinic-like connection testing:
     - Uses Settings with provider injection for environment-agnostic operation
-    - Uses DictConfigProvider with production-like configuration
+    - Uses DictConfigProvider with clinic configuration
     - Supports dependency injection for integration testing
     """
-    return Settings(environment='clinic', provider=production_connection_provider)
+    return Settings(environment='clinic', provider=clinic_connection_provider)
 
 
 @pytest.fixture
@@ -545,24 +547,24 @@ def connection_factory_test_cases():
             'schema': PostgresSchema.MARTS,
             'expected_engine_type': 'postgresql'
         },
-        # Production connection methods with Settings injection
+        # Clinic connection methods with Settings injection
         {
             'method': 'get_source_connection',
-            'settings': 'production_settings',  # Settings with provider injection
+            'settings': 'clinic_settings',  # Settings with provider injection
             'db_type': DatabaseType.SOURCE,
             'schema': None,
             'expected_engine_type': 'mysql'
         },
         {
             'method': 'get_replication_connection',
-            'settings': 'production_settings',  # Settings with provider injection
+            'settings': 'clinic_settings',  # Settings with provider injection
             'db_type': DatabaseType.REPLICATION,
             'schema': None,
             'expected_engine_type': 'mysql'
         },
         {
             'method': 'get_analytics_connection',
-            'settings': 'production_settings',  # Settings with provider injection
+            'settings': 'clinic_settings',  # Settings with provider injection
             'db_type': DatabaseType.ANALYTICS,
             'schema': PostgresSchema.RAW,
             'expected_engine_type': 'postgresql'
@@ -664,7 +666,7 @@ def pool_config_test_cases():
         },
         {
             'name': 'custom_pool',
-            'settings': 'production_settings',  # Settings with provider injection
+            'settings': 'clinic_settings',  # Settings with provider injection
             'pool_size': 10,
             'max_overflow': 20,
             'pool_timeout': 60,

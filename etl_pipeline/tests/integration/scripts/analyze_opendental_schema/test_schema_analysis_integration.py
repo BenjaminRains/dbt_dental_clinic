@@ -3,10 +3,10 @@
 """
 Integration tests for schema analysis with real clinic database connections.
 
-This module tests schema analysis against the actual production OpenDental database
+This module tests schema analysis against the actual clinic OpenDental database
 to validate real schema information extraction, column analysis, and primary key detection.
 
-Production Test Strategy:
+Clinic integration test strategy:
 - Uses clinic database connections with readonly access
 - Tests real schema analysis with actual clinic database structure
 - Validates column information extraction from real clinic tables
@@ -24,8 +24,8 @@ Coverage Areas:
 - Consistent hash generation for same clinic schema structure
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
 - Validates actual clinic database connections and schema analysis
 """
@@ -47,13 +47,13 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestSchemaAnalysisIntegration:
     """Integration tests for schema analysis with real clinic database connections."""
     
 
 
-    def test_production_table_schema_analysis(self, production_settings_with_file_provider):
+    def test_clinic_table_schema_analysis(self, clinic_settings_with_file_provider):
         """
         Test clinic table schema analysis with actual clinic database structure.
         
@@ -74,7 +74,7 @@ class TestSchemaAnalysisIntegration:
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
-        # Find a table to test (prefer patient table as it's likely to exist in production)
+        # Find a table to test (prefer patient table as it's likely to exist in clinic stage)
         test_table = 'patient' if 'patient' in tables else tables[0]
         
         # Act: Call get_table_schema() method for clinic tables
@@ -99,7 +99,7 @@ class TestSchemaAnalysisIntegration:
         assert 'foreign_keys' in schema_info
         assert 'indexes' in schema_info
 
-    def test_production_schema_hash_generation(self, production_settings_with_file_provider):
+    def test_clinic_schema_hash_generation(self, clinic_settings_with_file_provider):
         """
         Test clinic schema hash generation with actual clinic database schema.
         
@@ -111,7 +111,7 @@ class TestSchemaAnalysisIntegration:
         Validates:
             - Real clinic schema hash generation with actual database schema
             - Consistent hash generation for same clinic schema structure
-            - Hash includes table names, column names, and primary keys from production
+            - Hash includes table names, column names, and primary keys from clinic stage
             - Error handling for clinic database schema analysis failures
             - Settings injection with real clinic database connections
         """

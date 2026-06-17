@@ -10,7 +10,7 @@ This module contains fixtures related to:
 Follows the connection architecture patterns where appropriate:
 - Uses provider pattern for dependency injection
 - Uses Settings injection for environment-agnostic orchestration
-- Uses environment separation for test vs production orchestration
+- Uses environment separation for test vs clinic orchestration
 - Uses unified interface with ConnectionFactory
 
 UPDATED: Aligned with current PipelineOrchestrator implementation

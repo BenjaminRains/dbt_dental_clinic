@@ -595,7 +595,7 @@ class TestConfigurationExceptions:
             - Used when ETL_ENVIRONMENT is not set (FAIL FAST requirement)
             - Critical for dental clinic ETL pipeline security
             - Supports provider pattern environment validation
-            - Enables FAIL FAST behavior to prevent production accidents
+            - Enables FAIL FAST behavior to prevent wrong-stage ETL accidents
         """
         # Arrange: Create environment error with FAIL FAST context
         missing_variables = ["ETL_ENVIRONMENT", "DENTAL_CLINIC_DATABASE_URL"]

@@ -1,34 +1,34 @@
 # tests/integration/scripts/analyze_opendental_schema/test_reporting_integration.py
 
 """
-Integration tests for analysis reports and summary generation with real production database connections.
+Integration tests for analysis reports and summary generation with real clinic database connections.
 
-This module tests reporting functionality against the actual production OpenDental database
+This module tests reporting functionality against the actual clinic OpenDental database
 to validate real analysis report generation, summary creation, and file output.
 
-Production Test Strategy:
-- Uses production database connections with readonly access
-- Tests real analysis report generation with actual production database data
-- Validates summary report generation with real production data
-- Tests file output generation with production information
+Clinic integration test strategy:
+- Uses clinic database connections with readonly access
+- Tests real analysis report generation with actual clinic database data
+- Validates summary report generation with real clinic data
+- Tests file output generation with clinic information
 - Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
-- Real production complete schema analysis with actual database
-- Configuration file generation with real production data
-- Analysis report generation with real production metadata
-- Summary report generation with real production statistics
-- Error handling for real production database operations
-- Settings injection with real production database connections
-- Detailed analysis report generation with production data
-- Summary report formatting with production metadata
-- File output generation with production information
+- Real clinic complete schema analysis with actual database
+- Configuration file generation with real clinic data
+- Analysis report generation with real clinic metadata
+- Summary report generation with real clinic statistics
+- Error handling for real clinic database operations
+- Settings injection with real clinic database connections
+- Detailed analysis report generation with clinic data
+- Summary report formatting with clinic metadata
+- File output generation with clinic information
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
-- Validates actual production database connections and reporting functionality
+- Validates actual clinic database connections and reporting functionality
 """
 
 import pytest
@@ -56,30 +56,30 @@ logger = logging.getLogger(__name__)
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestReportingIntegration:
-    """Integration tests for analysis reports and summary generation with real production database connections."""
+    """Integration tests for analysis reports and summary generation with real clinic database connections."""
     
 
 
-    def test_production_complete_schema_analysis(self, production_settings_with_file_provider):
+    def test_clinic_complete_schema_analysis(self, clinic_settings_with_file_provider):
         """
-        Test production complete schema analysis with actual production database and file output.
+        Test clinic complete schema analysis with actual clinic database and file output.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and temporary output directory
-            Act: Call analyze_complete_schema() method with production data
-            Assert: Verify all output files are generated correctly with production data
+            Arrange: Set up real clinic database connection and temporary output directory
+            Act: Call analyze_complete_schema() method with clinic data
+            Assert: Verify all output files are generated correctly with clinic data
             
         Validates:
-            - Real production complete schema analysis with actual database
-            - Configuration file generation with real production data
-            - Analysis report generation with real production metadata
-            - Summary report generation with real production statistics
-            - Error handling for real production database operations
-            - Settings injection with real production database connections
+            - Real clinic complete schema analysis with actual database
+            - Configuration file generation with real clinic data
+            - Analysis report generation with real clinic metadata
+            - Summary report generation with real clinic statistics
+            - Error handling for real clinic database operations
+            - Settings injection with real clinic database connections
         """
-        # Arrange: Set up real production database connection and temporary output directory
+        # Arrange: Set up real clinic database connection and temporary output directory
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Store original method for cleanup
@@ -90,10 +90,10 @@ class TestReportingIntegration:
                 # Mock the discover_all_tables method to return key tables
                 analyzer.discover_all_tables = lambda: ['patient', 'appointment', 'procedurelog']
                 
-                # Act: Call analyze_complete_schema() method with production data
+                # Act: Call analyze_complete_schema() method with clinic data
                 results = analyzer.analyze_complete_schema(temp_dir)
                 
-                # Assert: Verify all output files are generated correctly with production data
+                # Assert: Verify all output files are generated correctly with clinic data
                 assert 'tables_config' in results
                 assert 'analysis_report' in results
                 assert 'analysis_log' in results
@@ -230,24 +230,24 @@ class TestReportingIntegration:
             # Restore original method
             analyzer.discover_all_tables = original_discover
 
-    def test_production_detailed_analysis_report_generation(self, production_settings_with_file_provider):
+    def test_clinic_detailed_analysis_report_generation(self, clinic_settings_with_file_provider):
         """
-        Test production detailed analysis report generation with actual production database data.
+        Test clinic detailed analysis report generation with actual clinic database data.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and generate configuration
-            Act: Call _generate_detailed_analysis_report() method with production data
-            Assert: Verify detailed analysis report is correctly generated for production
+            Arrange: Set up real clinic database connection and generate configuration
+            Act: Call _generate_detailed_analysis_report() method with clinic data
+            Assert: Verify detailed analysis report is correctly generated for clinic stage
             
         Validates:
-            - Real production detailed analysis report generation with actual database data
-            - Table analysis with real production schema and size information
+            - Real clinic detailed analysis report generation with actual database data
+            - Table analysis with real clinic schema and size information
             - DBT model analysis with real project structure
-            - Performance analysis with production data
-            - Recommendations generation with production statistics
-            - Settings injection with real production database connections
+            - Performance analysis with clinic data
+            - Recommendations generation with clinic statistics
+            - Settings injection with real clinic database connections
         """
-        # Arrange: Set up real production database connection and generate configuration
+        # Arrange: Set up real clinic database connection and generate configuration
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Store original method for cleanup
@@ -261,10 +261,10 @@ class TestReportingIntegration:
             with tempfile.TemporaryDirectory() as temp_dir:
                 config = analyzer.generate_complete_configuration(temp_dir)
                 
-                # Act: Call _generate_detailed_analysis_report() method with production data
+                # Act: Call _generate_detailed_analysis_report() method with clinic data
                 analysis_report = analyzer._generate_detailed_analysis_report(config)
                 
-                # Assert: Verify detailed analysis report is correctly generated for production
+                # Assert: Verify detailed analysis report is correctly generated for clinic stage
                 assert 'analysis_metadata' in analysis_report
                 assert 'table_analysis' in analysis_report
                 assert 'dbt_model_analysis' in analysis_report
@@ -301,23 +301,23 @@ class TestReportingIntegration:
             # Restore original method
             analyzer.discover_all_tables = original_discover
 
-    def test_production_summary_report_generation(self, production_settings_with_file_provider):
+    def test_clinic_summary_report_generation(self, clinic_settings_with_file_provider):
         """
-        Test production summary report generation with actual production database data.
+        Test clinic summary report generation with actual clinic database data.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and generate configuration
-            Act: Call _generate_summary_report() method with production data
-            Assert: Verify summary report is correctly generated for production
+            Arrange: Set up real clinic database connection and generate configuration
+            Act: Call _generate_summary_report() method with clinic data
+            Assert: Verify summary report is correctly generated for clinic stage
             
         Validates:
-            - Real production summary report generation with actual database data
-            - Statistics calculation with real production data
-            - Report formatting with production metadata
-            - File output generation with production information
-            - Settings injection with real production database connections
+            - Real clinic summary report generation with actual database data
+            - Statistics calculation with real clinic data
+            - Report formatting with clinic metadata
+            - File output generation with clinic information
+            - Settings injection with real clinic database connections
         """
-        # Arrange: Set up real production database connection and generate configuration
+        # Arrange: Set up real clinic database connection and generate configuration
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Store original method for cleanup
@@ -336,10 +336,10 @@ class TestReportingIntegration:
                 analysis_path = os.path.join(temp_dir, 'analysis.json')
                 timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
                 
-                # Act: Call _generate_summary_report() method with production data
+                # Act: Call _generate_summary_report() method with clinic data
                 analyzer._generate_summary_report(config, output_path, analysis_path, timestamp)
                 
-                # Assert: Verify summary report is correctly generated for production
+                # Assert: Verify summary report is correctly generated for clinic stage
                 # The method should print to console and save to file
                 # We can verify the file was created in the organized logs directory
                 logs_base = Path('logs')

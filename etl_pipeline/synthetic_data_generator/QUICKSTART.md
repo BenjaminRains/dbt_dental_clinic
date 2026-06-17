@@ -39,10 +39,10 @@ If the database exists but the schema is outdated, use the automated script:
 
 ```powershell
 cd etl_pipeline/synthetic_data_generator
-.\recreate_schema.ps1 -ProductionDbPassword "your_prod_password" -DemoDbPassword "your_demo_password"
+.\recreate_schema.ps1 -ProductionDbPassword "your_clinic_password" -DemoDbPassword "your_demo_password"
 ```
 
-This will safely drop and recreate the `raw` schema with the latest production structure.
+This will safely drop and recreate the `raw` schema with the latest clinic structure.
 
 **Option B: Create new database**
 
@@ -53,7 +53,7 @@ createdb opendental_demo
 # 2. Create schema
 psql -d opendental_demo -c "CREATE SCHEMA IF NOT EXISTS raw;"
 
-# 3. Extract your production schema (STRUCTURE ONLY - NO DATA)
+# 3. Extract your clinic schema (STRUCTURE ONLY - NO DATA)
 pg_dump -h localhost -U postgres -d opendental_analytics \
   --schema-only --schema=raw \
   --no-owner --no-acl \

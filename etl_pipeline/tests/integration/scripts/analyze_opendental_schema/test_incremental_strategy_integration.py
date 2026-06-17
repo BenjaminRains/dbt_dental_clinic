@@ -1,35 +1,35 @@
 # tests/integration/scripts/analyze_opendental_schema/test_incremental_strategy_integration.py
 
 """
-Integration tests for incremental strategy and column discovery with real production database connections.
+Integration tests for incremental strategy and column discovery with real clinic database connections.
 
-This module tests incremental strategy determination and column discovery against the actual production
+This module tests incremental strategy determination and column discovery against the actual clinic
 OpenDental database to validate real timestamp column discovery, strategy selection, and data quality validation.
 
-Production Test Strategy:
-- Uses production database connections with readonly access
-- Tests real incremental column discovery with actual production database data
+Clinic integration test strategy:
+- Uses clinic database connections with readonly access
+- Tests real incremental column discovery with actual clinic database data
 - Validates data-driven timestamp discovery approach vs hardcoded patterns
-- Tests incremental strategy determination with real production data
+- Tests incremental strategy determination with real clinic data
 - Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
-- Real production incremental column discovery from actual database schema
-- Data quality validation for production timestamp columns
+- Real clinic incremental column discovery from actual database schema
+- Data quality validation for clinic timestamp columns
 - Column prioritization based on predefined priority order
 - Limiting to top 3 most reliable columns
 - Filtering of poor quality columns
-- Data-driven timestamp discovery works with real production database
+- Data-driven timestamp discovery works with real clinic database
 - Timestamp columns are identified by data type, not hardcoded patterns
 - Approach works with various timestamp data types (timestamp, datetime, date, time)
 - No reliance on specific column name patterns
-- Real production database schema compatibility
+- Real clinic database schema compatibility
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
-- Validates actual production database connections and incremental strategy determination
+- Validates actual clinic database connections and incremental strategy determination
 """
 
 import pytest
@@ -49,9 +49,9 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestIncrementalStrategyIntegration:
-    """Integration tests for incremental strategy and column discovery with real production database connections."""
+    """Integration tests for incremental strategy and column discovery with real clinic database connections."""
     
     @classmethod
     def setup_class(cls):
@@ -79,10 +79,10 @@ class TestIncrementalStrategyIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip("Production database connection failed")
+                    pytest.skip("Clinic database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"Production databases not available: {str(e)}")
+            pytest.skip(f"Clinic databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -93,24 +93,24 @@ class TestIncrementalStrategyIntegration:
         elif 'ETL_ENVIRONMENT' in os.environ:
             del os.environ['ETL_ENVIRONMENT']
 
-    def test_production_incremental_column_discovery(self, production_settings_with_file_provider):
+    def test_clinic_incremental_column_discovery(self, clinic_settings_with_file_provider):
         """
-        Test production incremental column discovery with actual production database schema.
+        Test clinic incremental column discovery with actual clinic database schema.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and get real schema data
-            Act: Call find_incremental_columns() method with production schema
-            Assert: Verify timestamp columns are correctly identified by data type in production
+            Arrange: Set up real clinic database connection and get real schema data
+            Act: Call find_incremental_columns() method with clinic schema
+            Assert: Verify timestamp columns are correctly identified by data type in clinic stage
             
         Validates:
-            - Real production incremental column discovery from actual database schema
-            - Timestamp column identification by data type from real production database
+            - Real clinic incremental column discovery from actual database schema
+            - Timestamp column identification by data type from real clinic database
             - Data type-based discovery (timestamp, datetime, date, time)
             - Maximum candidate limit enforcement
-            - Error handling for real production database operations
+            - Error handling for real clinic database operations
             - Data-driven approach vs hardcoded patterns
         """
-        # Arrange: Set up real production database connection and get real schema data
+        # Arrange: Set up real clinic database connection and get real schema data
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
@@ -119,19 +119,19 @@ class TestIncrementalStrategyIntegration:
         found_tables = [table for table in test_tables if table in tables]
         
         if not found_tables:
-            pytest.skip("No suitable test tables found in production database")
+            pytest.skip("No suitable test tables found in clinic stage database")
         
         for table_name in found_tables:
             schema_info = analyzer.get_table_schema(table_name)
             
-            # Act: Call find_incremental_columns() method with production schema
+            # Act: Call find_incremental_columns() method with clinic schema
             incremental_columns = analyzer.find_incremental_columns(table_name, schema_info)
             
-            # Assert: Verify timestamp and datetime columns are correctly identified by data type in production
+            # Assert: Verify timestamp and datetime columns are correctly identified by data type in clinic stage
             assert isinstance(incremental_columns, list)
             assert len(incremental_columns) <= 5  # Allow more realistic limit for timestamp/datetime columns
             
-            # Verify that identified columns exist in the production schema
+            # Verify that identified columns exist in the clinic schema
             for col_name in incremental_columns:
                 assert col_name in schema_info['columns']
                 
@@ -152,23 +152,23 @@ class TestIncrementalStrategyIntegration:
             if table_name in ['appointment', 'procedurelog']:
                 assert len(incremental_columns) > 0, f"Table {table_name} should have timestamp columns"
 
-    def test_production_data_driven_timestamp_discovery(self, production_settings_with_file_provider):
+    def test_clinic_data_driven_timestamp_discovery(self, clinic_settings_with_file_provider):
         """
-        Test production data-driven timestamp discovery approach vs hardcoded patterns.
+        Test clinic data-driven timestamp discovery approach vs hardcoded patterns.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and get real schema data
-            Act: Call find_incremental_columns() method with production schema
+            Arrange: Set up real clinic database connection and get real schema data
+            Act: Call find_incremental_columns() method with clinic schema
             Assert: Verify data-driven approach finds timestamp columns by data type
             
         Validates:
-            - Data-driven timestamp discovery works with real production database
+            - Data-driven timestamp discovery works with real clinic database
             - Timestamp columns are identified by data type, not hardcoded patterns
             - Approach works with various timestamp data types (timestamp, datetime, date, time)
             - No reliance on specific column name patterns
-            - Real production database schema compatibility
+            - Real clinic database schema compatibility
         """
-        # Arrange: Set up real production database connection and get real schema data
+        # Arrange: Set up real clinic database connection and get real schema data
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
@@ -177,14 +177,14 @@ class TestIncrementalStrategyIntegration:
         found_tables = [table for table in test_tables if table in tables]
         
         if not found_tables:
-            pytest.skip("No suitable test tables found in production database")
+            pytest.skip("No suitable test tables found in clinic stage database")
         
         timestamp_data_types_found = set()
         
         for table_name in found_tables:
             schema_info = analyzer.get_table_schema(table_name)
             
-            # Act: Call find_incremental_columns() method with production schema
+            # Act: Call find_incremental_columns() method with clinic schema
             incremental_columns = analyzer.find_incremental_columns(table_name, schema_info)
             
             # Assert: Verify data-driven approach finds timestamp/datetime columns or auto-incrementing PKs
@@ -214,24 +214,24 @@ class TestIncrementalStrategyIntegration:
                     print(f"    {col}: {col_type}")
         
         # Verify we found at least some timestamp data types
-        assert len(timestamp_data_types_found) > 0, "Should find at least one timestamp data type in production database"
+        assert len(timestamp_data_types_found) > 0, "Should find at least one timestamp data type in clinic stage database"
 
-    def test_production_determine_incremental_strategy(self, production_settings_with_file_provider):
+    def test_clinic_determine_incremental_strategy(self, clinic_settings_with_file_provider):
         """
-        Test production determine_incremental_strategy method with actual production database data.
+        Test clinic determine_incremental_strategy method with actual clinic database data.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and get real schema data
-            Act: Call determine_incremental_strategy() method with production data
-            Assert: Verify strategy is correctly determined for production tables
+            Arrange: Set up real clinic database connection and get real schema data
+            Act: Call determine_incremental_strategy() method with clinic data
+            Assert: Verify strategy is correctly determined for clinic tables
             
         Validates:
-            - Real production incremental strategy determination with actual database data
+            - Real clinic incremental strategy determination with actual database data
             - Strategy selection based on number of incremental columns
             - Business logic for conservative tables (claimproc, payment, adjustment)
             - Strategy determination for different table types
         """
-        # Arrange: Set up real production database connection and get real schema data
+        # Arrange: Set up real clinic database connection and get real schema data
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
@@ -247,10 +247,10 @@ class TestIncrementalStrategyIntegration:
             if table_name in tables:
                 schema_info = analyzer.get_table_schema(table_name)
                 
-                # Act: Call determine_incremental_strategy() method with production data
+                # Act: Call determine_incremental_strategy() method with clinic data
                 strategy = analyzer.determine_incremental_strategy(table_name, schema_info, incremental_columns)
                 
-                # Assert: Verify strategy is correctly determined for production tables
+                # Assert: Verify strategy is correctly determined for clinic tables
                 assert strategy in ['or_logic', 'and_logic', 'single_column', 'none']
                 
                 # Verify specific business logic
@@ -266,23 +266,23 @@ class TestIncrementalStrategyIntegration:
                     else:
                         assert strategy == 'or_logic', f"Table {table_name} with multiple columns should use or_logic"
 
-    def test_production_enhanced_find_incremental_columns(self, production_settings_with_file_provider):
+    def test_clinic_enhanced_find_incremental_columns(self, clinic_settings_with_file_provider):
         """
-        Test production enhanced find_incremental_columns method with actual production database data.
+        Test clinic enhanced find_incremental_columns method with actual clinic database data.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and get real schema data
-            Act: Call find_incremental_columns() method with production data
+            Arrange: Set up real clinic database connection and get real schema data
+            Act: Call find_incremental_columns() method with clinic data
             Assert: Verify enhanced incremental column discovery works correctly
             
         Validates:
-            - Real production enhanced incremental column discovery with actual database data
+            - Real clinic enhanced incremental column discovery with actual database data
             - Data quality validation integration in discovery process
             - Column prioritization based on predefined priority order
             - Limiting to top 3 most reliable columns
             - Filtering of poor quality columns
         """
-        # Arrange: Set up real production database connection and get real schema data
+        # Arrange: Set up real clinic database connection and get real schema data
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
@@ -291,19 +291,19 @@ class TestIncrementalStrategyIntegration:
         found_tables = [table for table in test_tables if table in tables]
         
         if not found_tables:
-            pytest.skip("No suitable test tables found in production database")
+            pytest.skip("No suitable test tables found in clinic stage database")
         
         for table_name in found_tables:
             schema_info = analyzer.get_table_schema(table_name)
             
-            # Act: Call find_incremental_columns() method with production data
+            # Act: Call find_incremental_columns() method with clinic data
             incremental_columns = analyzer.find_incremental_columns(table_name, schema_info)
             
             # Assert: Verify enhanced incremental column discovery works correctly
             assert isinstance(incremental_columns, list)
             assert len(incremental_columns) <= 3  # Limited to top 3
             
-            # Verify that identified columns exist in the production schema
+            # Verify that identified columns exist in the clinic schema
             for col_name in incremental_columns:
                 assert col_name in schema_info['columns']
                 

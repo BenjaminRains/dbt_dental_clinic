@@ -681,7 +681,7 @@ class PostgresLoader:
         self.settings = settings
         self.schema_adapter = schema_adapter
         
-        # Get target schema name using settings database config (align with production loader)
+        # Get target schema name using settings database config
         analytics_config = self.settings.get_database_config(DatabaseType.ANALYTICS, ConfigPostgresSchema.RAW)
         self.analytics_schema = analytics_config.get('schema', 'raw')
         # Backward-compat attribute used by bulk_insert_optimized

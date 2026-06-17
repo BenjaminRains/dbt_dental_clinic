@@ -171,8 +171,8 @@ class TestSettingsValidation:
             - Uses provider pattern for clean error testing
             - Supports Settings injection for environment-agnostic connections
         """
-        # Create test provider with missing environment variables
-        test_provider = DictConfigProvider(
+        # Incomplete env triggers skipped typed validation; Settings reports invalid
+        provider = DictConfigProvider(
             pipeline={
                 'general': {'pipeline_name': 'test_pipeline'},
                 'connections': {},
@@ -182,18 +182,14 @@ class TestSettingsValidation:
             },
             tables={'tables': {}},
             env={
-                # Missing most required environment variables
-                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host'
-                # Missing: port, database, user, password, etc.
-            }
+                'ETL_ENVIRONMENT': 'test',
+                'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+            },
+            environment='test',
         )
-        
-        # Mock os.getenv to return None for all environment variables
-        with patch('os.getenv', return_value=None):
-            settings = Settings(environment='test', provider=test_provider)
-            
-            # Should fail validation due to missing environment variables
-            assert settings.validate_configs() is False
+        settings = Settings(environment='test', provider=provider)
+        assert settings.validate_configs() is False
 
     @pytest.mark.validation
     @pytest.mark.provider_pattern
@@ -315,12 +311,12 @@ class TestSettingsValidation:
         Validates:
             - FAIL FAST behavior for missing ETL_ENVIRONMENT
             - Critical security requirement enforcement
-            - No defaulting to production when environment undefined
+            - No defaulting to clinic when environment undefined
             - Clear error messages for missing environment
             
         ETL Pipeline Context:
             - Critical security requirement for ETL pipeline
-            - Prevents accidental production usage
+            - Prevents using the wrong ETL stage
             - Clear error messages for configuration issues
             - Supports environment separation with FAIL FAST
         """
@@ -415,6 +411,17 @@ class TestSettingsValidation:
         """
         test_provider = DictConfigProvider(
             env={
+                'ETL_ENVIRONMENT': 'test',
+                'TEST_OPENDENTAL_SOURCE_HOST': 'test-host',
+                'TEST_OPENDENTAL_SOURCE_PORT': '3306',
+                'TEST_OPENDENTAL_SOURCE_DB': 'test_db',
+                'TEST_OPENDENTAL_SOURCE_USER': 'test_user',
+                'TEST_OPENDENTAL_SOURCE_PASSWORD': 'test_pass',
+                'TEST_MYSQL_REPLICATION_HOST': 'localhost',
+                'TEST_MYSQL_REPLICATION_PORT': '3306',
+                'TEST_MYSQL_REPLICATION_DB': 'test_repl_db',
+                'TEST_MYSQL_REPLICATION_USER': 'test_repl_user',
+                'TEST_MYSQL_REPLICATION_PASSWORD': 'test_repl_pass',
                 'TEST_POSTGRES_ANALYTICS_HOST': 'localhost',
                 'TEST_POSTGRES_ANALYTICS_PORT': '5432',
                 'TEST_POSTGRES_ANALYTICS_DB': 'test_analytics_db',

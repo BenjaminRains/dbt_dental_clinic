@@ -10,7 +10,7 @@ This module contains:
 Follows the connection architecture patterns where appropriate:
 - Uses provider pattern for dependency injection
 - Uses Settings injection for environment-agnostic mocks
-- Uses environment separation for test vs production mocks
+- Uses environment separation for test vs clinic mocks
 - Uses unified interface with ConnectionFactory
 """
 

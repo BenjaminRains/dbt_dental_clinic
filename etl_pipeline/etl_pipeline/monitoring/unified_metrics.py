@@ -18,7 +18,7 @@ FEATURES:
 - Configurable retention and cleanup policies
 
 USAGE:
-    # Production usage with Settings injection (unified interface)
+    # Clinic stage usage with Settings injection (unified interface)
     from etl_pipeline.config import get_settings
     settings = get_settings()
     metrics = create_metrics_collector(settings)

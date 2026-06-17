@@ -65,7 +65,7 @@ def create_postgres_loader_for_e2e(settings):
     )
 
 
-# Test data fixtures - using standardized test data instead of production sampling
+# Test data fixtures - using standardized test data instead of clinic source sampling
 
 
 

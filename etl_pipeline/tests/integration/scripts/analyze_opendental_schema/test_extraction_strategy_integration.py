@@ -1,32 +1,32 @@
 # tests/integration/scripts/analyze_opendental_schema/test_extraction_strategy_integration.py
 
 """
-Integration tests for extraction strategy determination with real production database connections.
+Integration tests for extraction strategy determination with real clinic database connections.
 
-This module tests extraction strategy determination against the actual production OpenDental database
+This module tests extraction strategy determination against the actual clinic OpenDental database
 to validate real strategy selection, business logic, and configuration generation.
 
-Production Test Strategy:
-- Uses production database connections with readonly access
-- Tests real extraction strategy determination with actual production database data
-- Validates strategy selection with real production data
-- Tests business logic with real production database structure
+Clinic integration test strategy:
+- Uses clinic database connections with readonly access
+- Tests real extraction strategy determination with actual clinic database data
+- Validates strategy selection with real clinic data
+- Tests business logic with real clinic database structure
 - Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
-- Real production extraction strategy determination with actual database data
-- Full table strategy for small production tables
-- Incremental strategy for medium production tables with timestamp columns
-- Chunked incremental strategy for large production tables
-- Error handling for real production database operations
+- Real clinic extraction strategy determination with actual database data
+- Full table strategy for small clinic tables
+- Incremental strategy for medium clinic tables with timestamp columns
+- Chunked incremental strategy for large clinic tables
+- Error handling for real clinic database operations
 - Strategy selection based on table size and schema characteristics
-- Business logic validation with real production data
+- Business logic validation with real clinic data
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
-- Validates actual production database connections and strategy determination
+- Validates actual clinic database connections and strategy determination
 """
 
 import pytest
@@ -46,9 +46,9 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestExtractionStrategyIntegration:
-    """Integration tests for extraction strategy determination with real production database connections."""
+    """Integration tests for extraction strategy determination with real clinic database connections."""
     
     @classmethod
     def setup_class(cls):
@@ -77,10 +77,10 @@ class TestExtractionStrategyIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip("Production database connection failed")
+                    pytest.skip("Clinic database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"Production databases not available: {str(e)}")
+            pytest.skip(f"Clinic databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -96,23 +96,23 @@ class TestExtractionStrategyIntegration:
         elif 'OPENDENTAL_SOURCE_DB' in os.environ:
             del os.environ['OPENDENTAL_SOURCE_DB']
 
-    def test_production_extraction_strategy_determination(self, production_settings_with_file_provider):
+    def test_clinic_extraction_strategy_determination(self, clinic_settings_with_file_provider):
         """
-        Test production extraction strategy determination with actual production database data.
+        Test clinic extraction strategy determination with actual clinic database data.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and get real schema/size data
-            Act: Call determine_extraction_strategy() method with production data
-            Assert: Verify strategy is correctly determined for production tables
+            Arrange: Set up real clinic database connection and get real schema/size data
+            Act: Call determine_extraction_strategy() method with clinic data
+            Assert: Verify strategy is correctly determined for clinic tables
             
         Validates:
-            - Real production extraction strategy determination with actual database data
-            - Full table strategy for small production tables
-            - Incremental strategy for medium production tables with timestamp columns
-            - Chunked incremental strategy for large production tables
-            - Error handling for real production database operations
+            - Real clinic extraction strategy determination with actual database data
+            - Full table strategy for small clinic tables
+            - Incremental strategy for medium clinic tables with timestamp columns
+            - Chunked incremental strategy for large clinic tables
+            - Error handling for real clinic database operations
         """
-        # Arrange: Set up real production database connection and get real schema/size data
+        # Arrange: Set up real clinic database connection and get real schema/size data
         analyzer = OpenDentalSchemaAnalyzer()
         tables = analyzer.discover_all_tables()
         
@@ -124,10 +124,10 @@ class TestExtractionStrategyIntegration:
             # Get performance characteristics (required for determine_extraction_strategy)
             performance_chars = analyzer.get_table_performance_profile('patient', schema_info, size_info)
             
-            # Act: Call determine_extraction_strategy() method with production data and performance_chars
+            # Act: Call determine_extraction_strategy() method with clinic data and performance_chars
             strategy = analyzer.determine_extraction_strategy('patient', schema_info, size_info, performance_chars)
             
-            # Assert: Verify strategy is correctly determined for production tables
+            # Assert: Verify strategy is correctly determined for clinic tables
             assert strategy in ['full_table', 'incremental', 'incremental_chunked']
 
     def setup_method(self, method):

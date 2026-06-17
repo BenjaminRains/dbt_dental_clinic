@@ -1024,7 +1024,7 @@ class TestConfigReaderETLIntegration:
         ETL Pipeline Context:
             - ConfigReader supports provider pattern for configuration management
             - Enables test isolation through DictConfigProvider
-            - Supports production configuration through FileConfigProvider
+            - Supports clinic configuration through FileConfigProvider
             - Maintains ETL pipeline flexibility and testability
         """
         # Test that ConfigReader can work with different configuration sources

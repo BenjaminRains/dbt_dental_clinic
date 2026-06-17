@@ -1,33 +1,33 @@
 # tests/integration/scripts/analyze_opendental_schema/test_initialization_integration.py
 
 """
-Integration tests for OpenDentalSchemaAnalyzer initialization with real production database connections.
+Integration tests for OpenDentalSchemaAnalyzer initialization with real clinic database connections.
 
-This module tests the schema analyzer initialization against the actual production OpenDental database
+This module tests the schema analyzer initialization against the actual clinic OpenDental database
 to validate real database connection establishment, Settings injection, and environment validation.
 
-Production Test Strategy:
-- Uses production database connections with readonly access
+Clinic integration test strategy:
+- Uses clinic database connections with readonly access
 - Tests real database connection establishment with actual clinic environment
 - Validates Settings injection with FileConfigProvider for clinic environment
 - Tests FAIL FAST behavior with clinic environment validation
 - Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
-- Real production database connection establishment
-- Settings injection with FileConfigProvider for production
+- Real clinic database connection establishment
+- Settings injection with FileConfigProvider for clinic stage
 - Environment validation with real .env_clinic file
-- Configuration validation with real production configuration files
+- Configuration validation with real clinic configuration files
 - Provider pattern works with real FileConfigProvider
 - FAIL FAST behavior works with clinic environment validation
-- Inspector initialization with real production database connection
-- Error handling works for real production database connection failures
+- Inspector initialization with real clinic database connection
+- Error handling works for real clinic database connection failures
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
-- Validates actual production database connections and schema analysis
+- Validates actual clinic database connections and schema analysis
 """
 
 import pytest
@@ -66,36 +66,36 @@ def ensure_logs_directory():
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestOpenDentalSchemaAnalyzerInitializationIntegration:
-    """Integration tests for OpenDentalSchemaAnalyzer initialization with real production database connections."""
+    """Integration tests for OpenDentalSchemaAnalyzer initialization with real clinic database connections."""
     
 
 
-    def test_production_schema_analyzer_initialization(self, production_settings_with_file_provider):
+    def test_clinic_schema_analyzer_initialization(self, clinic_settings_with_file_provider):
         """
-        Test production schema analyzer initialization with actual production database connection.
+        Test clinic schema analyzer initialization with actual clinic database connection.
         
         AAA Pattern:
             Arrange: Set up real clinic environment with FileConfigProvider
-            Act: Create OpenDentalSchemaAnalyzer instance with production connection
-            Assert: Verify analyzer is properly initialized with production database
+            Act: Create OpenDentalSchemaAnalyzer instance with clinic connection
+            Assert: Verify analyzer is properly initialized with clinic database
             
         Validates:
-            - Real production database connection establishment
-            - Settings injection with FileConfigProvider for production
+            - Real clinic database connection establishment
+            - Settings injection with FileConfigProvider for clinic stage
             - Environment validation with real .env_clinic file
-            - Configuration validation with real production configuration files
+            - Configuration validation with real clinic configuration files
             - Provider pattern works with real FileConfigProvider
             - FAIL FAST behavior works with clinic environment validation
-            - Inspector initialization with real production database connection
-            - Error handling works for real production database connection failures
+            - Inspector initialization with real clinic database connection
+            - Error handling works for real clinic database connection failures
         """
         
-        # Act: Create OpenDentalSchemaAnalyzer instance with production connection
+        # Act: Create OpenDentalSchemaAnalyzer instance with clinic connection
         analyzer = OpenDentalSchemaAnalyzer()
         
-        # Assert: Verify analyzer is properly initialized with production database
+        # Assert: Verify analyzer is properly initialized with clinic database
         assert analyzer.source_engine is not None
         assert analyzer.inspector is not None
         assert analyzer.source_db is not None
@@ -115,15 +115,15 @@ class TestOpenDentalSchemaAnalyzerInitializationIntegration:
         assert isinstance(analyzer.dbt_project_root, str)
         assert os.path.exists(analyzer.dbt_project_root)
         
-        # Test real production database connection
+        # Test real clinic database connection
         with analyzer.source_engine.connect() as conn:
             result = conn.execute(text("SELECT 1 as test_value"))
             row = result.fetchone()
             assert row is not None and row[0] == 1
 
-    def test_production_fail_fast_behavior(self, production_settings_with_file_provider):
+    def test_clinic_fail_fast_behavior(self, clinic_settings_with_file_provider):
         """
-        Test production FAIL FAST behavior when environment variables are missing.
+        Test clinic FAIL FAST behavior when environment variables are missing.
         
         AAA Pattern:
             Arrange: Set up test environment without required environment variables

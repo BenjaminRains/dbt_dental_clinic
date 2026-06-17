@@ -1,34 +1,34 @@
 # tests/integration/scripts/analyze_opendental_schema/test_configuration_generation_integration.py
 
 """
-Integration tests for configuration file generation with real production database connections.
+Integration tests for configuration file generation with real clinic database connections.
 
-This module tests configuration generation against the actual production OpenDental database
+This module tests configuration generation against the actual clinic OpenDental database
 to validate real configuration file generation, metadata creation, and tables.yml output.
 
-Production Test Strategy:
-- Uses production database connections with readonly access
-- Tests real configuration generation with actual production database data
-- Validates metadata generation with real production database information
-- Tests table configuration with real production schema and size data
+Clinic integration test strategy:
+- Uses clinic database connections with readonly access
+- Tests real configuration generation with actual clinic database data
+- Validates metadata generation with real clinic database information
+- Tests table configuration with real clinic schema and size data
 - Uses Settings injection for clinic environment-agnostic connections
 
 Coverage Areas:
-- Real production configuration generation with actual database data
-- Metadata generation with real production database information
-- Table configuration with real production schema and size data
+- Real clinic configuration generation with actual database data
+- Metadata generation with real clinic database information
+- Table configuration with real clinic schema and size data
 - DBT model integration with real project structure
-- Error handling for real production database operations
-- Settings injection with real production database connections
+- Error handling for real clinic database operations
+- Settings injection with real clinic database connections
 - Primary key detection in tables.yml
 - Incremental strategy integration in configuration
 - Versioned tables.yml output with internal versioning metadata
 
 ETL Context:
-- Critical for production ETL pipeline configuration generation
-- Tests with real production dental clinic database schemas
+- Critical for clinic ETL pipeline configuration generation
+- Tests with real clinic dental clinic database schemas
 - Uses Settings injection with FileConfigProvider for clinic environment
-- Validates actual production database connections and configuration generation
+- Validates actual clinic database connections and configuration generation
 """
 
 import pytest
@@ -51,9 +51,9 @@ from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
 @pytest.mark.etl_critical
 @pytest.mark.provider_pattern
 @pytest.mark.settings_injection
-@pytest.mark.production
+@pytest.mark.clinic
 class TestConfigurationGenerationIntegration:
-    """Integration tests for configuration file generation with real production database connections."""
+    """Integration tests for configuration file generation with real clinic database connections."""
     
     @classmethod
     def setup_class(cls):
@@ -82,10 +82,10 @@ class TestConfigurationGenerationIntegration:
                 result = conn.execute(text("SELECT 1"))
                 row = result.fetchone()
                 if not row or row[0] != 1:
-                    pytest.skip("Production database connection failed")
+                    pytest.skip("Clinic database connection failed")
                     
         except Exception as e:
-            pytest.skip(f"Production databases not available: {str(e)}")
+            pytest.skip(f"Clinic databases not available: {str(e)}")
     
     @classmethod
     def teardown_class(cls):
@@ -101,24 +101,24 @@ class TestConfigurationGenerationIntegration:
         elif 'OPENDENTAL_SOURCE_DB' in os.environ:
             del os.environ['OPENDENTAL_SOURCE_DB']
 
-    def test_production_complete_configuration_generation(self, production_settings_with_file_provider):
+    def test_clinic_complete_configuration_generation(self, clinic_settings_with_file_provider):
         """
-        Test production complete configuration generation with actual production database data.
+        Test clinic complete configuration generation with actual clinic database data.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and temporary output directory
-            Act: Call generate_complete_configuration() method with production data
-            Assert: Verify configuration is correctly generated with production metadata
+            Arrange: Set up real clinic database connection and temporary output directory
+            Act: Call generate_complete_configuration() method with clinic data
+            Assert: Verify configuration is correctly generated with clinic metadata
             
         Validates:
-            - Real production configuration generation with actual database data
-            - Metadata generation with real production database information
-            - Table configuration with real production schema and size data
+            - Real clinic configuration generation with actual database data
+            - Metadata generation with real clinic database information
+            - Table configuration with real clinic schema and size data
             - DBT model integration with real project structure
-            - Error handling for real production database operations
-            - Settings injection with real production database connections
+            - Error handling for real clinic database operations
+            - Settings injection with real clinic database connections
         """
-        # Arrange: Set up real production database connection and temporary output directory
+        # Arrange: Set up real clinic database connection and temporary output directory
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Store original method for cleanup
@@ -129,10 +129,10 @@ class TestConfigurationGenerationIntegration:
                 # Mock the discover_all_tables method to return key tables
                 analyzer.discover_all_tables = lambda: ['patient', 'appointment', 'procedurelog']
                 
-                # Act: Call generate_complete_configuration() method with production data
+                # Act: Call generate_complete_configuration() method with clinic data
                 config = analyzer.generate_complete_configuration(temp_dir)
                 
-                # Assert: Verify configuration is correctly generated with production metadata
+                # Assert: Verify configuration is correctly generated with clinic metadata
                 assert 'metadata' in config
                 assert 'tables' in config
                 assert len(config['tables']) > 0
@@ -214,7 +214,7 @@ class TestConfigurationGenerationIntegration:
             # Restore original method
             analyzer.discover_all_tables = original_discover
 
-    def test_primary_key_detection_in_tables_yml(self, production_settings_with_file_provider):
+    def test_primary_key_detection_in_tables_yml(self, clinic_settings_with_file_provider):
         """Test that primary_key is correctly detected and written for key tables in tables.yml."""
         import yaml
         from scripts.analyze_opendental_schema import OpenDentalSchemaAnalyzer
@@ -222,7 +222,7 @@ class TestConfigurationGenerationIntegration:
         import time
         import threading
         
-        # Use a temp directory to avoid overwriting production config
+        # Use a temp directory to avoid overwriting clinic config
         import tempfile
         with tempfile.TemporaryDirectory() as tmpdir:
             # Windows-compatible timeout mechanism
@@ -292,22 +292,22 @@ class TestConfigurationGenerationIntegration:
             # Optionally check a table with a composite or no primary key
             # ... add more assertions as needed
 
-    def test_production_complete_configuration_with_incremental_strategy(self, production_settings_with_file_provider):
+    def test_clinic_complete_configuration_with_incremental_strategy(self, clinic_settings_with_file_provider):
         """
-        Test production complete configuration generation includes incremental_strategy.
+        Test clinic complete configuration generation includes incremental_strategy.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and generate configuration
-            Act: Call generate_complete_configuration() method with production data
+            Arrange: Set up real clinic database connection and generate configuration
+            Act: Call generate_complete_configuration() method with clinic data
             Assert: Verify incremental_strategy is included in table configuration
             
         Validates:
-            - Real production configuration generation includes incremental_strategy
+            - Real clinic configuration generation includes incremental_strategy
             - Strategy determination is called for each table
             - Configuration includes the determined strategy
-            - Integration of incremental strategy in production configuration generation
+            - Integration of incremental strategy in clinic configuration generation
         """
-        # Arrange: Set up real production database connection and generate configuration
+        # Arrange: Set up real clinic database connection and generate configuration
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Store original method for cleanup
@@ -318,7 +318,7 @@ class TestConfigurationGenerationIntegration:
                 # Mock the discover_all_tables method to return key tables
                 analyzer.discover_all_tables = lambda: ['patient', 'appointment', 'procedurelog']
                 
-                # Act: Call generate_complete_configuration() method with production data
+                # Act: Call generate_complete_configuration() method with clinic data
                 config = analyzer.generate_complete_configuration(temp_dir)
                 
                 # Assert: Verify incremental_strategy is included in table configuration
@@ -353,12 +353,12 @@ class TestConfigurationGenerationIntegration:
             # Restore original method
             analyzer.discover_all_tables = original_discover
 
-    def test_production_tables_yml_incremental_strategy_integration(self, production_settings_with_file_provider):
+    def test_clinic_tables_yml_incremental_strategy_integration(self, clinic_settings_with_file_provider):
         """
-        Test that tables.yml includes incremental_strategy in production configuration.
+        Test that tables.yml includes incremental_strategy in clinic configuration.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and generate tables.yml
+            Arrange: Set up real clinic database connection and generate tables.yml
             Act: Generate complete configuration and check tables.yml content
             Assert: Verify incremental_strategy is included in tables.yml
             
@@ -366,9 +366,9 @@ class TestConfigurationGenerationIntegration:
             - tables.yml includes incremental_strategy field
             - Strategy determination works in clinic environment
             - Configuration file generation includes new field
-            - Integration of incremental strategy in production tables.yml
+            - Integration of incremental strategy in clinic stage tables.yml
         """
-        # Arrange: Set up real production database connection and generate tables.yml
+        # Arrange: Set up real clinic database connection and generate tables.yml
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Store original method for cleanup
@@ -420,12 +420,12 @@ class TestConfigurationGenerationIntegration:
             # Restore original method
             analyzer.discover_all_tables = original_discover
 
-    def test_versioned_tables_yml_output(self, production_settings_with_file_provider):
+    def test_versioned_tables_yml_output(self, clinic_settings_with_file_provider):
         """
         Test that tables.yml is created with internal versioning metadata.
         
         AAA Pattern:
-            Arrange: Set up real production database connection and temporary output directory
+            Arrange: Set up real clinic database connection and temporary output directory
             Act: Run complete schema analysis
             Assert: Verify tables.yml is created with proper metadata
             
@@ -435,7 +435,7 @@ class TestConfigurationGenerationIntegration:
             - Metadata includes schema hash and environment info
             - Only tables.yml is created (no versioned files)
         """
-        # Arrange: Set up real production database connection and temporary output directory
+        # Arrange: Set up real clinic database connection and temporary output directory
         analyzer = OpenDentalSchemaAnalyzer()
         
         # Store original method for cleanup
