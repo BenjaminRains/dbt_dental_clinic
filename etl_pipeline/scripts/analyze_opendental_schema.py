@@ -23,7 +23,8 @@ Performance Optimizations:
 - Adaptive batch sizing, extraction strategy selection, performance monitoring, memory/priority
 
 Usage:
-    mdc etl schema --env clinic          # preferred
+    mdc etl schema --env clinic          # preferred (runs update-schema with env injection)
+    mdc etl invoke --env clinic -- update-schema   # equivalent
     python etl_pipeline/scripts/analyze_opendental_schema.py --stage clinic
 
 Requires ETL_ENVIRONMENT or --stage (local|clinic|test). Uses settings_v2 via create_settings().
@@ -58,7 +59,7 @@ import concurrent.futures
 from etl_pipeline.core.connections import ConnectionFactory, create_connection_manager
 from etl_pipeline.config import get_settings, Settings, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.postgres_schema import PostgresSchema
-from etl_pipeline.scripts.script_env import (
+from etl_pipeline.config.script_env import (
     VALID_ETL_STAGES,
     load_script_settings,
     resolve_script_stage as resolve_analysis_stage,

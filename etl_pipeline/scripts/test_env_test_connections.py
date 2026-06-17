@@ -24,7 +24,7 @@ import sys
 from sqlalchemy import text
 
 from etl_pipeline.core.connections import ConnectionFactory
-from etl_pipeline.scripts.script_env import load_script_settings
+from etl_pipeline.config.script_env import load_script_settings
 
 
 def test_engine(engine, label: str) -> bool:

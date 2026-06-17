@@ -29,7 +29,7 @@ import sys
 
 from sqlalchemy import create_engine, text
 
-from etl_pipeline.scripts.script_env import load_script_settings
+from etl_pipeline.config.script_env import load_script_settings
 
 
 def test_mysql_root(host: str, port: int, database: str, user: str, password: str) -> bool:

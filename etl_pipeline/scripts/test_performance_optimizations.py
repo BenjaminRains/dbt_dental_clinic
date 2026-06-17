@@ -25,7 +25,7 @@ sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 from etl_pipeline.config.settings import get_settings
 from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
-from etl_pipeline.scripts.script_env import load_script_settings
+from etl_pipeline.config.script_env import load_script_settings
 
 # Configure logging
 logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')

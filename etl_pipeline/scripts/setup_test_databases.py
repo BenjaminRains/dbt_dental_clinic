@@ -42,7 +42,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 try:
     from etl_pipeline.config import DatabaseType, PostgresSchema, get_settings
     from etl_pipeline.core.connections import ConnectionFactory
-    from etl_pipeline.scripts.script_env import load_script_settings
+    from etl_pipeline.config.script_env import load_script_settings
     # Import standardized test data directly to avoid pytest dependencies
     import sys
     import os

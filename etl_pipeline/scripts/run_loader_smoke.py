@@ -8,7 +8,7 @@ from etl_pipeline.config import PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.core.postgres_schema import PostgresSchema
 from etl_pipeline.config.logging import get_logger
-from etl_pipeline.scripts.script_env import load_script_settings, resolve_script_stage
+from etl_pipeline.config.script_env import load_script_settings, resolve_script_stage
 
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
 

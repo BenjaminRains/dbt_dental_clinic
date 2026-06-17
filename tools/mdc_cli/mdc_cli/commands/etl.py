@@ -165,6 +165,39 @@ def status_cmd(
     raise typer.Exit(code=code)
 
 
+@etl_app.command("schema", context_settings=PASSTHROUGH)
+def schema_cmd(
+    ctx: typer.Context,
+    env: str = typer.Option(..., "--env", help="Stage: local, clinic, or test"),
+    profile: str = typer.Option(
+        "full",
+        "--profile",
+        help="Default full - schema analysis requires source database access",
+    ),
+) -> None:
+    """Update tables.yml by running OpenDental schema analysis."""
+    require_etl_stage(env)
+    resolved_profile = require_etl_profile(profile)
+    _require_valid_etl(env, resolved_profile)
+
+    settings = load_env_dict_isolated("etl", env, profile=resolved_profile)
+    python = require_component_python("etl")
+    cmd = [str(python), "-m", "etl_pipeline.cli.main", "update-schema", *ctx.args]
+    echo_run_banner(
+        "etl",
+        env,
+        etl_env_file(env),
+        f"profile={resolved_profile}  -> etl schema (update-schema)",
+    )
+    code = run_isolated(
+        settings=settings,
+        cmd=cmd,
+        cwd=ETL_DIR,
+        venv_root=venv_root_from_python(python),
+    )
+    raise typer.Exit(code=code)
+
+
 @etl_app.command("invoke", context_settings=PASSTHROUGH, hidden=True)
 def invoke(
     ctx: typer.Context,

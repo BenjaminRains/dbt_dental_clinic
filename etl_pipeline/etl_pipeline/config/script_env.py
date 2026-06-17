@@ -5,8 +5,7 @@ from __future__ import annotations
 import os
 from typing import Optional
 
-from etl_pipeline.config import create_settings
-from etl_pipeline.config.settings import Settings, reset_settings, set_settings
+from .settings import Settings, create_settings, reset_settings, set_settings
 
 VALID_ETL_STAGES = ("local", "clinic", "test")
 

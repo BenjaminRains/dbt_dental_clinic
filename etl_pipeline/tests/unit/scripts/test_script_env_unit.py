@@ -4,7 +4,7 @@ import os
 
 import pytest
 
-from etl_pipeline.scripts.script_env import (
+from etl_pipeline.config.script_env import (
     apply_supplemental_env,
     load_script_settings,
     resolve_script_stage,
