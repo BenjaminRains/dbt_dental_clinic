@@ -16,6 +16,7 @@ from etl_pipeline.config.settings_v2 import (
     load_etl_connection_settings_from_env,
     load_etl_env_dict,
     resolve_etl_profile,
+    resolve_etl_stage,
 )
 
 ETL_ROOT = Path(__file__).resolve().parents[2]
@@ -134,6 +135,55 @@ class TestSettingsV2:
     def test_invalid_stage_rejected(self, clean_etl_env):
         with pytest.raises(ValueError, match="Invalid environment 'demo'"):
             load_etl_env_dict(environment="demo", config_dir=CONFIG_DIR)
+
+
+class TestResolveEtlStage:
+    @pytest.mark.unit
+    def test_resolve_explicit_stage(self):
+        assert resolve_etl_stage("test").value == "test"
+
+    @pytest.mark.unit
+    def test_resolve_from_os_env(self, clean_etl_env, monkeypatch):
+        monkeypatch.setenv("ETL_ENVIRONMENT", "clinic")
+        assert resolve_etl_stage().value == "clinic"
+
+    @pytest.mark.unit
+    def test_missing_etl_environment_raises(self, clean_etl_env):
+        with pytest.raises(ValueError, match="ETL_ENVIRONMENT environment variable is not set"):
+            resolve_etl_stage()
+
+    @pytest.mark.unit
+    def test_production_stage_rejected(self, clean_etl_env):
+        with pytest.raises(ValueError, match="production.*removed"):
+            resolve_etl_stage("production")
+
+    @pytest.mark.unit
+    def test_demo_stage_rejected(self, clean_etl_env):
+        with pytest.raises(ValueError, match="Invalid environment 'demo'"):
+            resolve_etl_stage("demo")
+
+    @pytest.mark.unit
+    def test_settings_maps_missing_env_to_environment_error(self, clean_etl_env):
+        from etl_pipeline.config.settings import Settings
+        from etl_pipeline.exceptions.configuration import EnvironmentError
+
+        with pytest.raises(EnvironmentError, match="ETL_ENVIRONMENT environment variable is not set"):
+            Settings._detect_environment()
+
+    @pytest.mark.unit
+    def test_settings_maps_invalid_env_to_configuration_error(self, clean_etl_env, monkeypatch):
+        from etl_pipeline.config.settings import Settings
+        from etl_pipeline.exceptions.configuration import ConfigurationError
+
+        monkeypatch.setenv("ETL_ENVIRONMENT", "invalid")
+        with pytest.raises(ConfigurationError, match="Invalid environment"):
+            Settings._detect_environment()
+
+    @pytest.mark.unit
+    def test_file_config_provider_rejects_demo(self, clean_etl_env, monkeypatch, tmp_path):
+        monkeypatch.setenv("ETL_ENVIRONMENT", "demo")
+        with pytest.raises(ValueError, match="Invalid environment 'demo'"):
+            FileConfigProvider(tmp_path)
 
     @pytest.mark.unit
     @pytest.mark.provider_pattern

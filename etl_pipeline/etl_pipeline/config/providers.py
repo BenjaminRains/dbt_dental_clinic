@@ -9,7 +9,6 @@ validation for missing environment variables.
 from abc import ABC, abstractmethod
 from typing import Dict, Any, Optional
 from pathlib import Path
-import os
 import yaml
 import logging
 
@@ -36,26 +35,10 @@ class FileConfigProvider(ConfigProvider):
         self._load_environment_file()
     
     def _detect_environment(self) -> str:
-        """Detect environment from environment variables."""
-        environment = os.getenv('ETL_ENVIRONMENT')
-        if not environment:
-            raise ValueError(
-                "ETL_ENVIRONMENT environment variable is not set. "
-                "This is a critical security requirement. "
-                "Please set ETL_ENVIRONMENT to 'local', 'clinic', or 'test'. "
-                "No defaulting is allowed for security reasons."
-            )
-        valid_environments = ['local', 'clinic', 'test']
-        if environment not in valid_environments:
-            # Special error message for deprecated "production" environment
-            if environment == "production":
-                raise ValueError(
-                    f"Invalid environment '{environment}'. "
-                    "'production' has been removed. Use 'local' for localhost or 'clinic' for clinic. "
-                    f"Valid environments: {valid_environments}"
-                )
-            raise ValueError(f"Invalid environment '{environment}'. Must be one of: {valid_environments}")
-        return environment
+        """Detect environment from environment variables via settings_v2 authority."""
+        from .settings_v2 import resolve_etl_stage
+
+        return resolve_etl_stage().value
     
     def _load_environment_file(self):
         """Load environment variables via pydantic-settings (settings_v2.py)."""

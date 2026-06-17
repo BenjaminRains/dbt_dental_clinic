@@ -11,9 +11,9 @@
 
 The **Python config authority** for ETL connections is `settings_v2.py` → `FileConfigProvider` → `Settings`. Production library code (`get_settings()`, orchestration, loaders) is on that path when run via `mdc` or with `ETL_ENVIRONMENT` set.
 
-**Remaining gaps:** Stage detection is duplicated in three places (see §5.3). **ETL integration test fixtures** still use `load_dotenv(override=True)` — see §2.4. Loader TODOs and missing architecture docs are tracked in §5.6.
+**Remaining gaps:** **ETL integration test fixtures** still use `load_dotenv(override=True)` — see §2.4. Loader TODOs and missing architecture docs are tracked in §5.6.
 
-**Next up:** Step 1 in §5 — unify stage detection via shared `settings_v2` helper.
+**Next up:** Step 2 in §5 — trim duplicate `validate_configs()` in orchestration.
 
 **Completed since initial review (2026-06-17):**
 - `config/script_env.py` — shared `load_script_settings()` / `--stage` for standalone scripts
@@ -23,6 +23,7 @@ The **Python config authority** for ETL connections is `settings_v2.py` → `Fil
 - `get_cli()` export removed; `postgres_loader_deprecated.py` deleted
 - `ConfigReader.list_tables()`; `PriorityProcessor` / `PipelineOrchestrator` use `ConfigReader` for table enumeration
 - `Settings.profile` property passthrough from typed settings
+- **Phase B.1** — `settings_v2.resolve_etl_stage()` is single authority; `Settings` and `FileConfigProvider` delegate (2026-06-17)
 
 ---
 
@@ -227,7 +228,7 @@ Both `api/settings.py` and `settings_v2.py` pass `_env_file=...` into pydantic `
 
 3. **`ETLProfile` at Settings API** — ✅ `Settings.profile` property added; still need doc for `get_source_connection_config()` when profile is `load` (§5.2 step 3).
 
-4. **Stage detection duplicated** — `Settings._detect_environment()`, `FileConfigProvider._detect_environment()`, and `settings_v2._detect_stage()` (§5.3).
+4. **Stage detection** — ✅ `settings_v2.resolve_etl_stage()` is authority; `Settings._detect_environment()` maps to typed exceptions; `FileConfigProvider` delegates (Phase B.1, 2026-06-17).
 
 ### 3.2 Layer B — Pipeline / table config
 
@@ -262,7 +263,7 @@ Both `api/settings.py` and `settings_v2.py` pass `_env_file=...` into pydantic `
 | `ConfigReader.list_tables()` + align `PriorityProcessor` | ✅ Done (2026-06-17) |
 | `Settings.profile` property | ✅ Done (2026-06-17) |
 | `postgres_loader.py` TODOs (parallel load, post-load validation) | ❌ Open — track as issues |
-| Deduplicate stage validation (`Settings` → `settings_v2._detect_stage`) | ❌ Open |
+| Deduplicate stage validation (`resolve_etl_stage` authority) | ✅ Done (2026-06-17) |
 | Deprecate `Settings.ENV_MAPPINGS` after test migration | ✅ Done (PR #27) |
 | Migrate integration fixtures from `load_dotenv` to `load_etl_env_dict` (§2.4) | ❌ Open |
 | Architecture docs referenced by tests (see §5.6) | ❌ Missing from repo |
@@ -278,7 +279,7 @@ Phase A (scripts, deprecated loader, `ConfigReader` alignment) is complete. Rema
 
 | Item | Effort | Impact | Track |
 |------|--------|--------|-------|
-| Unify stage detection | Small–medium | High — removes drift risk | Phase B |
+| Unify stage detection | ✅ Done (2026-06-17) | High — removes drift risk | Phase B |
 | Trim `validate_configs()` redundancy | Small | Medium — clarity | Phase B |
 | Document `load` profile behavior at Settings API | Small | Medium — operator clarity | Phase B |
 | Deprecate `ENV_MAPPINGS` | Large | High — blocked on test migration | Phase B |
@@ -288,27 +289,25 @@ Phase A (scripts, deprecated loader, `ConfigReader` alignment) is complete. Rema
 
 ### 5.2 Recommended order
 
-| Step | Task | Rationale |
-|------|------|-----------|
-| **1** | **Unify stage detection** | Best next bite: contained scope, highest code-health payoff |
-| **2** | Trim duplicate `validate_configs()` in orchestration | Quick cleanup once step 1 lands |
-| **3** | Document `Settings.profile` / `load` profile in `ENVIRONMENT_FILES.md` | Small doc addition; closes §3.1 item 3 |
-| **4** | Plan `ENV_MAPPINGS` test migration | Inventory fixtures that need v2-shaped env dicts before removal |
-| **5** | Ticket loader TODOs + restore architecture docs | Separate tasks; not mixed into config refactor |
+| Step | Task | Status |
+|------|------|--------|
+| ~~**1**~~ | ~~Unify stage detection~~ | ✅ Done (2026-06-17) |
+| **2** | Trim duplicate `validate_configs()` in orchestration | Next up |
+| **3** | Document `Settings.profile` / `load` profile in `ENVIRONMENT_FILES.md` | Pending |
+| **4** | Plan `ENV_MAPPINGS` test migration | ✅ Done (PR #27) |
+| **5** | Ticket loader TODOs + restore architecture docs | Pending |
 
-### 5.3 Step 1 — Unify stage detection (next up)
+### 5.3 Step 1 — Unify stage detection ✅ (2026-06-17)
 
-Stage validation is duplicated in **three** places today:
+**Implemented:** `settings_v2.resolve_etl_stage()` is the single authority for stage rules (`production` / `demo` rejection, valid stages). `_detect_stage` is a module alias.
 
-| Location | Method | Exception types | Notes |
-|----------|--------|-----------------|-------|
-| `settings.py` | `_detect_environment()` | `EnvironmentError`, `ConfigurationError` | Handles `production` + `demo` rejection |
-| `providers.py` | `FileConfigProvider._detect_environment()` | `ValueError` | Missing `demo` rejection — already drifted |
-| `settings_v2.py` | `_detect_stage()` | `ValueError` | Returns `ETLStage`; authority for stage rules |
+| Location | Delegation |
+|----------|------------|
+| `settings_v2.py` | `resolve_etl_stage()` → `ETLStage`; raises `ValueError` |
+| `settings.py` | `_detect_environment()` → `resolve_etl_stage().value`; maps `ValueError` → `EnvironmentError` / `ConfigurationError` |
+| `providers.py` | `FileConfigProvider._detect_environment()` → `resolve_etl_stage().value` |
 
-**Approach:** Export a shared helper from `settings_v2` (e.g. `resolve_etl_stage()` wrapping `_detect_stage`). Thin wrappers in `Settings` and `FileConfigProvider` map `ValueError` → typed exceptions where callers expect them. Tests in `test_pipeline_orchestrator.py` assert `EnvironmentError` / `ConfigurationError` from bare `Settings()` — preserve those contracts.
-
-**Scope:** ~2–3 files; run config + orchestration unit/comprehensive tests.
+Tests: `TestResolveEtlStage` in `test_settings_v2_unit.py`; existing fail-fast tests unchanged.
 
 ### 5.4 Step 2 — Trim redundant `validate_configs()`
 
