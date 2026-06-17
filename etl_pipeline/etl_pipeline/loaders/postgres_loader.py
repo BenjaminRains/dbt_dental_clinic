@@ -2552,55 +2552,37 @@ EXAMPLE DATA FLOW FOR MEDICATION TABLE:
 # MIGRATION NOTES
 # ============================================================================
 """
-MIGRATION PLAN FROM OLD postgres_loader.py:
+MIGRATION HISTORY — strategy-pattern refactor (postgres_loader_deprecated.py removed 2026-06-17)
 
-PHASE 1: Structure Setup ✅ (This file)
-- Define Strategy Pattern classes
-- Create high-level orchestration flow
-- Document responsibilities clearly
+PHASE 1: Structure setup ✅
+- LoadStrategy ABC, LoadPreparation / LoadResult, PostgresLoader orchestration
+- load_table() → prepare → select strategy → execute → finalize
 
-PHASE 2: Migrate Helper Methods
-From postgres_loader.py, migrate:
-- _get_cached_schema() - Line 438
-- _build_load_query() - Line 2381
-- _build_enhanced_load_query() - Line 2153
-- _check_analytics_needs_updating() - Line 3508
-- _get_primary_incremental_column() - Line 3001
-- _filter_valid_incremental_columns() - Line 1238
-- bulk_insert_optimized() - Line 583
-- _update_load_status_hybrid() - Line 3565
-- _update_load_status() - Line 3001
+PHASE 2: Helper migration ✅
+- Query building, incremental fallback, schema cache, bulk insert, tracking tables
+- Stale-state detection (_check_analytics_needs_updating) and column validation
 
-PHASE 3: Implement Strategies
-Priority order (based on usage):
-1. StandardLoadStrategy - 95% of loads
-2. StreamingLoadStrategy - 5% of loads
-3. CopyCSVLoadStrategy - large tables (>200MB); chunked strategy removed
-4. ParallelLoadStrategy - 0% usage (future)
+PHASE 3: Strategy implementation
+- StandardLoadStrategy ✅  — small tables (< 50 MB est.)
+- StreamingLoadStrategy ✅ — medium tables (50–200 MB)
+- CopyCSVLoadStrategy ✅   — large tables (> 200 MB)
+- ParallelLoadStrategy 🚧  — branch feature/postgres-loader-parallel-validation
+  - PK-range chunks + ThreadPoolExecutor; falls back to CopyCSV
+  - Gated by pipeline.yml stages.load.enable_parallel_loading (default: false)
+  - Post-load validation in _finalize_table_load (row counts, PK nulls → warnings)
 
-PHASE 4: Testing
-- Unit tests for each strategy
-- Integration tests with test database
-- Performance benchmarks
-- Stale state recovery tests (incremental fallback detection)
+PHASE 4: Testing 🚧
+- Existing unit/integration loader tests cover standard/streaming/copy paths
+- test_postgres_loader_todos_unit.py — parallel selection, fallback, post-load validation
+- Remaining: integration tests with real DB, parallel end-to-end, benchmarks
 
-PHASE 5: Deployment
-- Run side-by-side with old loader
-- Compare results
-- Gradual rollout
-- Deprecate old loader
+PHASE 5: Deployment ✅ (main loader path)
+- postgres_loader_deprecated.py removed; clinic ETL uses this module
+- Parallel + post-load validation: merge only after Phase 4 passes on feature branch
 
-ESTIMATED EFFORT:
-- Phase 1: 2 hours (DONE)
-- Phase 2: 4-6 hours
-- Phase 3: 8-12 hours
-- Phase 4: 6-8 hours
-- Phase 5: 2-4 hours
-Total: 22-32 hours (~3-4 days)
-
-CODE REDUCTION:
-Current: ~1,250 lines across 5 methods
-Target: ~600 lines in organized structure
-Savings: ~650 lines (52% reduction)
+CONFIG (pipeline.yml → stages.load):
+- enable_parallel_loading: false   # must be true to select parallel strategy
+- parallel_workers: 4
+- parallel_min_rows: 1000000
 """
 

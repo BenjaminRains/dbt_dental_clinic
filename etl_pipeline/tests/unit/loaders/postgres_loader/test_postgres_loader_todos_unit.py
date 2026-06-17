@@ -17,7 +17,7 @@ from etl_pipeline.config import create_test_settings
 @pytest.fixture
 def postgres_loader():
     settings = create_test_settings(
-        pipeline={
+        pipeline_config={
             "stages": {
                 "load": {
                     "enable_parallel_loading": False,
