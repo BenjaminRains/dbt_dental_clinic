@@ -108,12 +108,12 @@ def run(
         cmd.append("--reload")
 
     reload_note = "reload" if use_reload else "no-reload"
-    tunnel_note = " tunnel-db→127.0.0.1" if tunnel_db else ""
+    tunnel_note = " tunnel-db->127.0.0.1" if tunnel_db else ""
     echo_run_banner(
         "api",
         env,
         config_path,
-        f"→ uvicorn {bind_host}:{bind_port} ({reload_note}{tunnel_note})",
+        f"-> uvicorn {bind_host}:{bind_port} ({reload_note}{tunnel_note})",
     )
     code = run_isolated(
         settings=settings,

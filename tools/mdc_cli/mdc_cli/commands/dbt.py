@@ -46,7 +46,7 @@ def run(
             ok=False,
             error=error,
         )
-    echo_run_banner("dbt", env, dbt_config_path(env), "→ dbt run")
+    echo_run_banner("dbt", env, dbt_config_path(env), "-> dbt run")
     code = run_dbt_command(env, ["run", *ctx.args])
     raise typer.Exit(code=code)
 
@@ -67,7 +67,7 @@ def test(
             ok=False,
             error=error,
         )
-    echo_run_banner("dbt", env, dbt_config_path(env), "→ dbt test")
+    echo_run_banner("dbt", env, dbt_config_path(env), "-> dbt test")
     code = run_dbt_command(env, ["test", *ctx.args])
     raise typer.Exit(code=code)
 
@@ -94,7 +94,7 @@ def docs(
             error=error,
         )
     subcommand = "serve" if serve else "generate"
-    echo_run_banner("dbt", env, dbt_config_path(env), f"→ dbt docs {subcommand}")
+    echo_run_banner("dbt", env, dbt_config_path(env), f"-> dbt docs {subcommand}")
     code = run_dbt_command(env, ["docs", subcommand, *ctx.args])
     raise typer.Exit(code=code)
 
@@ -118,6 +118,6 @@ def invoke(
     if not ctx.args:
         typer.echo("Usage: mdc dbt invoke --env <stage> -- <dbt subcommand> [args]", err=True)
         raise typer.Exit(code=2)
-    echo_run_banner("dbt", env, dbt_config_path(env), f"→ dbt {' '.join(ctx.args)}")
+    echo_run_banner("dbt", env, dbt_config_path(env), f"-> dbt {' '.join(ctx.args)}")
     code = run_dbt_command(env, list(ctx.args))
     raise typer.Exit(code=code)

@@ -58,14 +58,14 @@ def render_status_table(env_filter: Optional[str] = None) -> Table:
         file_status = "yes" if target.config_path.exists() else "no"
         valid_status, note = _validation_cell(target.component, target)
         venv_python = discover_component_python(target.component)
-        venv_display = _relative_config_path(venv_python) if venv_python else "—"
+        venv_display = _relative_config_path(venv_python) if venv_python else "-"
 
         table.add_row(
             target.component,
             target.stage,
             config_display,
             file_status,
-            target.profile or "—",
+            target.profile or "-",
             valid_status,
             venv_display,
             note,

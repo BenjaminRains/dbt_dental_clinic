@@ -36,7 +36,8 @@ From project root after `.\load_project.ps1`:
 ```powershell
 status
 api-test
-etl-validate
+etl-validate          # default: local + load
+mdc etl status --env clinic   # etl-status alias defaults to clinic + full
 mdc api run --env local
 mdc api run --env clinic --tunnel-db   # with mdc tunnel clinic-db
 mdc etl run --env clinic --profile full

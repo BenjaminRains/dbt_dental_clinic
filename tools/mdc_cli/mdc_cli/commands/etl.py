@@ -77,7 +77,7 @@ def run(
     profile: str = typer.Option(
         "full",
         "--profile",
-        help="Default full — full pipeline requires source + replication + analytics",
+        help="Default full - full pipeline requires source + replication + analytics",
     ),
 ) -> None:
     """Run ETL pipeline with isolated injected env (passthrough args after --)."""
@@ -92,7 +92,7 @@ def run(
         "etl",
         env,
         etl_env_file(env),
-        f"profile={resolved_profile}  → etl run",
+        f"profile={resolved_profile}  -> etl run",
     )
     code = run_isolated(
         settings=settings,
@@ -154,7 +154,7 @@ def status_cmd(
         "etl",
         env,
         etl_env_file(env),
-        f"profile={resolved_profile}  → etl status",
+        f"profile={resolved_profile}  -> etl status",
     )
     code = run_isolated(
         settings=settings,
@@ -186,7 +186,7 @@ def invoke(
         "etl",
         env,
         etl_env_file(env),
-        f"profile={resolved_profile}  → etl {' '.join(ctx.args)}",
+        f"profile={resolved_profile}  -> etl {' '.join(ctx.args)}",
     )
     code = run_isolated(
         settings=settings,

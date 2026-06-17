@@ -157,13 +157,13 @@ def validate_consult_audio() -> ConsultAudioValidation:
 
     venv_python = discover_consult_audio_python()
     if venv_python is None:
-        errors.append("venv missing — run: mdc consult-audio install")
+        errors.append("venv missing - run: mdc consult-audio install")
     else:
         typer.echo(f"venv python: {venv_python}")
 
     if not CONSULT_AUDIO_ENV_FILE.is_file():
         warnings.append(
-            "consult_audio_pipe/.env not found — copy .env.template to .env for API keys"
+            "consult_audio_pipe/.env not found - copy .env.template to .env for API keys"
         )
     else:
         env = load_consult_audio_env_dict()
@@ -179,17 +179,17 @@ def validate_consult_audio() -> ConsultAudioValidation:
                 typer.echo("OPENAI_API_KEY: ok")
             else:
                 warnings.append(
-                    "OPENAI_API_KEY missing — required for pipeline run --llm chatgpt"
+                    "OPENAI_API_KEY missing - required for pipeline run --llm chatgpt"
                 )
             if has_anthropic:
                 typer.echo("ANTHROPIC_API_KEY: ok")
             else:
                 warnings.append(
-                    "ANTHROPIC_API_KEY missing — required for pipeline run (default --llm claude)"
+                    "ANTHROPIC_API_KEY missing - required for pipeline run (default --llm claude)"
                 )
 
     if find_executable("ffmpeg") is None:
-        warnings.append("ffmpeg not on PATH — Whisper transcription may fail")
+        warnings.append("ffmpeg not on PATH - Whisper transcription may fail")
 
     ok = not errors
     return ConsultAudioValidation(ok=ok, errors=tuple(errors), warnings=tuple(warnings))

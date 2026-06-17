@@ -96,6 +96,7 @@ function etl-test {
 }
 
 function etl-status {
+    # Default stage clinic + profile full (same as etl-run). Use -Env local for local warehouse.
     param(
         [string]$Env = "",
         [ValidateSet("load", "full", "")]
@@ -212,6 +213,7 @@ Write-Host "  api-run                      mdc api run --env local" -ForegroundC
 Write-Host "  api-test                     mdc api test-config --env local" -ForegroundColor Cyan
 Write-Host "  etl-validate                 mdc etl validate --env local --profile load" -ForegroundColor Cyan
 Write-Host "  etl-run                      mdc etl run --env clinic --profile full" -ForegroundColor Cyan
+Write-Host "  etl-status                   mdc etl status --env clinic --profile full (use -Env local for local)" -ForegroundColor Cyan
 Write-Host "  etl-test                     mdc etl test-connections --env clinic" -ForegroundColor Cyan
 Write-Host "  mdc dbt run --env local      dbt via stateless subprocess" -ForegroundColor Cyan
 Write-Host "  mdc tunnel clinic-db         SSM port forward (Python)" -ForegroundColor Cyan
