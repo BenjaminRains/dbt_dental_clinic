@@ -124,7 +124,6 @@ docs/
 !docs/CLINIC_ANALYTICS_WORKFLOW.md
 /docs/analytics/
 etl_pipeline/docs/
-!etl_pipeline/docs/CODE_REVIEW.md
 etl_pipeline/CODE_REVIEW.md
 
 # Vendor reference material (OpenDental manual mirror, etc.)
