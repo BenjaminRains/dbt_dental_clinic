@@ -221,6 +221,52 @@ See **ENVIRONMENT_HANDLING_REVIEW.md** (Phase 0) and `api/settings.py`.
 - **Status:** `mdc etl status --env clinic` or alias `etl-status` (defaults to clinic + full; use `-Env local` for local).
 - **Creation:** `etl_pipeline/scripts/setup_environments.py` can create `.env_clinic` and `.env_test` from templates.
 
+#### ETL profiles (`load` vs `full`)
+
+`ETL_PROFILE` selects **which database connections pydantic validates and exposes** for a run. It does not change which `.env_<stage>` file is loaded — only which connection roles are required.
+
+| Profile | Validates | Typical use |
+|---------|-----------|-------------|
+| **`load`** | MySQL replication + PostgreSQL analytics only | Local warehouse work: confirm repl/analytics connectivity without OpenDental source creds |
+| **`full`** | OpenDental source + replication + analytics | Full pipeline: extract from source → replication → analytics (`mdc etl run` default) |
+
+**Resolution** (`settings_v2.resolve_etl_profile`):
+
+| Input | Result |
+|-------|--------|
+| `mdc etl … --profile load\|full` | Explicit profile wins |
+| `ETL_PROFILE` in child/shell env | Used when no explicit `--profile` |
+| Neither set | `local` → `load`; `clinic` / `test` → `full` |
+
+**`mdc` defaults** (see `tools/mdc_cli/mdc_cli/paths.py`):
+
+| Command | Default stage | Default profile |
+|---------|---------------|-----------------|
+| `mdc etl validate` / alias `etl-validate` | `local` | `load` |
+| `mdc etl run` / `etl-run` | `clinic` | `full` |
+| `mdc etl status` / `etl-status` | `clinic` | `full` (use `-Env local` for local warehouse) |
+
+Validate uses `settings_v2.load_etl_connection_settings(..., profile=…)` directly. Run/status inject a flat child env (including `ETL_PROFILE`) via `load_etl_env_dict`.
+
+**`Settings.profile`** (`etl_pipeline/etl_pipeline/config/settings.py`):
+
+- When using `FileConfigProvider` / typed `settings_v2` models: returns the resolved profile string (`"load"` or `"full"`) from `ETLConnectionSettings`.
+- Otherwise: falls back to the raw `ETL_PROFILE` environment variable (may be unset).
+
+**`Settings.get_source_connection_config()` when profile is `load`:**
+
+- OpenDental source is **optional** at validation time (`OPENDENTAL_SOURCE_*` may be absent from `.env_local`).
+- Calling `get_source_connection_config()` (or `get_database_config(DatabaseType.SOURCE)`) still requires a configured source. If `ETLConnectionSettings.source` is `None`, `connection_config_dict` raises `ValueError` with a message to add `OPENDENTAL_SOURCE_*` to `.env_<stage>` or switch to profile `full`.
+- **Replication and analytics getters always work** under `load` when those vars are present.
+
+**Practical guidance:**
+
+- Use **`mdc etl validate --env local --profile load`** to check local MySQL replication + Postgres analytics without source credentials.
+- Use **`mdc etl run --env clinic --profile full`** (default) for end-to-end extraction; source vars must be present.
+- Do not call `get_source_connection_config()` in code paths that should run under `load` unless source creds are intentionally configured.
+
+**Library note:** `FileConfigProvider` currently calls `load_etl_connection_settings(..., profile="full")` when constructing `Settings` from disk. The `mdc` child env still sets `ETL_PROFILE` for subprocesses; honoring that in `FileConfigProvider` is a follow-up. For tests, pass `profile="load"` to `DictConfigProvider` or use `load_etl_connection_settings_from_env(..., profile="load")`.
+
 #### Same variables in `.env_local` and `.env_clinic` (confusion / cross-contam risk)
 
 Development for clinic infra is often done locally before deploy, so **`.env_local` and `.env_clinic` intentionally share the same variable names** (e.g. `OPENDENTAL_SOURCE_HOST`, `POSTGRES_ANALYTICS_*`). Only **one** file is loaded per run: the loader reads `ETL_ENVIRONMENT` from the process, then loads `etl_pipeline/.env_<that>`. There is no merging of the two files.
@@ -324,6 +370,7 @@ This backs up the previous `.env`, retires any stale `api/.env_api_clinic` on th
 |--------------|-------------|-------------------|------------|
 | `API_ENVIRONMENT` | API | `local`, `demo`, `clinic`, `test` | Which `api/.env_api_*` `settings.py` may load (if OS env empty) |
 | `ETL_ENVIRONMENT` | ETL pipeline | `local`, `clinic`, `test` | Which `etl_pipeline/.env_*` is loaded in the **mdc child** process |
+| `ETL_PROFILE` | ETL pipeline | `load`, `full` | Which connections to validate (see §4.2 ETL profiles); default `load` for `local`, `full` for `clinic`/`test` |
 | `DBT_TARGET` | dbt | `local`, `demo`, `clinic` | Set by `mdc_cli/dbt_env.py` for dbt subprocess; selects `profiles.yml` target |
 | (none for frontend) | Frontend | — | File name (e.g. `.env.production`) and build-time env vars |
 

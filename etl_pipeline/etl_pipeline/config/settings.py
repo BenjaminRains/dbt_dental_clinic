@@ -79,7 +79,7 @@ class Settings:
 
     @property
     def profile(self) -> Optional[str]:
-        """Resolved ETL profile (full|load) when using settings_v2, else ETL_PROFILE env."""
+        """Resolved ETL profile (``load`` | ``full``) from typed settings_v2 models, else ``ETL_PROFILE`` env."""
         typed = self._typed_connection_settings()
         if typed is not None:
             return typed.profile.value
@@ -153,7 +153,12 @@ class Settings:
     # ============================================================================
     
     def get_source_connection_config(self) -> Dict:
-        """Get OpenDental source connection configuration."""
+        """Get OpenDental source connection configuration.
+
+        Requires profile ``full`` (or ``OPENDENTAL_SOURCE_*`` present under ``load``).
+        When profile is ``load`` and source was not validated/loaded, raises ``ValueError``
+        with guidance to add source vars or use profile ``full``.
+        """
         return self.get_database_config(DatabaseType.SOURCE)
     
     def get_replication_connection_config(self) -> Dict:
