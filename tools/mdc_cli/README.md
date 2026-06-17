@@ -3,6 +3,8 @@
 Monorepo developer CLI for API, ETL, and dbt workflows. Configuration is loaded only
 via existing pydantic loaders in `api/settings.py` and `etl_pipeline/.../settings_v2.py`.
 
+**Env file inventory:** [docs/ENVIRONMENT_FILES.md](../../docs/ENVIRONMENT_FILES.md)
+
 ## Install (editable)
 
 From the repository root:

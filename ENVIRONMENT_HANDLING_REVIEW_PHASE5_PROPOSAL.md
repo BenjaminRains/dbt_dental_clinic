@@ -77,7 +77,7 @@ Phase 4 made api/etl/dbt stateless. **Phase 5.1–5.4 addressed remaining glue:*
 | Duplicate JSON parsing in PS | `credentials.py` (+ `demo_frontend`, `.frontend-deploy.json`) |
 | `ssm-connect-*` dot-sourced `ssm_tunnels.ps1` | `mdc ssm connect` + thin aliases |
 
-**Still open (5.6):** none on this branch. Optional: refresh `docs/ENVIRONMENT_FILES.md`.
+**Still open (5.6):** none. `docs/ENVIRONMENT_FILES.md` refreshed for mdc-first onboarding.
 
 1. **`ps_invoke.py`** — wraps `deploy_api_file.ps1` only (acceptable deferral).
 
@@ -388,7 +388,7 @@ Acceptable deferrals (unchanged):
 
 ### Suggested implementation order (remaining)
 
-Phase 5 is **complete**. Optional follow-up: refresh `docs/ENVIRONMENT_FILES.md` for mdc-first onboarding.
+Phase 5 is **complete**. `docs/ENVIRONMENT_FILES.md` updated for mdc-first onboarding.
 
 **Completed order:** 5.2 → 5.1 → 5.3 → 5.6 (CI) → 5.4 → CI frontend fix → 5.5 (0.8.0) → 5.6 polish (0.8.1).
 

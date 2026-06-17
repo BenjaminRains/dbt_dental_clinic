@@ -21,7 +21,7 @@ under `scripts/archive/` (optional `-Legacy` loads it with a deprecation warning
 | **Secret hygiene** | Strong — templates only in git | Same | — |
 | **Validation** | Fail-fast; hand-rolled loaders | Typed `pydantic-settings` (API + ETL + dbt via mdc) | — |
 | **Stage naming** | Ambiguous per subproject | Documented matrix; `mdc … --env <stage>` per component | Unify edge cases in docs |
-| **Env loading** | Python dotenv **and** ~3,200-line PS shim | Python loaders only; `mdc` injects child env; no daily dot-source of monolith | Refresh `docs/ENVIRONMENT_FILES.md` |
+| **Env loading** | Python dotenv **and** ~3,200-line PS shim | Python loaders only; `mdc` injects child env; monolith archived | — |
 | **Virtualenvs** | Pipenv (dbt/ETL) + venv (api/audio) | Same (unchanged) | Single tool (uv/poetry) |
 | **Discoverability** | Fragmented docs | `docs/ENVIRONMENT_FILES.md` tracked; `mdc status` | — |
 
@@ -657,6 +657,6 @@ exists — no need to grep the codebase for `os.getenv` calls.
 - `load_project.ps1` — default → `scripts/mdc_aliases.ps1`; `-Legacy` deprecated (archive only).
 - `scripts/archive/environment_manager.ps1` — archived monolith (reference / emergency rollback).
 - `scripts/deployment/deploy_api_file.ps1` — EC2 deploy; `-ClinicEnv`; `/health/db` post-deploy check.
-- `docs/ENVIRONMENT_FILES.md` — env file inventory (may still reference legacy paths; refresh optional).
+- `docs/ENVIRONMENT_FILES.md` — env file inventory and mdc-first onboarding (tracked).
 - `ENVIRONMENT_HANDLING_REVIEW_PHASE4_PROPOSAL.md` — Phase 4 plan (complete).
 - `ENVIRONMENT_HANDLING_REVIEW_PHASE5_PROPOSAL.md` — Phase 5 plan (5.1–5.6).
