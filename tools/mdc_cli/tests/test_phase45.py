@@ -50,3 +50,24 @@ def test_etl_status_command(
     assert "status" in cmd
     assert "--config" in cmd
     assert "etl_pipeline/config/pipeline.yml" in cmd
+
+
+@patch("mdc_cli.commands.etl.run_isolated", return_value=0)
+@patch("mdc_cli.commands.etl.require_component_python")
+@patch("mdc_cli.commands.etl.load_env_dict_isolated")
+@patch("mdc_cli.commands.etl.validate_etl_stage", return_value=(True, None))
+def test_etl_schema_command(
+    mock_validate,
+    mock_load,
+    mock_python,
+    mock_run,
+):
+    from pathlib import Path
+
+    mock_load.return_value = {}
+    mock_python.return_value = Path("etl/venv/Scripts/python.exe")
+    result = runner.invoke(app, ["etl", "schema", "--env", "clinic"])
+    assert result.exit_code == 0
+    cmd = mock_run.call_args.kwargs["cmd"]
+    assert "update-schema" in cmd
+    assert mock_load.call_args.kwargs["profile"] == "full"

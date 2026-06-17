@@ -99,11 +99,13 @@ ENV_SCAN_PREFIXES: dict[str, list[str]] = {
         "OPENDENTAL_SOURCE_",
         "GLIC_OPENDENTAL_SOURCE_",
         "MYSQL_REPLICATION_",
+        "MYSQL_ROOT_",
         "POSTGRES_ANALYTICS_",
     ],
     "clinic": [
         "OPENDENTAL_SOURCE_",
         "MYSQL_REPLICATION_",
+        "MYSQL_ROOT_",
         "POSTGRES_ANALYTICS_",
     ],
     "test": [

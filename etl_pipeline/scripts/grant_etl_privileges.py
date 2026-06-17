@@ -19,24 +19,13 @@ Prerequisites:
     - Run test_root_connections.py first to verify root connectivity
 """
 
+import argparse
 import os
 import sys
-from pathlib import Path
+
 from sqlalchemy import create_engine, text
 
-script_dir = Path(__file__).resolve().parent
-etl_dir = script_dir.parent
-sys.path.insert(0, str(etl_dir.parent))
-
-env_name = os.getenv('ETL_ENVIRONMENT', 'local')
-env_file = etl_dir / f'.env_{env_name}'
-if env_file.exists():
-    from dotenv import load_dotenv
-    # override=False: OS env (e.g. from environment_manager.ps1) wins over the file.
-    load_dotenv(env_file, override=False)
-    print(f"Loaded {env_file.name}")
-else:
-    print(f"Warning: {env_file} not found")
+from etl_pipeline.config.script_env import load_script_settings
 
 
 def _set_global_on_local_mysql() -> tuple[bool, str]:
@@ -87,9 +76,27 @@ def _verify_local_mysql() -> tuple[bool, str]:
         engine.dispose()
 
 
+def parse_args() -> argparse.Namespace:
+    parser = argparse.ArgumentParser(description="Configure local MySQL for ETL bulk performance.")
+    parser.add_argument(
+        "--stage",
+        choices=("local", "clinic"),
+        default=None,
+        help="ETL stage (default: ETL_ENVIRONMENT or local)",
+    )
+    return parser.parse_args()
+
+
 def main():
+    args = parse_args()
+    try:
+        settings = load_script_settings(args.stage, default_stage="local")
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+
     print("=" * 70)
-    print("ETL Local MySQL Configuration")
+    print(f"ETL Local MySQL Configuration (ETL_ENVIRONMENT={settings.environment})")
     print("=" * 70)
     print("\nSource MySQL (OpenDental): No changes - skipping.")
     print("Local MySQL (replication): Setting GLOBAL variables for bulk performance.\n")

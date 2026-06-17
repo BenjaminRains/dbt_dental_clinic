@@ -34,32 +34,15 @@ import re
 from sqlalchemy import create_engine, text
 from sqlalchemy.engine import URL
 from datetime import datetime, date
-from dotenv import load_dotenv
-from pathlib import Path
 
 # Add the etl_pipeline directory to the path
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
-# Load test environment the same way as the test fixtures
-def load_test_environment():
-    """Load environment variables from .env_test file for testing."""
-    etl_env_path = Path(__file__).parent.parent / '.env_test'
-    if etl_env_path.exists():
-        # override=False: OS env wins over the file (see ENVIRONMENT_HANDLING_REVIEW.md).
-        load_dotenv(etl_env_path, override=False)
-        print(f"Loaded environment from: {etl_env_path}")
-    else:
-        print(f"No .env_test file found at: {etl_env_path}")
-        print("Please create etl_pipeline/.env_test from etl_pipeline/docs/env_test.template")
-        sys.exit(1)
-
-# Load environment at module import time
-load_test_environment()
-
 # Import new architectural components
 try:
-    from etl_pipeline.config import create_test_settings, DatabaseType, PostgresSchema, reset_settings, get_settings
+    from etl_pipeline.config import DatabaseType, PostgresSchema, get_settings
     from etl_pipeline.core.connections import ConnectionFactory
+    from etl_pipeline.config.script_env import load_script_settings
     # Import standardized test data directly to avoid pytest dependencies
     import sys
     import os
@@ -729,10 +712,14 @@ def setup_mysql_test_database(database_type):
 def main():
     """Main function to set up all test databases."""
     logger.info("Starting test database setup with safety checks...")
-    
-    # Set test environment explicitly
-    os.environ['ETL_ENVIRONMENT'] = 'test'
-    logger.info("Set ETL_ENVIRONMENT=test for test database setup")
+
+    try:
+        load_script_settings("test")
+    except ValueError as exc:
+        logger.error("Failed to load test settings: %s", exc)
+        sys.exit(1)
+
+    logger.info("Loaded test settings via create_settings (ETL_ENVIRONMENT=test)")
     
     # Safety checks
     if not validate_test_environment():

@@ -1,38 +1,50 @@
-import os
 import sys
 import argparse
 import json
 from typing import Any, Dict
 
 from sqlalchemy import text
-from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
+from etl_pipeline.config import PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.core.postgres_schema import PostgresSchema
 from etl_pipeline.config.logging import get_logger
+from etl_pipeline.config.script_env import load_script_settings, resolve_script_stage
 
 from etl_pipeline.loaders.postgres_loader import PostgresLoader
 
 
 logger = get_logger(__name__)
 
+ALLOWED_STAGES = ("test", "clinic")
+
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Smoke test PostgresLoader for a single table")
     parser.add_argument("table", help="Table name to load from replication to analytics")
     parser.add_argument("--force-full", action="store_true", help="Force full load (truncate then load)")
+    parser.add_argument(
+        "--stage",
+        choices=ALLOWED_STAGES,
+        default=None,
+        help="ETL stage (default: ETL_ENVIRONMENT; required if unset)",
+    )
     args = parser.parse_args()
 
-    # Ensure environment is set to test unless explicitly clinic
-    etl_env = os.environ.get("ETL_ENVIRONMENT", "test").lower()
-    if etl_env not in ("test", "clinic"):
-        # Special error message for deprecated "production" environment
-        if etl_env == "production":
-            print("❌ ETL_ENVIRONMENT='production' has been removed. Use 'clinic' for clinic deployment.")
-        else:
-            print("ETL_ENVIRONMENT must be 'test' or 'clinic'")
+    try:
+        stage = resolve_script_stage(args.stage)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
         return 2
 
-    settings = get_settings()
+    if stage not in ALLOWED_STAGES:
+        print(f"ERROR: run_loader_smoke supports {ALLOWED_STAGES} only, got '{stage}'")
+        return 2
+
+    try:
+        settings = load_script_settings(stage)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        return 2
 
     # Connections
     replication_engine = ConnectionFactory.get_replication_connection(settings)
