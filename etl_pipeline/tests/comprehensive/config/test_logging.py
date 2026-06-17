@@ -3,6 +3,7 @@ Comprehensive tests for the unified logging system using provider pattern and Se
 Follows the three-tier ETL testing strategy and connection architecture best practices.
 """
 
+import logging
 import pytest
 from unittest.mock import patch, MagicMock, call
 from etl_pipeline.config.logging import setup_logging, configure_sql_logging, get_logger, ETLLogger
@@ -162,11 +163,20 @@ class TestComprehensiveLogging:
 
     def test_logging_error_recovery(self, mock_logger):
         """Test logging error recovery (provider pattern)."""
-        with patch('etl_pipeline.config.logging.setup_logging', side_effect=Exception("Test error")), \
-             patch('logging.basicConfig') as mock_basic_config, \
-             patch('builtins.print') as mock_print:
-            from etl_pipeline.config.logging import init_default_logger
-            init_default_logger()
-            mock_basic_config.assert_called_once()
-            mock_print.assert_called_once()
-            assert "Warning: Could not set up advanced logging" in mock_print.call_args[0][0] 
+        root_logger = logging.getLogger()
+        original_handlers = root_logger.handlers[:]
+        root_logger.handlers.clear()
+        try:
+            with patch('pathlib.Path.mkdir'), \
+                 patch('etl_pipeline.config.logging.setup_run_logging', side_effect=Exception("Test error")), \
+                 patch('logging.basicConfig') as mock_basic_config, \
+                 patch('builtins.print') as mock_print:
+                from etl_pipeline.config.logging import init_default_logger
+                init_default_logger()
+                mock_basic_config.assert_called_once()
+                mock_print.assert_called_once()
+                assert "Warning: Could not set up advanced logging" in mock_print.call_args[0][0]
+        finally:
+            root_logger.handlers.clear()
+            for handler in original_handlers:
+                root_logger.addHandler(handler) 

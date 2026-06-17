@@ -116,6 +116,33 @@ class TestPostgresLoaderComprehensive:
     def setup_class(cls):
         """Set up logger for test class."""
         cls.logger = logging.getLogger(__name__)
+
+    @staticmethod
+    def _make_test_loader(test_settings, table_configs=None):
+        """Build PostgresLoader with injected mocks (matches table_processor wiring)."""
+        from etl_pipeline.config import DatabaseType
+
+        def mock_get_database_config(db_type, *args):
+            if db_type == DatabaseType.ANALYTICS:
+                return {'database': 'test_db', 'schema': 'raw'}
+            if db_type == DatabaseType.REPLICATION:
+                return {'database': 'test_replication'}
+            return {'database': 'test_db'}
+
+        test_settings.get_database_config = MagicMock(side_effect=mock_get_database_config)
+        replication_engine = MagicMock()
+        analytics_engine = MagicMock()
+        schema_adapter = MagicMock()
+        schema_adapter.get_table_schema_from_mysql.return_value = {'columns': []}
+        schema_adapter.ensure_table_exists.return_value = True
+
+        return PostgresLoader(
+            replication_engine=replication_engine,
+            analytics_engine=analytics_engine,
+            settings=test_settings,
+            schema_adapter=schema_adapter,
+            table_configs=table_configs or {},
+        )
     
     # ===========================================
     # PHASE 1: ENVIRONMENT VALIDATION (FAIL FAST)
@@ -221,9 +248,9 @@ class TestPostgresLoaderComprehensive:
             del os.environ['ETL_ENVIRONMENT']
         
         try:
-            # Act: Attempt to create PostgresLoader without ETL_ENVIRONMENT
+            # Act: new constructor requires explicit dependencies (fail fast at call site)
             if PostgresLoader is not None:
-                with pytest.raises((EnvironmentError, ConfigurationError), match="ETL_ENVIRONMENT"):
+                with pytest.raises(TypeError, match="missing.*required"):
                     PostgresLoader()
         finally:
             # Restore original environment
@@ -241,28 +268,16 @@ class TestPostgresLoaderComprehensive:
         """
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
-        
-        # Arrange: Mock components to focus on settings initialization
-        with patch('etl_pipeline.loaders.postgres_loader.PostgresSchema') as mock_schema_class:
-            mock_schema_adapter = MagicMock()
-            mock_schema_class.return_value = mock_schema_adapter
-            
-            with patch('etl_pipeline.loaders.postgres_loader.ConnectionFactory') as mock_factory:
-                mock_factory.get_replication_connection.return_value = MagicMock()
-                mock_factory.get_analytics_raw_connection.return_value = MagicMock()
-                
-                with patch('etl_pipeline.config.create_test_settings') as mock_create_test_settings:
-                    mock_create_test_settings.return_value = test_settings
-                    
-                    # Act: Initialize PostgresLoader
-                    if PostgresLoader is not None:
-                        loader = PostgresLoader(use_test_environment=True)
-                        
-                        # Assert: Settings are properly configured
-                        assert loader.settings is not None
-                        assert loader.settings.environment == 'test'
-                        assert loader.table_configs is not None
-                    
+
+        loader = self._make_test_loader(test_settings, table_configs={
+            'patient': {'incremental_columns': ['DateTStamp'], 'batch_size': 1000},
+        })
+
+        assert loader.settings is not None
+        assert loader.settings.environment == 'test'
+        assert loader.table_configs is not None
+        assert 'patient' in loader.table_configs
+
         self.logger.info("SUCCESS: Settings initialization successful")
     
     # ===========================================
@@ -527,44 +542,34 @@ class TestPostgresLoaderComprehensive:
         # Configure mock methods to return actual SQL strings based on real schema
         postgres_loader._build_load_query.return_value = "SELECT PatNum, LName, FName, DateTStamp, Status FROM patient WHERE DateTStamp > '2023-01-01'"
         postgres_loader._build_count_query.return_value = "SELECT COUNT(*) FROM patient WHERE DateTStamp > '2023-01-01'"
-        
-        # Mock database inspector with real schema data
-        mock_inspector = MagicMock()
-        patient_schema = sample_mysql_schema['patient']
-        mock_inspector.get_columns.return_value = [
-            {'name': col['name'], 'type': col['type']} 
-            for col in patient_schema['columns']
-        ]
-        
-        with patch('etl_pipeline.loaders.postgres_loader.inspect', return_value=mock_inspector):
-            # Act: Test load query building
-            full_query = postgres_loader._build_load_query(
-                'patient',
-                ['DateTStamp'],
-                force_full=True
-            )
-            
-            incremental_query = postgres_loader._build_load_query(
-                'patient',
-                ['DateTStamp'],
-                force_full=False
-            )
-            
-            # Test count query building
-            count_query = postgres_loader._build_count_query(
-                'patient',
-                ['DateTStamp'],
-                force_full=True
-            )
-            
-            # Assert: Verify queries are properly constructed with realistic column names
-            assert 'SELECT' in full_query
-            assert 'FROM patient' in full_query
-            assert 'SELECT' in incremental_query
-            assert 'FROM patient' in incremental_query
-            assert 'SELECT COUNT(*)' in count_query
-            assert 'FROM patient' in count_query
-            
+
+        # Act: Test load query building (mock fixture — no module-level inspect patch needed)
+        full_query = postgres_loader._build_load_query(
+            'patient',
+            ['DateTStamp'],
+            force_full=True
+        )
+
+        incremental_query = postgres_loader._build_load_query(
+            'patient',
+            ['DateTStamp'],
+            force_full=False
+        )
+
+        count_query = postgres_loader._build_count_query(
+            'patient',
+            ['DateTStamp'],
+            force_full=True
+        )
+
+        # Assert: Verify queries are properly constructed with realistic column names
+        assert 'SELECT' in full_query
+        assert 'FROM patient' in full_query
+        assert 'SELECT' in incremental_query
+        assert 'FROM patient' in incremental_query
+        assert 'SELECT COUNT(*)' in count_query
+        assert 'FROM patient' in count_query
+
         self.logger.info("SUCCESS: Query building logic tested successfully with realistic schema data")
     
     def test_schema_operations(self, postgres_loader, sample_mysql_schema):
@@ -582,31 +587,22 @@ class TestPostgresLoaderComprehensive:
         # Arrange: Use realistic schema information from fixtures
         mysql_schema = sample_mysql_schema['patient']
         
-        # Mock database inspector with realistic table existence check
-        mock_inspector = MagicMock()
-        mock_inspector.has_table.return_value = False  # Table doesn't exist
-        
-        # Mock schema adapter operations
-        postgres_loader.schema_adapter.create_postgres_table.return_value = True
-        
-        # Configure _ensure_postgres_table to simulate calling create_postgres_table
+        # Mock schema adapter operations (schema_adapter injected at construction)
+        postgres_loader.schema_adapter.ensure_table_exists.return_value = True
+
         def mock_ensure_postgres_table(table_name, schema):
-            # Simulate the real behavior: call create_postgres_table when table doesn't exist
-            postgres_loader.schema_adapter.create_postgres_table(table_name, schema)
+            postgres_loader.schema_adapter.ensure_table_exists(table_name, schema)
             return True
-        
+
         postgres_loader._ensure_postgres_table.side_effect = mock_ensure_postgres_table
-        
-        with patch('etl_pipeline.loaders.postgres_loader.inspect', return_value=mock_inspector):
-            # Act: Ensure PostgreSQL table exists with realistic schema
-            result = postgres_loader._ensure_postgres_table('patient', mysql_schema)
-            
-            # Assert: Verify table creation was called with realistic schema
-            assert result is True
-            postgres_loader.schema_adapter.create_postgres_table.assert_called_once_with(
-                'patient', mysql_schema
-            )
-            
+
+        result = postgres_loader._ensure_postgres_table('patient', mysql_schema)
+
+        assert result is True
+        postgres_loader.schema_adapter.ensure_table_exists.assert_called_once_with(
+            'patient', mysql_schema
+        )
+
         self.logger.info("SUCCESS: Schema operations tested successfully with realistic schema data")
     
     # ===========================================
@@ -625,56 +621,34 @@ class TestPostgresLoaderComprehensive:
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
         
-        # Arrange: Realistic configuration based on actual dental clinic tables
-        config = {
-            'tables': {
-                'patient': {
-                    'incremental_columns': ['DateTStamp'],
-                    'batch_size': 1000,
-                    'extraction_strategy': 'incremental',
-                    'table_importance': 'critical'
-                },
-                'appointment': {
-                    'incremental_columns': ['AptDateTime'],
-                    'batch_size': 500,
-                    'extraction_strategy': 'incremental',
-                    'table_importance': 'high'
-                },
-                'procedurelog': {
-                    'incremental_columns': ['ProcDate'],
-                    'batch_size': 2000,
-                    'extraction_strategy': 'incremental',
-                    'table_importance': 'high'
-                }
-            }
+        table_configs = {
+            'patient': {
+                'incremental_columns': ['DateTStamp'],
+                'batch_size': 1000,
+                'extraction_strategy': 'incremental',
+            },
+            'appointment': {
+                'incremental_columns': ['AptDateTime'],
+                'batch_size': 500,
+                'extraction_strategy': 'incremental',
+            },
+            'procedurelog': {
+                'incremental_columns': ['ProcDate'],
+                'batch_size': 2000,
+                'extraction_strategy': 'incremental',
+            },
         }
-        
-        # Mock file operations
-        with patch('builtins.open', mock_open(read_data=yaml.dump(config))):
-            with patch('etl_pipeline.loaders.postgres_loader.PostgresSchema') as mock_schema_class:
-                mock_schema_adapter = MagicMock()
-                mock_schema_class.return_value = mock_schema_adapter
-                
-                with patch('etl_pipeline.loaders.postgres_loader.ConnectionFactory') as mock_factory:
-                    mock_factory.get_replication_connection.return_value = MagicMock()
-                    mock_factory.get_analytics_raw_connection.return_value = MagicMock()
-                    
-                    with patch('etl_pipeline.config.create_test_settings') as mock_create_test_settings:
-                        mock_create_test_settings.return_value = test_settings
-                        
-                        # Act: Create PostgresLoader
-                        if PostgresLoader is not None:
-                            loader = PostgresLoader(use_test_environment=True)
-                            
-                            # Assert: Verify configuration loading with realistic table names
-                            assert loader.table_configs is not None
-                            assert 'patient' in loader.table_configs
-                            assert 'appointment' in loader.table_configs
-                            assert 'procedurelog' in loader.table_configs
-                            assert loader.table_configs['patient']['batch_size'] == 1000
-                            assert loader.table_configs['appointment']['batch_size'] == 500
-                            assert loader.table_configs['procedurelog']['batch_size'] == 2000
-                        
+
+        loader = self._make_test_loader(test_settings, table_configs=table_configs)
+
+        assert loader.table_configs is not None
+        assert 'patient' in loader.table_configs
+        assert 'appointment' in loader.table_configs
+        assert 'procedurelog' in loader.table_configs
+        assert loader.table_configs['patient']['batch_size'] == 1000
+        assert loader.table_configs['appointment']['batch_size'] == 500
+        assert loader.table_configs['procedurelog']['batch_size'] == 2000
+
         self.logger.info("SUCCESS: Configuration loading tested successfully with realistic dental clinic table configurations")
     
     def test_error_handling_scenarios(self, postgres_loader, sample_table_data):
@@ -749,25 +723,14 @@ class TestPostgresLoaderComprehensive:
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
         
-        # Arrange: Mock components
-        with patch('etl_pipeline.loaders.postgres_loader.PostgresSchema') as mock_schema_class:
-            mock_schema_adapter = MagicMock()
-            mock_schema_class.return_value = mock_schema_adapter
-            
-            with patch('etl_pipeline.loaders.postgres_loader.ConnectionFactory') as mock_factory:
-                mock_factory.get_replication_connection.return_value = MagicMock()
-                mock_factory.get_analytics_raw_connection.return_value = MagicMock()
-                
-                with patch('etl_pipeline.config.create_test_settings') as mock_create_test_settings:
-                    mock_create_test_settings.return_value = test_settings
-                    
-                    # Act: Create PostgresLoader with provider pattern
-                    if PostgresLoader is not None:
-                        loader = PostgresLoader(use_test_environment=True)
-                        
-                        # Assert: Verify provider pattern integration
-                        assert loader.settings is not None
-                        assert loader.settings.environment == 'test'
-                        assert loader.table_configs is not None
-                        
+        loader = self._make_test_loader(test_settings, table_configs={
+            'patient': {'incremental_columns': ['DateTStamp']},
+        })
+
+        assert loader.settings is not None
+        assert loader.settings.environment == 'test'
+        assert loader.schema_adapter is not None
+        assert loader.replication_engine is not None
+        assert loader.analytics_engine is not None
+
         self.logger.info("SUCCESS: Provider pattern integration tested successfully")

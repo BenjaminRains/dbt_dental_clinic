@@ -385,23 +385,31 @@ class TestMetadataReturnType:
 
 class TestMetadataFieldTypes:
     """Test common field type constraints across all metadata."""
-    
-    def test_string_fields_not_empty(self):
-        """String fields should not be empty strings."""
-        metadata = {
-            'strategy_used': '',  # Invalid
-            'error': ''           # Invalid
+
+    @pytest.fixture
+    def valid_success_metadata(self) -> Dict[str, Any]:
+        return {
+            'strategy_used': 'incremental',
+            'error': None,
         }
-        
-        # Check strategy_used
-        if 'strategy_used' in metadata:
-            assert len(metadata['strategy_used']) > 0, \
-                "strategy_used should not be empty string"
-        
-        # Check error
-        if 'error' in metadata:
-            assert metadata['error'] is None or len(metadata['error']) > 0, \
-                "error should be None or non-empty string"
+
+    @pytest.fixture
+    def valid_failure_metadata(self) -> Dict[str, Any]:
+        return {
+            'strategy_used': 'error',
+            'error': 'Connection timeout',
+        }
+    
+    def test_string_fields_not_empty(self, valid_success_metadata, valid_failure_metadata):
+        """String fields should not be empty strings in valid metadata."""
+        for metadata in (valid_success_metadata, valid_failure_metadata):
+            if 'strategy_used' in metadata:
+                assert len(metadata['strategy_used']) > 0, \
+                    "strategy_used should not be empty string"
+            
+            if metadata.get('error') is not None:
+                assert len(metadata['error']) > 0, \
+                    "error should be non-empty string when present"
     
     def test_numeric_fields_finite(self):
         """Numeric fields should be finite (not inf or nan)."""

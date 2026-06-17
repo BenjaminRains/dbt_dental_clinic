@@ -83,11 +83,11 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_mock_engine(db_type: str, db_name: str) -> Mock:
+def create_mock_engine(db_type: str, db_name: str) -> MagicMock:
     """Create a mock SQLAlchemy engine for testing."""
-    mock_engine = Mock()
+    mock_engine = MagicMock()
     mock_engine.name = db_type
-    mock_engine.url = Mock()
+    mock_engine.url = MagicMock()
     mock_engine.url.database = db_name
     
     # Set up begin() method to return a context manager
@@ -148,7 +148,7 @@ class TestPostgresSchemaInitialization:
         
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         mock_inspect_patch = patch('etl_pipeline.core.postgres_schema.inspect')
-        mock_factory_patch = patch('etl_pipeline.core.connections.ConnectionFactory')
+        mock_factory_patch = patch('etl_pipeline.core.postgres_schema.ConnectionFactory')
         
         # Add patches to the isolation fixture for automatic cleanup
         add_patch(mock_inspect_patch)
@@ -216,7 +216,7 @@ class TestPostgresSchemaInitialization:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -314,7 +314,7 @@ class TestPostgresSchemaInitialization:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'custom_replication')
@@ -365,7 +365,7 @@ class TestPostgresSchemaInitialization:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -424,7 +424,7 @@ class TestPostgresSchemaTypeConversion:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -508,7 +508,7 @@ class TestPostgresSchemaTypeConversion:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -549,7 +549,7 @@ class TestPostgresSchemaTypeConversion:
                 else:
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 # Test boolean columns
                 for col in boolean_columns:
                     result = schema._convert_mysql_type('tinyint', 'patient', col)
@@ -583,7 +583,7 @@ class TestPostgresSchemaTypeConversion:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -646,7 +646,7 @@ class TestPostgresSchemaTypeConversion:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -706,7 +706,7 @@ class TestPostgresSchemaTypeConversion:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -760,7 +760,7 @@ class TestPostgresSchemaTypeConversion:
                 else:
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 for table_name, column_name, mysql_type, expected_type in test_scenarios:
                     result = schema._convert_mysql_type(mysql_type, table_name, column_name)
                     assert result == expected_type, f"Failed for {table_name}.{column_name}: expected {expected_type}, got {result}"
@@ -785,7 +785,7 @@ class TestPostgresSchemaTypeConversion:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -862,7 +862,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -900,7 +900,7 @@ class TestPostgresSchemaAdaptation:
                 else:
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 # Test comprehensive schema conversion
                 for table_name, mysql_schema in sample_mysql_schemas.items():
                     # Skip procedurelog table as it has a different format (no backticks)
@@ -954,7 +954,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -992,7 +992,7 @@ class TestPostgresSchemaAdaptation:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test complex schema with various column types
@@ -1039,7 +1039,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1077,7 +1077,7 @@ class TestPostgresSchemaAdaptation:
                 else:
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 # Test primary key scenarios
                 primary_key_scenarios = [
                     {
@@ -1126,7 +1126,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1204,7 +1204,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1242,7 +1242,7 @@ class TestPostgresSchemaAdaptation:
                 else:
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 # Test intelligent conversion scenarios
                 test_scenarios = [
                     {
@@ -1283,7 +1283,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1340,7 +1340,7 @@ class TestPostgresSchemaAdaptation:
             
             mock_postgres_inspector.get_columns = mock_get_columns
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 # Mock verify_schema at the class level to ensure it's applied before method calls
                 with patch.object(PostgresSchema, 'verify_schema', return_value=True):
                     # Test ensure_table_exists for valid schemas
@@ -1386,7 +1386,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1486,7 +1486,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1625,7 +1625,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1738,7 +1738,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1780,7 +1780,7 @@ class TestPostgresSchemaTableOperations:
             mock_conn = create_mock_connection()
             mock_postgres_engine.begin.return_value = mock_conn
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 # Test table creation for valid schemas
                 valid_tables = ['patient', 'appointment']
                 for table_name in valid_tables:
@@ -1808,7 +1808,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1858,7 +1858,7 @@ class TestPostgresSchemaTableOperations:
                 }
             ]
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 for scenario in error_scenarios:
                     # Setup error condition
                     scenario['mock_behavior']()
@@ -1912,7 +1912,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1970,7 +1970,7 @@ class TestPostgresSchemaTableOperations:
             
             mock_postgres_inspector.get_columns = mock_get_columns
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 # Test schema verification for valid schemas
                 valid_tables = ['patient', 'appointment']
                 for table_name in valid_tables:
@@ -2001,7 +2001,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -2039,7 +2039,7 @@ class TestPostgresSchemaTableOperations:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test error scenarios
@@ -2088,7 +2088,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -2191,7 +2191,7 @@ class TestPostgresSchemaComplexScenarios:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -2335,7 +2335,7 @@ class TestPostgresSchemaComplexScenarios:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -2385,7 +2385,7 @@ class TestPostgresSchemaComplexScenarios:
                 scenario['mock_behavior']()
                 
                 # Test error handling
-                with pytest.raises((ValueError, DatabaseConnectionError, DataExtractionError)):
+                with pytest.raises((ValueError, DatabaseConnectionError, DataExtractionError, SchemaValidationError)):
                     schema.get_table_schema_from_mysql(scenario['table_name'])
 
     def test_comprehensive_workflow_integration(self, test_settings, sample_mysql_schemas):
@@ -2407,7 +2407,7 @@ class TestPostgresSchemaComplexScenarios:
         """
         # Mock all database connections and inspectors
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -2468,7 +2468,7 @@ class TestPostgresSchemaComplexScenarios:
             
             mock_postgres_inspector.get_columns = mock_get_columns
             
-            with patch.object(schema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(schema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 # Test comprehensive workflow for valid schemas
                 valid_tables = ['patient', 'appointment']
                 for table_name in valid_tables:
@@ -2509,7 +2509,7 @@ class TestPostgresSchemaComplexScenarios:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -2547,7 +2547,7 @@ class TestPostgresSchemaComplexScenarios:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test edge cases
@@ -2619,7 +2619,7 @@ class TestPostgresSchemaComplexScenarios:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -2657,7 +2657,7 @@ class TestPostgresSchemaComplexScenarios:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test performance with multiple operations
@@ -2727,7 +2727,7 @@ class TestPostgresSchemaComplexScenarios:
         
         # Test that the PostgresSchema uses proper exception hierarchy
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')

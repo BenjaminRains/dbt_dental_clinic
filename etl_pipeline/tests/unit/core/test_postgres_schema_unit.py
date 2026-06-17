@@ -35,7 +35,7 @@ ETL Context:
 
 import pytest
 import os
-from unittest.mock import Mock, patch
+from unittest.mock import Mock, patch, MagicMock
 from typing import Dict, Any
 from datetime import datetime
 
@@ -63,13 +63,63 @@ import logging
 logger = logging.getLogger(__name__)
 
 
-def create_mock_engine(db_type: str, db_name: str) -> Mock:
+def create_mock_engine(db_type: str, db_name: str) -> MagicMock:
     """Create a mock SQLAlchemy engine for testing."""
-    mock_engine = Mock()
+    mock_engine = MagicMock()
     mock_engine.name = db_type
-    mock_engine.url = Mock()
+    mock_engine.url = MagicMock()
     mock_engine.url.database = db_name
     return mock_engine
+
+
+def create_mock_connection() -> MagicMock:
+    """Create a mock database connection that works as a context manager."""
+    mock_conn = MagicMock()
+    mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+    mock_conn.__exit__ = MagicMock(return_value=None)
+    return mock_conn
+
+
+def configure_mysql_schema_extraction_mock(mock_mysql_engine: MagicMock) -> MagicMock:
+    """Wire mock MySQL engine for get_table_schema_from_mysql() tests."""
+    mock_conn = create_mock_connection()
+    mock_mysql_engine.connect.return_value = mock_conn
+
+    def mock_execute_side_effect(query):
+        query_text = str(query)
+        if 'SHOW CREATE TABLE' in query_text:
+            mock_result = Mock()
+            mock_result.fetchone.return_value = (
+                'patient',
+                'CREATE TABLE `patient` (`PatNum` int(11) NOT NULL AUTO_INCREMENT, '
+                '`LName` varchar(100) DEFAULT NULL, `FName` varchar(100) DEFAULT NULL, '
+                '`IsActive` tinyint(1) DEFAULT \'1\', PRIMARY KEY (`PatNum`)) '
+                'ENGINE=InnoDB DEFAULT CHARSET=utf8mb4',
+            )
+            return mock_result
+        if 'SHOW TABLE STATUS' in query_text:
+            mock_result = Mock()
+            mock_result.fetchone.return_value = (
+                'patient', 'InnoDB', None, None, 100, None, None, None, None, None,
+                None, None, None, None, None, None, None, None,
+            )
+            return mock_result
+        if 'information_schema.columns' in query_text:
+            mock_result = Mock()
+            mock_result.__iter__ = Mock(return_value=iter([
+                ('PatNum', 'int', 'NO', None, 'auto_increment', '', 'PRI'),
+                ('LName', 'varchar', 'YES', None, '', 'Last Name', ''),
+                ('FName', 'varchar', 'YES', None, '', 'First Name', ''),
+                ('IsActive', 'tinyint', 'YES', '1', '', 'Active Status', ''),
+            ]))
+            return mock_result
+        mock_result = Mock()
+        mock_result.fetchone.return_value = None
+        mock_result.fetchall.return_value = []
+        return mock_result
+
+    mock_conn.execute.side_effect = mock_execute_side_effect
+    return mock_conn
 
 
 @pytest.mark.unit
@@ -97,7 +147,7 @@ class TestPostgresSchemaInitialization:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -155,7 +205,7 @@ class TestPostgresSchemaInitialization:
         
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -205,7 +255,7 @@ class TestPostgresSchemaInitialization:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -283,7 +333,7 @@ class TestPostgresSchemaInitialization:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -341,7 +391,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -379,7 +429,7 @@ class TestPostgresSchemaAdaptation:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test schema adaptation
@@ -413,7 +463,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -451,7 +501,7 @@ class TestPostgresSchemaAdaptation:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test column extraction
@@ -481,7 +531,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -519,7 +569,7 @@ class TestPostgresSchemaAdaptation:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test PRIMARY KEY extraction
@@ -548,7 +598,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -601,7 +651,7 @@ class TestPostgresSchemaAdaptation:
         """
         # Patch sqlalchemy.inspect at the module level where PostgresSchema imports it
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -677,7 +727,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -702,47 +752,7 @@ class TestPostgresSchemaTableOperations:
             
             mock_inspect.side_effect = mock_inspect_side_effect
             
-            # Create mock connection and results
-            mock_conn = Mock()
-            mock_mysql_engine.connect.return_value.__enter__.return_value = mock_conn
-            
-            # Mock SHOW CREATE TABLE result
-            mock_create_result = Mock()
-            mock_create_result.fetchone.return_value = ('patient', '''
-                CREATE TABLE `patient` (
-                    `PatNum` int(11) NOT NULL AUTO_INCREMENT,
-                    `LName` varchar(100) DEFAULT NULL,
-                    `FName` varchar(100) DEFAULT NULL,
-                    `IsActive` tinyint(1) DEFAULT '1',
-                    PRIMARY KEY (`PatNum`)
-                ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4
-            ''')
-            
-            # Mock SHOW TABLE STATUS result
-            mock_status_result = Mock()
-            mock_status_result.fetchone.return_value = ('patient', 'InnoDB', 10, 'Dynamic', 100, 1024, 0, 0, 0, 0, None, None, None, None, 'utf8mb4_general_ci', None, None, '')
-            
-            # Mock information_schema.columns result
-            mock_columns_result = Mock()
-            mock_columns_result.fetchall.return_value = [
-                ('PatNum', 'int', 'NO', None, 'auto_increment', '', 'PRI'),
-                ('LName', 'varchar', 'YES', None, '', 'Last Name', ''),
-                ('FName', 'varchar', 'YES', None, '', 'First Name', ''),
-                ('IsActive', 'tinyint', 'YES', '1', '', 'Active Status', '')
-            ]
-            
-            # Configure mock connection execute
-            def mock_execute_side_effect(query):
-                if 'SHOW CREATE TABLE' in str(query):
-                    return mock_create_result
-                elif 'SHOW TABLE STATUS' in str(query):
-                    return mock_status_result
-                elif 'information_schema.columns' in str(query):
-                    return mock_columns_result
-                else:
-                    return Mock()
-            
-            mock_conn.execute.side_effect = mock_execute_side_effect
+            configure_mysql_schema_extraction_mock(mock_mysql_engine)
             
             schema = PostgresSchema(settings=test_settings)
             
@@ -789,7 +799,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -815,18 +825,17 @@ class TestPostgresSchemaTableOperations:
             mock_inspect.side_effect = mock_inspect_side_effect
             
             # Create mock connection for PostgreSQL operations
-            mock_conn = Mock()
-            mock_postgres_engine.begin.return_value.__enter__.return_value = mock_conn
+            mock_conn = create_mock_connection()
+            mock_postgres_engine.begin.return_value = mock_conn
             
             # Mock _analyze_column_data to return appropriate types
             def mock_analyze_column_data(table_name, column_name, mysql_type):
                 if mysql_type.lower().startswith('tinyint'):
                     return 'boolean' if column_name in ['IsActive', 'IsDeleted'] else 'smallint'
-                else:
-                    schema = PostgresSchema(settings=test_settings)
-                    return schema._convert_mysql_type_standard(mysql_type)
+                temp_schema = PostgresSchema(settings=test_settings)
+                return temp_schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test table creation
@@ -836,12 +845,13 @@ class TestPostgresSchemaTableOperations:
                 # Validate successful creation
                 assert result is True
                 
-                # Validate that schema creation was attempted
-                mock_conn.execute.assert_any_call(Mock())  # CREATE SCHEMA call
-                
-                # Validate that table was dropped and recreated
-                mock_conn.execute.assert_any_call(Mock())  # DROP TABLE call
-                mock_conn.execute.assert_any_call(Mock())  # CREATE TABLE call
+                execute_sql = [
+                    call.args[0].text if hasattr(call.args[0], 'text') else str(call.args[0])
+                    for call in mock_conn.execute.call_args_list
+                ]
+                assert any('CREATE SCHEMA' in sql for sql in execute_sql)
+                assert any('DROP TABLE' in sql for sql in execute_sql)
+                assert any('CREATE TABLE' in sql for sql in execute_sql)
 
     def test_ensure_table_exists(self, test_settings, sample_mysql_schemas):
         """
@@ -861,7 +871,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -894,7 +904,7 @@ class TestPostgresSchemaTableOperations:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test when table doesn't exist (should create)
@@ -932,7 +942,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -974,8 +984,9 @@ class TestPostgresSchemaTableOperations:
                     schema = PostgresSchema(settings=test_settings)
                     return schema._convert_mysql_type_standard(mysql_type)
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
+                schema.postgres_inspector = mock_postgres_inspector
                 
                 # Test schema verification
                 mysql_schema = sample_mysql_schemas['patient']
@@ -1003,7 +1014,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1028,36 +1039,20 @@ class TestPostgresSchemaTableOperations:
             
             mock_inspect.side_effect = mock_inspect_side_effect
             
-            # Create mock connection
-            mock_conn = Mock()
-            mock_postgres_engine.connect.return_value.__enter__.return_value = mock_conn
-            
-            # Mock PostgreSQL columns with type information
-            mock_pg_columns = [
-                {
-                    'name': 'id',
-                    'type': Mock(python_type=int, length=None),
-                    'nullable': False
-                },
-                {
-                    'name': 'name',
-                    'type': Mock(python_type=str, length=100),
-                    'nullable': True
-                },
-                {
-                    'name': 'is_active',
-                    'type': Mock(python_type=bool, length=None),
-                    'nullable': True
-                },
-                {
-                    'name': 'amount',
-                    'type': Mock(python_type=float, length=None),
-                    'nullable': True
-                }
-            ]
-            mock_postgres_inspector.get_columns.return_value = mock_pg_columns
-            
             schema = PostgresSchema(settings=test_settings)
+            
+            column_types = {
+                'id': 'integer',
+                'name': 'character varying',
+                'is_active': 'boolean',
+                'amount': 'numeric',
+            }
+            mysql_columns = [
+                {'name': 'id', 'type': 'int', 'is_nullable': False},
+                {'name': 'name', 'type': 'varchar', 'is_nullable': True},
+                {'name': 'is_active', 'type': 'tinyint', 'is_nullable': True},
+                {'name': 'amount', 'type': 'decimal', 'is_nullable': True},
+            ]
             
             # Test data conversion
             row_data = {
@@ -1068,13 +1063,16 @@ class TestPostgresSchemaTableOperations:
                 'extra_column': 'should_be_ignored'
             }
             
-            converted_data = schema.convert_row_data_types('test_table', row_data)
+            with patch.object(schema, '_get_table_column_types_cached', return_value=column_types), \
+                 patch.object(schema, 'get_table_schema_from_mysql', return_value={'columns': mysql_columns}):
+                converted_data = schema.convert_row_data_types('test_table', row_data)
             
             # Validate conversions
             assert converted_data['id'] == 123  # String to int
             assert converted_data['name'] == 'Test Patient'  # String unchanged
             assert converted_data['is_active'] is True  # String '1' to boolean
-            assert converted_data['amount'] == 99.99  # String to float
+            from decimal import Decimal
+            assert converted_data['amount'] == Decimal('99.99')  # String to numeric
             assert converted_data['extra_column'] == 'should_be_ignored'  # Pass through
 
     def test_convert_single_value(self, test_settings):
@@ -1098,7 +1096,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1178,8 +1176,8 @@ class TestPostgresSchemaTableOperations:
             }
             
             # Mock dateutil.parser for datetime parsing
-            with patch('etl_pipeline.core.postgres_schema.parser') as mock_parser:
-                mock_parser.parse.return_value = datetime(2023, 1, 1, 12, 0, 0)
+            with patch('dateutil.parser.parse') as mock_parse:
+                mock_parse.return_value = datetime(2023, 1, 1, 12, 0, 0)
                 
                 result = schema._convert_single_value('2023-01-01 12:00:00', datetime_type_info, 'test_col', 'test_table')
                 if isinstance(result, datetime):
@@ -1208,7 +1206,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1285,7 +1283,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1311,10 +1309,9 @@ class TestPostgresSchemaTableOperations:
             mock_inspect.side_effect = mock_inspect_side_effect
             
             # Create mock connection that returns no results (table not found)
-            mock_conn = Mock()
-            mock_mysql_engine.connect.return_value.__enter__.return_value = mock_conn
+            mock_conn = create_mock_connection()
+            mock_mysql_engine.connect.return_value = mock_conn
             
-            # Mock empty result for non-existent table
             mock_result = Mock()
             mock_result.fetchone.return_value = None
             mock_conn.execute.return_value = mock_result
@@ -1343,7 +1340,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1377,7 +1374,7 @@ class TestPostgresSchemaTableOperations:
                     details={"error_type": "test_error"}
                 )
             
-            with patch.object(PostgresSchema, '_analyze_column_data', side_effect=mock_analyze_column_data):
+            with patch.object(PostgresSchema, '_analyze_column_data_cached', side_effect=mock_analyze_column_data):
                 schema = PostgresSchema(settings=test_settings)
                 
                 # Test with invalid schema that causes transformation error
@@ -1407,7 +1404,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')
@@ -1464,7 +1461,7 @@ class TestPostgresSchemaTableOperations:
         """
         # Patch sqlalchemy.inspect and ConnectionFactory
         with patch('etl_pipeline.core.postgres_schema.inspect') as mock_inspect, \
-             patch('etl_pipeline.core.connections.ConnectionFactory') as mock_factory:
+             patch('etl_pipeline.core.postgres_schema.ConnectionFactory') as mock_factory:
             
             # Create mock engines
             mock_mysql_engine = create_mock_engine('mysql', 'test_replication')

@@ -1,6 +1,6 @@
 # ETL Pipeline Code Review
 
-**Date:** 2026-06-16 (updated 2026-06-17)  
+**Date:** 2026-06-16 (updated 2026-06-17; action plan 2026-06-17)  
 **Scope:** `etl_pipeline/` — config authority migration, `Settings` class, legacy env loading  
 **Current env reference:** [docs/ENVIRONMENT_FILES.md](../../docs/ENVIRONMENT_FILES.md)  
 **Refactor history (archived):** [docs/_archive/ENVIRONMENT_HANDLING_REVIEW.md](../../docs/_archive/ENVIRONMENT_HANDLING_REVIEW.md)
@@ -11,7 +11,9 @@
 
 The **Python config authority** for ETL connections is `settings_v2.py` → `FileConfigProvider` → `Settings`. Production library code (`get_settings()`, orchestration, loaders) is on that path when run via `mdc` or with `ETL_ENVIRONMENT` set.
 
-**Remaining gaps:** `Settings` is still a **hybrid facade** (env router + YAML reader) with a **dual validation path** (pydantic for production, legacy `ENV_MAPPINGS` for unit tests). Stage detection is duplicated between `Settings` and `settings_v2`. Loader TODOs and missing architecture docs are tracked below.
+**Remaining gaps:** `Settings` is still a **hybrid facade** (env router + YAML reader) with a **dual validation path** (pydantic for production, legacy `ENV_MAPPINGS` for unit tests). Stage detection is duplicated in three places (see §5.3). Loader TODOs and missing architecture docs are tracked in §5.6.
+
+**Next up:** Step 1 in §5 — unify stage detection via shared `settings_v2` helper.
 
 **Completed since initial review (2026-06-17):**
 - `config/script_env.py` — shared `load_script_settings()` / `--stage` for standalone scripts
@@ -105,15 +107,15 @@ All standalone scripts under `scripts/` now use `config/script_env.py` (`load_sc
 | Production / integration | `FileConfigProvider` | `settings_v2` typed models → `connection_config_dict()` | Pydantic at provider init |
 | Unit tests | `DictConfigProvider` | Legacy `ENV_MAPPINGS` scan of injected `env` dict | `validate_configs()` + `_validate_environment()` |
 
-**Open issues:**
+**Open issues** (action plan in §5):
 
-1. **Duplicate mapping tables** — `Settings.ENV_MAPPINGS` mirrors `settings_v2.STAGE_PREFIXES`. Long-term: tests inject v2-shaped env dicts, then drop `ENV_MAPPINGS`.
+1. **Duplicate mapping tables** — `Settings.ENV_MAPPINGS` mirrors `settings_v2.STAGE_PREFIXES`. Defer removal until test migration (§5.5).
 
-2. **`validate_configs()` short-circuit** — Redundant calls in orchestration components.
+2. **`validate_configs()` short-circuit** — Redundant calls in orchestration components (§5.4).
 
-3. **`ETLProfile` at Settings API** — ✅ `Settings.profile` property added; document `get_source_connection_config()` behavior when profile is `load`.
+3. **`ETLProfile` at Settings API** — ✅ `Settings.profile` property added; still need doc for `get_source_connection_config()` when profile is `load` (§5.2 step 3).
 
-4. **Stage detection duplicated** — `Settings._detect_environment()` and `settings_v2._detect_stage()` still separate. Delegate when exception mapping is unified.
+4. **Stage detection duplicated** — `Settings._detect_environment()`, `FileConfigProvider._detect_environment()`, and `settings_v2._detect_stage()` (§5.3).
 
 ### 3.2 Layer B — Pipeline / table config
 
@@ -150,23 +152,92 @@ All standalone scripts under `scripts/` now use `config/script_env.py` (`load_sc
 | `postgres_loader.py` TODOs (parallel load, post-load validation) | ❌ Open — track as issues |
 | Deduplicate stage validation (`Settings` → `settings_v2._detect_stage`) | ❌ Open |
 | Deprecate `Settings.ENV_MAPPINGS` after test migration | ❌ Open |
-| Architecture docs referenced by tests (`docs/PIPELINE_ARCHITECTURE.md`, etc.) | ❌ Missing from repo |
+| Architecture docs referenced by tests (see §5) | ❌ Missing from repo |
+| Document `Settings.profile` + `get_source_connection_config()` when profile is `load` | ❌ Open |
 
 ---
 
-## 5. Recommended Next Steps
+## 5. Action Plan (prioritized)
 
-### Phase B — Settings consolidation (remaining)
+Phase A (scripts, deprecated loader, `ConfigReader` alignment) is complete. Remaining work falls into three tracks with different effort and payoff.
 
-1. Delegate `Settings._detect_environment()` to `settings_v2._detect_stage()` with consistent exception types.
-2. Plan deprecation of `ENV_MAPPINGS` once DictConfigProvider tests use v2-shaped env dicts.
-3. Trim redundant `validate_configs()` calls in orchestration.
+### 5.1 Open work — effort vs impact
 
-### Phase C — Cleanup (remaining)
+| Item | Effort | Impact | Track |
+|------|--------|--------|-------|
+| Unify stage detection | Small–medium | High — removes drift risk | Phase B |
+| Trim `validate_configs()` redundancy | Small | Medium — clarity | Phase B |
+| Document `load` profile behavior at Settings API | Small | Medium — operator clarity | Phase B |
+| Deprecate `ENV_MAPPINGS` | Large | High — blocked on test migration | Phase B |
+| Restore missing architecture docs | Medium | Medium — docs hygiene | Phase C |
+| `postgres_loader.py` TODOs (parallel load, post-load validation) | Large | Feature work, not refactor | Phase C |
+| Integration fixtures → `load_etl_env_dict` | Small | Low — optional | Phase C |
 
-1. Resolve or ticket `postgres_loader.py` TODOs.
-2. Add or restore architecture docs referenced by tests.
-3. Optional: migrate integration fixtures from `load_dotenv` to `load_etl_env_dict`.
+### 5.2 Recommended order
+
+| Step | Task | Rationale |
+|------|------|-----------|
+| **1** | **Unify stage detection** | Best next bite: contained scope, highest code-health payoff |
+| **2** | Trim duplicate `validate_configs()` in orchestration | Quick cleanup once step 1 lands |
+| **3** | Document `Settings.profile` / `load` profile in `ENVIRONMENT_FILES.md` | Small doc addition; closes §3.1 item 3 |
+| **4** | Plan `ENV_MAPPINGS` test migration | Inventory fixtures that need v2-shaped env dicts before removal |
+| **5** | Ticket loader TODOs + restore architecture docs | Separate tasks; not mixed into config refactor |
+
+### 5.3 Step 1 — Unify stage detection (next up)
+
+Stage validation is duplicated in **three** places today:
+
+| Location | Method | Exception types | Notes |
+|----------|--------|-----------------|-------|
+| `settings.py` | `_detect_environment()` | `EnvironmentError`, `ConfigurationError` | Handles `production` + `demo` rejection |
+| `providers.py` | `FileConfigProvider._detect_environment()` | `ValueError` | Missing `demo` rejection — already drifted |
+| `settings_v2.py` | `_detect_stage()` | `ValueError` | Returns `ETLStage`; authority for stage rules |
+
+**Approach:** Export a shared helper from `settings_v2` (e.g. `resolve_etl_stage()` wrapping `_detect_stage`). Thin wrappers in `Settings` and `FileConfigProvider` map `ValueError` → typed exceptions where callers expect them. Tests in `test_pipeline_orchestrator.py` assert `EnvironmentError` / `ConfigurationError` from bare `Settings()` — preserve those contracts.
+
+**Scope:** ~2–3 files; run config + orchestration unit/comprehensive tests.
+
+### 5.4 Step 2 — Trim redundant `validate_configs()`
+
+`validate_configs()` is called from:
+
+- `pipeline_orchestrator.initialize()`
+- `PriorityProcessor.__init__` → `_validate_environment()`
+- `TableProcessor.__init__` → `_validate_environment()`
+
+On the production path (`FileConfigProvider` + pydantic), it **always short-circuits to `True`** because `_typed_connection_settings()` is set at provider init. Nested orchestration components therefore re-validate on every startup — harmless but noisy.
+
+**Approach:** Validate once at the orchestrator boundary. Keep validation in `Settings.__init__` for the legacy `DictConfigProvider` test path (which skips pydantic and relies on `ENV_MAPPINGS` scan).
+
+### 5.5 Step 4 — `ENV_MAPPINGS` deprecation (defer until planned)
+
+`ENV_MAPPINGS` lives only in `settings.py`, but dozens of tests still inject `TEST_*` vars via `create_test_settings()`. Removal requires migrating `DictConfigProvider` fixtures to v2-shaped env dicts so `validate_configs()` can drop the legacy scan entirely.
+
+**Pre-work:** Inventory `tests/fixtures/*` and comprehensive config tests; align env key names with `settings_v2.STAGE_PREFIXES`.
+
+### 5.6 Defer — loader TODOs and architecture docs
+
+**`postgres_loader.py` TODOs** — three stubs, not cleanup:
+
+- ~L600: parallel loading logic (unimplemented `ParallelStrategy`)
+- ~L982: config gate for parallel strategy selection
+- ~L1078: post-load validation (row counts, PK integrity)
+
+Track as separate GitHub issues; do not mix into config refactor PRs.
+
+**Missing architecture docs** — referenced but absent from repo:
+
+| Referenced path | Referenced by |
+|-----------------|---------------|
+| `etl_pipeline/docs/PIPELINE_ARCHITECTURE.md` | `airflow/DAGS_STATUS.md` |
+| `docs/connection_architecture.md` | CLI unit/integration test module docstrings |
+| `docs/TESTING_PLAN.md` | Orchestration test module docstrings |
+
+Restore stubs or write from `ENVIRONMENT_FILES.md` + current code. Lower urgency than code consolidation unless onboarding.
+
+### 5.7 Phase C — optional cleanup
+
+- Migrate integration fixtures in `env_fixtures.py` from `load_dotenv(override=True)` to `load_etl_env_dict` + `os.environ.update` (aligns with production loader; low priority).
 
 ---
 

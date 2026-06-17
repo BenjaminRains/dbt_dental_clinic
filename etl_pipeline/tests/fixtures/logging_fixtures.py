@@ -14,8 +14,21 @@ Follows the connection architecture patterns:
 
 import pytest
 import logging
+import os
 from unittest.mock import MagicMock, patch
-from typing import Dict, Any, Optional
+from typing import Dict, Any, Optional, Callable
+
+
+def mock_getenv_side_effect(env: Optional[Dict[str, Any]] = None) -> Callable[..., Any]:
+    """Build os.getenv side_effect that accepts optional default argument."""
+    overrides = env or {}
+
+    def getenv(key: str, default: Any = None) -> Any:
+        if key in overrides:
+            return overrides[key]
+        return os.environ.get(key, default)
+
+    return getenv
 
 from etl_pipeline.config import create_test_settings
 from etl_pipeline.config.providers import DictConfigProvider

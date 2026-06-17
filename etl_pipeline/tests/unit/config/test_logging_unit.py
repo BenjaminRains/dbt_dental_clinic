@@ -51,6 +51,7 @@ from tests.fixtures.logging_fixtures import (
     mock_logging_get_logger,
     mock_logging_basic_config,
     mock_logging_setup,
+    mock_getenv_side_effect,
     mock_sql_loggers,
     mock_etl_logger,
     sample_log_records,
@@ -1218,149 +1219,93 @@ class TestInitDefaultLoggerUnit:
         - Integrates with MariaDB v11.6 and PostgreSQL default logging requirements
     """
 
-    def test_init_default_logger_success(self, mock_logging_environment, test_logging_settings):
+    def test_init_default_logger_success(self, test_logging_settings):
         """
         Test successful default logger initialization using provider pattern and Settings injection.
-        
-        Validates:
-            - Provider pattern dependency injection for default logger initialization
-            - Settings injection for environment-agnostic default logger setup
-            - Successful default logger initialization for dental clinic ETL operations
-            - Proper default logger configuration for dental clinic data processing
-            
-        ETL Pipeline Context:
-            - Used by ETL pipeline for default logger initialization during data processing
-            - Supports dental clinic data processing with successful default logger setup
-            - Uses provider pattern for environment-specific default logger configuration
-            - Enables Settings injection for environment-agnostic default logger initialization
         """
-        with patch('os.getenv', side_effect=lambda key, default: mock_logging_environment.get(key, default)), \
-             patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
-            
+        with patch.dict(os.environ, {'ETL_ENVIRONMENT': 'test'}, clear=False), \
+             patch('pathlib.Path.mkdir'), \
+             patch('etl_pipeline.config.logging.setup_run_logging', return_value='/tmp/test_run.log') as mock_setup_run, \
+             patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
+            mock_get_logger.return_value = MagicMock()
             init_default_logger()
-            
-            mock_setup_logging.assert_called_with(
-                log_level="INFO", 
-                log_file="etl_pipeline.log", 
-                log_dir="logs", 
-                format_type="detailed"
+
+            mock_setup_run.assert_called_once_with(
+                log_level='INFO',
+                log_dir=str(Path(__file__).resolve().parents[3] / 'logs' / 'tests'),
+                format_type='detailed',
             )
 
     def test_init_default_logger_with_context_manager(self, mock_logging_context, test_logging_settings):
         """
         Test default logger initialization using context manager fixture with provider pattern.
-        
-        Validates:
-            - Provider pattern dependency injection for default logger initialization
-            - Settings injection for environment-agnostic default logger setup
-            - Context manager default logger initialization for dental clinic ETL operations
-            - Proper context manager default logger configuration for dental clinic data processing
-            
-        ETL Pipeline Context:
-            - Used by ETL pipeline for context manager default logger initialization during data processing
-            - Supports dental clinic data processing with context manager default logger setup
-            - Uses provider pattern for environment-specific default logger configuration
-            - Enables Settings injection for environment-agnostic default logger initialization
         """
         with mock_logging_context as mocks:
-            # Mock the setup_logging function
-            with patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
+            with patch('pathlib.Path.mkdir'), \
+                 patch('etl_pipeline.config.logging.setup_run_logging', return_value='/tmp/test_run.log') as mock_setup_run:
                 init_default_logger()
-                
-                # Verify that setup_logging was called
-                mock_setup_logging.assert_called_once()
-                
-                # Verify that the logger was created
+                mock_setup_run.assert_called_once()
                 assert mocks['logger'] is not None
 
     def test_init_default_logger_with_custom_env_vars(self, test_logging_settings):
         """
         Test default logger initialization with custom environment variables using provider pattern.
-        
-        Validates:
-            - Provider pattern dependency injection for default logger initialization
-            - Settings injection for environment-agnostic default logger setup
-            - Custom environment variables default logger initialization for dental clinic ETL operations
-            - Proper custom environment variables default logger configuration for dental clinic data processing
-            
-        ETL Pipeline Context:
-            - Used by ETL pipeline for custom environment variables default logger initialization during data processing
-            - Supports dental clinic data processing with custom environment variables default logger setup
-            - Uses provider pattern for environment-specific default logger configuration
-            - Enables Settings injection for environment-agnostic default logger initialization
         """
         custom_env = {
             'ETL_LOG_LEVEL': 'DEBUG',
             'ETL_LOG_PATH': 'custom_logs',
-            'ETL_LOG_FORMAT': 'detailed'
         }
-        with patch('os.getenv', side_effect=lambda key, default: custom_env.get(key, default)), \
-             patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
-            
+        project_root = Path(__file__).resolve().parents[3]
+        with patch('os.getenv', side_effect=mock_getenv_side_effect(custom_env)), \
+             patch('pathlib.Path.mkdir'), \
+             patch('etl_pipeline.config.logging.setup_run_logging', return_value='/tmp/test_run.log') as mock_setup_run, \
+             patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
+            mock_get_logger.return_value = MagicMock()
             init_default_logger()
-            
-            mock_setup_logging.assert_called_with(
-                log_level="DEBUG", 
-                log_file="etl_pipeline.log", 
-                log_dir="custom_logs", 
-                format_type="detailed"
+
+            mock_setup_run.assert_called_once_with(
+                log_level='DEBUG',
+                log_dir=str(project_root / 'custom_logs'),
+                format_type='detailed',
             )
 
-    def test_init_default_logger_exception_handling(self, mock_logging_environment, mock_logging_basic_config, test_logging_settings):
+    def test_init_default_logger_exception_handling(self, mock_logging_basic_config, test_logging_settings):
         """
         Test default logger initialization when setup fails using provider pattern and Settings injection.
-        
-        Validates:
-            - Provider pattern dependency injection for default logger initialization
-            - Settings injection for environment-agnostic default logger setup
-            - Exception handling during default logger initialization for dental clinic ETL operations
-            - Proper fallback to basic config for dental clinic data processing
-            
-        ETL Pipeline Context:
-            - Used by ETL pipeline for exception handling during default logger initialization
-            - Supports dental clinic data processing with proper exception handling
-            - Uses provider pattern for environment-specific default logger configuration
-            - Enables Settings injection for environment-agnostic default logger initialization
         """
-        with patch('os.getenv', side_effect=lambda key, default: mock_logging_environment.get(key, default)), \
-             patch('etl_pipeline.config.logging.setup_logging', side_effect=Exception("Test error")), \
-             patch('builtins.print') as mock_print:
-            
-            init_default_logger()
-            
-            # Should fall back to basic config
-            mock_logging_basic_config.assert_called_once()
-            mock_print.assert_called_once()
-            assert "Warning: Could not set up advanced logging" in mock_print.call_args[0][0]
+        root_logger = logging.getLogger()
+        original_handlers = root_logger.handlers[:]
+        root_logger.handlers.clear()
+        try:
+            with patch('pathlib.Path.mkdir'), \
+                 patch('etl_pipeline.config.logging.setup_run_logging', side_effect=Exception("Test error")), \
+                 patch('builtins.print') as mock_print:
+                init_default_logger()
+
+                mock_logging_basic_config.assert_called_once()
+                mock_print.assert_called_once()
+                assert "Warning: Could not set up advanced logging" in mock_print.call_args[0][0]
+        finally:
+            root_logger.handlers.clear()
+            for handler in original_handlers:
+                root_logger.addHandler(handler)
 
     def test_init_default_logger_environment_variable_handling(self, test_logging_settings):
         """
         Test environment variable handling in init_default_logger using provider pattern and Settings injection.
-        
-        Validates:
-            - Provider pattern dependency injection for default logger initialization
-            - Settings injection for environment-agnostic default logger setup
-            - Environment variable handling for dental clinic ETL operations
-            - Proper environment variable handling for dental clinic data processing
-            
-        ETL Pipeline Context:
-            - Used by ETL pipeline for environment variable handling during default logger initialization
-            - Supports dental clinic data processing with proper environment variable handling
-            - Uses provider pattern for environment-specific default logger configuration
-            - Enables Settings injection for environment-agnostic default logger initialization
         """
-        # Test with None values (should use defaults)
-        # os.getenv returns the default value when key doesn't exist
-        with patch('os.getenv', side_effect=lambda key, default: default), \
-             patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
-            
+        with patch.dict(os.environ, {'ETL_ENVIRONMENT': 'test'}, clear=False), \
+             patch('os.getenv', side_effect=mock_getenv_side_effect({})), \
+             patch('pathlib.Path.mkdir'), \
+             patch('etl_pipeline.config.logging.setup_run_logging', return_value='/tmp/test_run.log') as mock_setup_run, \
+             patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
+            mock_get_logger.return_value = MagicMock()
             init_default_logger()
-            
-            mock_setup_logging.assert_called_with(
-                log_level="INFO", 
-                log_file="etl_pipeline.log", 
-                log_dir="logs", 
-                format_type="detailed"
+
+            mock_setup_run.assert_called_once_with(
+                log_level='INFO',
+                log_dir=str(Path(__file__).resolve().parents[3] / 'logs' / 'tests'),
+                format_type='detailed',
             )
 
     def test_init_default_logger_with_empty_env_vars(self):
@@ -1368,19 +1313,19 @@ class TestInitDefaultLoggerUnit:
         empty_env = {
             'ETL_LOG_LEVEL': '',
             'ETL_LOG_PATH': '',
-            'ETL_LOG_FORMAT': ''
         }
-        with patch('os.getenv', side_effect=lambda key, default: empty_env.get(key, default)), \
-             patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
-            
+        with patch.dict(os.environ, {'ETL_ENVIRONMENT': 'test'}, clear=False), \
+             patch('os.getenv', side_effect=mock_getenv_side_effect(empty_env)), \
+             patch('pathlib.Path.mkdir'), \
+             patch('etl_pipeline.config.logging.setup_run_logging', return_value='/tmp/test_run.log') as mock_setup_run, \
+             patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
+            mock_get_logger.return_value = MagicMock()
             init_default_logger()
-            
-            # The actual implementation passes empty strings directly
-            mock_setup_logging.assert_called_with(
-                log_level="", 
-                log_file="etl_pipeline.log", 
-                log_dir="", 
-                format_type="detailed"
+
+            mock_setup_run.assert_called_once_with(
+                log_level='',
+                log_dir=str(Path(__file__).resolve().parents[3] / 'logs' / 'tests'),
+                format_type='detailed',
             )
 
     def test_init_default_logger_with_none_env_vars(self):
@@ -1388,19 +1333,19 @@ class TestInitDefaultLoggerUnit:
         none_env = {
             'ETL_LOG_LEVEL': None,
             'ETL_LOG_PATH': None,
-            'ETL_LOG_FORMAT': None
         }
-        with patch('os.getenv', side_effect=lambda key, default: none_env.get(key, default)), \
-             patch('etl_pipeline.config.logging.setup_logging') as mock_setup_logging:
-            
+        with patch.dict(os.environ, {'ETL_ENVIRONMENT': 'test'}, clear=False), \
+             patch('os.getenv', side_effect=mock_getenv_side_effect(none_env)), \
+             patch('pathlib.Path.mkdir'), \
+             patch('etl_pipeline.config.logging.setup_run_logging', return_value='/tmp/test_run.log') as mock_setup_run, \
+             patch('etl_pipeline.config.logging.get_logger') as mock_get_logger:
+            mock_get_logger.return_value = MagicMock()
             init_default_logger()
-            
-            # The actual implementation passes None values directly
-            mock_setup_logging.assert_called_with(
-                log_level=None, 
-                log_file="etl_pipeline.log", 
-                log_dir=None, 
-                format_type="detailed"
+
+            mock_setup_run.assert_called_once_with(
+                log_level=None,
+                log_dir=str(Path(__file__).resolve().parents[3] / 'logs' / 'tests'),
+                format_type='detailed',
             )
 
 

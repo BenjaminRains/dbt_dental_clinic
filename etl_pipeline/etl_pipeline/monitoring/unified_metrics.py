@@ -175,44 +175,30 @@ class UnifiedMetricsCollector:
         if not self.pipeline_started:
             logger.warning("Pipeline not started, starting automatically")
             self.start_pipeline()
-        
-        # Record in memory metrics
-        if table_name not in self.table_metrics:
-            self.table_metrics[table_name] = {
-                'total_rows': 0,
-                'total_time': 0.0,
-                'success_count': 0,
-                'error_count': 0,
-                'last_processed': None,
-                'errors': []
-            }
-        
-        self.table_metrics[table_name]['total_rows'] += rows_processed
-        self.table_metrics[table_name]['total_time'] += processing_time
-        self.table_metrics[table_name]['last_processed'] = datetime.now()
-        
-        if success:
-            self.table_metrics[table_name]['success_count'] += 1
-        else:
-            self.table_metrics[table_name]['error_count'] += 1
-            if error:
-                self.table_metrics[table_name]['errors'].append({
-                    'timestamp': datetime.now(),
-                    'error': error
-                })
-        
+
+        now = datetime.now()
+        self.table_metrics[table_name] = {
+            'table_name': table_name,
+            'rows_processed': rows_processed,
+            'processing_time': processing_time,
+            'success': success,
+            'error': error,
+            'status': 'completed' if success else 'failed',
+            'timestamp': now,
+        }
+
         # Record in pipeline metrics
         self.pipeline_metrics['tables_processed'] += 1
         self.pipeline_metrics['total_rows_processed'] += rows_processed
         self.pipeline_metrics['total_processing_time'] += processing_time
-        
+
         if not success:
             self.pipeline_metrics['errors'].append({
-                'timestamp': datetime.now(),
+                'timestamp': now,
                 'table': table_name,
                 'error': error or 'Unknown error'
             })
-        
+
         logger.info(f"Recorded metrics for {table_name}: {rows_processed} rows, {processing_time:.2f}s, success={success}")
     
     def record_performance_metric(self, table_name: str, metric_name: str, value: float, 

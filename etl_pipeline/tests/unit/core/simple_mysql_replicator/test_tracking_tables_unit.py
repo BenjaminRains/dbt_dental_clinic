@@ -135,22 +135,28 @@ class TestSimpleMySQLReplicatorTracking:
         replicator = replicator_with_mock_engines
         
         # Mock the methods that are called during copy_table execution
-        with patch.object(replicator, '_execute_copy_operation', return_value=(True, 500)) as mock_execute, \
+        with patch.object(replicator, '_execute_table_copy', return_value=(True, 500)) as mock_execute, \
              patch.object(replicator, '_update_copy_status', return_value=True) as mock_update, \
-             patch.object(replicator, '_get_primary_incremental_column', return_value='DateTStamp'), \
+             patch.object(replicator, '_get_max_primary_value_from_copied_data', return_value=None), \
+             patch.object(replicator, '_get_last_copy_time', return_value=None), \
+             patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False), \
              patch.object(replicator.performance_optimizer, '_track_performance_optimized'), \
-             patch.object(replicator, 'get_extraction_strategy', return_value='full_table'), \
-             patch.object(replicator, 'get_copy_method', return_value='medium'), \
-             patch.object(replicator, '_log_incremental_strategy'), \
-             patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False):
-            
-            # Act
-            result = replicator.copy_table('test_table')
-            
-            # Assert
-            assert result is True
-            mock_execute.assert_called_once()
-            mock_update.assert_called_once()
+             patch('psutil.Process') as mock_psutil, \
+             patch('etl_pipeline.core.simple_mysql_replicator.time.time', return_value=1000.0):
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            mock_conn = MagicMock()
+            mock_result = MagicMock()
+            mock_result.scalar.return_value = 500
+            mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+            mock_conn.__exit__ = MagicMock(return_value=None)
+            mock_conn.execute.return_value = mock_result
+            replicator.target_engine.connect.return_value = mock_conn
+            success, metadata = replicator.copy_table('test_table')
+
+        assert success is True
+        assert metadata['rows_copied'] == 500
+        mock_execute.assert_called_once()
+        mock_update.assert_called_once()
     
     def test_copy_table_updates_tracking_on_failure(self, replicator_with_mock_engines):
         """Test that copy_table updates tracking when failed."""
@@ -158,18 +164,15 @@ class TestSimpleMySQLReplicatorTracking:
         replicator = replicator_with_mock_engines
         
         # Mock the methods that are called during copy_table execution
-        with patch.object(replicator, '_execute_copy_operation', return_value=(False, 0)) as mock_execute, \
+        with patch.object(replicator, '_execute_table_copy', return_value=(False, 0)) as mock_execute, \
              patch.object(replicator, '_update_copy_status', return_value=True) as mock_update, \
-             patch.object(replicator, '_get_primary_incremental_column', return_value='DateTStamp'), \
-             patch.object(replicator, 'get_extraction_strategy', return_value='full_table'), \
-             patch.object(replicator, 'get_copy_method', return_value='medium'), \
-             patch.object(replicator, '_log_incremental_strategy'), \
-             patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False):
-            
-            # Act
-            result = replicator.copy_table('test_table')
-            
-            # Assert
-            assert result is False
-            mock_execute.assert_called_once()
-            mock_update.assert_called_once() 
+             patch.object(replicator, '_get_last_copy_time', return_value=None), \
+             patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False), \
+             patch('psutil.Process') as mock_psutil, \
+             patch('etl_pipeline.core.simple_mysql_replicator.time.time', return_value=1000.0):
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, metadata = replicator.copy_table('test_table')
+
+        assert success is False
+        mock_execute.assert_called_once()
+        mock_update.assert_called_once() 

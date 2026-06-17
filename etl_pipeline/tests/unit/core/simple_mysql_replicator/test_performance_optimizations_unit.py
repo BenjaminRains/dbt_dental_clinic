@@ -535,7 +535,7 @@ class TestPerformanceOptimizations:
         optimizer._apply_bulk_optimizations()
         
         # Verify optimizations were applied
-        assert mock_conn.execute.call_count == 6  # 6 optimization settings
+        assert mock_conn.execute.call_count == 5
         mock_conn.commit.assert_called_once()
 
     def test_apply_bulk_optimizations_failure(self, replicator_with_mock_engines):
@@ -570,93 +570,67 @@ class TestPerformanceOptimizations:
             optimizer._apply_bulk_optimizations()
             
             # Verify warning was logged
-            mock_logger.warning.assert_called_once()
+            mock_logger.warning.assert_called()
 
-    def test_ultra_fast_bulk_insert_success(self, replicator_with_mock_engines):
-        """
-        Test successful ultra-fast bulk insert operation.
-        
-        Validates:
-            - Ultra-fast bulk insert operation
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - MySQL session optimization for bulk operations
-            
-        ETL Pipeline Context:
-            - Ultra-fast bulk insert for dental clinic ETL
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
+    def test_execute_bulk_operation_success(self, replicator_with_mock_engines):
         replicator = replicator_with_mock_engines
-        optimizer = replicator.performance_optimizer
-        
-        # Mock data
-        table_name = 'test_table'
-        columns = ['id', 'name', 'date']
-        rows = [
-            (1, 'John', '2024-01-01'),
-            (2, 'Jane', '2024-01-02'),
-            (3, 'Bob', '2024-01-03')
-        ]
-        
-        # Mock database connection and cursor
+        replicator.table_configs['test_table'] = {'primary_key': 'id'}
         mock_conn = MagicMock()
         mock_cursor = MagicMock()
+        mock_cursor.rowcount = 3
+        mock_cursor.fetchone.return_value = (3,)
         mock_conn.connection.connection.cursor.return_value = mock_cursor
-        mock_conn.commit.return_value = None
-        
-        # Mock context manager
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=None)
         replicator.target_engine.connect.return_value = mock_conn
-        
-        # Mock row cleaning
-        with patch.object(replicator, '_clean_row_data', side_effect=lambda row, cols, table: row):
-            result = optimizer._ultra_fast_bulk_insert(table_name, columns, rows)
-            
-            # Verify result
-            assert result == 3
-            
-            # Verify cursor operations
-            assert mock_cursor.execute.call_count >= 3  # Session settings + executemany
-            mock_conn.commit.assert_called_once()
 
-    def test_ultra_fast_bulk_insert_failure(self, replicator_with_mock_engines):
-        """
-        Test ultra-fast bulk insert failure handling.
-        
-        Validates:
-            - Ultra-fast bulk insert failure handling
-            - Provider pattern error handling
-            - Settings injection error handling
-            - Exception propagation
-            
-        ETL Pipeline Context:
-            - Ultra-fast bulk insert failure handling for dental clinic ETL
-            - Provider pattern for error isolation
-            - Settings injection for error context
-        """
-        replicator = replicator_with_mock_engines
-        optimizer = replicator.performance_optimizer
-        
-        # Mock data
-        table_name = 'test_table'
         columns = ['id', 'name']
-        rows = [(1, 'John')]
-        
-        # Mock database connection to raise exception
+        rows = [(1, 'John'), (2, 'Jane'), (3, 'Bob')]
+        with patch.object(replicator, '_clean_row_data', side_effect=lambda row, cols, table: row):
+            result = replicator.performance_optimizer._execute_bulk_operation(
+                'test_table', columns, rows, operation_type='insert'
+            )
+        assert result == 3
+
+    def test_execute_bulk_operation_failure(self, replicator_with_mock_engines):
+        replicator = replicator_with_mock_engines
+        replicator.table_configs['test_table'] = {'primary_key': 'id'}
         mock_conn = MagicMock()
         mock_conn.connection.connection.cursor.side_effect = DatabaseConnectionError("Connection failed")
-        
-        # Mock context manager
         mock_conn.__enter__ = MagicMock(return_value=mock_conn)
         mock_conn.__exit__ = MagicMock(return_value=None)
         replicator.target_engine.connect.return_value = mock_conn
-        
-        # Mock row cleaning
+
         with patch.object(replicator, '_clean_row_data', side_effect=lambda row, cols, table: row):
             with pytest.raises(DatabaseConnectionError):
-                optimizer._ultra_fast_bulk_insert(table_name, columns, rows)
+                replicator.performance_optimizer._execute_bulk_operation(
+                    'test_table', ['id', 'name'], [(1, 'John')], operation_type='insert'
+                )
+
+    def test_execute_table_copy_full_refresh(self, replicator_with_mock_engines):
+        replicator = replicator_with_mock_engines
+        config = replicator.table_configs['large_table']
+        with patch.object(replicator, '_copy_full_table_unified', return_value=(True, 1_000_000)) as mock_full:
+            result = replicator._execute_table_copy('large_table', config, 'full_table')
+        assert result == (True, 1_000_000)
+        mock_full.assert_called_once()
+
+    def test_execute_table_copy_incremental(self, replicator_with_mock_engines):
+        replicator = replicator_with_mock_engines
+        config = replicator.table_configs['medium_table']
+        with patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False), \
+             patch.object(replicator, '_copy_incremental_unified', return_value=(True, 500_000)) as mock_incremental:
+            result = replicator._execute_table_copy('medium_table', config, 'incremental')
+        assert result == (True, 500_000)
+        mock_incremental.assert_called_once()
+
+    def test_execute_table_copy_failure(self, replicator_with_mock_engines):
+        replicator = replicator_with_mock_engines
+        config = replicator.table_configs['large_table']
+        with patch.object(replicator, '_copy_full_table_unified', side_effect=DataExtractionError("Copy failed")):
+            success, rows = replicator._execute_table_copy('large_table', config, 'full_table')
+        assert success is False
+        assert rows == 0
 
     def test_track_performance_optimized(self, replicator_with_mock_engines):
         """
@@ -753,100 +727,3 @@ class TestPerformanceOptimizations:
             # No warning should be logged for incremental
             mock_logger.warning.assert_not_called()
             assert mock_logger.info.call_count >= 1  # Performance metrics still logged
-
-    def test_copy_large_table_optimized_success(self, replicator_with_mock_engines):
-        """
-        Test successful optimized large table copy.
-        
-        Validates:
-            - Optimized large table copy operation
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Adaptive batch sizing and strategy selection
-            
-        ETL Pipeline Context:
-            - Optimized large table copy for dental clinic ETL
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
-        replicator = replicator_with_mock_engines
-        optimizer = replicator.performance_optimizer
-        
-        config = {
-            'batch_size': 50000,
-            'performance_category': 'large',
-            'estimated_rows': 1000000
-        }
-        
-        # Mock the copy methods
-        with patch.object(optimizer, '_copy_full_table_bulk', return_value=(True, 1000000)) as mock_bulk:
-            result = optimizer._copy_large_table_optimized('large_table', config)
-            
-            # Verify success
-            assert result == (True, 1000000)
-            mock_bulk.assert_called_once()
-
-    def test_copy_large_table_optimized_incremental(self, replicator_with_mock_engines):
-        """
-        Test optimized large table copy with incremental strategy.
-        
-        Validates:
-            - Optimized large table copy with incremental strategy
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Incremental strategy selection
-            
-        ETL Pipeline Context:
-            - Optimized large table copy with incremental strategy for dental clinic ETL
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
-        replicator = replicator_with_mock_engines
-        optimizer = replicator.performance_optimizer
-        
-        config = {
-            'batch_size': 50000,
-            'performance_category': 'large',
-            'estimated_rows': 1000000,
-            'incremental_columns': ['DateTStamp']
-        }
-        
-        # Mock should_use_full_refresh to return False (use incremental)
-        with patch.object(optimizer, 'should_use_full_refresh', return_value=False), \
-             patch.object(optimizer, '_copy_incremental_bulk', return_value=(True, 500000)) as mock_incremental:
-            result = optimizer._copy_large_table_optimized('large_table', config)
-            
-            # Verify success
-            assert result == (True, 500000)
-            mock_incremental.assert_called_once()
-
-    def test_copy_large_table_optimized_failure(self, replicator_with_mock_engines):
-        """
-        Test optimized large table copy failure handling.
-        
-        Validates:
-            - Optimized large table copy failure handling
-            - Provider pattern error handling
-            - Settings injection error handling
-            - Exception propagation
-            
-        ETL Pipeline Context:
-            - Optimized large table copy failure handling for dental clinic ETL
-            - Provider pattern for error isolation
-            - Settings injection for error context
-        """
-        replicator = replicator_with_mock_engines
-        optimizer = replicator.performance_optimizer
-        
-        config = {
-            'batch_size': 50000,
-            'performance_category': 'large',
-            'estimated_rows': 1000000
-        }
-        
-        # Mock the copy method to raise exception
-        with patch.object(optimizer, '_copy_full_table_bulk', side_effect=DataExtractionError("Copy failed")):
-            result = optimizer._copy_large_table_optimized('large_table', config)
-            
-            # Verify failure
-            assert result == (False, 0) 

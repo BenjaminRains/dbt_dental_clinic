@@ -1,432 +1,121 @@
 """
-Unit tests for SimpleMySQLReplicator error handling using provider pattern.
-
-This module tests the SimpleMySQLReplicator error handling with pure unit tests using mocked
-dependencies and provider pattern dependency injection. All tests use DictConfigProvider
-for injected configuration to ensure complete test isolation.
-
-Test Strategy:
-    - Unit tests with mocked dependencies using DictConfigProvider
-    - Validates provider pattern dependency injection and Settings injection
-    - Tests exception handling and error propagation
-    - Tests specific exception types and categorization
-    - Validates error handling in bulk operations
-
-Coverage Areas:
-    - Exception handling with provider pattern
-    - Settings injection error handling
-    - Provider pattern error propagation
-    - Specific exception types and categorization
-    - Error handling in bulk operations
-
-ETL Context:
-    - Critical for nightly ETL pipeline execution with dental clinic data
-    - Supports MariaDB v11.6 source and MySQL replication database
-    - Uses provider pattern for clean dependency injection and test isolation
-    - Implements Settings injection for environment-agnostic connections
+Unit tests for SimpleMySQLReplicator error handling on the unified copy path.
 """
+from unittest.mock import MagicMock, patch
+
 import pytest
-from unittest.mock import patch, MagicMock, mock_open
-import os
-import yaml
-from typing import Dict, Any
 
-# Import ETL pipeline components
-from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
-from etl_pipeline.config import (
-    DatabaseType, 
-    PostgresSchema,
-    reset_settings
-)
-from etl_pipeline.config.providers import DictConfigProvider
-from etl_pipeline.config.settings import Settings
-from etl_pipeline.core.connections import ConnectionFactory
-
-# Import custom exceptions for structured error handling
 from etl_pipeline.exceptions.database import DatabaseConnectionError, DatabaseQueryError
-from etl_pipeline.exceptions.data import DataExtractionError, DataLoadingError
-from etl_pipeline.exceptions.configuration import ConfigurationError, EnvironmentError
+from etl_pipeline.exceptions.data import DataExtractionError
+from etl_pipeline.exceptions.configuration import ConfigurationError
 
-# Import standardized fixtures
-from tests.fixtures.connection_fixtures import (
-    mock_connection_factory_with_settings,
-    test_connection_settings,
-    production_connection_settings
+from tests.unit.core.simple_mysql_replicator.conftest import (
+    copy_table_test_patches,
+    replicator_with_mock_engines,
 )
-from tests.fixtures.env_fixtures import (
-    test_settings,
-    production_settings,
-    test_env_provider,
-    production_env_provider
-)
-from tests.fixtures.config_fixtures import (
-    test_pipeline_config,
-    test_tables_config
-)
+
+
+@pytest.fixture
+def replicator_with_error_config(test_settings):
+    mock_source_engine = MagicMock()
+    mock_target_engine = MagicMock()
+    mock_target_engine.url = MagicMock()
+    mock_target_engine.url.database = 'test_replication'
+
+    mock_config = {
+        'patient': {
+            'incremental_columns': ['DateTStamp'],
+            'batch_size': 1000,
+            'estimated_size_mb': 50,
+            'extraction_strategy': 'incremental',
+            'performance_category': 'medium',
+            'processing_priority': 5,
+        }
+    }
+
+    with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
+         patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
+         patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=mock_config), \
+         patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True):
+        from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
+        replicator = SimpleMySQLReplicator(settings=test_settings)
+        replicator.source_engine = mock_source_engine
+        replicator.target_engine = mock_target_engine
+        return replicator
 
 
 class TestSimpleMySQLReplicatorErrorHandling:
-    """Unit tests for SimpleMySQLReplicator error handling using provider pattern."""
-    
-    @pytest.fixture
-    def replicator_with_error_config(self, test_settings):
-        """Create replicator with error-prone configuration using provider pattern."""
-        # Mock engines
-        mock_source_engine = MagicMock()
-        mock_target_engine = MagicMock()
-        
-        # Mock connection context managers
-        mock_source_conn = MagicMock()
-        mock_target_conn = MagicMock()
-        
-        # Set up the connection context manager mocks
-        mock_source_engine.connect.return_value.__enter__.return_value = mock_source_conn
-        mock_source_engine.connect.return_value.__exit__.return_value = None
-        mock_target_engine.connect.return_value.__enter__.return_value = mock_target_conn
-        mock_target_engine.connect.return_value.__exit__.return_value = None
-        
-        # Mock connection managers
-        mock_source_manager = MagicMock()
-        mock_target_manager = MagicMock()
-        
-        with patch('etl_pipeline.core.connections.ConnectionFactory.get_source_connection', return_value=mock_source_engine), \
-             patch('etl_pipeline.core.connections.ConnectionFactory.get_replication_connection', return_value=mock_target_engine), \
-             patch('etl_pipeline.core.simple_mysql_replicator.create_connection_manager') as mock_create_conn_manager:
-            
-            # Configure the create_connection_manager mock to return our mock managers
-            mock_create_conn_manager.side_effect = lambda engine, **kwargs: mock_source_manager if engine == mock_source_engine else mock_target_manager
-            
-            # Mock configuration with test data
-            mock_config = {
-                'patient': {
-                    'incremental_columns': ['DateTStamp'],
-                    'batch_size': 1000,
-                    'estimated_size_mb': 50,
-                    'extraction_strategy': 'incremental'
-                }
-            }
-            
-            # Mock the _load_configuration method at the class level to intercept during __init__
-            with patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._load_configuration', return_value=mock_config), \
-                 patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._validate_tracking_tables_exist', return_value=True), \
-                 patch('etl_pipeline.core.simple_mysql_replicator.SimpleMySQLReplicator._create_connection_managers', return_value=(mock_source_manager, mock_target_manager)):
-                
-                # Create replicator instance
-                replicator = SimpleMySQLReplicator(settings=test_settings)
-                replicator.source_engine = mock_source_engine
-                replicator.target_engine = mock_target_engine
-                
-                return replicator
-
     def test_copy_table_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in copy_table using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - False return for exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
         replicator = replicator_with_error_config
-        
-        # Mock copy_table to raise exception
-        with patch.object(replicator, '_copy_incremental_table', side_effect=DataExtractionError("Test exception")):
-            result = replicator.copy_table('patient')
-            
-            # Verify failure due to exception
-            assert result is False
+        with patch.object(replicator, '_execute_table_copy', side_effect=DataExtractionError("Test exception")), \
+             patch('psutil.Process') as mock_psutil, \
+             patch.object(replicator, '_get_last_copy_time', return_value=None), \
+             patch.object(replicator.performance_optimizer, 'should_use_full_refresh', return_value=False):
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, metadata = replicator.copy_table('patient')
+        assert success is False
+        assert 'error' in metadata
 
-    def test_copy_incremental_table_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in _copy_incremental_table using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - False return for exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
+    def test_copy_incremental_unified_exception_handling(self, replicator_with_error_config):
         replicator = replicator_with_error_config
-        
-        # Mock helper method to raise exception
-        with patch.object(replicator, '_get_last_processed_value_max', side_effect=DatabaseConnectionError("Test exception")):
-            result = replicator._copy_incremental_table('patient', replicator.table_configs['patient'])
-            
-            # Verify failure due to exception
-            assert result == (False, 0)
+        with patch.object(replicator, '_get_incremental_metadata', side_effect=DatabaseConnectionError("Test exception")):
+            success, rows = replicator._copy_incremental_unified(
+                'patient', replicator.table_configs['patient'], 1000
+            )
+        assert success is False
+        assert rows == 0
 
-    def test_get_last_processed_value_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in _get_last_processed_value using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - None return for exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
+    def test_get_last_copy_primary_value_exception_handling(self, replicator_with_error_config):
         replicator = replicator_with_error_config
-        
-        # Configure the mock target manager to raise exception
-        # The fixture already sets up create_connection_manager to return mock_target_manager
-        # We need to configure the mock manager that's already created
-        mock_target_manager = MagicMock()
-        mock_target_manager.execute_with_retry.side_effect = DatabaseConnectionError("Database error")
-        mock_target_manager.__enter__ = MagicMock(return_value=mock_target_manager)
-        mock_target_manager.__exit__ = MagicMock(return_value=None)
-        
-        # Patch create_connection_manager to return our configured mock
-        with patch('etl_pipeline.core.simple_mysql_replicator.create_connection_manager', return_value=mock_target_manager):
-            result = replicator._get_last_processed_value('patient', 'DateTStamp')
-            
-            # Verify None return due to exception
-            assert result is None
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=None)
+        mock_conn.execute.side_effect = DatabaseConnectionError("Database error")
+        replicator.target_engine.connect.return_value = mock_conn
+        assert replicator._get_last_copy_primary_value('patient') is None
 
-    def test_get_new_records_count_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in _get_new_records_count using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - Zero return for exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
+    def test_get_max_primary_value_exception_handling(self, replicator_with_error_config):
         replicator = replicator_with_error_config
-        
-        # Configure the mock source manager to raise exception
-        # The fixture already sets up create_connection_manager to return mock_source_manager
-        # We need to configure the mock manager that's already created
-        mock_source_manager = MagicMock()
-        mock_source_manager.execute_with_retry.side_effect = DatabaseConnectionError("Database error")
-        mock_source_manager.__enter__ = MagicMock(return_value=mock_source_manager)
-        mock_source_manager.__exit__ = MagicMock(return_value=None)
-        
-        # Patch create_connection_manager to return our configured mock
-        with patch('etl_pipeline.core.simple_mysql_replicator.create_connection_manager', return_value=mock_source_manager):
-            result = replicator._get_new_records_count('patient', 'DateTStamp', None)
-            
-            # Verify zero return due to exception
-            assert result == 0
-
-    def test_copy_new_records_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in _copy_new_records using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - False return for exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
-        replicator = replicator_with_error_config
-        
-        # Mock the connection managers to raise exception
-        mock_source_manager = MagicMock()
-        mock_target_manager = MagicMock()
-        
-        # Configure source manager to raise exception
-        mock_source_manager.execute_with_retry.side_effect = DatabaseConnectionError("Database error")
-        mock_source_manager.__enter__ = MagicMock(return_value=mock_source_manager)
-        mock_source_manager.__exit__ = MagicMock(return_value=None)
-        
-        # Configure target manager with context manager support
-        mock_target_manager.__enter__ = MagicMock(return_value=mock_target_manager)
-        mock_target_manager.__exit__ = MagicMock(return_value=None)
-        
-        with patch.object(replicator, '_create_connection_managers') as mock_create_managers:
-            mock_create_managers.return_value = (mock_source_manager, mock_target_manager)
-            
-            result = replicator._copy_new_records('patient', 'DateTStamp', '2024-01-01 10:00:00', 1000)
-            
-            # Verify False return due to exception
-            assert result == (False, 0)
+        mock_conn = MagicMock()
+        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
+        mock_conn.__exit__ = MagicMock(return_value=None)
+        mock_conn.execute.side_effect = RuntimeError("Query failed")
+        replicator.target_engine.connect.return_value = mock_conn
+        assert replicator._get_max_primary_value_from_copied_data('patient', 'DateTStamp') is None
 
     def test_bulk_operations_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in bulk operations using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - Result aggregation with exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
         replicator = replicator_with_error_config
-        
-        # Mock copy_table to raise exception
         with patch.object(replicator, 'copy_table', side_effect=DataExtractionError("Bulk operation error")):
-            # The actual implementation should catch exceptions and return False
-            # or handle them gracefully
             results = replicator.copy_all_tables()
-            
-            # Verify that the exception was handled gracefully
-            # The method should return a dictionary with failure results
-            assert isinstance(results, dict)
-            assert len(results) == 1  # Only one table in config
-            assert not any(results.values())  # All should fail due to exception
+        assert isinstance(results, dict)
+        assert results['patient'] is False
 
     def test_specific_exception_handling_validation(self, replicator_with_error_config):
-        """
-        Test that specific exception types are properly handled and categorized.
-        
-        Validates:
-            - Specific exception types are used instead of generic Exception
-            - DatabaseConnectionError for connection issues
-            - DataExtractionError for extraction issues
-            - ConfigurationError for configuration issues
-            - Proper exception categorization for error handling
-            
-        ETL Pipeline Context:
-            - Structured error handling for dental clinic ETL reliability
-            - Specific exception types enable better error recovery
-            - Uses provider pattern for error isolation
-        """
         replicator = replicator_with_error_config
-        
-        # Test DatabaseConnectionError handling
-        with patch.object(replicator, '_get_last_processed_value_max', 
-                         side_effect=DatabaseConnectionError("Connection timeout")):
-            result = replicator._copy_incremental_table('patient', replicator.table_configs['patient'])
-            assert result == (False, 0)
-        
-        # Test DataExtractionError handling
-        with patch.object(replicator, '_copy_incremental_table', 
-                         side_effect=DataExtractionError("Extraction failed")):
-            result = replicator.copy_table('patient')
-            assert result is False
-        
-        # Test ConfigurationError handling
-        with patch.object(replicator, 'get_extraction_strategy', 
-                         side_effect=ConfigurationError("Invalid configuration")):
-            result = replicator.copy_table('patient')
-            assert result is False
 
-    def test_get_last_processed_value_max_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in _get_last_processed_value_max using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - None return for exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
-        replicator = replicator_with_error_config
-        
-        # Mock the target engine connection to raise exception
-        # This method uses self.target_engine.connect() directly
-        mock_conn = MagicMock()
-        mock_conn.execute.side_effect = DatabaseConnectionError("Database error")
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-        replicator.target_engine.connect.return_value = mock_conn
-        
-        result = replicator._get_last_processed_value_max('patient', ['DateTStamp'])
-        
-        # Verify None return due to exception
-        assert result is None
+        with patch.object(replicator, '_execute_table_copy', side_effect=DatabaseConnectionError("Connection timeout")):
+            success, _ = replicator.copy_table('patient')
+            assert success is False
 
-    def test_get_new_records_count_max_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in _get_new_records_count_max using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - Zero return for exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
-        replicator = replicator_with_error_config
-        
-        # Mock the source engine connection to raise exception
-        # This method uses self.source_engine.connect() directly
-        mock_conn = MagicMock()
-        mock_conn.execute.side_effect = DatabaseConnectionError("Database error")
-        mock_conn.__enter__ = MagicMock(return_value=mock_conn)
-        mock_conn.__exit__ = MagicMock(return_value=None)
-        replicator.source_engine.connect.return_value = mock_conn
-        
-        result = replicator._get_new_records_count_max('patient', ['DateTStamp'], None)
-        
-        # Verify zero return due to exception
-        assert result == 0
+        with patch.object(replicator, '_execute_table_copy', side_effect=DataExtractionError("Extraction failed")):
+            success, _ = replicator.copy_table('patient')
+            assert success is False
 
-    def test_copy_new_records_max_exception_handling(self, replicator_with_error_config):
-        """
-        Test exception handling in _copy_new_records_max using provider pattern.
-        
-        Validates:
-            - Exception handling with provider pattern
-            - Settings injection error handling
-            - Provider pattern error propagation
-            - False return for exceptions
-            
-        ETL Pipeline Context:
-            - Exception handling for dental clinic ETL reliability
-            - Maintains provider pattern for error isolation
-            - Uses Settings injection for error context
-        """
-        replicator = replicator_with_error_config
-        
-        # Mock the connection managers to raise exception
-        mock_source_manager = MagicMock()
-        mock_target_manager = MagicMock()
-        
-        # Configure source manager to raise exception
-        mock_source_manager.execute_with_retry.side_effect = DatabaseConnectionError("Database error")
-        mock_source_manager.__enter__ = MagicMock(return_value=mock_source_manager)
-        mock_source_manager.__exit__ = MagicMock(return_value=None)
-        
-        # Configure target manager with context manager support
-        mock_target_manager.__enter__ = MagicMock(return_value=mock_target_manager)
-        mock_target_manager.__exit__ = MagicMock(return_value=None)
-        
-        with patch.object(replicator, '_create_connection_managers') as mock_create_managers:
-            mock_create_managers.return_value = (mock_source_manager, mock_target_manager)
-            
-            result = replicator._copy_new_records_max('patient', ['DateTStamp'], '2024-01-01 10:00:00', 1000)
-            
-            # Verify False return due to exception
-            assert result == (False, 0) 
+        with patch.object(replicator, 'get_extraction_strategy', side_effect=ConfigurationError("Invalid configuration")):
+            success, _ = replicator.copy_table('patient')
+            assert success is False
+
+    def test_execute_table_copy_exception_returns_false(self, replicator_with_mock_engines):
+        replicator = replicator_with_mock_engines
+        config = replicator.table_configs['patient']
+        with patch.object(replicator, '_copy_incremental_unified', side_effect=RuntimeError("unexpected")):
+            success, rows = replicator._execute_table_copy('patient', config, 'incremental')
+        assert success is False
+        assert rows == 0
+
+    def test_copy_table_returns_metadata_on_success(self, replicator_with_mock_engines):
+        replicator = replicator_with_mock_engines
+        with copy_table_test_patches(replicator, execute_result=(True, 42)):
+            success, metadata = replicator.copy_table('patient')
+        assert success is True
+        assert metadata['rows_copied'] == 42

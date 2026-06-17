@@ -120,31 +120,39 @@ def replicator_with_comprehensive_config(test_settings):
                 'patient': {
                     'batch_size': 1000,
                     'extraction_strategy': 'incremental',
-                    'incremental_column': 'PatientNum',
+                    'incremental_columns': ['PatientNum'],
+                    'performance_category': 'medium',
+                    'processing_priority': 1,
                     'estimated_rows': 50000,
-                    'estimated_size_mb': 25.5
+                    'estimated_size_mb': 25.5,
                 },
                 'appointment': {
                     'batch_size': 500,
                     'extraction_strategy': 'incremental',
-                    'incremental_column': 'AptNum',
+                    'incremental_columns': ['AptNum'],
+                    'performance_category': 'medium',
+                    'processing_priority': 2,
                     'estimated_rows': 100000,
-                    'estimated_size_mb': 45.2
+                    'estimated_size_mb': 45.2,
                 },
                 'procedurelog': {
                     'batch_size': 2000,
                     'extraction_strategy': 'incremental',
-                    'incremental_column': 'ProcNum',
+                    'incremental_columns': ['ProcNum'],
+                    'performance_category': 'large',
+                    'processing_priority': 5,
                     'estimated_rows': 200000,
-                    'estimated_size_mb': 120.8
+                    'estimated_size_mb': 120.8,
                 },
                 'claimproc': {
                     'batch_size': 1500,
                     'extraction_strategy': 'incremental',
-                    'incremental_column': 'ClaimProcNum',
+                    'incremental_columns': ['ClaimProcNum'],
+                    'performance_category': 'small',
+                    'processing_priority': 3,
                     'estimated_rows': 75000,
-                    'estimated_size_mb': 85.3
-                }
+                    'estimated_size_mb': 85.3,
+                },
             }
         }
         with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
@@ -186,17 +194,19 @@ def real_replicator_for_exception_tests(test_settings):
                 'patient': {
                     'incremental_columns': ['DateTStamp'],
                     'batch_size': 1000,
-                    'table_importance': 'important',
                     'extraction_strategy': 'incremental',
-                    'estimated_size_mb': 50
+                    'performance_category': 'medium',
+                    'processing_priority': 1,
+                    'estimated_size_mb': 50,
                 },
                 'appointment': {
                     'incremental_columns': ['DateTStamp'],
                     'batch_size': 500,
-                    'table_importance': 'important',
                     'extraction_strategy': 'incremental',
-                    'estimated_size_mb': 25
-                }
+                    'performance_category': 'medium',
+                    'processing_priority': 2,
+                    'estimated_size_mb': 25,
+                },
             }
         }
         with patch('builtins.open', mock_open(read_data=yaml.dump(mock_config))):
@@ -299,32 +309,26 @@ class TestSimpleMySQLReplicatorComprehensive:
             - Implements Settings injection for environment-agnostic connections
             - Optimized for dental clinic data processing priorities
         """
-        # Mock copy_tables_by_importance method to return expected results
-        with patch.object(replicator_with_comprehensive_config, 'copy_tables_by_importance') as mock_copy_importance:
-            mock_copy_importance.side_effect = lambda importance: {
+        with patch.object(replicator_with_comprehensive_config, 'copy_tables_by_processing_priority') as mock_copy_priority:
+            mock_copy_priority.side_effect = lambda max_priority: {
                 'patient': True,
                 'appointment': True,
-                'claim': True
-            } if importance == 'important' else {
-                'procedurelog': True
-            } if importance == 'standard' else {}
-            
-            # Test importance-based processing
-            important_results = replicator_with_comprehensive_config.copy_tables_by_importance('important')
-            standard_results = replicator_with_comprehensive_config.copy_tables_by_importance('standard')
-            audit_results = replicator_with_comprehensive_config.copy_tables_by_importance('audit')
-            
-            # Validate importance-based processing results
-            assert important_results['patient'] is True
-            assert important_results['appointment'] is True
-            assert important_results['claim'] is True
-            assert standard_results['procedurelog'] is True
-            assert audit_results == {}  # No audit tables in fixture
-            
-            # Verify the methods were called
-            mock_copy_importance.assert_any_call('important')
-            mock_copy_importance.assert_any_call('standard')
-            mock_copy_importance.assert_any_call('audit')
+            } if max_priority <= 2 else {
+                'procedurelog': True,
+            } if max_priority <= 5 else {}
+
+            high_priority_results = replicator_with_comprehensive_config.copy_tables_by_processing_priority(2)
+            medium_priority_results = replicator_with_comprehensive_config.copy_tables_by_processing_priority(5)
+            low_priority_results = replicator_with_comprehensive_config.copy_tables_by_processing_priority(10)
+
+            assert high_priority_results['patient'] is True
+            assert high_priority_results['appointment'] is True
+            assert medium_priority_results['procedurelog'] is True
+            assert low_priority_results == {}
+
+            mock_copy_priority.assert_any_call(2)
+            mock_copy_priority.assert_any_call(5)
+            mock_copy_priority.assert_any_call(10)
 
     def test_performance_optimization_with_provider_pattern(self, replicator_with_comprehensive_config):
         """
@@ -345,9 +349,9 @@ class TestSimpleMySQLReplicatorComprehensive:
             - Supports performance optimization for nightly ETL operations
         """
         # Test different copy strategies based on table size
-        small_strategy = replicator_with_comprehensive_config.get_copy_method('claim')  # 10MB
-        medium_strategy = replicator_with_comprehensive_config.get_copy_method('appointment')  # 25MB
-        large_strategy = replicator_with_comprehensive_config.get_copy_method('procedurelog')  # 100MB
+        small_strategy = replicator_with_comprehensive_config.get_copy_method('claimproc')
+        medium_strategy = replicator_with_comprehensive_config.get_copy_method('appointment')
+        large_strategy = replicator_with_comprehensive_config.get_copy_method('procedurelog')
         
         # Validate copy strategy optimization
         assert small_strategy == 'small'
@@ -422,7 +426,7 @@ class TestSimpleMySQLReplicatorComprehensive:
         # Test YAML configuration integration
         assert 'patient' in replicator_with_comprehensive_config.table_configs
         assert 'appointment' in replicator_with_comprehensive_config.table_configs
-        assert replicator_with_comprehensive_config.table_configs['patient']['incremental_columns'] == ['DateTStamp']
+        assert replicator_with_comprehensive_config.table_configs['patient']['incremental_columns'] == ['PatientNum']
 
     def test_sample_data_integration_with_provider_pattern(self, replicator_with_comprehensive_config, sample_mysql_replicator_table_data):
         """
@@ -977,17 +981,16 @@ class TestSimpleMySQLReplicatorComprehensive:
             - Supports connection error recovery for dental clinic data processing
         """
         # Mock a connection error scenario by mocking the _get_last_processed_value method
-        with patch.object(real_replicator_for_exception_tests, '_get_last_processed_value') as mock_get_last:
-            mock_get_last.side_effect = DatabaseConnectionError(
+        with patch.object(real_replicator_for_exception_tests, '_execute_table_copy', side_effect=DatabaseConnectionError(
                 message="Connection failed",
                 database_type="mysql",
                 connection_params={"host": "test-target-host", "port": 3306, "database": "test_opendental_replication"},
-                details={"host": "test-target-host", "port": 3306}
-            )
-            
-            # Test that the replicator handles connection errors gracefully
-            result = real_replicator_for_exception_tests.copy_table('patient')
-            assert result is False
+                details={"host": "test-target-host", "port": 3306},
+            )), patch('psutil.Process') as mock_psutil:
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, metadata = real_replicator_for_exception_tests.copy_table('patient')
+            assert success is False
+            assert 'error' in metadata
 
     def test_database_query_error_handling(self, real_replicator_for_exception_tests):
         """
@@ -1007,18 +1010,17 @@ class TestSimpleMySQLReplicatorComprehensive:
             - Supports query error recovery for dental clinic data processing
         """
         # Mock a query error scenario by mocking the _get_new_records_count method
-        with patch.object(real_replicator_for_exception_tests, '_get_new_records_count') as mock_get_count:
-            mock_get_count.side_effect = DatabaseQueryError(
+        with patch.object(real_replicator_for_exception_tests, '_execute_table_copy', side_effect=DatabaseQueryError(
                 message="Query failed",
                 table_name="patient",
                 query="SELECT COUNT(*) FROM patient",
                 database_type="mysql",
-                details={"error_code": 1064}
-            )
-            
-            # Test that the replicator handles query errors gracefully
-            result = real_replicator_for_exception_tests.copy_table('patient')
-            assert result is False
+                details={"error_code": 1064},
+            )), patch('psutil.Process') as mock_psutil:
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, metadata = real_replicator_for_exception_tests.copy_table('patient')
+            assert success is False
+            assert 'error' in metadata
 
     def test_data_extraction_error_handling(self, real_replicator_for_exception_tests):
         """
@@ -1038,18 +1040,17 @@ class TestSimpleMySQLReplicatorComprehensive:
             - Supports extraction error recovery for dental clinic data processing
         """
         # Mock a data extraction error scenario
-        with patch.object(real_replicator_for_exception_tests, '_copy_incremental_table') as mock_copy:
-            mock_copy.side_effect = DataExtractionError(
+        with patch.object(real_replicator_for_exception_tests, '_execute_table_copy', side_effect=DataExtractionError(
                 message="Data extraction failed",
                 table_name="patient",
                 extraction_strategy="incremental",
                 batch_size=1000,
-                details={"rows_processed": 0, "error_type": "timeout"}
-            )
-            
-            # Test that the replicator handles extraction errors gracefully
-            result = real_replicator_for_exception_tests.copy_table('patient')
-            assert result is False
+                details={"rows_processed": 0, "error_type": "timeout"},
+            )), patch('psutil.Process') as mock_psutil:
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, metadata = real_replicator_for_exception_tests.copy_table('patient')
+            assert success is False
+            assert 'error' in metadata
 
     def test_configuration_error_handling(self, replicator_with_settings):
         """
@@ -1121,25 +1122,19 @@ class TestSimpleMySQLReplicatorComprehensive:
             - Supports comprehensive error context for dental clinic data processing
         """
         # Test that exceptions preserve context information
-        try:
-            with patch.object(real_replicator_for_exception_tests, '_get_last_processed_value') as mock_get_last:
-                mock_get_last.side_effect = DatabaseConnectionError(
-                    message="Connection failed",
-                    database_type="mysql",
-                    connection_params={"host": "test-target-host", "port": 3306, "database": "test_opendental_replication"},
-                    details={"host": "test-target-host", "port": 3306}
-                )
-                
-                result = real_replicator_for_exception_tests.copy_table('patient')
-                assert result is False
-                
-        except DatabaseConnectionError as e:
-            # Verify context preservation
-            assert e.message == "Connection failed"
-            assert e.database_type == "mysql"
-            assert e.connection_params is not None
-            assert e.connection_params["host"] == "test-target-host"
-            assert e.connection_params["port"] == 3306
+        with patch.object(real_replicator_for_exception_tests, '_execute_table_copy', side_effect=DatabaseConnectionError(
+                message="Connection failed",
+                database_type="mysql",
+                connection_params={"host": "test-target-host", "port": 3306, "database": "test_opendental_replication"},
+                details={"host": "test-target-host", "port": 3306},
+            )), \
+             patch.object(real_replicator_for_exception_tests, '_get_last_copy_time', return_value=None), \
+             patch.object(real_replicator_for_exception_tests.performance_optimizer, 'should_use_full_refresh', return_value=False), \
+             patch('psutil.Process') as mock_psutil:
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, metadata = real_replicator_for_exception_tests.copy_table('patient')
+            assert success is False
+            assert 'Connection failed' in metadata['error']
 
     def test_exception_hierarchy_compliance(self, replicator_with_settings):
         """
@@ -1175,45 +1170,45 @@ class TestSimpleMySQLReplicatorComprehensive:
         """
         Test that DatabaseConnectionError is handled and returns False when connection fails.
         """
-        with patch.object(real_replicator_for_exception_tests, '_get_last_processed_value') as mock_get_last:
-            mock_get_last.side_effect = DatabaseConnectionError(
+        with patch.object(real_replicator_for_exception_tests, '_execute_table_copy', side_effect=DatabaseConnectionError(
                 message="Connection failed",
                 database_type="mysql",
                 connection_params={"host": "test-target-host", "port": 3306, "database": "test_opendental_replication"},
-                details={"host": "test-target-host", "port": 3306}
-            )
-            result = real_replicator_for_exception_tests.copy_table('patient')
-            assert result is False
+                details={"host": "test-target-host", "port": 3306},
+            )), patch('psutil.Process') as mock_psutil:
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, _ = real_replicator_for_exception_tests.copy_table('patient')
+            assert success is False
 
     def test_copy_table_raises_data_extraction_error(self, real_replicator_for_exception_tests):
         """
         Test that DataExtractionError is handled and returns False when extraction fails.
         """
-        with patch.object(real_replicator_for_exception_tests, '_copy_incremental_table') as mock_copy:
-            mock_copy.side_effect = DataExtractionError(
+        with patch.object(real_replicator_for_exception_tests, '_execute_table_copy', side_effect=DataExtractionError(
                 message="Extraction failed",
                 table_name="patient",
                 extraction_strategy="incremental",
                 batch_size=1000,
-                details={"rows_processed": 0, "error_type": "timeout"}
-            )
-            result = real_replicator_for_exception_tests.copy_table('patient')
-            assert result is False
+                details={"rows_processed": 0, "error_type": "timeout"},
+            )), patch('psutil.Process') as mock_psutil:
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, _ = real_replicator_for_exception_tests.copy_table('patient')
+            assert success is False
 
     def test_copy_table_raises_database_query_error(self, real_replicator_for_exception_tests):
         """
         Test that DatabaseQueryError is handled and returns False when query fails.
         """
-        with patch.object(real_replicator_for_exception_tests, '_get_new_records_count') as mock_get_count:
-            mock_get_count.side_effect = DatabaseQueryError(
+        with patch.object(real_replicator_for_exception_tests, '_execute_table_copy', side_effect=DatabaseQueryError(
                 message="Query failed",
                 table_name="patient",
                 query="SELECT COUNT(*) FROM patient",
                 database_type="mysql",
-                details={"error_code": 1064}
-            )
-            result = real_replicator_for_exception_tests.copy_table('patient')
-            assert result is False
+                details={"error_code": 1064},
+            )), patch('psutil.Process') as mock_psutil:
+            mock_psutil.return_value.memory_info.return_value.rss = 100 * 1024 * 1024
+            success, _ = real_replicator_for_exception_tests.copy_table('patient')
+            assert success is False
 
     def test_copy_table_raises_configuration_error(self, replicator_with_settings):
         """

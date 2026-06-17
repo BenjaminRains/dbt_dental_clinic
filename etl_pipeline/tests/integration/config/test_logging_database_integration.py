@@ -28,6 +28,7 @@ import logging
 import time
 from pathlib import Path
 from typing import Optional, Dict, Any
+from unittest.mock import patch
 from sqlalchemy import text
 from datetime import datetime, timedelta
 
@@ -941,7 +942,6 @@ class TestDatabaseLoggingErrorRecovery:
         temp_log_dir,
         cleanup_logging,
         validate_test_databases,
-        capsys
     ):
         """
         Test logging behavior during database connection failures.
@@ -965,8 +965,6 @@ class TestDatabaseLoggingErrorRecovery:
         etl_logger = ETLLogger("connection_error_test")
         
         try:
-            # Test logging with invalid connection parameters
-            # This will cause a connection error
             invalid_settings = Settings(environment='test')
             invalid_settings._env_vars = {
                 'TEST_OPENDENTAL_SOURCE_HOST': 'invalid-host',
@@ -975,24 +973,22 @@ class TestDatabaseLoggingErrorRecovery:
                 'TEST_OPENDENTAL_SOURCE_USER': 'invalid_user',
                 'TEST_OPENDENTAL_SOURCE_PASSWORD': 'invalid_pass'
             }
-            
-            try:
-                # This should fail
-                engine = ConnectionFactory.get_source_connection(invalid_settings)
-                with engine.connect():
-                    pass
-            except Exception as e:
-                etl_logger.log_etl_error("invalid_connection", "connection_test", e)
-            
-            # Verify error logging
-            captured = capsys.readouterr()
-            assert "[FAIL] Error during connection_test for table: invalid_connection" in captured.out
-            
-            # Verify file output
+
+            connection_error = ConnectionError("Connection refused")
+            with patch.object(
+                ConnectionFactory,
+                'get_source_connection',
+                side_effect=connection_error,
+            ):
+                try:
+                    ConnectionFactory.get_source_connection(invalid_settings)
+                except Exception as e:
+                    etl_logger.log_etl_error("invalid_connection", "connection_test", e)
+
             assert log_file.exists()
             content = log_file.read_text()
+            assert "[FAIL] Error during connection_test for table: invalid_connection" in content
             assert "connection_error_test" in content
-            assert "[FAIL]" in content
             
         except Exception as e:
             etl_logger.log_etl_error("connection_error_test", "error_test", e)

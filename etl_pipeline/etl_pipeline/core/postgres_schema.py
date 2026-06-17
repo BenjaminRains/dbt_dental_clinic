@@ -671,7 +671,7 @@ class PostgresSchema:
             
             # Extract MySQL columns from create statement
             create_stmt = mysql_schema['create_statement']
-            content_match = re.search(r'CREATE\s+TABLE\s+`[^`]+`\s*\((.*)\)', create_stmt, re.DOTALL)
+            content_match = re.search(r'CREATE\s+TABLE\s+(?:`[^`]+`|\w+)\s*\((.*)\)', create_stmt, re.DOTALL | re.IGNORECASE)
             if not content_match:
                 logger.error(f"Could not extract column definitions from MySQL create statement for {table_name}")
                 return False
@@ -854,8 +854,12 @@ class PostgresSchema:
             # Get nullable flag
             nullable = type_info.get('nullable', True)
             
-            # Handle empty strings for nullable columns
+            # Handle empty strings
             if isinstance(value, str) and value.strip() == '':
+                if python_type == int and not nullable:
+                    return 0
+                if python_type == float and not nullable:
+                    return 0.0
                 return None if nullable else ''
             
             # Boolean conversion (MySQL TINYINT 0/1 → PostgreSQL boolean)

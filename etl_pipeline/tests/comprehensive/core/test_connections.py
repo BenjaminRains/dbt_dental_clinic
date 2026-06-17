@@ -379,14 +379,14 @@ class TestConnectionFactoryComprehensive:
         
         settings = create_test_settings(env_vars=test_provider.get_config('env'))
         
-        with patch('etl_pipeline.core.connections.create_engine') as mock_create_engine:
+        with patch('etl_pipeline.core.connections.create_engine') as mock_create_engine, \
+             patch.object(ConnectionFactory, '_apply_mysql_performance_settings'):
             mock_engine = MagicMock()
             mock_connection = MagicMock()
             mock_result = MagicMock()
             mock_result.fetchone.return_value = [1]
             mock_connection.execute.return_value = mock_result
-            mock_engine.connect.return_value.__enter__.return_value = mock_connection
-            mock_engine.connect.return_value.__exit__.return_value = None
+            mock_engine.connect.return_value = mock_connection
             mock_create_engine.return_value = mock_engine
             
             # Get connection using modern architecture
@@ -397,12 +397,9 @@ class TestConnectionFactoryComprehensive:
                 assert isinstance(manager, ConnectionManager)
                 assert manager.engine == source_engine
                 
-                # Test connection execution - just verify the method was called
                 result = manager.execute_with_retry("SELECT 1")
-                assert result is not None  # Just verify we got a result
-                # SQLAlchemy text() creates a TextClause object, not a string
+                assert result is not None
                 mock_connection.execute.assert_called_once()
-                # Verify the call was made (the exact object comparison is handled by SQLAlchemy)
 
     def test_connection_factory_error_handling_with_provider_pattern(self):
         """Test ConnectionFactory error handling with provider pattern."""

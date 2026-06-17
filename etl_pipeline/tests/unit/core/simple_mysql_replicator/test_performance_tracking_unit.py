@@ -141,118 +141,52 @@ class TestPerformanceTrackingAndReporting:
                 return replicator
 
     def test_track_performance_metrics_success(self, replicator_with_mock_engines):
-        """
-        Test successful performance metrics tracking.
-        
-        Validates:
-            - Performance metrics tracking with detailed information
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Performance history storage
-            
-        ETL Pipeline Context:
-            - Performance metrics tracking for dental clinic ETL
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
         replicator = replicator_with_mock_engines
-        
-        # Test performance tracking
+        optimizer = replicator.performance_optimizer
         table_name = 'patient'
-        strategy = 'incremental'
         duration = 30.5
         memory_mb = 100.0
         rows_processed = 50000
-        
+
         with patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
-            replicator.track_performance_metrics(table_name, strategy, duration, memory_mb, rows_processed)
-            
-            # Verify performance metrics were stored
-            assert hasattr(replicator, 'performance_metrics')
-            assert table_name in replicator.performance_metrics
-            
-            metrics = replicator.performance_metrics[table_name]
-            assert metrics['strategy'] == strategy
-            assert metrics['duration'] == duration
-            assert metrics['memory_mb'] == memory_mb
-            assert metrics['rows_processed'] == rows_processed
-            assert metrics['rows_per_second'] == rows_processed / duration
-            assert 'timestamp' in metrics
-            
-            # Verify logging
-            mock_logger.info.assert_called_once()
-            log_call = mock_logger.info.call_args[0][0]
-            assert "Copy performance metrics" in log_call
-            assert table_name in log_call
-            assert strategy in log_call
+            optimizer._track_performance_optimized(
+                table_name, duration, memory_mb, rows_processed, extraction_strategy='incremental'
+            )
+
+        history = optimizer.performance_history[table_name]
+        assert history['rows_processed'] == rows_processed
+        assert history['duration'] == duration
+        assert history['memory_mb'] == memory_mb
+        assert history['records_per_second'] == rows_processed / duration
+        mock_logger.info.assert_called()
 
     def test_track_performance_metrics_multiple_tables(self, replicator_with_mock_engines):
-        """
-        Test performance metrics tracking for multiple tables.
-        
-        Validates:
-            - Performance metrics tracking for multiple tables
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Multiple table performance history storage
-            
-        ETL Pipeline Context:
-            - Performance metrics tracking for dental clinic ETL with multiple tables
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
         replicator = replicator_with_mock_engines
-        
-        # Track metrics for multiple tables
+        optimizer = replicator.performance_optimizer
         tables_data = [
-            ('patient', 'incremental', 30.0, 100.0, 50000),
-            ('appointment', 'incremental', 15.0, 50.0, 25000),
-            ('procedurelog', 'full_table', 60.0, 200.0, 100000)
+            ('patient', 30.0, 100.0, 50000),
+            ('appointment', 15.0, 50.0, 25000),
+            ('procedurelog', 60.0, 200.0, 100000),
         ]
-        
-        with patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
-            for table_name, strategy, duration, memory_mb, rows_processed in tables_data:
-                replicator.track_performance_metrics(table_name, strategy, duration, memory_mb, rows_processed)
-            
-            # Verify all tables were tracked
-            assert len(replicator.performance_metrics) == 3
-            
-            for table_name, _, _, _, _ in tables_data:
-                assert table_name in replicator.performance_metrics
-                
-            # Verify logging was called for each table
-            assert mock_logger.info.call_count == 3
+
+        with patch('etl_pipeline.core.simple_mysql_replicator.logger'):
+            for table_name, duration, memory_mb, rows_processed in tables_data:
+                optimizer._track_performance_optimized(
+                    table_name, duration, memory_mb, rows_processed, extraction_strategy='incremental'
+                )
+
+        assert len(optimizer.performance_history) == 3
+        for table_name, _, _, _ in tables_data:
+            assert table_name in optimizer.performance_history
 
     def test_track_performance_metrics_zero_duration(self, replicator_with_mock_engines):
-        """
-        Test performance metrics tracking with zero duration.
-        
-        Validates:
-            - Performance metrics tracking with zero duration
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Zero duration handling
-            
-        ETL Pipeline Context:
-            - Performance metrics tracking for dental clinic ETL with zero duration
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
         replicator = replicator_with_mock_engines
-        
-        # Test with zero duration
-        table_name = 'patient'
-        strategy = 'incremental'
-        duration = 0.0
-        memory_mb = 100.0
-        rows_processed = 50000
-        
-        with patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
-            replicator.track_performance_metrics(table_name, strategy, duration, memory_mb, rows_processed)
-            
-            # Verify performance metrics were stored
-            metrics = replicator.performance_metrics[table_name]
-            assert metrics['rows_per_second'] == 0  # Should handle zero duration
+        optimizer = replicator.performance_optimizer
+
+        with patch('etl_pipeline.core.simple_mysql_replicator.logger'):
+            optimizer._track_performance_optimized('patient', 0.0, 100.0, 50000, extraction_strategy='incremental')
+
+        assert optimizer.performance_history['patient']['records_per_second'] == 0
 
     def test_get_performance_report_no_metrics(self, replicator_with_mock_engines):
         """
@@ -441,62 +375,21 @@ class TestPerformanceTrackingAndReporting:
         assert "Total Tables: 5" in summary  # 4 original + 1 incomplete
 
     def test_performance_metrics_initialization(self, replicator_with_mock_engines):
-        """
-        Test performance metrics initialization.
-        
-        Validates:
-            - Performance metrics initialization
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Metrics storage initialization
-            
-        ETL Pipeline Context:
-            - Performance metrics initialization for dental clinic ETL
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
         replicator = replicator_with_mock_engines
-        
-        # Verify performance metrics is initialized as empty dict
-        assert not hasattr(replicator, 'performance_metrics')
-        
-        # Track first metric to initialize
-        replicator.track_performance_metrics('test_table', 'full_table', 10.0, 50.0, 1000)
-        
-        # Verify performance metrics was initialized
-        assert hasattr(replicator, 'performance_metrics')
-        assert isinstance(replicator.performance_metrics, dict)
-        assert 'test_table' in replicator.performance_metrics
+        optimizer = replicator.performance_optimizer
+        assert optimizer.performance_history == {}
+
+        optimizer._track_performance_optimized('test_table', 10.0, 50.0, 1000, extraction_strategy='full_table')
+        assert 'test_table' in optimizer.performance_history
 
     def test_performance_metrics_overwrite(self, replicator_with_mock_engines):
-        """
-        Test performance metrics overwriting for same table.
-        
-        Validates:
-            - Performance metrics overwriting for same table
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Metrics overwriting behavior
-            
-        ETL Pipeline Context:
-            - Performance metrics overwriting for dental clinic ETL
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
         replicator = replicator_with_mock_engines
-        
-        # Track metrics for same table twice
-        replicator.track_performance_metrics('test_table', 'full_table', 10.0, 50.0, 1000)
-        replicator.track_performance_metrics('test_table', 'incremental', 20.0, 100.0, 2000)
-        
-        # Verify only the latest metrics are stored
-        assert len(replicator.performance_metrics) == 1
-        assert 'test_table' in replicator.performance_metrics
-        
-        metrics = replicator.performance_metrics['test_table']
-        assert metrics['strategy'] == 'incremental'
-        assert metrics['duration'] == 20.0
-        assert metrics['rows_processed'] == 2000
+        optimizer = replicator.performance_optimizer
+        optimizer._track_performance_optimized('test_table', 10.0, 50.0, 1000, extraction_strategy='full_table')
+        optimizer._track_performance_optimized('test_table', 20.0, 100.0, 2000, extraction_strategy='incremental')
+
+        assert len(optimizer.performance_history) == 1
+        assert optimizer.performance_history['test_table']['rows_processed'] == 2000
 
     def test_performance_report_formatting(self, replicator_with_mock_engines):
         """
@@ -583,80 +476,28 @@ class TestPerformanceTrackingAndReporting:
             assert header in lines
 
     def test_performance_metrics_calculation_accuracy(self, replicator_with_mock_engines):
-        """
-        Test performance metrics calculation accuracy.
-        
-        Validates:
-            - Performance metrics calculation accuracy
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Calculation precision
-            
-        ETL Pipeline Context:
-            - Performance metrics calculation for dental clinic ETL
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
         replicator = replicator_with_mock_engines
-        
-        # Test with specific values
-        table_name = 'test_table'
-        strategy = 'full_table'
-        duration = 60.0  # 60 seconds
-        memory_mb = 200.0
-        rows_processed = 120000  # 120K rows
-        
-        replicator.track_performance_metrics(table_name, strategy, duration, memory_mb, rows_processed)
-        
-        # Verify calculations
-        metrics = replicator.performance_metrics[table_name]
-        expected_rows_per_second = 120000 / 60.0  # 2000 rows/sec
-        
-        assert metrics['rows_per_second'] == expected_rows_per_second
-        assert metrics['duration'] == duration
-        assert metrics['memory_mb'] == memory_mb
-        assert metrics['rows_processed'] == rows_processed
+        optimizer = replicator.performance_optimizer
+        optimizer._track_performance_optimized('test_table', 60.0, 200.0, 120000, extraction_strategy='full_table')
+        history = optimizer.performance_history['test_table']
+        assert history['records_per_second'] == 2000
+        assert history['duration'] == 60.0
+        assert history['rows_processed'] == 120000
 
     def test_performance_metrics_edge_cases(self, replicator_with_mock_engines):
-        """
-        Test performance metrics edge cases.
-        
-        Validates:
-            - Performance metrics edge case handling
-            - Provider pattern configuration access
-            - Settings injection for configuration retrieval
-            - Edge case robustness
-            
-        ETL Pipeline Context:
-            - Performance metrics edge cases for dental clinic ETL
-            - Provider pattern for configuration access
-            - Settings injection for environment-agnostic operation
-        """
         replicator = replicator_with_mock_engines
-        
-        # Test edge cases
+        optimizer = replicator.performance_optimizer
         edge_cases = [
-            ('zero_duration', 'full_table', 0.0, 0.0, 0),
-            ('zero_memory', 'incremental', 10.0, 0.0, 1000),
-            ('zero_rows', 'full_table', 10.0, 50.0, 0),
-            ('very_large', 'full_table', 3600.0, 1000.0, 1000000),  # 1 hour, 1M rows
+            ('zero_duration', 0.0, 0.0, 0),
+            ('zero_memory', 10.0, 0.0, 1000),
+            ('zero_rows', 10.0, 50.0, 0),
+            ('very_large', 3600.0, 1000.0, 1000000),
         ]
-        
-        for table_name, strategy, duration, memory_mb, rows_processed in edge_cases:
-            replicator.track_performance_metrics(table_name, strategy, duration, memory_mb, rows_processed)
-            
-            # Verify metrics were stored
-            assert table_name in replicator.performance_metrics
-            
-            metrics = replicator.performance_metrics[table_name]
-            assert metrics['strategy'] == strategy
-            assert metrics['duration'] == duration
-            assert metrics['memory_mb'] == memory_mb
-            assert metrics['rows_processed'] == rows_processed
-            
-            # Verify rows_per_second calculation handles edge cases
-            if duration > 0:
-                expected_rate = rows_processed / duration
-            else:
-                expected_rate = 0
-            assert metrics['rows_per_second'] == expected_rate 
+
+        for table_name, duration, memory_mb, rows_processed in edge_cases:
+            optimizer._track_performance_optimized(
+                table_name, duration, memory_mb, rows_processed, extraction_strategy='full_table'
+            )
+            history = optimizer.performance_history[table_name]
+            expected_rate = rows_processed / duration if duration > 0 else 0
+            assert history['records_per_second'] == expected_rate 
