@@ -10,18 +10,20 @@ Expected Tracking Tables:
 - PostgreSQL Analytics: raw.etl_load_status, raw.etl_transform_status
 
 Usage:
-    python scripts/cleanup_old_tracking_tables.py
+    python scripts/cleanup_old_tracking_tables.py --stage clinic
+    mdc etl invoke --env clinic -- python scripts/cleanup_old_tracking_tables.py
 """
 
 import sys
 import os
+import argparse
 from pathlib import Path
 from sqlalchemy import text, inspect
 
 # Add the etl_pipeline directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from etl_pipeline.config import get_settings
+from etl_pipeline.config.script_env import add_stage_argument, load_script_settings
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config.settings import DatabaseType, PostgresSchema
@@ -392,8 +394,21 @@ def get_user_confirmation(tables_to_drop):
         else:
             print("Please enter 'y' or 'n'.")
 
+def parse_args():
+    parser = argparse.ArgumentParser(description="Clean up old or incorrectly named ETL tracking tables.")
+    add_stage_argument(parser)
+    return parser.parse_args()
+
+
 def main():
     """Main function to clean up old tracking tables."""
+    args = parse_args()
+    try:
+        load_script_settings(args.stage)
+    except ValueError as exc:
+        logger.error("Failed to load settings: %s", exc)
+        return False
+
     logger.info("Starting ETL tracking tables cleanup...")
     
     # Analyze tables to be dropped
