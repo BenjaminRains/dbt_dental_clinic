@@ -125,6 +125,12 @@ curl.exe "https://api-clinic.dbtdentalclinic.com/ar/kpi-summary" -H "X-API-Key: 
 
 Expect **200** with JSON (not `UndefinedTable`).
 
+**On-instance smoke test (SSM, no allowlisted IP required):**
+
+```powershell
+pwsh -File scripts/verification/verify_clinic_api_smoke.ps1
+```
+
 If the API still references `raw_marts.*` or returns import errors, EC2 is running stale code. Deploy current API from repo root:
 
 ```powershell

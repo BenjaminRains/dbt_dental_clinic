@@ -113,6 +113,7 @@ See `docs/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
 ```powershell
 .\scripts\verification\verify_clinic_ec2_details.ps1
 .\scripts\verification\check_ec2_setup.ps1
+.\scripts\verification\verify_clinic_api_smoke.ps1   # after clinic API deploy or RDS publish
 ```
 
 ### Utilities
