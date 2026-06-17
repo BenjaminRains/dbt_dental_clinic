@@ -1,9 +1,9 @@
 ## Phase 5 — Python-first orchestration; retire the Legacy environment manager
 
-> Status: **in progress** (Phase **5.4 done**; mdc **0.7.4**). Remaining: 5.5, 5.6 polish.
-> Objective: complete the migration started in Phase 4 by moving **deploy, SSM, frontend, and consult-audio** workflows into the **`mdc` Python CLI**, leaving PowerShell as an **optional thin wrapper** (or none at all after `pip install -e tools/mdc_cli`).
+> Status: **in progress** (Phases **5.1–5.4 done**; mdc **0.7.4** on feature branch). Remaining: **5.5** (archive monolith), **5.6** polish.
+> Objective: complete the migration started in Phase 4 by moving **deploy, SSM, frontend, consult-audio, and dbt-docs** workflows into the **`mdc` Python CLI**, leaving PowerShell as an **optional thin wrapper** (or none at all after `pip install -e tools/mdc_cli`).
 > Prerequisite: Phase 4 complete (Phases 4.1–4.6 merged; mdc **0.6.0**) — satisfied.
-> Merged: PR #14 (5.3 + 5.1 + deploy docs), PR #15 (main sync); CI workflow on `main`.
+> Merged to `main`: PR #14 (5.1 SSM + 5.3 frontend), #15 (sync), #16 (5.3 dbt-docs + demo hosting config, **0.7.3**). **5.4 (0.7.4)** + CI test fix on `refactor/phase5-mdc-frontend` after green CI (PR #17 sync).
 
 ### Implementation status
 
@@ -11,10 +11,10 @@
 |-----------|--------|-------|
 | 5.1 — SSM tunnels in Python | **done** (0.7.1) | `mdc_cli/ssm.py`; `mdc tunnel` + `mdc ssm connect\|status`; aliases call `mdc` (no `ssm_tunnels` dot-source) |
 | 5.2 — Shared credentials module | **done** | `credentials.py`; `_norm()` coerces numeric JSON fields |
-| 5.3 — Frontend + dbt docs via mdc | **done** (0.7.2) | `mdc frontend dev\|status`; `mdc deploy frontend`; `mdc deploy dbt-docs` |
-| 5.4 — Consult audio via mdc | **done** (0.7.4) | `mdc consult-audio install\|validate\|pipeline\|run` |
+| 5.3 — Frontend + dbt docs via mdc | **done** (0.7.3) | `mdc frontend dev\|status`; `mdc deploy frontend`; `mdc deploy dbt-docs`; `demo_frontend` + `.frontend-deploy.json` resolution |
+| 5.4 — Consult audio via mdc | **done** (0.7.4) | `mdc consult-audio install\|validate\|pipeline\|analyze\|run` |
 | 5.5 — Archive Legacy manager | **planned** | `environment_manager.ps1` still ~2,160 lines under `-Legacy` |
-| 5.6 — Docs, CI, polish | **partial** | **Done:** `.github/workflows/mdc_cli.yml`, README updates. **Remaining:** Unicode CLI polish, rename historical test file, `etl-status` default docs |
+| 5.6 — Docs, CI, polish | **partial** | **Done:** CI workflow (86 tests, Ubuntu-safe frontend mocks). **Open:** Unicode CLI, test file rename, `etl-status` docs |
 
 **Current daily workflow (no `-Legacy` for these):**
 
@@ -30,10 +30,12 @@ mdc ssm connect clinic-api
 mdc frontend dev
 mdc deploy frontend --target demo
 mdc deploy dbt-docs
+mdc consult-audio validate
+mdc consult-audio pipeline run --llm claude
 mdc deploy api --env clinic
 ```
 
-**Still requires `-Legacy`:** unmigrated monolith menus only (5.5 teardown).
+**Still requires `-Legacy`:** only until **5.5** tears down `environment_manager.ps1` (no daily workflow needs it).
 
 **Optional Windows shorthand** (after 5.5):
 
@@ -62,14 +64,16 @@ Phase 4 optional follow-ups (extract Legacy, consult-audio, CI without PS, contr
 
 ### Problem with the current model (original Phase 5 pain points)
 
-Phase 4 made api/etl/dbt stateless. **Phase 5.1–5.3 addressed most remaining glue:**
+Phase 4 made api/etl/dbt stateless. **Phase 5.1–5.4 addressed remaining glue:**
 
 | Was broken | Now |
 |------------|-----|
 | `mdc tunnel` → PowerShell → `ssm_tunnels.ps1` | `mdc_cli/ssm.py` → `aws ssm start-session` |
 | `mdc deploy frontend` → `Deploy-Frontend` in monolith | `deploy_frontend.py` + `credentials.py` |
+| `mdc deploy dbt-docs` → `Deploy-DBTDocs` | `deploy_dbt_docs.py` |
 | `frontend-dev` only in Legacy manager | `mdc frontend dev` + alias |
-| Duplicate JSON parsing in PS | `credentials.py` |
+| `consult-audio-init` shell venv activation | `mdc consult-audio install` + stateless `pipeline` / `run` |
+| Duplicate JSON parsing in PS | `credentials.py` (+ `demo_frontend`, `.frontend-deploy.json`) |
 | `ssm-connect-*` dot-sourced `ssm_tunnels.ps1` | `mdc ssm connect` + thin aliases |
 
 **Still open:**
@@ -96,7 +100,7 @@ mdc deploy frontend ──► powershell ──► environment_manager.ps1 [fixe
 load_project.ps1 -Legacy ──► full environment_manager.ps1      [5.5 remaining]
 ```
 
-**Implemented (5.1–5.3):**
+**Implemented (5.1–5.4):**
 
 ```text
                     ┌─────────────────────────────────────┐
@@ -106,8 +110,10 @@ load_project.ps1 -Legacy ──► full environment_manager.ps1      [5.5 remain
                     └─────────────────┬───────────────────┘
                                       │
                     ┌─────────────────┴───────────────────┐
-                    │  mdc_cli/credentials.py (new)       │  ← deployment_credentials.json
-                    │  mdc_cli/ssm.py (new)                 │  ← instance IDs, port-forward
+                    │  mdc_cli/credentials.py             │  ← deployment_credentials.json,
+                    │  mdc_cli/consult_audio_env.py       │     .frontend-deploy.json
+                    │  mdc_cli/ssm.py                     │  ← SSM / port-forward
+                    │  deploy_frontend.py / deploy_dbt_docs.py
                     └─────────────────┬───────────────────┘
                                       │
                               ┌───────────────┐
@@ -117,8 +123,7 @@ load_project.ps1 -Legacy ──► full environment_manager.ps1      [5.5 remain
         ┌──────────────┬──────────────┼──────────────┬──────────────┐
         ▼              ▼              ▼              ▼              ▼
    api/etl/dbt    frontend dev   S3/CloudFront   aws ssm        deploy_api_file.ps1
-   (existing)    npm subprocess  (aws cli or     start-session  (wrap until ported)
-                                  boto3)         (subprocess)
+   consult-audio npm subprocess  (aws cli)       start-session  (wrap until ported)
 
 Optional:  load_project.ps1  →  function aliases only (no dot-source monolith)
             scripts/deployment/*.ps1  →  rare EC2 batch deploys (unchanged until touched)
@@ -144,6 +149,7 @@ New module (implemented):
 ```text
 tools/mdc_cli/mdc_cli/credentials.py   # done
 tools/mdc_cli/mdc_cli/ssm.py           # done
+tools/mdc_cli/mdc_cli/consult_audio_env.py  # done (5.4)
 tools/mdc_cli/mdc_cli/process_util.py  # Windows npm/aws executable resolution
 ```
 
@@ -205,7 +211,7 @@ Keep `demo-frontend-deploy` etc. as **wrappers** that call `mdc deploy frontend 
 | `subprocess` (stdlib) | aws, npm, powershell (transitional deploy scripts) |
 | Optional: `boto3` | Phase 5 stretch — only if `aws` CLI wrapping proves painful |
 
-Bump `mdc-cli` to **0.7.2** when 5.3 ships (**done**); **0.8.0** when Legacy manager is archived.
+Bump `mdc-cli` to **0.7.4** when 5.4 ships (**done**); **0.8.0** when Legacy manager is archived (5.5).
 
 ---
 
@@ -239,9 +245,15 @@ mdc deploy dbt-docs                   # S3 prefix dbt-docs/ + CloudFront invalid
 #### Consult audio (5.4)
 
 ```bash
-mdc consult-audio validate    # venv exists, requirements, .env keys present
-mdc consult-audio run -- <cmd> # e.g. python -m consult_audio_pipe.scripts...
+mdc consult-audio install           # venv + pip install -r requirements.txt (explicit; slow)
+mdc consult-audio validate          # venv, OPENAI + ANTHROPIC keys, ffmpeg warning
+mdc consult-audio pipeline run --llm claude   # default: needs ANTHROPIC_API_KEY
+mdc consult-audio pipeline status|validate|cleanup
+mdc consult-audio analyze|tokens    # scripts/llm_analysis_integration.py helpers
+mdc consult-audio run -- scripts/llm_analysis_integration.py analyze
 ```
+
+Use `python -m consult_audio_pipe.pipeline` (not legacy `dental_consultation_pipeline` README name).
 
 #### Deploy API (unchanged path in 5.1–5.3)
 
@@ -280,6 +292,7 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 | `commands/frontend.py` | `dev`, `status` |
 | `deploy_frontend.py` | Build + S3 sync + CloudFront invalidation (demo/clinic) |
 | `deploy_dbt_docs.py` | Generate if needed + S3 sync under `dbt-docs/` + CloudFront invalidation |
+| `credentials.py` | `demo_frontend` + `.frontend-deploy.json` hosting resolution (0.7.3) |
 | `process_util.py` | Windows `npm.cmd` / `aws` resolution |
 | `commands/deploy.py` | `deploy frontend`, `deploy dbt-docs` |
 | Tests | `test_frontend_commands.py`, `test_deploy_dbt_docs.py`, `test_deploy_dbt_docs_module.py` |
@@ -290,9 +303,10 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 | Item | Result |
 |------|--------|
 | `consult_audio_env.py` | venv discovery, `.env` child env (OS wins), validate, install |
-| `commands/consult_audio.py` | `install`, `validate`, `run --`, `pipeline run\|status\|validate\|cleanup` |
-| Aliases | `consult-audio-validate`, `consult-audio-run`; deprecated `consult-audio-init` |
+| `commands/consult_audio.py` | `install`, `validate`, `analyze`, `tokens`, `run --`, `pipeline *` |
+| Aliases | `consult-audio-validate`, `consult-audio-run`; deprecated `consult-audio-init` / `consult-audio-deactivate` |
 | Tests | `test_consult_audio_env.py`, `test_consult_audio_commands.py` |
+| Verified | Operator: `validate`, `pipeline run`, `pipeline status` on Windows |
 
 #### Phase 5.5 — Archive Legacy environment manager
 
@@ -311,8 +325,9 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 
 | Item | Status |
 |------|--------|
-| `.github/workflows/mdc_cli.yml` | **Done** — pytest + `mdc status --env local` on Ubuntu 3.11; path filters |
-| `tools/mdc_cli/README.md`, `scripts/README.md` | **Done** — command reference + CI note |
+| `.github/workflows/mdc_cli.yml` | **Done** — pytest (86 tests) + smoke on Ubuntu 3.11; no `node_modules` required |
+| `test_frontend_commands.py` | **Done** — isolated tmp `frontend/` + mocked npm (CI-safe) |
+| `tools/mdc_cli/README.md`, `scripts/README.md` | **Done** — command reference incl. consult-audio |
 | `ENVIRONMENT_HANDLING_REVIEW.md` | **Partial** — Phase 5 section; update on 5.5 completion |
 | Unicode `->` in CLI output (cp1252) | **Open** |
 | Rename `test_export_env_for_shell_unit.py` | **Open** |
@@ -327,7 +342,7 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 | Unit | `credentials.py` parsing; SSM JSON parameter encoding; frontend config resolution |
 | Unit | CLI routing for `--target demo\|clinic`; missing key error messages |
 | Mocked integration | `subprocess.run` called with expected `aws`/`npm` argv |
-| Regression | Existing `tools/mdc_cli/tests/*`; no change to api/etl/dbt run tests |
+| Regression | `tools/mdc_cli/tests/*` (86 tests); frontend dev tests use tmp dirs, not repo `node_modules` |
 | Manual | `mdc tunnel clinic-db` + `mdc etl validate --env clinic`; demo + clinic frontend deploy to real AWS (operator) |
 
 **CI must not require:** AWS credentials, `deployment_credentials.json`, or npm install for default PR checks.
@@ -341,7 +356,7 @@ Phase 5 is **complete** when:
 - [x] `mdc tunnel *` runs without spawning PowerShell.
 - [x] `mdc frontend dev`, `mdc deploy frontend --target demo|clinic`, `mdc deploy dbt-docs` without `environment_manager.ps1`.
 - [x] `deployment_credentials.json` and env-file key parsing in **one** Python module (`credentials.py`).
-- [~] `.\load_project.ps1 -Legacy` not required for **documented daily workflows** — **done** including consult-audio; **5.5** removes monolith.
+- [x] `.\load_project.ps1 -Legacy` not required for **documented daily workflows** (api/etl/dbt, frontend, tunnels, SSM, dbt-docs, consult-audio).
 - [ ] `environment_manager.ps1` archived or under **200 lines**.
 - [x] `mdc consult-audio validate` without shell venv activation.
 - [x] CI runs `mdc status` and pytest without PowerShell / `load_project.ps1` (`.github/workflows/mdc_cli.yml`).
@@ -383,7 +398,7 @@ Acceptable deferrals (unchanged):
 1. **5.5** — archive / shrink `environment_manager.ps1` after parity checklist
 2. **5.6 remainder** — Unicode polish, test file rename, `etl-status` default docs
 
-**Completed order:** 5.2 → 5.1 → 5.3 → 5.6 (CI) → 5.4.
+**Completed order:** 5.2 → 5.1 → 5.3 (0.7.3 hosting fix) → 5.6 (CI) → 5.4 (0.7.4) → CI frontend test fix.
 
 ---
 
@@ -399,9 +414,11 @@ mdc api run --env local
 mdc etl validate --env local --profile load
 mdc tunnel clinic-db
 mdc frontend dev
+mdc consult-audio pipeline run --llm claude
 
 # Release
 mdc deploy frontend --target clinic
+mdc deploy dbt-docs
 mdc deploy api --env clinic
 ```
 

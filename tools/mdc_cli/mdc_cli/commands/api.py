@@ -10,6 +10,7 @@ from mdc_cli.env import validate_api_stage
 from mdc_cli.output import finish_validation
 from mdc_cli.paths import API_DIR, api_env_file
 from mdc_cli.run_helper import (
+    apply_tunnel_db_overrides,
     echo_run_banner,
     load_env_dict_isolated,
     require_component_python,
@@ -61,6 +62,16 @@ def run(
         "--reload/--no-reload",
         help="Enable uvicorn reload (default: on for local only)",
     ),
+    tunnel_db: bool = typer.Option(
+        False,
+        "--tunnel-db",
+        help="Route Postgres to localhost (for mdc tunnel clinic-db). Overrides host/port after loading stage env.",
+    ),
+    tunnel_port: Optional[int] = typer.Option(
+        None,
+        "--tunnel-port",
+        help="Local tunnel port (default: POSTGRES_PORT env or 5433)",
+    ),
 ) -> None:
     """Run uvicorn with isolated injected env (no api-init required)."""
     require_api_stage(env)
@@ -76,6 +87,8 @@ def run(
         )
 
     settings = load_env_dict_isolated("api", env)
+    if tunnel_db:
+        settings = apply_tunnel_db_overrides(settings, local_port=tunnel_port)
     python = require_component_python("api")
     bind_host = host or settings.get("API_HOST", "0.0.0.0")
     bind_port = str(port or settings.get("API_PORT", "8000"))
@@ -95,11 +108,12 @@ def run(
         cmd.append("--reload")
 
     reload_note = "reload" if use_reload else "no-reload"
+    tunnel_note = " tunnel-db→127.0.0.1" if tunnel_db else ""
     echo_run_banner(
         "api",
         env,
         config_path,
-        f"→ uvicorn {bind_host}:{bind_port} ({reload_note})",
+        f"→ uvicorn {bind_host}:{bind_port} ({reload_note}{tunnel_note})",
     )
     code = run_isolated(
         settings=settings,
