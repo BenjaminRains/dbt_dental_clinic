@@ -12,6 +12,20 @@ from mdc_cli.paths import REPO_ROOT
 
 console = Console()
 
+# Replace Unicode punctuation that breaks cp1252 Windows consoles.
+_ASCII_REPLACEMENTS = (
+    ("\u2192", "->"),  # →
+    ("\u2014", "-"),  # —
+    ("\u2013", "-"),  # –
+)
+
+
+def ascii_cli_text(text: str) -> str:
+    """Normalize CLI strings for narrow / legacy Windows code pages."""
+    for old, new in _ASCII_REPLACEMENTS:
+        text = text.replace(old, new)
+    return text
+
 
 def relative_repo_path(path: Path) -> str:
     try:

@@ -10,6 +10,7 @@ from typing import Iterator, Optional, Sequence
 
 import typer
 
+from mdc_cli.output import ascii_cli_text
 from mdc_cli.paths import DBT_DIR, discover_component_python, discover_dbt_python
 
 # Stage prefixes cleared before isolated mdc child runs (mirrors legacy env manager behavior).
@@ -249,4 +250,6 @@ def echo_run_banner(component: str, stage: str, config_path: Path, detail: str) 
         rel = config_path.relative_to(REPO_ROOT)
     except ValueError:
         pass
-    typer.echo(f"{component.upper()}  {stage}  {rel}  {detail}")
+    typer.echo(
+        ascii_cli_text(f"{component.upper()}  {stage}  {rel}  {detail}")
+    )

@@ -3,6 +3,8 @@
 Monorepo developer CLI for API, ETL, and dbt workflows. Configuration is loaded only
 via existing pydantic loaders in `api/settings.py` and `etl_pipeline/.../settings_v2.py`.
 
+**Env file inventory:** [docs/ENVIRONMENT_FILES.md](../../docs/ENVIRONMENT_FILES.md)
+
 ## Install (editable)
 
 From the repository root:
@@ -66,6 +68,14 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 `scripts/mdc_aliases.ps1` (default via `load_project.ps1`): `status`, `api-run`, `api-test`,
 `etl-run`, `etl-validate`, `etl-test`, `etl-status`, `env-status`, `ssm-connect-clinic-api`,
 `ssm-connect-api`, `ssm-connect-demo-db`.
+
+**ETL alias defaults** (when stage/profile omitted):
+
+| Alias | Default stage | Default profile |
+|-------|---------------|-----------------|
+| `etl-validate` | `local` | `load` for local, `full` otherwise |
+| `etl-run`, `etl-test` | `clinic` | `full` |
+| `etl-status` | `clinic` | `full` (use `etl-status -Env local` for local warehouse) |
 
 Stages: `local`, `clinic`, `test`, `demo` (API/dbt). Use `clinic` for live clinic context.
 

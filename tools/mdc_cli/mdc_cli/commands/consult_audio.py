@@ -11,6 +11,7 @@ from mdc_cli.consult_audio_env import (
     run_consult_audio_pipeline,
     validate_consult_audio,
 )
+from mdc_cli.output import ascii_cli_text
 
 consult_audio_app = typer.Typer(help="Consult audio pipe (stateless venv + child env)")
 
@@ -24,9 +25,9 @@ def validate_cmd() -> None:
     """Check venv, requirements, and API keys in consult_audio_pipe/.env."""
     result = validate_consult_audio()
     for warning in result.warnings:
-        typer.echo(f"warning: {warning}", err=True)
+        typer.echo(f"warning: {ascii_cli_text(warning)}", err=True)
     for error in result.errors:
-        typer.echo(error, err=True)
+        typer.echo(ascii_cli_text(error), err=True)
     if result.ok:
         typer.echo("consult-audio validate: ok")
         raise typer.Exit(code=0)
