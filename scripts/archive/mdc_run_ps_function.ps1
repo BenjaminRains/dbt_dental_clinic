@@ -1,4 +1,4 @@
-﻿# Run a single function from environment_manager.ps1 without interactive startup noise.
+﻿# Run a single function from archived environment_manager.ps1 (reference only).
 param(
     [Parameter(Mandatory = $true, Position = 0)]
     [string]$FunctionName
@@ -11,7 +11,7 @@ Set-Location $projectRoot
 
 $env:ENV_MANAGER_QUIET_RELOAD = '1'
 try {
-    . (Join-Path $scriptsRoot 'environment_manager.ps1')
+    . (Join-Path $scriptsRoot 'archive\environment_manager.ps1')
 } finally {
     Remove-Item Env:ENV_MANAGER_QUIET_RELOAD -ErrorAction SilentlyContinue
 }

@@ -1,5 +1,5 @@
 ﻿# Shared helper to run mdc from repo root (Phase 4.3+).
-# Dot-sourced by mdc_aliases.ps1 and environment_manager.ps1.
+# Dot-sourced by mdc_aliases.ps1.
 
 function Invoke-MDC {
     param(

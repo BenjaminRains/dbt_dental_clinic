@@ -6,17 +6,18 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 
 | Script | Purpose |
 |--------|---------|
-| [environment_manager.ps1](environment_manager.ps1) | Legacy full manager (`-Legacy`): deploy, SSM, frontend. *-init deprecated (Phase 4.6). |
 | [mdc_aliases.ps1](mdc_aliases.ps1) | **Default** thin `mdc` aliases. Load via `load_project.ps1`. |
-| [mdc_invoke.ps1](mdc_invoke.ps1) | Shared `Invoke-MDC` helper used by aliases and environment manager. |
-| **ssm_tunnels.ps1** | Dot-source in default aliases replaced by `mdc ssm connect`; file kept for Legacy env manager |
-| [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `load_project.ps1` (mdc aliases) when in project. |
+| [mdc_invoke.ps1](mdc_invoke.ps1) | Shared `Invoke-MDC` helper used by aliases. |
+| [environment_manager.ps1](environment_manager.ps1) | **Deprecated stub** — points to `mdc`. Full copy in [archive/](archive/). |
+| [ssm_tunnels.ps1](ssm_tunnels.ps1) | Legacy port-forward helpers; use `mdc tunnel` / `mdc ssm connect` instead. |
+| [project_profile.ps1](project_profile.ps1) | PowerShell profile loader; sources `load_project.ps1` when in project. |
 | [run_dbt.bat](run_dbt.bat) | Convenience wrapper to run dbt on EC2; forwards to `ec2\run_dbt_on_ec2.ps1`. |
 
 ## Directory Layout
 
 | Path | Purpose |
 |------|---------|
+| **archive/** | Archived Phase 5.5 legacy orchestration (reference only) |
 | **deployment/** | Deploy code/config to AWS/EC2 |
 | **ec2/** | EC2 dbt runtime, setup script, fixes |
 | **verification/** | Verify AWS resources (IAM, security groups, target groups, etc.) |
@@ -28,6 +29,8 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 
 ### Daily dev (mdc — default)
 
+One-time: `pip install -e tools/mdc_cli`
+
 From project root after `.\load_project.ps1`:
 
 ```powershell
@@ -35,42 +38,34 @@ status
 api-test
 etl-validate
 mdc api run --env local
+mdc api run --env clinic --tunnel-db   # with mdc tunnel clinic-db
 mdc etl run --env clinic --profile full
 mdc dbt run --env clinic
 mdc tunnel clinic-db
-ssm-connect-clinic-api    # SSM shell on clinic API EC2 (also in default aliases)
+ssm-connect-clinic-api
 ```
-
-Use `.\load_project.ps1 -Legacy` only for unmigrated monolith menus.
 
 ### Consult audio (Phase 5.4)
 
 Stateless runs in `consult_audio_pipe/venv` with child env from `consult_audio_pipe/.env`:
 
 ```bash
-mdc consult-audio install          # once: venv + pip install -r requirements.txt
+mdc consult-audio install
 mdc consult-audio validate
 mdc consult-audio pipeline run --llm claude
 mdc consult-audio pipeline status
-mdc consult-audio analyze              # LLM analysis on clean transcripts (legacy script)
-mdc consult-audio run -- scripts/llm_analysis_integration.py analyze
 ```
 
-Aliases: `consult-audio-validate`, `consult-audio-run`; `consult-audio-init` → `mdc consult-audio install`.
+Aliases: `consult-audio-validate`, `consult-audio-run`.
 
 ### Deploy dbt docs to portfolio site
-
-Uploads `dbt_dental_models/target` to demo frontend bucket under `dbt-docs/`:
 
 ```powershell
 dbt-docs-deploy
 # or: mdc deploy dbt-docs
-# optional: mdc deploy dbt-docs --skip-generate  (deploy existing target/ only)
 ```
 
 ### Deploy clinic API env to EC2
-
-Copies local `api/.env_api_clinic` → `/opt/dbt_dental_clinic/api/.env`, restarts systemd unit `dental-clinic-api`, verifies `/health/db`:
 
 ```powershell
 .\load_project.ps1
@@ -113,7 +108,7 @@ See `docs/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
 ```powershell
 .\scripts\verification\verify_clinic_ec2_details.ps1
 .\scripts\verification\check_ec2_setup.ps1
-.\scripts\verification\verify_clinic_api_smoke.ps1   # after clinic API deploy or RDS publish
+.\scripts\verification\verify_clinic_api_smoke.ps1
 ```
 
 ### Utilities
