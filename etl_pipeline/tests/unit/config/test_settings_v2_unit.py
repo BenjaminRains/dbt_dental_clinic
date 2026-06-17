@@ -338,3 +338,14 @@ class TestSettingsV2:
 
         with pytest.raises(ValueError, match="Invalid ETL configuration"):
             FileConfigProvider(tmp_path, environment="local")
+
+
+@pytest.mark.unit
+def test_create_settings_default_config_dir_is_etl_pipeline_root():
+    """create_settings() must load .env_<stage> from etl_pipeline/, not etl_pipeline/etl_pipeline/."""
+    from etl_pipeline.config.settings import Settings
+
+    root = Settings.etl_pipeline_root()
+    assert root.is_dir()
+    assert (root / "etl_pipeline" / "config" / "pipeline.yml").exists()
+    assert (root / ".env_clinic.template").exists() or (root / ".env_test.template").exists()

@@ -118,6 +118,11 @@ class Settings:
         DatabaseType.REPLICATION: ['host', 'port', 'database', 'user', 'password'],
         DatabaseType.ANALYTICS: ['host', 'port', 'database', 'schema', 'user', 'password']
     }
+
+    @staticmethod
+    def etl_pipeline_root() -> Path:
+        """Directory containing .env_<stage> files (the etl_pipeline package root)."""
+        return Path(__file__).parent.parent.parent
     
     def __init__(self, environment: Optional[str] = None, provider = None):
         """Initialize settings with fail-fast validation."""
@@ -131,7 +136,7 @@ class Settings:
             # .env_test is in etl_pipeline/.env_test
             # pipeline.yml and tables.yml are in etl_pipeline/etl_pipeline/config/
             # So we need to go up 3 levels: config -> etl_pipeline -> etl_pipeline -> etl_pipeline
-            config_dir = Path(__file__).parent.parent.parent  # etl_pipeline directory
+            config_dir = Settings.etl_pipeline_root()
             provider = FileConfigProvider(config_dir, self.environment)
         else:
             # Ensure provider knows the environment for mapping
@@ -424,8 +429,7 @@ def create_settings(environment: Optional[str] = None,
     else:
         from .providers import FileConfigProvider
         if config_dir is None:
-            # Point to etl_pipeline root directory where .env files are located
-            config_dir = Path(__file__).parent.parent
+            config_dir = Settings.etl_pipeline_root()
         # Explicitly pass environment to ensure correct .env file loading
         provider = FileConfigProvider(config_dir, environment)
     

@@ -23,7 +23,10 @@ Performance Optimizations:
 - Adaptive batch sizing, extraction strategy selection, performance monitoring, memory/priority
 
 Usage:
-    python etl_pipeline/scripts/analyze_opendental_schema.py
+    mdc etl schema --env clinic          # preferred
+    python etl_pipeline/scripts/analyze_opendental_schema.py --stage clinic
+
+Requires ETL_ENVIRONMENT or --stage (local|clinic|test). Uses settings_v2 via create_settings().
 
 Output:
     - etl_pipeline/config/tables.yml (performance-optimized pipeline configuration)
@@ -38,6 +41,7 @@ import os
 import yaml
 import json
 import hashlib
+import argparse
 from datetime import datetime, date
 from pathlib import Path
 import logging
@@ -47,13 +51,13 @@ from sqlalchemy import text, inspect
 from sqlalchemy.engine import Engine
 from decimal import Decimal
 import shutil
-from dotenv import load_dotenv
 import time
 import threading
 import concurrent.futures
 
 from etl_pipeline.core.connections import ConnectionFactory, create_connection_manager
-from etl_pipeline.config import get_settings, Settings, PostgresSchema as ConfigPostgresSchema
+from etl_pipeline.config import create_settings, get_settings, Settings, PostgresSchema as ConfigPostgresSchema
+from etl_pipeline.config.settings import reset_settings
 from etl_pipeline.core.postgres_schema import PostgresSchema
 
 # Configure timeout for database operations
@@ -129,52 +133,52 @@ def run_with_timeout(func, timeout_seconds):
         except concurrent.futures.TimeoutError:
             raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
 
-def setup_environment():
-    """Setup environment variables for the script."""
-    # Get the script directory and project paths
-    script_dir = Path(__file__).parent
-    etl_pipeline_dir = script_dir.parent  # etl_pipeline directory
-    project_root = etl_pipeline_dir.parent  # project root
-    
-    # Check if ETL_ENVIRONMENT is already set
-    if not os.getenv('ETL_ENVIRONMENT'):
-        logger.info("ETL_ENVIRONMENT not set, attempting to detect environment...")
-        
-        # Try to load from environment files in etl_pipeline/ only (no project-root fallback)
-        env_files = [
-            etl_pipeline_dir / '.env_local',
-            etl_pipeline_dir / '.env_clinic',
-            etl_pipeline_dir / '.env_test',
-        ]
-        
-        loaded = False
-        for env_file in env_files:
-            if env_file.exists():
-                logger.info(f"Loading environment from: {env_file}")
-                # override=False: OS env wins over the file (see ENVIRONMENT_HANDLING_REVIEW.md).
-                load_dotenv(env_file, override=False)
-                loaded = True
-                break
-        
-        if not loaded:
-            # Fail fast if no environment is set and no files found
-            raise ValueError("ETL_ENVIRONMENT environment variable is not set")
-        else:
-            logger.info(f"Environment loaded, ETL_ENVIRONMENT={os.getenv('ETL_ENVIRONMENT')}")
-    
-    # Validate environment
-    environment = os.getenv('ETL_ENVIRONMENT')
-    if not environment:
-        raise ValueError("ETL_ENVIRONMENT environment variable is not set")
-    
-    if environment not in ['local', 'clinic', 'test']:
-        # Special error message for deprecated "production" environment
-        if environment == "production":
-            raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. 'production' has been removed. Use 'local' or 'clinic'.")
-        raise ValueError(f"Invalid ETL_ENVIRONMENT: {environment}. Must be 'local', 'clinic', or 'test'")
-    
-    logger.info(f"Using environment: {environment}")
-    return environment
+VALID_ETL_STAGES = ('local', 'clinic', 'test')
+
+
+def resolve_analysis_stage(explicit: Optional[str] = None) -> str:
+    """Resolve ETL stage from --stage or ETL_ENVIRONMENT (fail fast if neither set)."""
+    stage = (explicit or os.getenv('ETL_ENVIRONMENT') or '').strip()
+    if not stage:
+        raise ValueError(
+            "ETL_ENVIRONMENT is not set. Run via mdc (e.g. mdc etl schema --env clinic) "
+            "or pass --stage local|clinic|test."
+        )
+    if stage == 'production':
+        raise ValueError(
+            "Invalid ETL_ENVIRONMENT 'production'. Use 'local' or 'clinic'."
+        )
+    if stage not in VALID_ETL_STAGES:
+        raise ValueError(
+            f"Invalid ETL stage '{stage}'. Must be one of: {', '.join(VALID_ETL_STAGES)}"
+        )
+    return stage
+
+
+def build_analysis_settings(
+    settings: Optional[Settings] = None,
+    stage: Optional[str] = None,
+) -> Settings:
+    """Load Settings via create_settings (settings_v2 / FileConfigProvider)."""
+    if settings is not None:
+        return settings
+    resolved = resolve_analysis_stage(stage)
+    os.environ['ETL_ENVIRONMENT'] = resolved
+    reset_settings()
+    return create_settings(environment=resolved)
+
+
+def parse_analysis_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
+    parser = argparse.ArgumentParser(
+        description='Analyze OpenDental schema and generate tables.yml',
+    )
+    parser.add_argument(
+        '--stage',
+        choices=VALID_ETL_STAGES,
+        default=None,
+        help='ETL stage (default: ETL_ENVIRONMENT from mdc or shell)',
+    )
+    return parser.parse_args(argv)
 
 class OpenDentalSchemaAnalyzer:
     """
@@ -218,18 +222,22 @@ class OpenDentalSchemaAnalyzer:
     # SECTION 1: INITIALIZATION & SETUP
     # =========================================================================
     
-    def __init__(self, settings: Optional[Settings] = None):
+    def __init__(
+        self,
+        settings: Optional[Settings] = None,
+        stage: Optional[str] = None,
+    ):
         """
         Initialize with source database connection using Settings injection pattern.
         
         Args:
-            settings: Settings instance (uses global if None)
+            settings: Settings instance (uses create_settings if None)
+            stage: ETL stage when settings is None (falls back to ETL_ENVIRONMENT)
         """
-        # Setup environment first
-        self.environment = setup_environment()
+        self.settings = build_analysis_settings(settings=settings, stage=stage)
+        self.environment = self.settings.environment
         
-        # Use provided settings or get global settings (Settings injection pattern)
-        self.settings = settings or get_settings()
+        logger.info(f"Using environment: {self.environment}")
         
         # Get database connections using Settings injection
         self.source_engine = ConnectionFactory.get_source_connection(self.settings)
@@ -2089,15 +2097,16 @@ Generated: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}
         
         return result
 
-def main():
+def main(argv: Optional[List[str]] = None):
     """Main function - generate complete schema analysis and configuration."""
     try:
+        args = parse_analysis_args(argv)
         script_start_time = time.time()
         logger.info("Starting OpenDental Schema Analysis")
         logger.info("=" * 50)
         
         # Create analyzer and run complete analysis
-        analyzer = OpenDentalSchemaAnalyzer()
+        analyzer = OpenDentalSchemaAnalyzer(stage=args.stage)
         results = analyzer.analyze_complete_schema()
         
         total_script_time = time.time() - script_start_time
