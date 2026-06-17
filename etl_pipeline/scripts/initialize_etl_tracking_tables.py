@@ -28,10 +28,11 @@ from sqlalchemy import text
 # Add the etl_pipeline directory to the path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
-from etl_pipeline.config import get_settings, create_settings
+from etl_pipeline.config import get_settings
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.config.logging import get_logger
 from etl_pipeline.config.settings import DatabaseType, PostgresSchema
+from etl_pipeline.scripts.script_env import load_script_settings
 
 logger = get_logger(__name__)
 
@@ -46,16 +47,6 @@ def parse_arguments():
         help='Environment to initialize tracking tables for (default: local)'
     )
     return parser.parse_args()
-
-def get_settings_for_environment(environment):
-    """Get settings for the specified environment."""
-    if environment == 'test':
-        os.environ['ETL_ENVIRONMENT'] = 'test'
-        return create_settings(environment='test')
-    else:
-        # local or clinic: set ETL_ENVIRONMENT and use create_settings for correct .env file
-        os.environ['ETL_ENVIRONMENT'] = environment
-        return create_settings(environment=environment)
 
 def load_tables_config():
     """Load the tables configuration file."""
@@ -237,7 +228,6 @@ def create_postgresql_tracking_tables(analytics_engine, analytics_schema):
 def create_mysql_tracking_records(replication_engine, tables_config):
     """Create initial tracking records for all tables in MySQL replication database."""
     try:
-        # Get replication database info from settings
         settings = get_settings()
         replication_config = settings.get_database_config(DatabaseType.REPLICATION)
         replication_database = replication_config.get('database', 'opendental_replication')
@@ -387,7 +377,7 @@ def main():
     environment = args.environment
     
     # Get settings for the specified environment
-    settings = get_settings_for_environment(environment)
+    settings = load_script_settings(environment)
     
     # Load configuration
     config = load_tables_config()

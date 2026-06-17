@@ -56,9 +56,13 @@ import threading
 import concurrent.futures
 
 from etl_pipeline.core.connections import ConnectionFactory, create_connection_manager
-from etl_pipeline.config import create_settings, get_settings, Settings, PostgresSchema as ConfigPostgresSchema
-from etl_pipeline.config.settings import reset_settings
+from etl_pipeline.config import get_settings, Settings, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.core.postgres_schema import PostgresSchema
+from etl_pipeline.scripts.script_env import (
+    VALID_ETL_STAGES,
+    load_script_settings,
+    resolve_script_stage as resolve_analysis_stage,
+)
 
 # Configure timeout for database operations
 DB_TIMEOUT = 30  # seconds
@@ -133,39 +137,14 @@ def run_with_timeout(func, timeout_seconds):
         except concurrent.futures.TimeoutError:
             raise TimeoutError(f"Operation timed out after {timeout_seconds} seconds")
 
-VALID_ETL_STAGES = ('local', 'clinic', 'test')
-
-
-def resolve_analysis_stage(explicit: Optional[str] = None) -> str:
-    """Resolve ETL stage from --stage or ETL_ENVIRONMENT (fail fast if neither set)."""
-    stage = (explicit or os.getenv('ETL_ENVIRONMENT') or '').strip()
-    if not stage:
-        raise ValueError(
-            "ETL_ENVIRONMENT is not set. Run via mdc (e.g. mdc etl schema --env clinic) "
-            "or pass --stage local|clinic|test."
-        )
-    if stage == 'production':
-        raise ValueError(
-            "Invalid ETL_ENVIRONMENT 'production'. Use 'local' or 'clinic'."
-        )
-    if stage not in VALID_ETL_STAGES:
-        raise ValueError(
-            f"Invalid ETL stage '{stage}'. Must be one of: {', '.join(VALID_ETL_STAGES)}"
-        )
-    return stage
-
-
 def build_analysis_settings(
     settings: Optional[Settings] = None,
     stage: Optional[str] = None,
 ) -> Settings:
-    """Load Settings via create_settings (settings_v2 / FileConfigProvider)."""
+    """Load Settings via script_env (settings_v2 / FileConfigProvider)."""
     if settings is not None:
         return settings
-    resolved = resolve_analysis_stage(stage)
-    os.environ['ETL_ENVIRONMENT'] = resolved
-    reset_settings()
-    return create_settings(environment=resolved)
+    return load_script_settings(stage)
 
 
 def parse_analysis_args(argv: Optional[List[str]] = None) -> argparse.Namespace:
