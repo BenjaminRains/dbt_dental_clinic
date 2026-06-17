@@ -178,14 +178,14 @@ class PriorityProcessor:
             self._validate_performance_categories()
             
             # Get all tables and categorize by performance_category
-            all_tables = self.settings.list_tables()
+            all_tables = self.config_reader.list_tables()
             large_tables = []
             medium_tables = []
             small_tables = []
             tiny_tables = []  # Support for tiny tables
             
             for table_name in all_tables:
-                config = self.settings.get_table_config(table_name)
+                config = self.config_reader.get_table_config(table_name)
                 performance_category = config.get('performance_category', 'tiny')
                 
                 if performance_category == 'large':
@@ -272,11 +272,11 @@ class PriorityProcessor:
     
     def _validate_performance_categories(self):
         """Validate that all tables have performance_category from schema analyzer."""
-        all_tables = self.settings.list_tables()
+        all_tables = self.config_reader.list_tables()
         missing_categories = []
         
         for table_name in all_tables:
-            config = self.settings.get_table_config(table_name)
+            config = self.config_reader.get_table_config(table_name)
             performance_category = config.get('performance_category')
             
             if not performance_category:

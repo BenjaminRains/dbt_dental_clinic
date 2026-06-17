@@ -273,11 +273,11 @@ class PipelineOrchestrator:
             logger.info(f"Processing tables by performance category: {category}")
             
             # Get all tables with the specified performance category
-            all_tables = self.settings.list_tables()
+            all_tables = self.config_reader.list_tables()
             target_tables = []
             
             for table_name in all_tables:
-                config = self.settings.get_table_config(table_name)
+                config = self.config_reader.get_table_config(table_name)
                 if config.get('performance_category') == category:
                     target_tables.append(table_name)
             

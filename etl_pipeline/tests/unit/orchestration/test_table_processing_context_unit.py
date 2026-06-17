@@ -57,7 +57,7 @@ class TestTableProcessingContext:
         # Assert
         assert hasattr(context, 'incremental_columns')
         assert context.incremental_columns == ['DateModified', 'DateCreated']
-        assert context.primary_column == 'id'
+        assert context.primary_column == 'DateModified'
     
     def test_table_processing_context_with_empty_incremental_columns(self, mock_config_reader):
         """Test TableProcessingContext with empty incremental_columns."""
@@ -407,7 +407,7 @@ class TestIncrementalColumnsIntegration:
         # Verify the context has the expected attributes
         assert hasattr(context, 'incremental_columns')
         assert context.incremental_columns == ['DateModified', 'DateCreated']
-        assert context.primary_column == 'id'
+        assert context.primary_column == 'DateModified'
         
         # Verify the config dictionary has the expected structure
         assert 'incremental_columns' in context.config

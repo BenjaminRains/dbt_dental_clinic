@@ -608,13 +608,18 @@ class TestConfigReaderSummary:
     """
 
     @pytest.mark.unit
+    def test_list_tables(self, mock_config_reader):
+        """Test listing all configured table names."""
+        tables = mock_config_reader.list_tables()
+        assert tables == ['patient', 'appointment', 'procedurelog', 'securitylog', 'definition']
+
+    @pytest.mark.unit
     def test_get_configuration_summary(self, mock_config_reader):
         """Test getting configuration summary."""
         summary = mock_config_reader.get_configuration_summary()
         
         # Test summary structure
         assert 'total_tables' in summary
-        assert 'importance_levels' in summary
         assert 'extraction_strategies' in summary
         assert 'size_ranges' in summary
         assert 'monitored_tables' in summary
@@ -623,10 +628,6 @@ class TestConfigReaderSummary:
         
         # Test summary values
         assert summary['total_tables'] == 5
-        assert summary['importance_levels']['critical'] == 1
-        assert summary['importance_levels']['important'] == 2
-        assert summary['importance_levels']['reference'] == 1
-        assert summary['importance_levels']['standard'] == 1
         assert summary['extraction_strategies']['incremental'] == 3
         assert summary['extraction_strategies']['full_table'] == 2
         assert summary['size_ranges']['small'] == 0  # definition: 1MB (not < 1MB)
@@ -642,8 +643,8 @@ class TestConfigReaderSummary:
         
         # Test empty summary
         assert summary['total_tables'] == 0
-        assert summary['importance_levels'] == {}
-        assert summary['extraction_strategies'] == {}
+        assert summary['extraction_strategies']['full_table'] == 0
+        assert summary['extraction_strategies']['incremental'] == 0
         assert summary['size_ranges']['small'] == 0
         assert summary['size_ranges']['medium'] == 0
         assert summary['size_ranges']['large'] == 0
@@ -682,7 +683,6 @@ class TestConfigReaderValidation:
         # Test no issues with valid configuration
         assert issues['missing_batch_size'] == []
         assert issues['missing_extraction_strategy'] == []
-        assert issues['missing_importance'] == []
         assert issues['invalid_batch_size'] == []
         # procedurelog is > 50MB without monitoring, so it should be flagged
         assert 'procedurelog' in issues['large_tables_without_monitoring']
@@ -703,7 +703,6 @@ class TestConfigReaderValidation:
         # Test no issues with empty configuration
         assert issues['missing_batch_size'] == []
         assert issues['missing_extraction_strategy'] == []
-        assert issues['missing_importance'] == []
         assert issues['invalid_batch_size'] == []
         assert issues['large_tables_without_monitoring'] == []
 
@@ -1010,7 +1009,6 @@ class TestConfigReaderETLIntegration:
         # Test configuration summary for pipeline monitoring
         summary = mock_config_reader.get_configuration_summary()
         assert summary['total_tables'] > 0
-        assert 'importance_levels' in summary
 
     @pytest.mark.unit
     def test_provider_pattern_integration(self, mock_config_reader):

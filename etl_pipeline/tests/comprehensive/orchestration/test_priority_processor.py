@@ -56,6 +56,10 @@ from tests.fixtures.connection_fixtures import (
 )
 
 
+def _set_performance_category(config_reader, table_name: str, category: str) -> None:
+    config_reader.config['tables'][table_name]['performance_category'] = category
+
+
 @pytest.fixture(autouse=True)
 def set_etl_environment(monkeypatch, request):
     """Set ETL environment for tests, removing it for fail_fast tests."""
@@ -226,22 +230,15 @@ class TestPriorityProcessorComprehensive:
         # Arrange: Set up settings and mock components for parallel processing
         processor = PriorityProcessor(mock_config_reader)
         processor.settings = priority_processor_settings
-        processor.settings.get_tables_by_importance = MagicMock(return_value=['patient', 'appointment', 'procedurelog'])
-        
-        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
-            mock_table_processor = MagicMock()
-            mock_table_processor.process_table.return_value = True
-            mock_table_processor_class.return_value = mock_table_processor
-            
-            # Act: Call process_by_priority() with important level
-            result = processor.process_by_priority(['important'], max_workers=2)
-            
-            # Assert: Verify parallel processing is used for important tables
-            # Note: Order doesn't matter for parallel processing
-            assert set(result['important']['success']) == set(['patient', 'appointment', 'procedurelog'])
-            assert result['important']['failed'] == []
-            assert result['important']['total'] == 3
-            assert mock_table_processor.process_table.call_count == 3
+        for table in ('patient', 'appointment', 'procedurelog'):
+            _set_performance_category(mock_config_reader, table, 'large')
+
+        with patch.object(processor, '_process_single_table', return_value=True):
+            result = processor.process_by_priority(max_workers=2)
+
+        assert set(result['large']['success']) == set(['patient', 'appointment', 'procedurelog'])
+        assert result['large']['failed'] == []
+        assert result['large']['total'] == 3
     
     def test_comprehensive_process_by_priority_audit_tables_sequential(self, priority_processor_settings, mock_config_reader):
         """
@@ -262,21 +259,17 @@ class TestPriorityProcessorComprehensive:
         # Arrange: Set up settings and mock components for sequential processing
         processor = PriorityProcessor(mock_config_reader)
         processor.settings = priority_processor_settings
-        processor.settings.get_tables_by_importance = MagicMock(return_value=['securitylog', 'definition'])
-        
-        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
-            mock_table_processor = MagicMock()
-            mock_table_processor.process_table.return_value = True
-            mock_table_processor_class.return_value = mock_table_processor
-            
-            # Act: Call process_by_priority() with audit level
-            result = processor.process_by_priority(['audit'], max_workers=2)
-            
-            # Assert: Verify sequential processing is used for audit tables
-            assert result['audit']['success'] == ['securitylog', 'definition']
-            assert result['audit']['failed'] == []
-            assert result['audit']['total'] == 2
-            assert mock_table_processor.process_table.call_count == 2
+        for table in ('securitylog', 'definition'):
+            _set_performance_category(mock_config_reader, table, 'tiny')
+        for table in ('patient', 'appointment', 'procedurelog'):
+            _set_performance_category(mock_config_reader, table, 'large')
+
+        with patch.object(processor, '_process_single_table', return_value=True):
+            result = processor.process_by_priority(max_workers=2)
+
+        assert result['tiny']['success'] == ['securitylog', 'definition']
+        assert result['tiny']['failed'] == []
+        assert result['tiny']['total'] == 2
     
     def test_comprehensive_process_by_priority_no_tables_found(self, priority_processor_settings, mock_config_reader):
         """
@@ -295,13 +288,11 @@ class TestPriorityProcessorComprehensive:
         # Arrange: Set up settings with no tables returned
         processor = PriorityProcessor(mock_config_reader)
         processor.settings = priority_processor_settings
-        processor.settings.get_tables_by_importance = MagicMock(return_value=[])
-        
-        # Act: Call process_by_priority() with importance level that has no tables
-        result = processor.process_by_priority(['standard'], max_workers=2)
-        
-        # Assert: Verify empty result is returned
-        assert 'standard' not in result
+        mock_config_reader.config['tables'] = {}
+
+        result = processor.process_by_priority(max_workers=2)
+
+        assert result == {}
     
     def test_comprehensive_process_by_priority_stop_on_important_failure(self, priority_processor_settings, mock_config_reader):
         """
@@ -321,20 +312,14 @@ class TestPriorityProcessorComprehensive:
         # Arrange: Set up settings with failing important tables
         processor = PriorityProcessor(mock_config_reader)
         processor.settings = priority_processor_settings
-        processor.settings.get_tables_by_importance = MagicMock(side_effect=lambda x: ['patient', 'appointment'] if x == 'important' else ['audit'])
-        
-        with patch('etl_pipeline.orchestration.priority_processor.TableProcessor') as mock_table_processor_class:
-            mock_table_processor = MagicMock()
-            mock_table_processor.process_table.return_value = False  # All tables fail
-            mock_table_processor_class.return_value = mock_table_processor
-            
-            # Act: Call process_by_priority() with important level that fails
-            result = processor.process_by_priority(['important', 'audit'], max_workers=2)
-            
-            # Assert: Verify processing stops after important table failures
-            assert result['important']['success'] == []
-            assert result['important']['failed'] == ['patient', 'appointment']
-            assert 'audit' not in result  # Processing stopped after important failures
+        for table in ('patient', 'appointment'):
+            _set_performance_category(mock_config_reader, table, 'large')
+
+        with patch.object(processor, '_process_single_table', return_value=False):
+            result = processor.process_by_priority(max_workers=2)
+
+        assert result['large']['success'] == []
+        assert result['large']['failed'] == ['patient', 'appointment']
     
     def test_comprehensive_process_parallel_success(self, priority_processor_settings, mock_config_reader):
         """

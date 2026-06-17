@@ -162,6 +162,14 @@ class Settings:
 
     def _typed_connection_settings(self):
         return getattr(self.provider, "_connection_settings", None)
+
+    @property
+    def profile(self) -> Optional[str]:
+        """Resolved ETL profile (full|load) when using settings_v2, else ETL_PROFILE env."""
+        typed = self._typed_connection_settings()
+        if typed is not None:
+            return typed.profile.value
+        return os.getenv("ETL_PROFILE")
     
     @staticmethod
     def _detect_environment() -> str:

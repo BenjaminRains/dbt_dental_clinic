@@ -154,6 +154,10 @@ class ConfigReader:
             logger.error(f"Unexpected error during configuration reload: {str(e)}")
             return False
     
+    def list_tables(self) -> List[str]:
+        """List all configured table names from tables.yml."""
+        return list(self.config.get('tables', {}).keys())
+
     def get_table_config(self, table_name: str) -> Dict:
         """
         Get configuration for a specific table.
