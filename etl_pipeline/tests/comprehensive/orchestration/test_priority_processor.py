@@ -162,54 +162,33 @@ class TestPriorityProcessorComprehensive:
     
     def test_comprehensive_environment_validation_success(self, priority_processor_settings, mock_config_reader):
         """
-        Test comprehensive successful environment validation.
+        Test comprehensive successful environment validation via Settings.
         
         AAA Pattern:
             Arrange: Set up valid settings and mock ConfigReader
-            Act: Call _validate_environment()
+            Act: Initialize PriorityProcessor and check settings.validate_configs()
             Assert: Verify validation passes without exceptions
-            
-        Validates:
-            - Environment validation works correctly
-            - Settings injection supports validation
-            - Provider pattern integration works
-            - Configuration validation passes
         """
-        # Arrange: Set up valid settings and mock ConfigReader
         processor = PriorityProcessor(mock_config_reader)
         processor.settings = priority_processor_settings
-        
-        # Act: Call _validate_environment()
-        # Should not raise any exceptions
-        processor._validate_environment()
-        
-        # Assert: Verify validation passes without exceptions
+
+        assert processor.settings.validate_configs() is True
         assert processor.config_reader == mock_config_reader
         assert processor.settings == priority_processor_settings
-    
+
     def test_comprehensive_environment_validation_failure(self, mock_config_reader):
         """
-        Test comprehensive environment validation failure handling.
+        Test environment validation failure at Settings layer.
         
         AAA Pattern:
-            Arrange: Set up mock ConfigReader with failing validation
-            Act: Call _validate_environment() with failing validation
-            Assert: Verify EnvironmentError is raised
-            
-        Validates:
-            - Environment validation failure handling
-            - Error propagation for configuration issues
-            - FAIL FAST behavior for invalid environments
+            Arrange: PriorityProcessor with settings that fail validate_configs
+            Act: Call settings.validate_configs()
+            Assert: Verify validation returns False
         """
-        # Arrange: Set up mock ConfigReader with failing validation
         processor = PriorityProcessor(mock_config_reader)
-        
-        # Mock the validation to fail
-        processor._validate_environment = MagicMock(side_effect=EnvironmentError("Configuration validation failed"))
-        
-        # Act & Assert: Call _validate_environment() with failing validation
-        with pytest.raises(EnvironmentError, match="Configuration validation failed"):
-            processor._validate_environment()
+        processor.settings.validate_configs = MagicMock(return_value=False)
+
+        assert processor.settings.validate_configs() is False
     
     def test_comprehensive_process_by_priority_important_tables_parallel(self, priority_processor_settings, mock_config_reader):
         """
@@ -726,27 +705,25 @@ class TestPriorityProcessorComprehensive:
             if original_env:
                 os.environ['ETL_ENVIRONMENT'] = original_env
     
-    def test_comprehensive_fail_fast_on_environment_validation_failure(self, mock_config_reader):
+    def test_comprehensive_fail_fast_on_environment_validation_failure(self, test_orchestrator_settings):
         """
-        Test comprehensive FAIL FAST when environment validation fails.
+        Test comprehensive FAIL FAST when environment validation fails at orchestrator boundary.
         
         AAA Pattern:
-            Arrange: Set up mock ConfigReader with failing validation
-            Act: Attempt to create PriorityProcessor with failing environment validation
-            Assert: Verify FAIL FAST behavior with EnvironmentError
-            
-        Validates:
-            - FAIL FAST behavior for environment validation failures
-            - Error propagation for configuration issues
-            - Security validation prevents invalid environments
+            Arrange: Orchestrator settings with validate_configs returning False
+            Act: Call initialize_connections()
+            Assert: Verify initialization fails
         """
-        # Arrange: Set up mock ConfigReader with failing validation
-        processor = PriorityProcessor(mock_config_reader)
-        processor._validate_environment = MagicMock(side_effect=EnvironmentError("Configuration validation failed"))
-        
-        # Act & Assert: Attempt to create PriorityProcessor with failing environment validation
-        with pytest.raises(EnvironmentError, match="Configuration validation failed"):
-            processor._validate_environment()
+        from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
+
+        settings = test_orchestrator_settings
+        settings.validate_configs = MagicMock(return_value=False)
+
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.TableProcessor'):
+            with patch('etl_pipeline.orchestration.pipeline_orchestrator.PriorityProcessor'):
+                with patch('etl_pipeline.orchestration.pipeline_orchestrator.UnifiedMetricsCollector'):
+                    orchestrator = PipelineOrchestrator(settings=settings)
+                    assert orchestrator.initialize_connections() is False
     
     def test_comprehensive_error_handling_data_extraction_failure(self, priority_processor_settings, mock_config_reader):
         """

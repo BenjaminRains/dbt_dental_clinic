@@ -131,10 +131,7 @@ class TestTableProcessorIntegration:
         # Assert: Verify environment validation passes
         assert table_processor.settings is not None
         assert table_processor.settings.environment == 'test'
-        
-        # Verify test configuration validation
-        # The _validate_environment method is called during initialization
-        # If it fails, the test will fail with an exception
+        assert table_processor.settings.validate_configs() is True
     
     def test_integration_config_reader_with_test_configuration(self):
         """

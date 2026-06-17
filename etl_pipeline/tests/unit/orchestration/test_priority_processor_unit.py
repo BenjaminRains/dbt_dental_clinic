@@ -145,43 +145,33 @@ class TestPriorityProcessorUnit:
 
     def test_environment_validation_success(self, mock_config_reader):
         """
-        Test successful environment validation.
+        Test successful environment validation via Settings (orchestrator boundary).
         
         AAA Pattern:
-            Arrange: Use existing mock_config_reader fixture with mocked validation
-            Act: Call _validate_environment()
+            Arrange: Use existing mock_config_reader fixture
+            Act: Initialize PriorityProcessor and check settings.validate_configs()
             Assert: Verify validation passes without exceptions
         """
-        # Arrange: Use existing mock_config_reader fixture with mocked validation
         config_reader = mock_config_reader
         processor = PriorityProcessor(config_reader)
-        
-        # Act: Call _validate_environment()
-        # Should not raise any exceptions
-        processor._validate_environment()
-        
-        # Assert: Verify validation passes without exceptions
+
+        assert processor.settings.validate_configs() is True
         assert processor.config_reader == config_reader
 
     def test_environment_validation_failure(self, mock_config_reader):
         """
-        Test environment validation failure handling.
+        Test environment validation failure at Settings layer.
         
         AAA Pattern:
-            Arrange: Use existing mock_config_reader fixture with failing validation
-            Act: Call _validate_environment() with failing validation
-            Assert: Verify EnvironmentError is raised
+            Arrange: PriorityProcessor with settings that fail validate_configs
+            Act: Call settings.validate_configs()
+            Assert: Verify validation returns False
         """
-        # Arrange: Use existing mock_config_reader fixture with failing validation
         config_reader = mock_config_reader
         processor = PriorityProcessor(config_reader)
-        
-        # Mock the validation to fail
-        processor._validate_environment = Mock(side_effect=EnvironmentError("Configuration validation failed"))
-        
-        # Act & Assert: Call _validate_environment() with failing validation
-        with pytest.raises(EnvironmentError, match="Configuration validation failed"):
-            processor._validate_environment()
+        processor.settings.validate_configs = Mock(return_value=False)
+
+        assert processor.settings.validate_configs() is False
 
     def test_process_by_priority_important_tables_parallel(self, mock_config_reader):
         """
@@ -550,19 +540,22 @@ class TestPriorityProcessorUnit:
         with pytest.raises(ConfigurationError, match="ConfigReader instance is required"):
             PriorityProcessor(invalid_config_reader)  # type: ignore
 
-    def test_fail_fast_on_environment_validation_failure(self, mock_config_reader):
+    def test_fail_fast_on_environment_validation_failure(self, test_orchestrator_settings):
         """
-        Test FAIL FAST when environment validation fails.
+        Test FAIL FAST when environment validation fails at orchestrator boundary.
         
         AAA Pattern:
-            Arrange: Use existing mock_config_reader fixture with failing validation
-            Act: Attempt to create PriorityProcessor with failing environment validation
-            Assert: Verify FAIL FAST behavior with EnvironmentError
+            Arrange: Orchestrator settings with validate_configs returning False
+            Act: Call initialize_connections()
+            Assert: Verify initialization fails without raising
         """
-        # Arrange: Use existing mock_config_reader fixture with failing validation
-        processor = PriorityProcessor(mock_config_reader)
-        processor._validate_environment = Mock(side_effect=EnvironmentError("Configuration validation failed"))
-        
-        # Act & Assert: Attempt to create PriorityProcessor with failing environment validation
-        with pytest.raises(EnvironmentError, match="Configuration validation failed"):
-            processor._validate_environment()
+        from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
+
+        settings = test_orchestrator_settings
+        settings.validate_configs = Mock(return_value=False)
+
+        with patch('etl_pipeline.orchestration.pipeline_orchestrator.TableProcessor'):
+            with patch('etl_pipeline.orchestration.pipeline_orchestrator.PriorityProcessor'):
+                with patch('etl_pipeline.orchestration.pipeline_orchestrator.UnifiedMetricsCollector'):
+                    orchestrator = PipelineOrchestrator(settings=settings)
+                    assert orchestrator.initialize_connections() is False

@@ -254,9 +254,6 @@ class TableProcessor:
         self.config_path = config_path or "etl_pipeline/config/tables.yml"
         self.metrics = metrics if metrics is not None else UnifiedMetricsCollector(settings=self.settings)
         
-        # ✅ MODERN ARCHITECTURE: Validate environment configuration
-        self._validate_environment()
-        
         # Create ConfigReader immediately if not provided
         if config_reader is None:
             # Use auto-detected path or provided path
@@ -270,30 +267,6 @@ class TableProcessor:
         # ✅ MODERN ARCHITECTURE: No direct connection management
         # Components (SimpleMySQLReplicator, PostgresLoader) handle their own connections
         # using Settings injection for environment-agnostic operation
-    
-    def _validate_environment(self):
-        """Validate environment configuration before processing."""
-        try:
-            # Validate that all required configurations are present
-            if not self.settings.validate_configs():
-                raise EnvironmentError(
-                    message=f"Configuration validation failed for {self.settings.environment} environment",
-                    environment=self.settings.environment,
-                    missing_variables=[],
-                    details={"critical": True, "error_type": "validation_failed"}
-                )
-            logger.debug(f"Environment validation passed for {self.settings.environment} environment")
-        except EnvironmentError:
-            # Re-raise environment errors as-is
-            raise
-        except Exception as e:
-            logger.error(f"Environment validation failed: {str(e)}")
-            raise EnvironmentError(
-                message=f"Unexpected error during environment validation",
-                environment=self.settings.environment,
-                details={"error_type": "unexpected", "original_error": str(e)},
-                original_exception=e
-            )
     
     def process_table(self, table_name: str, force_full: bool = False) -> bool:
         """

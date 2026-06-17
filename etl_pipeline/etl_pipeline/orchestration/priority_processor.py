@@ -122,9 +122,6 @@ class PriorityProcessor:
             # ✅ CONNECTION ARCHITECTURE: Always use get_settings() for proper environment detection
             self.settings = get_settings()
             
-            # ✅ CONNECTION ARCHITECTURE: Validate environment configuration
-            self._validate_environment()
-            
         except ConfigurationError as e:
             logger.error(f"Configuration error in PriorityProcessor initialization: {e}")
             raise
@@ -133,27 +130,6 @@ class PriorityProcessor:
             raise
         except Exception as e:
             logger.error(f"Unexpected error in PriorityProcessor initialization: {str(e)}")
-            raise
-    
-    def _validate_environment(self):
-        """Validate environment configuration before processing."""
-        try:
-            # Validate that all required configurations are present
-            if not self.settings.validate_configs():
-                raise EnvironmentError(
-                    message=f"Configuration validation failed for {self.settings.environment} environment",
-                    environment=self.settings.environment,
-                    details={
-                        "config_file": f".env_{self.settings.environment}",
-                        "critical": True
-                    }
-                )
-            logger.info(f"Environment validation passed for {self.settings.environment} environment")
-        except EnvironmentError as e:
-            logger.error(f"Environment validation failed: {e}")
-            raise
-        except Exception as e:
-            logger.error(f"Unexpected error during environment validation: {str(e)}")
             raise
     
     def process_by_priority(self, importance_levels: Optional[List[str]] = None,

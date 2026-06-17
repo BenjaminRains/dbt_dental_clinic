@@ -134,14 +134,7 @@ class TestTableProcessorInitializationIntegration:
             
             table_processor = TableProcessor()
             
-            # Validate environment validation method exists
-            assert hasattr(table_processor, '_validate_environment')
-            
-            # Validate that environment validation passes
-            # This should not raise an exception with valid test environment
-            table_processor._validate_environment()
-            
-            # Validate settings are properly injected
+            assert table_processor.settings.validate_configs() is True
             assert table_processor.settings.environment == 'test'
             
             logger.info("TableProcessor environment validation successful")
