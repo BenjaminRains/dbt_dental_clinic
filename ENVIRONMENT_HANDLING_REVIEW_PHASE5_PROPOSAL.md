@@ -1,6 +1,6 @@
 ## Phase 5 — Python-first orchestration; retire the Legacy environment manager
 
-> Status: **in progress** (Phases **5.1–5.5 done**; mdc **0.8.0**). Remaining: **5.6** polish.
+> Status: **complete** (Phases **5.1–5.6 done**; mdc **0.8.1**). Phase 5 objective achieved.
 > Objective: complete the migration started in Phase 4 by moving **deploy, SSM, frontend, consult-audio, and dbt-docs** workflows into the **`mdc` Python CLI**, leaving PowerShell as an **optional thin wrapper** (or none at all after `pip install -e tools/mdc_cli`).
 > Prerequisite: Phase 4 complete (Phases 4.1–4.6 merged; mdc **0.6.0**) — satisfied.
 > Merged to `main`: PR #14–#16 (5.1–5.3), #18 (5.4 **0.7.4**), #19 (`--tunnel-db`). **5.5** on `refactor/phase5-5-archive-legacy-manager`.
@@ -14,7 +14,7 @@
 | 5.3 — Frontend + dbt docs via mdc | **done** (0.7.3) | `mdc frontend dev\|status`; `mdc deploy frontend`; `mdc deploy dbt-docs`; `demo_frontend` + `.frontend-deploy.json` resolution |
 | 5.4 — Consult audio via mdc | **done** (0.7.4) | `mdc consult-audio install\|validate\|pipeline\|analyze\|run` |
 | 5.5 — Archive Legacy manager | **done** (0.8.0) | Monolith → `scripts/archive/`; thin `load_project.ps1`; deprecation stub |
-| 5.6 — Docs, CI, polish | **partial** | **Done:** CI workflow. **Open:** Unicode CLI, test file rename, `etl-status` docs, `ENVIRONMENT_HANDLING_REVIEW.md` |
+| 5.6 — Docs, CI, polish | **done** (0.8.1) | ASCII CLI output; test rename; `etl-status` docs; main review sync |
 
 **Current daily workflow (no `-Legacy` for these):**
 
@@ -77,7 +77,7 @@ Phase 4 made api/etl/dbt stateless. **Phase 5.1–5.4 addressed remaining glue:*
 | Duplicate JSON parsing in PS | `credentials.py` (+ `demo_frontend`, `.frontend-deploy.json`) |
 | `ssm-connect-*` dot-sourced `ssm_tunnels.ps1` | `mdc ssm connect` + thin aliases |
 
-**Still open (5.6):** Unicode CLI polish, test file rename, `etl-status` docs.
+**Still open (5.6):** none on this branch. Optional: refresh `docs/ENVIRONMENT_FILES.md`.
 
 1. **`ps_invoke.py`** — wraps `deploy_api_file.ps1` only (acceptable deferral).
 
@@ -315,17 +315,16 @@ Port to Python in a **future Phase 5.x or Phase 6** if desired; not a gate for a
 | `project_profile.ps1`, `load_env.ps1`, `.ps1_profile` | Thin alias loaders only |
 | mdc version | **0.8.0** |
 
-#### Phase 5.6 — Docs, CI, polish — **partial**
+#### Phase 5.6 — Docs, CI, polish — **done**
 
-| Item | Status |
+| Item | Result |
 |------|--------|
-| `.github/workflows/mdc_cli.yml` | **Done** — pytest (86 tests) + smoke on Ubuntu 3.11; no `node_modules` required |
-| `test_frontend_commands.py` | **Done** — isolated tmp `frontend/` + mocked npm (CI-safe) |
-| `tools/mdc_cli/README.md`, `scripts/README.md` | **Done** — command reference incl. consult-audio |
-| `ENVIRONMENT_HANDLING_REVIEW.md` | **Partial** — Phase 5 section; update on 5.5 completion |
-| Unicode `->` in CLI output (cp1252) | **Open** |
-| Rename `test_export_env_for_shell_unit.py` | **Open** |
-| `etl-status` default stage docs | **Open** |
+| `.github/workflows/mdc_cli.yml` | pytest + smoke (done earlier) |
+| `ascii_cli_text()` / run banners | ASCII `->` and `-` for cp1252 consoles |
+| `test_pydantic_env_loaders_unit.py` | Renamed from `test_export_env_for_shell_unit.py` |
+| `etl-status` alias docs | Table in `mdc_cli/README.md`; alias quick-start in `mdc_aliases.ps1` |
+| `ENVIRONMENT_HANDLING_REVIEW.md` | Phase 5 implemented; archive path; daily workflow |
+| mdc version | **0.8.1** |
 
 ---
 
@@ -389,9 +388,9 @@ Acceptable deferrals (unchanged):
 
 ### Suggested implementation order (remaining)
 
-1. **5.6 remainder** — Unicode polish, test file rename, `etl-status` default docs, `ENVIRONMENT_HANDLING_REVIEW.md`
+Phase 5 is **complete**. Optional follow-up: refresh `docs/ENVIRONMENT_FILES.md` for mdc-first onboarding.
 
-**Completed order:** 5.2 → 5.1 → 5.3 → 5.6 (CI) → 5.4 → CI frontend fix → 5.5 (0.8.0).
+**Completed order:** 5.2 → 5.1 → 5.3 → 5.6 (CI) → 5.4 → CI frontend fix → 5.5 (0.8.0) → 5.6 polish (0.8.1).
 
 ---
 

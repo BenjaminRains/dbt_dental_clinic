@@ -67,6 +67,14 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 `etl-run`, `etl-validate`, `etl-test`, `etl-status`, `env-status`, `ssm-connect-clinic-api`,
 `ssm-connect-api`, `ssm-connect-demo-db`.
 
+**ETL alias defaults** (when stage/profile omitted):
+
+| Alias | Default stage | Default profile |
+|-------|---------------|-----------------|
+| `etl-validate` | `local` | `load` for local, `full` otherwise |
+| `etl-run`, `etl-test` | `clinic` | `full` |
+| `etl-status` | `clinic` | `full` (use `etl-status -Env local` for local warehouse) |
+
 Stages: `local`, `clinic`, `test`, `demo` (API/dbt). Use `clinic` for live clinic context.
 
 ## CI
