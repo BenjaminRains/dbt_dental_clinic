@@ -7,14 +7,15 @@ and PostgreSQL analytics database to identify tables with data mismatches
 that may be affected by the incremental loading stale state bug.
 
 Usage:
-    cd etl_pipeline
-    pipenv run python scripts/audit_table_row_counts.py
+    mdc etl invoke --env clinic -- python scripts/audit_table_row_counts.py
+    cd etl_pipeline && python scripts/audit_table_row_counts.py --stage clinic
 
 Output:
     Tables with >10% row count mismatch, sorted by severity
 """
 
 import sys
+import argparse
 from pathlib import Path
 from sqlalchemy import text
 from tabulate import tabulate
@@ -22,8 +23,16 @@ from tabulate import tabulate
 # Add parent directory to path for imports
 sys.path.insert(0, str(Path(__file__).parent.parent))
 
-from etl_pipeline.config import get_settings, DatabaseType
+from etl_pipeline.config import DatabaseType
+from etl_pipeline.config.script_env import add_stage_argument, load_script_settings
 from etl_pipeline.core.connections import ConnectionFactory
+
+def parse_args():
+    parser = argparse.ArgumentParser(
+        description="Compare replication vs analytics row counts for mismatch detection.",
+    )
+    add_stage_argument(parser)
+    return parser.parse_args()
 
 def get_analytics_row_count(analytics_engine, table_name):
     """Get row count from analytics database."""
@@ -47,14 +56,20 @@ def get_replication_row_count(replication_engine, table_name, replication_db):
 
 def main():
     """Main audit function."""
+    args = parse_args()
+    try:
+        settings = load_script_settings(args.stage)
+    except ValueError as exc:
+        print(f"ERROR: {exc}")
+        sys.exit(1)
+
     print("=" * 80)
     print("TABLE ROW COUNT AUDIT: Replication vs Analytics")
     print("=" * 80)
     print()
     
     # Get settings and database connections
-    print("Initializing connections...")
-    settings = get_settings()
+    print(f"Initializing connections (ETL_ENVIRONMENT={settings.environment})...")
     replication_engine = ConnectionFactory.get_replication_connection(settings)
     analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
     

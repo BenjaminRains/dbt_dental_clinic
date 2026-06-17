@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import argparse
 import os
 from typing import Optional
 
@@ -54,3 +55,13 @@ def load_script_settings(
     apply_supplemental_env(settings)
     set_settings(settings)
     return settings
+
+
+def add_stage_argument(parser: argparse.ArgumentParser) -> None:
+    """Add standard --stage option to a script ArgumentParser."""
+    parser.add_argument(
+        "--stage",
+        choices=VALID_ETL_STAGES,
+        default=None,
+        help="ETL stage (default: ETL_ENVIRONMENT from mdc or shell)",
+    )

@@ -14,10 +14,13 @@ Features:
 - Generates connection usage reports
 
 Usage:
-    python etl_pipeline/scripts/analyze_connection_usage.py
+    python etl_pipeline/scripts/analyze_connection_usage.py --stage test
+    mdc etl invoke --env test -- python scripts/analyze_connection_usage.py
 """
 
 import os
+import sys
+import argparse
 import sys
 import time
 import logging
@@ -32,6 +35,7 @@ from pathlib import Path
 sys.path.append(os.path.join(os.path.dirname(__file__), '..'))
 
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema
+from etl_pipeline.config.script_env import add_stage_argument, load_script_settings
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.core.simple_mysql_replicator import SimpleMySQLReplicator
 # Removed find_latest_tables_config import - we only use tables.yml with metadata versioning
@@ -605,6 +609,16 @@ class ConnectionAnalyzer:
 
 def main():
     """Main function to run connection analysis."""
+    parser = argparse.ArgumentParser(description="Analyze ETL pipeline connection usage patterns.")
+    add_stage_argument(parser)
+    args = parser.parse_args()
+
+    try:
+        load_script_settings(args.stage)
+    except ValueError as exc:
+        logger.error("Failed to load settings: %s", exc)
+        sys.exit(1)
+
     logger.info("Starting ETL pipeline connection usage analysis...")
     
     # Create analyzer
