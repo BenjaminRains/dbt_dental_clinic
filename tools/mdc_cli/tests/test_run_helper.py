@@ -44,6 +44,12 @@ def test_ensure_dbt_target_respects_existing():
     assert _ensure_dbt_target(args, "clinic") == args
 
 
+def test_is_local_tcp_port_open_false_when_closed():
+    from mdc_cli.run_helper import is_local_tcp_port_open
+
+    assert is_local_tcp_port_open("127.0.0.1", 1, timeout=0.2) is False
+
+
 def test_load_env_dict_isolated_scrubs_before_load(monkeypatch):
     monkeypatch.setenv("API_ENVIRONMENT", "clinic")
     monkeypatch.setenv("POSTGRES_ANALYTICS_HOST", "should-not-win")

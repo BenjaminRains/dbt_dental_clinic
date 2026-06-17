@@ -1,25 +1,25 @@
-# Publish local dbt analytics schemas to clinic RDS (Phase 3.5b).
+# Publish local dbt marts schema to clinic RDS (Phase 3.5b).
 #
-# Workflow: ETL + dbt run locally (localhost opendental_analytics). This script copies
-# marts (+ int, staging for API joins) to RDS for api-clinic.dbtdentalclinic.com.
+# Workflow: dbt run locally (localhost opendental_analytics). This script copies
+# the marts schema to RDS for api-clinic.dbtdentalclinic.com.
 #
 # Prerequisites:
-#   - Local Postgres has fresh dbt output (marts, int, staging)
+#   - Local Postgres has fresh dbt marts output
 #   - pg_dump / pg_restore on PATH (PostgreSQL client tools)
 #   - RDS reachable: mdc tunnel clinic-db (default) OR -UseDirectRds
 #   - etl_pipeline/.env_clinic (local POSTGRES_ANALYTICS_*)
 #   - api/.env_api_clinic (RDS credentials; tunnel uses 127.0.0.1:TunnelPort)
 #
 # Usage (from repo root):
+#   See docs/CLINIC_ANALYTICS_WORKFLOW.md
 #   mdc tunnel clinic-db                    # separate terminal, keep open
-#   pwsh -File scripts/publish/publish_analytics_to_rds.ps1
 #   mdc publish analytics --env clinic      # wrapper (after pip install -e tools/mdc_cli)
 #
 param(
     [string]$ProjectRoot = "",
     [string]$LocalEnvFile = "",
     [string]$RemoteEnvFile = "",
-    [string[]]$Schemas = @("marts", "int", "staging"),
+    [string[]]$Schemas = @("marts"),
     [int]$TunnelPort = 5433,
     [switch]$UseDirectRds,
     [switch]$DryRun,
@@ -142,7 +142,19 @@ if (-not $localCounts -or $localCounts -notmatch "marts") {
 if (-not $UseDirectRds) {
     $tcp = Test-NetConnection -ComputerName $rdsConn.Host -Port ([int]$rdsConn.Port) -WarningAction SilentlyContinue
     if (-not $tcp.TcpTestSucceeded) {
-        throw "Tunnel not reachable on $($rdsConn.Host):$($rdsConn.Port). Start: mdc tunnel clinic-db"
+        throw @"
+Clinic RDS tunnel not reachable on $($rdsConn.Host):$($rdsConn.Port).
+
+In a separate terminal (keep it open):
+  mdc tunnel clinic-db
+
+Wait for: Port $TunnelPort opened ... Waiting for connections...
+
+Then rerun:
+  mdc publish analytics --env clinic
+
+Full workflow: docs/CLINIC_ANALYTICS_WORKFLOW.md
+"@
     }
 }
 

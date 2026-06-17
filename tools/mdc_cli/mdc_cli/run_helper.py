@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import os
+import socket
 import subprocess
 from contextlib import contextmanager
 from pathlib import Path
@@ -106,6 +107,20 @@ def build_isolated_child_env(
 def build_child_env(settings: dict[str, str]) -> dict[str, str]:
     """Backward-compatible alias; prefer build_isolated_child_env for runtime runs."""
     return build_isolated_child_env(settings)
+
+
+def is_local_tcp_port_open(
+    host: str = "127.0.0.1",
+    port: int = 5433,
+    *,
+    timeout: float = 3.0,
+) -> bool:
+    """Return True when host:port accepts a TCP connection (e.g. SSM port-forward)."""
+    try:
+        with socket.create_connection((host, port), timeout=timeout):
+            return True
+    except OSError:
+        return False
 
 
 def apply_tunnel_db_overrides(
