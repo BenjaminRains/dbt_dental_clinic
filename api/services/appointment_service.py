@@ -1,9 +1,86 @@
 # api/services/appointment_service.py
 from sqlalchemy.orm import Session
 from sqlalchemy import text
-from typing import List, Optional
-from datetime import date
-from models.appointment import AppointmentSummary, AppointmentDetail, AppointmentCreate, AppointmentUpdate
+from typing import Any, List, Optional
+from datetime import date, datetime
+from decimal import Decimal
+
+from models.appointment import AppointmentSummary, AppointmentDetail
+
+
+def _coerce_int(value: Any, default: int = 0) -> int:
+    if value is None:
+        return default
+    if isinstance(value, bool):
+        return int(value)
+    if isinstance(value, Decimal):
+        return int(value)
+    return int(value)
+
+
+def _coerce_float(value: Any, default: float = 0.0) -> float:
+    if value is None:
+        return default
+    if isinstance(value, Decimal):
+        return float(value)
+    return float(value)
+
+
+def _format_appointment_time(value: Any) -> str:
+    if value is None:
+        return ""
+    if isinstance(value, datetime):
+        return value.strftime("%H:%M")
+    if isinstance(value, date):
+        return ""
+    if isinstance(value, str):
+        if "T" in value:
+            try:
+                return datetime.fromisoformat(value.replace("Z", "+00:00")).strftime("%H:%M")
+            except ValueError:
+                pass
+        return value[:5] if len(value) >= 5 else value
+    if hasattr(value, "strftime"):
+        return value.strftime("%H:%M")
+    return str(value)
+
+
+def _format_appointment_date(value: Any) -> str:
+    if value is None:
+        return ""
+    if hasattr(value, "isoformat"):
+        return value.isoformat()
+    return str(value)
+
+
+def _row_to_appointment_detail(row) -> Optional[AppointmentDetail]:
+    if row.appointment_id is None or row.patient_id is None or row.appointment_date is None:
+        return None
+
+    return AppointmentDetail(
+        appointment_id=_coerce_int(row.appointment_id),
+        patient_id=_coerce_int(row.patient_id),
+        provider_id=_coerce_int(row.provider_id),
+        appointment_date=_format_appointment_date(row.appointment_date),
+        appointment_time=_format_appointment_time(row.appointment_datetime),
+        appointment_type=row.appointment_type or "Unknown",
+        appointment_status=row.appointment_status or "Unknown",
+        is_completed=bool(row.is_completed),
+        is_no_show=bool(row.is_no_show),
+        is_broken=bool(row.is_broken),
+        scheduled_production_amount=_coerce_float(row.scheduled_production_amount),
+        appointment_length_minutes=_coerce_int(row.appointment_length_minutes),
+    )
+
+
+def _rows_to_appointment_details(rows) -> List[AppointmentDetail]:
+    details: List[AppointmentDetail] = []
+    for row in rows:
+        detail = _row_to_appointment_detail(row)
+        if detail is not None:
+            details.append(detail)
+    return details
+
 
 def get_appointment_summary(
     db: Session,
@@ -31,7 +108,7 @@ def get_appointment_summary(
     FROM marts.fact_appointment fa
     WHERE fa.appointment_date IS NOT NULL
     """
-    
+
     params = {}
     if start_date:
         query += " AND fa.appointment_date >= :start_date"
@@ -42,30 +119,35 @@ def get_appointment_summary(
     if provider_id:
         query += " AND fa.provider_id = :provider_id"
         params['provider_id'] = provider_id
-    
+
     query += " GROUP BY fa.appointment_date, fa.provider_id ORDER BY fa.appointment_date DESC, fa.provider_id"
-    
+
     result = db.execute(text(query), params).fetchall()
-    return [
-        AppointmentSummary(
-            date=row.date_actual.isoformat(),
-            provider_id=row.provider_id or 0,
-            total_appointments=row.total_appointments,
-            completed_appointments=row.completed_appointments,
-            no_show_appointments=row.no_show_appointments,
-            broken_appointments=row.broken_appointments,
-            new_patient_appointments=row.new_patient_appointments,
-            hygiene_appointments=row.hygiene_appointments,
-            unique_patients=row.unique_patients,
-            completion_rate=float(row.appointment_completion_rate or 0),
-            no_show_rate=float(row.no_show_rate or 0),
-            cancellation_rate=float(row.cancellation_rate or 0),
-            utilization_rate=0.0,  # Not available in fact_appointment
-            scheduled_production=float(row.total_scheduled_production or 0),
-            completed_production=float(row.completed_production or 0)
+    summaries: List[AppointmentSummary] = []
+    for row in result:
+        if row.date_actual is None:
+            continue
+        summaries.append(
+            AppointmentSummary(
+                date=_format_appointment_date(row.date_actual),
+                provider_id=_coerce_int(row.provider_id),
+                total_appointments=_coerce_int(row.total_appointments),
+                completed_appointments=_coerce_int(row.completed_appointments),
+                no_show_appointments=_coerce_int(row.no_show_appointments),
+                broken_appointments=_coerce_int(row.broken_appointments),
+                new_patient_appointments=_coerce_int(row.new_patient_appointments),
+                hygiene_appointments=_coerce_int(row.hygiene_appointments),
+                unique_patients=_coerce_int(row.unique_patients),
+                completion_rate=_coerce_float(row.appointment_completion_rate),
+                no_show_rate=_coerce_float(row.no_show_rate),
+                cancellation_rate=_coerce_float(row.cancellation_rate),
+                utilization_rate=0.0,
+                scheduled_production=_coerce_float(row.total_scheduled_production),
+                completed_production=_coerce_float(row.completed_production),
+            )
         )
-        for row in result
-    ]
+    return summaries
+
 
 def get_appointments(
     db: Session,
@@ -93,8 +175,8 @@ def get_appointments(
     FROM marts.fact_appointment fa
     WHERE fa.appointment_date IS NOT NULL
     """
-    
-    params = {}
+
+    params: dict[str, Any] = {}
     if start_date:
         query += " AND fa.appointment_date >= :start_date"
         params['start_date'] = start_date
@@ -104,29 +186,14 @@ def get_appointments(
     if provider_id:
         query += " AND fa.provider_id = :provider_id"
         params['provider_id'] = provider_id
-    
+
     query += " ORDER BY fa.appointment_date DESC, fa.appointment_datetime DESC LIMIT :limit OFFSET :skip"
     params['limit'] = limit
     params['skip'] = skip
-    
+
     result = db.execute(text(query), params).fetchall()
-    return [
-        AppointmentDetail(
-            appointment_id=row.appointment_id,
-            patient_id=row.patient_id,
-            provider_id=row.provider_id or 0,
-            appointment_date=row.appointment_date.isoformat(),
-            appointment_time=row.appointment_datetime.strftime("%H:%M") if row.appointment_datetime else "",
-            appointment_type=row.appointment_type or "Unknown",
-            appointment_status=row.appointment_status or "Unknown",
-            is_completed=bool(row.is_completed),
-            is_no_show=bool(row.is_no_show),
-            is_broken=bool(row.is_broken),
-            scheduled_production_amount=float(row.scheduled_production_amount or 0),
-            appointment_length_minutes=row.appointment_length_minutes or 0
-        )
-        for row in result
-    ]
+    return _rows_to_appointment_details(result)
+
 
 def get_appointment_by_id(db: Session, appointment_id: int) -> Optional[AppointmentDetail]:
     """Get a specific appointment by ID"""
@@ -147,25 +214,13 @@ def get_appointment_by_id(db: Session, appointment_id: int) -> Optional[Appointm
     FROM marts.fact_appointment fa
     WHERE fa.appointment_id = :appointment_id
     """
-    
+
     result = db.execute(text(query), {"appointment_id": appointment_id}).fetchone()
     if not result:
         return None
-    
-    return AppointmentDetail(
-        appointment_id=result.appointment_id,
-        patient_id=result.patient_id,
-        provider_id=result.provider_id or 0,
-        appointment_date=result.appointment_date.isoformat(),
-        appointment_time=result.appointment_datetime.strftime("%H:%M") if result.appointment_datetime else "",
-        appointment_type=result.appointment_type or "Unknown",
-        appointment_status=result.appointment_status or "Unknown",
-        is_completed=bool(result.is_completed),
-        is_no_show=bool(result.is_no_show),
-        is_broken=bool(result.is_broken),
-        scheduled_production_amount=float(result.scheduled_production_amount or 0),
-        appointment_length_minutes=result.appointment_length_minutes or 0
-    )
+
+    return _row_to_appointment_detail(result)
+
 
 def get_today_appointments(db: Session, provider_id: Optional[int] = None) -> List[AppointmentDetail]:
     """Get today's appointments"""
@@ -186,35 +241,22 @@ def get_today_appointments(db: Session, provider_id: Optional[int] = None) -> Li
     FROM marts.fact_appointment fa
     WHERE fa.appointment_date = CURRENT_DATE
     """
-    
-    params = {}
+
+    params: dict[str, Any] = {}
     if provider_id:
         query += " AND fa.provider_id = :provider_id"
         params['provider_id'] = provider_id
-    
-    query += " ORDER BY fa.appointment_datetime ASC"
-    
+
+    query += " ORDER BY fa.appointment_datetime ASC NULLS LAST, fa.appointment_id ASC"
+
     result = db.execute(text(query), params).fetchall()
-    return [
-        AppointmentDetail(
-            appointment_id=row.appointment_id,
-            patient_id=row.patient_id,
-            provider_id=row.provider_id or 0,
-            appointment_date=row.appointment_date.isoformat(),
-            appointment_time=row.appointment_datetime.strftime("%H:%M") if row.appointment_datetime else "",
-            appointment_type=row.appointment_type or "Unknown",
-            appointment_status=row.appointment_status or "Unknown",
-            is_completed=bool(row.is_completed),
-            is_no_show=bool(row.is_no_show),
-            is_broken=bool(row.is_broken),
-            scheduled_production_amount=float(row.scheduled_production_amount or 0),
-            appointment_length_minutes=row.appointment_length_minutes or 0
-        )
-        for row in result
-    ]
+    return _rows_to_appointment_details(result)
+
 
 def get_upcoming_appointments(db: Session, days: int = 7, provider_id: Optional[int] = None) -> List[AppointmentDetail]:
-    """Get upcoming appointments for the next N days"""
+    """Get upcoming appointments for the next N days (inclusive of today)."""
+    days = max(1, min(days, 90))
+
     query = """
     SELECT 
         fa.appointment_id,
@@ -230,31 +272,15 @@ def get_upcoming_appointments(db: Session, days: int = 7, provider_id: Optional[
         fa.scheduled_production_amount,
         fa.appointment_length_minutes
     FROM marts.fact_appointment fa
-    WHERE fa.appointment_date BETWEEN CURRENT_DATE AND CURRENT_DATE + INTERVAL '1 day' * :days
+    WHERE fa.appointment_date BETWEEN CURRENT_DATE AND CURRENT_DATE + :days
     """
-    
-    params = {"days": days}
+
+    params: dict[str, Any] = {"days": days}
     if provider_id:
         query += " AND fa.provider_id = :provider_id"
         params['provider_id'] = provider_id
-    
-    query += " ORDER BY fa.appointment_date ASC, fa.appointment_datetime ASC"
-    
+
+    query += " ORDER BY fa.appointment_date ASC, fa.appointment_datetime ASC NULLS LAST, fa.appointment_id ASC"
+
     result = db.execute(text(query), params).fetchall()
-    return [
-        AppointmentDetail(
-            appointment_id=row.appointment_id,
-            patient_id=row.patient_id,
-            provider_id=row.provider_id or 0,
-            appointment_date=row.appointment_date.isoformat(),
-            appointment_time=row.appointment_datetime.strftime("%H:%M") if row.appointment_datetime else "",
-            appointment_type=row.appointment_type or "Unknown",
-            appointment_status=row.appointment_status or "Unknown",
-            is_completed=bool(row.is_completed),
-            is_no_show=bool(row.is_no_show),
-            is_broken=bool(row.is_broken),
-            scheduled_production_amount=float(row.scheduled_production_amount or 0),
-            appointment_length_minutes=row.appointment_length_minutes or 0
-        )
-        for row in result
-    ]
+    return _rows_to_appointment_details(result)

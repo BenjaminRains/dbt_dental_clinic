@@ -27,7 +27,18 @@ _handler.addFilter(_env_log_filter)
 # force=True so [demo]/[clinic] prefix is used even if uvicorn configured root first (Phase 2, 7.2b)
 logging.basicConfig(level=logging.INFO, format=_log_format, handlers=[_handler], force=True)
 
-from routers import patient, reports, appointment, provider, revenue, dbt_metadata, ar, treatment_acceptance, hygiene
+from routers import (
+    patient,
+    reports,
+    appointment,
+    provider,
+    revenue,
+    dbt_metadata,
+    ar,
+    treatment_acceptance,
+    hygiene,
+    portal_auth,
+)
 from config import APIConfig
 from deps import get_api_settings_optional
 from settings import APISettings
@@ -216,7 +227,7 @@ app.add_middleware(
     allow_origins=cors_origins,  # Use environment-specific origins
     allow_credentials=True,
     allow_methods=["GET", "POST", "OPTIONS"],  # Restrict methods
-    allow_headers=["Content-Type", "X-API-Key", "Accept"],  # Explicit headers only
+    allow_headers=["Content-Type", "X-API-Key", "Accept", "Authorization"],
     expose_headers=["X-RateLimit-Limit-Minute", "X-RateLimit-Remaining-Minute",
                     "X-RateLimit-Limit-Hour", "X-RateLimit-Remaining-Hour"],  # Rate limit headers
     max_age=3600,  # Cache preflight requests
@@ -232,6 +243,7 @@ app.include_router(dbt_metadata.router)
 app.include_router(ar.router)
 app.include_router(treatment_acceptance.router)
 app.include_router(hygiene.router)
+app.include_router(portal_auth.router)
 
 @app.get("/")
 def read_root():

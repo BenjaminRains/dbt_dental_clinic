@@ -533,7 +533,7 @@ API_CORS_ORIGINS=http://localhost:3000,http://127.0.0.1:3000
 | **Written on EC2 (verbatim copy)** | `/opt/dbt_dental_clinic/api/.env` |
 | **Loaded by** | systemd `EnvironmentFile=` → process env (Python does not re-read `.env_api_clinic` on EC2) |
 | **EC2 instance Name tag** | `dental-clinic-api-clinic` (see `deployment_credentials.json` → `backend_api.clinic_api.ec2`) |
-| **systemd unit name** | `dental-clinic-api` (from `api/dental-clinic-api.service`) — **not** the EC2 Name tag |
+| **systemd unit name** | `dental-clinic-api-clinic` (from `api/dental-clinic-api-clinic.service`) — **not** the EC2 Name tag |
 
 Deploy copies your local file byte-for-byte; nothing is merged from `deployment_credentials.json` at deploy time:
 
@@ -578,36 +578,24 @@ CLINIC_API_KEY=<CLINIC_API_KEY>  # Clinic API key (IP-restricted)
 
 ### Service Management
 
-The API runs as a **systemd unit named `dental-clinic-api`** on demo and clinic EC2 instances
-(same unit file: `api/dental-clinic-api.service`). Do not confuse with the clinic EC2 **Name tag**
-`dental-clinic-api-clinic` in AWS — that is not the systemd service name.
+Demo and clinic APIs run on **separate EC2 instances** with **different systemd unit names**. Do not confuse the EC2 **Name tag** (e.g. `dental-clinic-api-clinic`) with the **systemd unit** (`dental-clinic-api-clinic`).
 
-After `mdc deploy api --env clinic`, the deploy script restarts `dental-clinic-api` and verifies
-`GET http://127.0.0.1:8000/health/db` on the instance (use `-SkipHealthCheck` to skip).
+| Instance | Typical systemd unit | Unit file in repo |
+|----------|---------------------|-------------------|
+| Demo API | `dental-clinic-api-demo` or legacy `dental-clinic-api` | `api/dental-clinic-api.service` |
+| Clinic API | `dental-clinic-api-clinic` | `api/dental-clinic-api-clinic.service` |
 
-**Service Management Commands:**
+After `mdc deploy api --env clinic`, `deploy_api_file.ps1` resolves the clinic unit via `Get-ApiSystemdServiceName` (reads `deployment_credentials.json` → `backend_api.clinic_api.ec2.systemd_service`, default `dental-clinic-api-clinic`; legacy value `dental-clinic-api` is mapped automatically), restarts it, and verifies `GET http://127.0.0.1:8000/health/db` (use `-SkipHealthCheck` to skip).
+
+**Clinic API service commands (on clinic EC2):**
 ```bash
-# Check service status
-sudo systemctl status dental-clinic-api
-
-# View recent logs
-sudo journalctl -u dental-clinic-api -n 50
-
-# View live logs
-sudo journalctl -u dental-clinic-api -f
-
-# Restart service
-sudo systemctl restart dental-clinic-api
-
-# Stop service
-sudo systemctl stop dental-clinic-api
-
-# Start service
-sudo systemctl start dental-clinic-api
-
-# Enable service (start on boot)
-sudo systemctl enable dental-clinic-api
+sudo systemctl status dental-clinic-api-clinic
+sudo journalctl -u dental-clinic-api-clinic -n 50
+sudo journalctl -u dental-clinic-api-clinic -f
+sudo systemctl restart dental-clinic-api-clinic
 ```
+
+Clinic logs may also be in `/var/log/dental-clinic-api-clinic.log` (see `api/dental-clinic-api-clinic.service`).
 
 **Service Configuration:**
 - **User**: Runs as `ec2-user` (non-root)

@@ -3,6 +3,7 @@ import {
     AppBar,
     Alert,
     Box,
+    Button,
     CssBaseline,
     Drawer,
     IconButton,
@@ -11,6 +12,7 @@ import {
     ListItemButton,
     ListItemIcon,
     ListItemText,
+    ListSubheader,
     Toolbar,
     Typography,
     useTheme,
@@ -32,54 +34,49 @@ import {
     HelpOutline as HelpIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import { isClinicSite } from '../../config/clinicSite';
+import { useRole } from '../../context/RoleContext';
+import { useAuth } from '../../context/AuthContext';
+import RoleSwitcher from '../common/RoleSwitcher';
 
 const drawerWidth = 240;
-
-// Clinic build (VITE_IS_DEMO=false): "/" is ClinicHome. Demo: "/" is Portfolio, then Dashboard at /dashboard.
-const isDemoBuild = import.meta.env.VITE_IS_DEMO === 'true';
 
 interface LayoutProps {
     children: React.ReactNode;
 }
 
-const menuItems = isDemoBuild
-    ? [
-          { text: 'Portfolio', icon: <HomeIcon />, path: '/' },
-          { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-          { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
-          { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
-          { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
-          { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
-          { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
-          { text: 'Referral sources', icon: <ReferralIcon />, path: '/referral-sources' },
-          { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
-          { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
-          { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
-      ]
-    : [
-          { text: 'Home', icon: <HomeIcon />, path: '/' },
-          { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
-          { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
-          { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
-          { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
-          { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
-          { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
-          { text: 'Referral sources', icon: <ReferralIcon />, path: '/referral-sources' },
-          { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
-          { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
-          { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
-      ];
+const demoMenuItems = [
+    { text: 'Portfolio', icon: <HomeIcon />, path: '/' },
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+    { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
+    { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
+    { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
+    { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
+    { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
+    { text: 'Referral sources', icon: <ReferralIcon />, path: '/referral-sources' },
+    { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
+    { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
+    { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
+];
 
-// Helper: demo/portfolio mode = show portfolio at / and "synthetic data" banner. Clinic = dashboard at /, no banner.
-const isDemoMode = (): boolean => {
-    const envIsDemo = import.meta.env.VITE_IS_DEMO === 'true';
-    const hostname = typeof window !== 'undefined' ? window.location.hostname : '';
-    // Only main and www are portfolio/demo; clinic.dbtdentalclinic.com is clinic (not demo)
-    const isPortfolioSite = hostname === 'dbtdentalclinic.com' || hostname === 'www.dbtdentalclinic.com';
-    return envIsDemo || isPortfolioSite;
-};
+const clinicReportItems = [
+    { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
+    { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
+    { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
+    { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
+    { text: 'Hygiene Retention', icon: <HygieneIcon />, path: '/hygiene-retention' },
+    { text: 'Referral sources', icon: <ReferralIcon />, path: '/referral-sources' },
+    { text: 'Providers', icon: <ProvidersIcon />, path: '/providers' },
+    { text: 'Patients', icon: <PatientsIcon />, path: '/patients' },
+    { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
+    { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
+];
+
+// Demo/portfolio = synthetic data banner. Clinic = no banner.
+const isDemoMode = (): boolean => !isClinicSite();
 
 const Layout: React.FC<LayoutProps> = ({ children }) => {
+    const isDemoBuild = !isClinicSite();
     const [mobileOpen, setMobileOpen] = useState(false);
     const [bannerDismissed, setBannerDismissed] = useState(false);
     const [isDemo, setIsDemo] = useState(false);
@@ -87,6 +84,8 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     const location = useLocation();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
+    const { homePath } = useRole();
+    const { logout, isClinicBuild } = useAuth();
 
     // Check if we're in demo mode and localStorage on mount
     useEffect(() => {
@@ -116,6 +115,30 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
     const appTitle = isDemoBuild ? '🦷 Dental Analytics' : 'MDC & GLIC Analytics';
     const headerTitle = isDemoBuild ? 'Dental Practice Analytics Dashboard' : 'MDC & GLIC Analytics';
 
+    const renderNavItem = (item: { text: string; icon: React.ReactNode; path: string }) => (
+        <ListItem key={item.text} disablePadding>
+            <ListItemButton
+                selected={location.pathname === item.path}
+                onClick={() => handleNavigation(item.path)}
+                sx={{
+                    '&.Mui-selected': {
+                        backgroundColor: theme.palette.primary.main,
+                        color: 'white',
+                        '&:hover': {
+                            backgroundColor: theme.palette.primary.dark,
+                        },
+                        '& .MuiListItemIcon-root': {
+                            color: 'white',
+                        },
+                    },
+                }}
+            >
+                <ListItemIcon>{item.icon}</ListItemIcon>
+                <ListItemText primary={item.text} />
+            </ListItemButton>
+        </ListItem>
+    );
+
     const drawer = (
         <div>
             <Toolbar>
@@ -131,29 +154,17 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                 </Typography>
             </Toolbar>
             <List>
-                {menuItems.map((item) => (
-                    <ListItem key={item.text} disablePadding>
-                        <ListItemButton
-                            selected={location.pathname === item.path}
-                            onClick={() => handleNavigation(item.path)}
-                            sx={{
-                                '&.Mui-selected': {
-                                    backgroundColor: theme.palette.primary.main,
-                                    color: 'white',
-                                    '&:hover': {
-                                        backgroundColor: theme.palette.primary.dark,
-                                    },
-                                    '& .MuiListItemIcon-root': {
-                                        color: 'white',
-                                    },
-                                },
-                            }}
-                        >
-                            <ListItemIcon>{item.icon}</ListItemIcon>
-                            <ListItemText primary={item.text} />
-                        </ListItemButton>
-                    </ListItem>
-                ))}
+                {isDemoBuild ? (
+                    demoMenuItems.map(renderNavItem)
+                ) : (
+                    <>
+                        {renderNavItem({ text: 'Home', icon: <HomeIcon />, path: homePath })}
+                        <ListSubheader component="div" sx={{ lineHeight: 2.5 }}>
+                            Reports
+                        </ListSubheader>
+                        {clinicReportItems.map(renderNavItem)}
+                    </>
+                )}
             </List>
         </div>
     );
@@ -182,9 +193,10 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                         variant="h6"
                         noWrap
                         component="div"
-                        onClick={() => handleNavigation('/')}
+                        onClick={() => handleNavigation(isDemoBuild ? '/' : homePath)}
                         sx={{
                             cursor: 'pointer',
+                            flexGrow: 1,
                             '&:hover': {
                                 opacity: 0.8,
                             },
@@ -192,6 +204,20 @@ const Layout: React.FC<LayoutProps> = ({ children }) => {
                     >
                         {headerTitle}
                     </Typography>
+                    <RoleSwitcher />
+                    {isClinicBuild && (
+                        <Button
+                            color="inherit"
+                            size="small"
+                            onClick={() => {
+                                logout();
+                                navigate('/login');
+                            }}
+                            sx={{ ml: 1 }}
+                        >
+                            Sign out
+                        </Button>
+                    )}
                 </Toolbar>
             </AppBar>
             <Box

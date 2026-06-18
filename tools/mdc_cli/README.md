@@ -62,7 +62,7 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 - `mdc tunnel clinic-db|demo-db|rds` — SSM port forward (Python; no PowerShell bridge)
 - `mdc ssm status` — AWS CLI, plugin, instance IDs from `deployment_credentials.json`
 - `mdc ssm connect api|clinic-api|demo-db` — interactive SSM shell
-- `mdc deploy api --env clinic` — copies `api/.env_api_clinic` to EC2 `api/.env`, restarts **`dental-clinic-api`** systemd unit, `/health/db` check
+- `mdc deploy api --env clinic` — copies `api/.env_api_clinic` to EC2 `api/.env`, restarts **`dental-clinic-api-clinic`** systemd unit (via `deploy_api_file.ps1`), `/health/db` check
 
 ### PowerShell aliases (Phase 4.5)
 

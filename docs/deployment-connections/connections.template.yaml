@@ -1,0 +1,107 @@
+# Deployment connections inventory (template)
+#
+# Copy to connections.yaml and fill in. connections.yaml is gitignored.
+# After editing, sync CIDRs to deployment_credentials.json → clinic_frontend.waf.ip_sets
+# and update the matching AWS WAF IP sets in us-east-1 (CloudFront scope).
+#
+# last_updated: YYYY-MM-DD
+# maintained_by: <name>
+
+connections:
+  # --- Clinic office (already deployed) ---
+  - id: clinic-office-wan
+    label: "MDC / GLIC office WAN"
+    connection_type: clinic_office
+    waf_ip_set_key: clinic_office # deployment_credentials.json key
+    public_ipv4: "99.89.219.137/32"
+  #   public_ipv6: null
+    isp: "AT&T"
+    location: "Office"
+    ip_stability: static # static | dynamic
+    services: [frontend, api]
+    contact:
+      name: "<office IT or practice manager>"
+      role: "Office"
+    last_verified: null # YYYY-MM-DD
+    notes: "Shared WAN for clinic server and staff browsers."
+
+  # --- Developer (already deployed) ---
+  - id: dev-primary
+    label: "Dev machine"
+    connection_type: dev
+    waf_ip_set_key: dev
+    public_ipv4: "50.158.66.217/32"
+    isp: "<ISP>"
+    location: "<city or Remote>"
+    ip_stability: dynamic
+    services: [frontend, api]
+    contact:
+      name: "<developer>"
+      role: "Engineering"
+    last_verified: null
+    notes: "Update when home IP changes."
+
+  # --- Business owner: home (ADD) ---
+  # WireGuard to MDC does NOT route clinic.dbtdentalclinic.com through office NAT.
+  # WAF sees this home WAN IP for browser traffic from home PC/server — must be allowlisted.
+  - id: owner-home
+    label: "Owner home — main"
+    connection_type: owner_home
+    waf_ip_set_key: owner_home # create in deployment_credentials.json + AWS
+    public_ipv4: "<WAN_IP>/32" # https://ifconfig.me on home Wi-Fi (WireGuard on or off — same IP)
+    isp: "<e.g. Comcast, Spectrum>"
+    location: "<city>"
+    ip_stability: dynamic # most residential; static if business line
+    services: [frontend, api]
+    contact:
+      name: "<owner name>"
+      role: "Business owner"
+    last_verified: null
+    wireguard_split_tunnel: true # clinic LAN only; public web still uses home WAN
+    notes: |
+      Home servers on this LAN use the same public_ipv4.
+      Alternative without WAF change: RDP to MDC server and browse there (office egress 99.89.219.137).
+      List servers in home_servers below.
+
+  # --- Business owner: cell (ADD — optional, often temporary) ---
+  - id: owner-mobile-cellular
+    label: "Owner phone — cellular"
+    connection_type: owner_mobile
+    waf_ip_set_key: owner_mobile
+    public_ipv4: "<CURRENT_CELL_IP>/32"
+    isp: "<Verizon | AT&T | T-Mobile>"
+    location: "Mobile"
+    ip_stability: dynamic
+    services: [frontend]
+    contact:
+      name: "<owner name>"
+      role: "Business owner"
+    last_verified: null
+    review_by: null # YYYY-MM-DD — remove or re-verify; cellular IPs churn
+    notes: |
+      Prefer owner on home/office Wi-Fi instead of allowlisting cellular.
+      If added while traveling, delete or update when IP changes.
+
+# Servers at owner home — inventory only (WAF uses home WAN IP above)
+home_servers:
+  - hostname: "<e.g. nas, etl-pc>"
+    role: "<what it does>"
+    access_pattern: outbound # outbound (calls API) | browser_on_lan | both
+    services_needed: [api] # if server pulls analytics; frontend if someone RDPs and browses
+    notes: "Shares owner-home public_ipv4; no separate WAF entry unless separate ISP line."
+
+# Pending collection — check off when gathered
+checklist:
+  owner_home_wan_ip: false # ifconfig.me from home (this is what WAF sees — not VPN inner IP)
+  owner_home_isp: false
+  owner_home_static_or_dynamic: false
+  owner_cellular_ip_if_needed: false
+  home_server_hostnames_and_roles: false
+  mdc_server_egress_ip_verified: false # curl ifconfig.me ON MDC server — expect 99.89.219.137
+  wireguard_understood_split_tunnel: false # VPN ≠ clinic site access from home browser
+  confirmed_api_restricted_same_as_frontend: false
+  synced_to_deployment_credentials_json: false
+  synced_to_aws_waf_ip_sets: false
+  tested_from_owner_home: false
+  tested_from_mdc_server_rdp_browser: false
+  tested_from_owner_phone_wifi: false

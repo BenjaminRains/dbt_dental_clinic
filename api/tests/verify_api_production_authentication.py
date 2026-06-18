@@ -89,6 +89,7 @@ BUSINESS_ENDPOINTS = [
     # Appointment endpoints
     ("/appointments/summary", "GET", "Appointment Summary"),
     ("/appointments/today", "GET", "Today's Appointments"),
+    ("/appointments/upcoming", "GET", "Upcoming Appointments"),
     # Reports endpoints
     ("/reports/dashboard/kpis", "GET", "Dashboard KPIs"),
     # Treatment Acceptance endpoints

@@ -76,6 +76,61 @@ def npm_build(frontend_dir: Path, config: FrontendDeployConfig) -> None:
         raise typer.Exit(code=code)
 
 
+# React Router paths that must resolve when entered directly in the browser (S3 has no
+# server-side rewrite; CloudFront custom errors are preferred — see configure_clinic_cloudfront_spa.ps1).
+CLINIC_SPA_ROUTE_KEYS: tuple[str, ...] = (
+    "login",
+    "home/practice-manager",
+    "home/owner",
+    "home/front-desk",
+    "home/insurance",
+    "agent-profile",
+    "dashboard",
+    "revenue",
+    "providers",
+    "patients",
+    "appointments",
+    "ar-aging",
+    "treatment-acceptance",
+    "hygiene-retention",
+    "referral-sources",
+    "kpi-definitions",
+    "environment-manager",
+    "schema-discovery",
+)
+
+
+def upload_spa_route_fallbacks(dist_dir: Path, bucket_name: str) -> None:
+    """Copy index.html to each client route key so /login etc. work without CloudFront error pages."""
+    index_html = dist_dir / "index.html"
+    if not index_html.is_file():
+        typer.echo("index.html missing; skipping SPA route fallbacks.", err=True)
+        return
+
+    typer.echo("Uploading SPA route fallbacks (index.html copies for deep links)...")
+    cache = "no-cache, no-store, must-revalidate"
+    for route in CLINIC_SPA_ROUTE_KEYS:
+        for key in (route, f"{route}/index.html"):
+            dest = f"s3://{bucket_name}/{key}"
+            code = _run(
+                [
+                    "aws",
+                    "s3",
+                    "cp",
+                    str(index_html),
+                    dest,
+                    "--content-type",
+                    "text/html",
+                    "--cache-control",
+                    cache,
+                ],
+                cwd=REPO_ROOT,
+            )
+            if code != 0:
+                typer.echo(f"Failed to upload SPA fallback: {dest}", err=True)
+                raise typer.Exit(code=code)
+
+
 def upload_dist_to_s3(dist_dir: Path, bucket_name: str) -> None:
     if not dist_dir.is_dir():
         typer.echo(f"Build directory not found: {dist_dir}", err=True)
@@ -185,6 +240,8 @@ def deploy_frontend_target(target: str) -> int:
     npm_install_if_needed(FRONTEND_DIR)
     npm_build(FRONTEND_DIR, config)
     upload_dist_to_s3(FRONTEND_DIR / "dist", config.bucket_name)
+    if target == "clinic":
+        upload_spa_route_fallbacks(FRONTEND_DIR / "dist", config.bucket_name)
     invalidate_cloudfront(config.distribution_id, ["/*"])
 
     typer.echo(f"Frontend deployment completed (target={target}).")
@@ -194,5 +251,10 @@ def deploy_frontend_target(target: str) -> int:
         typer.echo(
             "Reminder: clinic frontend is IP-restricted (WAF). "
             "Verify clinic-office-ips and clinic-dev-ips.",
+        )
+        typer.echo(
+            "SPA deep links: route fallbacks uploaded to S3. "
+            "For cleaner setup, also run scripts/deployment/configure_clinic_cloudfront_spa.ps1 "
+            "(CloudFront 403/404 -> index.html).",
         )
     return 0
