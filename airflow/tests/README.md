@@ -2,6 +2,8 @@
 
 Tests for Airflow DAGs and helpers. Run from the **repository root** so DAG and ETL paths resolve correctly.
 
+**Deployment roadmap:** [`../ORCHESTRATION_ROADMAP.md`](../ORCHESTRATION_ROADMAP.md)
+
 ## What’s in here
 
 - **DAG parsing / import**: All DAGs in `airflow/dags/` load without import or parse errors.

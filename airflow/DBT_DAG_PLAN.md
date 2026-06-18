@@ -1,105 +1,99 @@
-### High-Level Plan: Airflow DAG for dbt Project
+# dbt Orchestration Plan
 
-This document outlines options and a recommended starting approach for orchestrating the `dbt_dental_models` project with Airflow. We'll implement after confirming the open questions below.
+**Status:** Initial implementation **complete** (integrated in `etl_pipeline` DAG).  
+**This document:** Future enhancements only — selectors, layered runs, Cosmos.  
+**Deployment roadmap:** [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md)
 
-### What “creating a DAG” can mean for dbt here
-- **Minimal**: One task that runs the entire dbt project (e.g., `dbt build`).
-- **Layered**: Separate tasks for stages using selectors (e.g., staging/intermediate/marts).
-- **Model-level**: One Airflow task per dbt node with dependencies from the manifest. Best done via Astronomer Cosmos.
+---
 
-### Operator choices
-- **BashOperator**: Simple; runs dbt CLI directly on the Airflow worker.
-- **DockerOperator/KubernetesPodOperator**: Run dbt in an isolated container when workers don’t have dbt.
-- **Astronomer Cosmos**: Auto-generates Airflow tasks from the dbt manifest for model-level DAGs.
+## Current implementation (done)
 
-### Suggested starting approach (simple, fast to value)
-- Start with a single-DAG, single-task `BashOperator` that runs, in sequence:
-  - `dbt deps`
-  - `dbt build --project-dir /opt/airflow/dbt_dental_models --profiles-dir /opt/airflow/.dbt --target prod`
-- Schedule nightly; add retries. Mount the repo into Airflow so dbt can run against `dbt_dental_models`.
+dbt runs inside `airflow/dags/etl_pipeline_dag.py` as the `dbt_build` task group:
 
-### Iteration ideas (future)
-- Add a `freshness` task before `build`.
-- Split into staged `BashOperator` tasks using selectors from `selectors.yml`:
-  - **Option 1 - Layer-based**: `staging_only` → `intermediate_only` → `marts_only`
-  - **Option 2 - Domain-based**: `insurance_workflow`, `clinical_workflow`, `financial_workflow` (parallel)
-  - **Option 3 - System-based**: Run your documented system workflows independently
-  - **Option 4 - Hybrid**: `daily_refresh` (morning) + `reference_data` (weekly)
-- Adopt Astronomer Cosmos for model-level tasks and dependency visualization.
-- Persist artifacts/logs to a durable volume or cloud storage (S3/GCS) and wire into observability.
-- Use state selection (e.g., `--select state:modified+`) to speed runs.
+1. `should_run_dbt` — ShortCircuit; skips when `pipeline_success` is False
+2. `dbt_deps` — install package dependencies
+3. `dbt_build` — `dbt build --target {dbt_target}` (run + test)
 
-### Selector Examples (see selectors.yml)
+There is **no separate `dbt_build` DAG**. A standalone DAG was considered early in planning but superseded by same-run orchestration (see [discussion](30475cd5-d66b-42f7-84a3-3ae3466c2e9b), 2026-06-17).
 
-#### Daily Operations
+**Airflow Variables:**
+- `dbt_target`: `local` (Compose dev) or `clinic` (RDS on EC2)
+- `project_root`: path to repo root containing `dbt_dental_models/`
+
+**Profiles:** `dbt_dental_models/profiles.yml`; `DBT_PROFILES_DIR` set to project dir in BashOperator.
+
+---
+
+## Resolved decisions (initial scope)
+
+| Question | Decision |
+|----------|----------|
+| Separate dbt DAG vs integrated? | **Integrated** in `etl_pipeline` (ShortCircuit on ETL success) |
+| Operator | **BashOperator** — `dbt deps` then `dbt build` |
+| Schedule | Same as ETL — nightly 9 PM Central |
+| Initial scope | Single `dbt build` (full project) |
+
+---
+
+## Open decisions (still TBD)
+
+Record answers in [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md).
+
+| # | Question | Options |
+|---|----------|---------|
+| 1 | Nightly dbt scope | Full `dbt build` (~52 min; `mart_patient_retention` dominates) · Split slow marts to weekly selector |
+| 2 | Model-level observability | Stay on BashOperator · Adopt Astronomer Cosmos later |
+| 3 | Artifact persistence | Local volume only · S3/GCS for `target/` and logs |
+
+---
+
+## Future enhancement options
+
+### Operator choices (if refactoring)
+
+- **BashOperator** (current): Simple; runs dbt CLI on the Airflow worker.
+- **DockerOperator / KubernetesPodOperator**: Isolated container when workers lack dbt.
+- **Astronomer Cosmos**: Auto-generates tasks from dbt manifest for per-model retries and graph view.
+
+### Layered runs (selectors)
+
+Split into staged tasks using `dbt_dental_models/selectors.yml`:
+
 ```bash
-# Daily critical models (insurance, AR, appointments)
-dbt run --selector daily_critical
+# Layer-based (sequential)
+dbt run --selector staging_only
+dbt run --selector intermediate_only
+dbt run --selector marts_only
 
-# Only incremental models for fast refresh
+# Domain-based (parallel potential)
+dbt run --selector insurance_workflow
+dbt run --selector clinical_workflow
+dbt run --selector financial_workflow
+
+# Daily critical subset
+dbt run --selector daily_critical
 dbt run --selector incremental_only
 ```
 
-#### Domain-Specific Workflows
-```bash
-# Run insurance workflow independently
-dbt run --selector insurance_workflow
+### Other iteration ideas
 
-# Run clinical workflow
-dbt run --selector clinical_workflow
-
-# Financial reporting models
-dbt run --selector financial_workflow
-```
-
-#### Layer-Based Orchestration (Sequential)
-```bash
-# Step 1: Staging layer
-dbt run --selector staging_only
-
-# Step 2: Intermediate layer
-dbt run --selector intermediate_only
-
-# Step 3: Marts layer
-dbt run --selector marts_only
-```
-
-#### System-Based Workflows
-```bash
-# System A: Fee Processing
-dbt run --selector system_a_fee_processing
-
-# System B: Insurance Management
-dbt run --selector system_b_insurance
-
-# System C: Appointments
-dbt run --selector system_c_appointments
-```
-
-#### CI/CD & Testing
-```bash
-# Smoke test for deployments
-dbt run --selector smoke_test
-
-# Production-critical only
-dbt run --selector production_critical
-```
+- Add `dbt source freshness` before `build`
+- Use `--select state:modified+` for faster CI/CD runs
+- Run `mart_patient_retention` on a separate weekly schedule (see TODO: Optimize mart_patient_retention)
+- Persist artifacts to durable storage and wire into observability
 
 ### Environment and paths
-- Mount `dbt_dental_models` under `/opt/airflow/dbt_dental_models` in the Airflow runtime.
-- Place `profiles.yml` under `/opt/airflow/.dbt/profiles.yml` (or confirm existing path) and set the appropriate `target` (local/demo/clinic).
-- Ensure dbt is installed in the Airflow environment, or run via containerized operator.
 
-### Questions to confirm before implementation
-1. Are we running Airflow via this repo’s `docker-compose` (using `Dockerfile.airflow`) or another environment (e.g., MWAA/Astronomer/k8s)?
-2. Do you want the initial DAG to be a single `dbt build` task, or split into staged tasks right away?
-3. Confirm `profiles.yml` path and `target` to use. Is `dbt_dental_models/profiles.yml` sufficient, or should we mount `/opt/airflow/.dbt/profiles.yml`?
-4. Desired schedule and retry policy (e.g., daily 02:00, 2 retries, 5 minutes delay).
-5. Where should we persist dbt `target/` artifacts and logs (local volume vs S3/GCS)?
-6. Should we include `dbt source freshness` and `dbt test` explicitly, or rely on `dbt build`?
-7. Any immediate need for model-level observability/retries per node (i.e., adopt Cosmos now vs later)?
+- Mount `dbt_dental_models` under `{project_root}/dbt_dental_models`
+- Ensure `POSTGRES_ANALYTICS_*` env vars reach the worker for `dbt_target=clinic`
+- See [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md) for ETL + dbt env gaps in Docker Compose
 
-### Next steps
-- After confirming the above, scaffold an initial DAG in `airflow/dags/` and update the runtime mounts/env as needed.
+---
 
+## When to revisit this doc
 
+- After Phase C production cutover (roadmap) — if nightly `dbt build` duration is unacceptable
+- When adding Cosmos or selector-based task groups
+- When multi-tenant schema routing (MDC/GLIC) affects dbt targets
+
+**Last updated:** 2026-06-17

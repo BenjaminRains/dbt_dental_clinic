@@ -7,8 +7,10 @@ This directory contains Airflow DAG definitions for orchestrating the complete O
 ```
 airflow/
 ├── README.md                    # This file
+├── ORCHESTRATION_ROADMAP.md    # Deployment roadmap, gaps, open decisions (start here)
 ├── DEPLOYMENT_STRATEGY.md      # How we deploy Airflow; how Docker fits in
-├── DBT_DAG_PLAN.md             # dbt DAG implementation plan
+├── NIGHTLY_RUN.md              # What one nightly run is (guard → ETL → dbt)
+├── DBT_DAG_PLAN.md             # Future dbt enhancements (selectors, Cosmos)
 ├── dags/
 │   ├── schema_analysis_dag.py  # Schema analyzer orchestration ✅
 │   ├── etl_pipeline_dag.py     # ETL pipeline orchestration ✅
@@ -132,53 +134,28 @@ airflow/
                          ↓ Configuration file (versioned)
                          │
 ┌────────────────────────┴───────────────────────────────────────────────┐
-│ 2. ETL PIPELINE DAG (Daily at 3 AM)                                   │
+│ 2. ETL PIPELINE DAG (Nightly 9 PM Central, Mon–Sun)                   │
 ├────────────────────────────────────────────────────────────────────────┤
-│ Validation Phase:                                                      │
-│  ✓ Validate tables.yml (age, environment, structure)                  │
-│  ✓ Test database connections (source, replication, analytics)         │
-│  ✓ Check schema drift (optional quick check)                          │
-│                                                                        │
-│ Processing Phase (by performance category):                            │
-│  ✓ Large tables (1M+ rows)    → PARALLEL (5 workers)                  │
-│  ✓ Medium tables (100K-1M)    → Sequential                            │
-│  ✓ Small tables (10K-100K)    → Sequential                            │
-│  ✓ Tiny tables (<10K)         → Sequential                            │
-│                                                                        │
-│ Reporting Phase:                                                       │
-│  ✓ Verify loads (row counts, timestamps)                              │
-│  ✓ Generate execution report                                          │
-│  ✓ Send notification (SUCCESS/WARNING/ERROR)                          │
+│ Validation → ETL (large → medium → small → tiny) → report / notify   │
+│ dbt (same run, only if pipeline_success):                             │
+│   should_run_dbt → dbt_deps → dbt build --target {dbt_target}         │
 ├────────────────────────────────────────────────────────────────────────┤
-│ Output: PostgreSQL Analytics (raw schema populated)                    │
-└────────────────────────┬───────────────────────────────────────────────┘
-                         │
-                         ↓ Raw data ready for transformation
-                         │
-┌────────────────────────┴───────────────────────────────────────────────┐
-│ 3. DBT BUILD DAG (Triggered on ETL success) [TO BE CREATED]           │
-├────────────────────────────────────────────────────────────────────────┤
-│ Tasks (planned):                                                       │
-│  ✓ dbt deps                                                            │
-│  ✓ dbt source freshness                                               │
-│  ✓ dbt run (staging → intermediate → marts)                           │
-│  ✓ dbt test                                                            │
-│  ✓ dbt docs generate                                                   │
-├────────────────────────────────────────────────────────────────────────┤
-│ Output: Analytics marts ready for consumption                          │
+│ Output: raw schema populated; marts built when ETL succeeded          │
 └────────────────────────────────────────────────────────────────────────┘
 
-COMMUNICATION BETWEEN DAGS:
-━━━━━━━━━━━━━━━━━━━━━━━━
+COMMUNICATION:
+━━━━━━━━━━━━━━
 • Schema Analysis → ETL Pipeline: Via tables.yml (static configuration)
-• ETL Pipeline → dbt Build: Via Airflow trigger (dynamic)
+• ETL → dbt: Same DAG run; ShortCircuit skips dbt when pipeline_success is False
 • All DAGs: Email/Slack notifications with severity levels
 
 FAILURE HANDLING:
 ━━━━━━━━━━━━━━━━
 • Schema Analysis fails: Alerts sent, ETL can still run with old config
-• ETL Pipeline fails: Individual table failures logged, retries available
-• dbt Build fails: Model-level granularity, partial success possible
+• ETL Pipeline fails: Individual table failures logged, retries available; dbt skipped
+• dbt build fails: Entire dbt task group fails; ETL data remains in raw schema
+
+See ORCHESTRATION_ROADMAP.md for deployment status, environment gaps, and open decisions.
 ```
 
 ## Configuration
@@ -190,6 +167,8 @@ Set these in Airflow UI (Admin → Variables):
 ```python
 # Required
 etl_environment = 'clinic'  # or 'test'
+dbt_target = 'local'          # or 'clinic' for RDS
+project_root = '/opt/airflow/dbt_dental_clinic'  # override on EC2 if path differs
 
 # Optional
 slack_webhook_url = 'https://hooks.slack.com/services/...'
@@ -429,37 +408,19 @@ airflow dags test schema_analysis 2025-01-01
 
 ## Migration Path
 
-### Current State (Manual)
-```bash
-# Manual schema analysis
-python etl_pipeline/scripts/analyze_opendental_schema.py
+| Phase | State | What runs |
+|-------|-------|-----------|
+| **Today (manual)** | Default | `etl-run` / `mdc etl run`, `run_dbt_on_ec2.ps1`, ad-hoc schema analysis |
+| **Code complete** | DAGs implemented | `schema_analysis`, `etl_pipeline` (+ integrated `dbt_build` task group) |
+| **Target** | Deployed + validated | Nightly unattended ETL + dbt on schedule; manual scripts as break-glass only |
 
-# Manual ETL run
-python -m etl_pipeline.cli run --all
-```
+**Blockers to target:** deployment, environment wiring (`.env_clinic`, replication, RDS dbt creds), end-to-end smoke test, orchestration host decision.
 
-### Phase 1 (Schema Analysis DAG)
-```bash
-# Airflow manages schema analysis
-# Still manual ETL
-```
-
-### Phase 2 (ETL Pipeline DAG)
-```bash
-# Airflow manages both schema analysis and ETL
-# Still manual dbt
-```
-
-### Phase 3 (Complete Orchestration)
-```bash
-# Airflow manages everything:
-# - Schema analysis (weekly)
-# - ETL pipeline (daily)
-# - dbt transformations (after ETL)
-```
+Full phased plan and open decisions: [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md).
 
 ## Resources
 
+- **Orchestration roadmap**: [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md) — gaps, phased plan, open decisions
 - **Airflow Documentation**: https://airflow.apache.org/docs/
 - **Best Practices**: https://airflow.apache.org/docs/apache-airflow/stable/best-practices.html
 - **Astronomer Cosmos** (dbt): https://astronomer.github.io/astronomer-cosmos/
@@ -474,6 +435,6 @@ For questions or issues:
 
 ---
 
-**Last Updated**: 2025-10-22
+**Last Updated**: 2026-06-17
 **Maintained By**: Data Engineering Team
 

@@ -2,6 +2,8 @@
 
 This document describes how we deploy Apache Airflow for the OpenDental ETL pipeline, **how Docker fits in**, and the options for local vs EC2 vs future managed services.
 
+**Start here for overall status and open decisions:** [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md)
+
 ---
 
 ## How Docker Fits In
@@ -28,6 +30,41 @@ Docker does **not** run the client’s MySQL or your analytics Postgres; those a
 | **Future: MWAA / Astronomer / k8s** | Replace *where* the image runs; DAGs and variables/connections stay the same. We’d adapt the deployment tool (Terraform, Helm, etc.), not redesign the DAGs. | Multi-tenant or high-availability production. |
 
 So: **Docker defines the Airflow runtime**; the **deployment strategy** is “run that image in the right place with the right mounts and env.”
+
+---
+
+## Environment wiring (critical)
+
+DAG code is complete; **environment configuration is the main deployment blocker**.
+
+The ETL pipeline reads **`etl_pipeline/.env_<stage>`** (`FileConfigProvider` / `settings_v2.py`). OS env vars override file values when both are set.
+
+| Requirement | Local Compose | Clinic production |
+|-------------|---------------|-------------------|
+| Stage env file | `etl_pipeline/.env_test` (or mount `.env_clinic`) | Deploy `etl_pipeline/.env_clinic` on host |
+| `OPENDENTAL_*` | Root `.env` and/or stage file | Client MySQL (VPN/tunnel) |
+| `MYSQL_REPLICATION_*` | Compose `mysql` service or stage file | Replication endpoint in stage file |
+| `POSTGRES_ANALYTICS_*` | Compose `postgres` or `.env` | RDS `dental-clinic-analytics` |
+| Airflow Variables | `etl_environment`, `dbt_target`, `project_root` | Same; `clinic` targets for prod |
+| dbt credentials | `dbt_target=local` | `dbt_target=clinic` + EC2/RDS creds (see TODO: Fix EC2 dbt Database Connection Credentials) |
+
+**Known Compose gaps (as of 2026-06-17):** Airflow services do not mount or generate `.env_clinic`; `MYSQL_REPLICATION_*` and `ETL_ENVIRONMENT` are not injected. Fix during [Phase A](ORCHESTRATION_ROADMAP.md#phase-a--local-proof-12-days) smoke test.
+
+See also [`docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md) §4.4.
+
+---
+
+## Orchestration host (open decision)
+
+Production nightly runs need a host with **network access to client OpenDental MySQL** and availability at **9 PM Central**.
+
+| Option | Notes |
+|--------|-------|
+| Dev machine + VPN | Fastest validation; not production-grade |
+| **Dedicated EC2 orchestrator** | Recommended for unattended runs |
+| Clinic API EC2 (`i-0b7013339cf648e0f`) | Possible; `t3.small` may contend with API load |
+
+`docs/deployment/CLINIC_INFRASTRUCTURE_PLAN.md` does not yet assign an orchestration host. Record the decision in [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md).
 
 ---
 
@@ -141,4 +178,6 @@ So: **Docker defines the Airflow runtime**; the **deployment strategy** is “ru
 - **Docker Compose** = how we run that image locally and (optionally) on EC2.
 - **Deployment strategy** = build the image, mount DAGs and project code, set env (and Variables/Connections), run webserver + scheduler (and init once). Same approach locally and on EC2; later you can swap the execution environment (e.g. MWAA) without redefining the DAGs.
 
-For nightly run details (schedule, business-hours guard, incremental ETL + dbt), see `NIGHTLY_RUN.md`. For DAG status and usage, see `README.md` and `DAGS_STATUS.md`.
+For nightly run details (schedule, business-hours guard, incremental ETL + dbt), see `NIGHTLY_RUN.md`. For DAG status and usage, see `README.md` and `DAGS_STATUS.md`. For phased deployment plan and open decisions, see `ORCHESTRATION_ROADMAP.md`.
+
+**Last updated:** 2026-06-17

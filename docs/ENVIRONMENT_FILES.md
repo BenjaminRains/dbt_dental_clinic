@@ -299,6 +299,7 @@ Development for clinic infra is often done locally before deploy, so **`.env_loc
 
 - **Root `.env`:** `docker-compose.yml` uses `env_file: - .env` for postgres, mysql, dbt services. Variables like `POSTGRES_*`, `AIRFLOW_FERNET_KEY`, etc. come from this file.
 - **Creation:** Copy `.env.template` to `.env` and fill in values. Never commit `.env`.
+- **ETL stage files:** Airflow ETL tasks also need `etl_pipeline/.env_<stage>` (e.g. `.env_test`, `.env_clinic`) or equivalent OS env vars on the worker. See [`airflow/ORCHESTRATION_ROADMAP.md`](../airflow/ORCHESTRATION_ROADMAP.md) (environment gaps).
 
 ### 4.5 Frontend (`frontend/`)
 

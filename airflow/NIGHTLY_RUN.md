@@ -2,6 +2,8 @@
 
 This document defines **what a run is**, how it works, and how to run it locally (localhost) vs on EC2.
 
+**Deployment roadmap and open decisions:** [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md)
+
 ## What a Run Is
 
 One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
@@ -87,3 +89,24 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
 | **Config**   | `tables.yml` (Schema Analysis or manual) |
 | **Paths**    | Variable `project_root` (default `/opt/airflow/dbt_dental_clinic`) |
 | **dbt target** | Variable `dbt_target` (`local` / `clinic`) |
+
+---
+
+## Environment prerequisites
+
+Before a run can succeed, the Airflow worker must resolve **all three ETL connections** (source MySQL, replication MySQL, analytics PostgreSQL) and **dbt analytics credentials**.
+
+| Source | Used by | Notes |
+|--------|---------|-------|
+| `etl_pipeline/.env_<stage>` | ETL (`get_settings`) | Stage from Airflow Variable `etl_environment` (`test`, `clinic`, …) |
+| Container / OS env vars | ETL + dbt | Override file values when set (`settings_v2` precedence) |
+| Root `.env` | Docker Compose substitution | Partial; not sufficient alone for full clinic ETL |
+| `POSTGRES_ANALYTICS_*` | dbt (`profiles.yml`) | Required for `dbt_target=clinic` against RDS |
+
+**Compose local dev:** use `etl_environment=test`, `dbt_target=local`, and ensure `etl_pipeline/.env_test` exists on the mounted volume.
+
+**Clinic production:** deploy `etl_pipeline/.env_clinic`, set `dbt_target=clinic`, wire RDS credentials. See [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md) environment gaps section.
+
+---
+
+**Last updated:** 2026-06-17
