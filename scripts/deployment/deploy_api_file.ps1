@@ -316,7 +316,7 @@ try {
             
             $restartSucceeded = $false
             try {
-                # systemd unit is dental-clinic-api (see api/dental-clinic-api.service), not the EC2 Name tag.
+                # Clinic: dental-clinic-api-clinic (Get-ApiSystemdServiceName); demo: dental-clinic-api-demo / dental-clinic-api.
                 $serviceName = Get-ApiSystemdServiceName -ClinicEnv:($Clinic -or $ClinicEnv)
                 $restartCmds = @(
                     ('sudo systemctl restart {0}' -f $serviceName),

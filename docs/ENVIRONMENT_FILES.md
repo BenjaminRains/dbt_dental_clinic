@@ -207,7 +207,7 @@ Each component should have a single config entrypoint that:
 
 - **Driver:** `API_ENVIRONMENT` (set by `mdc api … --env <stage>` in the child process, or explicitly in the shell).
 - **Loader:** `api/settings.py` → `load_api_settings()` loads `api/.env_api_<environment>` **only when** the stage’s analytics host var is not already in the OS environment (Phase 0). `api/config.py` delegates to settings. On EC2, systemd `EnvironmentFile=api/.env` populates the process env first, so a stale `api/.env_api_clinic` on disk is ignored.
-- **On EC2:** systemd uses `EnvironmentFile=/opt/dbt_dental_clinic/api/.env`. Deploy with `mdc deploy api --env clinic` (wraps `deploy_api_file.ps1 -ClinicEnv`). See `api/dental-clinic-api.service`.
+- **On EC2:** systemd uses `EnvironmentFile=/opt/dbt_dental_clinic/api/.env`. Deploy with `mdc deploy api --env clinic` (wraps `deploy_api_file.ps1 -ClinicEnv`). Clinic unit: `dental-clinic-api-clinic` (`api/dental-clinic-api-clinic.service`).
 - **Local:** `mdc api test-config --env local` or alias `api-test`. Run with `mdc api run --env local` / `api-run`. Clinic + tunnel: `mdc tunnel clinic-db` then `mdc api run --env clinic --tunnel-db`.
 
 See **ENVIRONMENT_HANDLING_REVIEW.md** (Phase 0) and `api/settings.py`.
@@ -335,11 +335,11 @@ Development for clinic infra is often done locally before deploy, so **`.env_loc
 | Name | Example | Meaning |
 |------|---------|---------|
 | EC2 **Name tag** | `dental-clinic-api-clinic` | AWS console / `deployment_credentials.json` → `backend_api.clinic_api.ec2.name` |
-| **systemd unit** | `dental-clinic-api` | `systemctl restart dental-clinic-api`; unit file `api/dental-clinic-api.service` |
+| **systemd unit** | `dental-clinic-api-clinic` | `systemctl restart dental-clinic-api-clinic`; unit file `api/dental-clinic-api-clinic.service` |
 | Target group | `dental-clinic-api-clinic-tg` | ALB routing for `api-clinic.dbtdentalclinic.com` |
 | IAM role | `dental-clinic-api-clinic-role` | Clinic EC2 instance profile |
 
-Optional override in `deployment_credentials.json` → `backend_api.clinic_api.ec2.systemd_service` (default: `dental-clinic-api`).
+Set `backend_api.clinic_api.ec2.systemd_service` to `dental-clinic-api-clinic` in `deployment_credentials.json`. Deploy scripts map legacy value `dental-clinic-api` to `dental-clinic-api-clinic` automatically.
 
 #### SSM shell on clinic API EC2
 
