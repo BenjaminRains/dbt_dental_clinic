@@ -32,6 +32,7 @@ import {
 } from '@mui/icons-material';
 import { appointmentApi, dateUtils } from '../services/api';
 import { AppointmentSummary, AppointmentDetail, ApiResponse, ProviderFilter } from '../types/api';
+import { formatCurrency } from '../utils/format';
 
 interface TabPanelProps {
     children?: React.ReactNode;
@@ -61,7 +62,7 @@ const Appointments: React.FC = () => {
     const [todayAppointments, setTodayAppointments] = useState<ApiResponse<AppointmentDetail[]>>({ loading: true });
     const [upcomingAppointments, setUpcomingAppointments] = useState<ApiResponse<AppointmentDetail[]>>({ loading: true });
     const [providerFilter, setProviderFilter] = useState<number | undefined>(undefined);
-    const [dateRange, setDateRange] = useState<ProviderFilter>(dateUtils.getLast30Days());
+    const [dateRange, setDateRange] = useState<ProviderFilter>(dateUtils.getLast90Days());
 
     const handleTabChange = (_event: React.SyntheticEvent, newValue: number) => {
         setTabValue(newValue);
@@ -103,12 +104,7 @@ const Appointments: React.FC = () => {
         }
     };
 
-    const formatCurrency = (amount: number) => {
-        return new Intl.NumberFormat('en-US', {
-            style: 'currency',
-            currency: 'USD',
-        }).format(amount);
-    };
+    const formatPercent = (value: number | null | undefined) => `${(value ?? 0).toFixed(1)}%`;
 
     const formatDate = (dateString: string) => {
         return new Date(dateString).toLocaleDateString();
@@ -162,6 +158,24 @@ const Appointments: React.FC = () => {
                         </Grid>
                         <Grid item xs={12} sm={3}>
                             <Button
+                                variant="outlined"
+                                onClick={() => setDateRange(dateUtils.getLast90Days())}
+                                fullWidth
+                            >
+                                Last 90 Days
+                            </Button>
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <Button
+                                variant="outlined"
+                                onClick={() => setDateRange(dateUtils.getLastYear())}
+                                fullWidth
+                            >
+                                Last Year
+                            </Button>
+                        </Grid>
+                        <Grid item xs={12} sm={3}>
+                            <Button
                                 variant="contained"
                                 onClick={loadSummaryData}
                                 fullWidth
@@ -191,6 +205,11 @@ const Appointments: React.FC = () => {
                 ) : summaryData.error ? (
                     <Alert severity="error" sx={{ mb: 2 }}>
                         Error loading summary data: {summaryData.error}
+                    </Alert>
+                ) : summaryData.data?.length === 0 ? (
+                    <Alert severity="info">
+                        No appointment summary data for {dateRange.start_date} to {dateRange.end_date}.
+                        Try widening the date range with Last 90 Days or Last Year.
                     </Alert>
                 ) : (
                     <Grid container spacing={3}>
@@ -224,13 +243,13 @@ const Appointments: React.FC = () => {
                                             </Grid>
                                             <Grid item xs={6}>
                                                 <Typography variant="body2" color="text.secondary">
-                                                    Completion Rate: {summary.completion_rate.toFixed(1)}%
+                                                    Completion Rate: {formatPercent(summary.completion_rate)}
                                                 </Typography>
                                                 <Typography variant="body2" color="text.secondary">
-                                                    No Show Rate: {summary.no_show_rate.toFixed(1)}%
+                                                    No Show Rate: {formatPercent(summary.no_show_rate)}
                                                 </Typography>
                                                 <Typography variant="body2" color="text.secondary">
-                                                    Cancellation Rate: {summary.cancellation_rate.toFixed(1)}%
+                                                    Cancellation Rate: {formatPercent(summary.cancellation_rate)}
                                                 </Typography>
                                             </Grid>
                                         </Grid>
@@ -260,6 +279,11 @@ const Appointments: React.FC = () => {
                 ) : todayAppointments.error ? (
                     <Alert severity="error" sx={{ mb: 2 }}>
                         Error loading today's appointments: {todayAppointments.error}
+                    </Alert>
+                ) : todayAppointments.data?.length === 0 ? (
+                    <Alert severity="info">
+                        No appointments scheduled for today. Today&apos;s schedule only shows live appointments
+                        for the current date in the warehouse.
                     </Alert>
                 ) : (
                     <TableContainer component={Paper}>
@@ -302,6 +326,10 @@ const Appointments: React.FC = () => {
                 ) : upcomingAppointments.error ? (
                     <Alert severity="error" sx={{ mb: 2 }}>
                         Error loading upcoming appointments: {upcomingAppointments.error}
+                    </Alert>
+                ) : upcomingAppointments.data?.length === 0 ? (
+                    <Alert severity="info">
+                        No upcoming appointments in the next 7 days.
                     </Alert>
                 ) : (
                     <TableContainer component={Paper}>

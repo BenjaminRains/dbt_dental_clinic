@@ -1,0 +1,26 @@
+[
+  {
+    "username": "owner",
+    "password": "Tmpp0rtal-Owner-8kRm4n",
+    "role": "owner",
+    "display_name": "Practice Owner"
+  },
+  {
+    "username": "manager",
+    "password": "Tmpp0rtal-Mgr-5hWq9x",
+    "role": "practice-manager",
+    "display_name": "Practice Manager"
+  },
+  {
+    "username": "frontdesk",
+    "password": "Tmpp0rtal-Desk-2jZk7p",
+    "role": "front-desk",
+    "display_name": "Front Desk"
+  },
+  {
+    "username": "insurance",
+    "password": "Tmpp0rtal-Ins-6bNf3v",
+    "role": "insurance",
+    "display_name": "Insurance Specialist"
+  }
+]

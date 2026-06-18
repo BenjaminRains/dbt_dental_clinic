@@ -222,7 +222,7 @@ Write-Host "  clinic-frontend-deploy       mdc deploy frontend --target clinic" 
 Write-Host "  dbt-docs-deploy              mdc deploy dbt-docs" -ForegroundColor Cyan
 Write-Host "  consult-audio-validate       mdc consult-audio validate" -ForegroundColor Cyan
 Write-Host "  consult-audio-run            mdc consult-audio pipeline run" -ForegroundColor Cyan
-Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api" -ForegroundColor Cyan
+Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api-clinic" -ForegroundColor Cyan
 Write-Host "  mdc api run --env clinic --tunnel-db  clinic API via mdc tunnel clinic-db" -ForegroundColor Cyan
 Write-Host "  ssm-connect-clinic-api       SSM shell on clinic API EC2" -ForegroundColor Cyan
 Write-Host ""

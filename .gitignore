@@ -122,6 +122,12 @@ docs/
 /docs/*
 !docs/ENVIRONMENT_FILES.md
 !docs/CLINIC_ANALYTICS_WORKFLOW.md
+!docs/deployment-connections/
+!docs/deployment-connections/README.md
+!docs/deployment-connections/connections.template.yaml
+!docs/deployment-connections/clinic-portal-users.template.json
+api/clinic-portal-users.json
+docs/deployment-connections/clinic-portal-users.json
 /docs/analytics/
 etl_pipeline/docs/
 etl_pipeline/CODE_REVIEW.md
