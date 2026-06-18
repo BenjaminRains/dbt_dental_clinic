@@ -42,6 +42,7 @@ def frontend_dev() -> None:
         "# LOCAL development only (opendental_analytics on localhost)",
         "",
         "VITE_API_URL=http://localhost:8000",
+        "VITE_IS_DEMO=true",
     ]
     if api_key:
         lines.append(f"VITE_API_KEY={api_key}")
