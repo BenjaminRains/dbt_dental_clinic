@@ -129,12 +129,12 @@ class ETLLogParser:
                 if root_path.exists():
                     log_path = root_path
                 elif len(log_path.parts) == 1:
-                    # Strategy 3: filename only -> try known ETL log dirs (pipeline writes to etl_pipeline/logs/etl_pipeline/)
+                    # Strategy 3: filename only -> try known ETL log dirs
                     search_dirs = [
-                        project_root / "logs" / "etl_pipeline",
-                        project_root / "etl_pipeline" / "logs" / "etl_pipeline",  # actual pipeline default
-                        Path.cwd() / "logs" / "etl_pipeline",
+                        project_root / "etl_pipeline" / "logs" / "etl_pipeline",
+                        project_root / "logs" / "etl_pipeline",  # legacy pre-consolidation
                         Path.cwd() / "etl_pipeline" / "logs" / "etl_pipeline",
+                        Path.cwd() / "logs" / "etl_pipeline",
                     ]
                     for log_dir in search_dirs:
                         default_log = (log_dir / log_path.name).resolve()

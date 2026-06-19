@@ -55,8 +55,8 @@ dag = DAG(
 PROJECT_ROOT = Path(Variable.get('project_root', default_var='/opt/airflow/dbt_dental_clinic'))
 ETL_PIPELINE_DIR = PROJECT_ROOT / 'etl_pipeline'
 TABLES_YML_PATH = ETL_PIPELINE_DIR / 'etl_pipeline' / 'config' / 'tables.yml'
-BACKUP_DIR = PROJECT_ROOT / 'logs' / 'schema_analysis' / 'backups'
-CHANGELOG_DIR = PROJECT_ROOT / 'logs' / 'schema_analysis' / 'reports'
+BACKUP_DIR = PROJECT_ROOT / 'etl_pipeline' / 'logs' / 'schema_analysis' / 'backups'
+CHANGELOG_DIR = PROJECT_ROOT / 'etl_pipeline' / 'logs' / 'schema_analysis' / 'reports'
 
 # Environment (from Airflow Variable or default to clinic)
 ENVIRONMENT = Variable.get('etl_environment', default_var='clinic')
@@ -106,98 +106,30 @@ def validate_source_connection(**context):
 
 
 def backup_existing_config(**context):
-    """
-    Backup existing tables.yml before running analysis.
-    
-    This allows rollback if the new configuration has issues.
-    """
-    import shutil
-    from datetime import datetime
-    
-    logging.info("Backing up existing tables.yml")
-    
-    if not TABLES_YML_PATH.exists():
-        logging.warning("No existing tables.yml to backup")
-        context['task_instance'].xcom_push(key='backup_created', value=False)
-        return False
-    
-    # Create backup directory if it doesn't exist
-    BACKUP_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # Create timestamped backup
-    timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-    backup_path = BACKUP_DIR / f'tables.yml.backup.{timestamp}'
-    
+    """Backup existing tables.yml before running analysis."""
+    from lib.schema_refresh import backup_tables_yml
+
     try:
-        shutil.copy2(TABLES_YML_PATH, backup_path)
-        logging.info(f"✅ Backup created: {backup_path}")
-        
-        # Store backup path in XCom for potential rollback
-        context['task_instance'].xcom_push(key='backup_path', value=str(backup_path))
-        context['task_instance'].xcom_push(key='backup_created', value=True)
-        
-        return True
-        
+        return backup_tables_yml(PROJECT_ROOT, task_instance=context['task_instance'])
     except Exception as e:
         logging.error(f"❌ Failed to backup configuration: {e}")
-        raise AirflowException(f"Configuration backup failed: {e}")
+        raise AirflowException(f"Configuration backup failed: {e}") from e
 
 
 def run_schema_analysis(**context):
-    """
-    Run the OpenDental schema analyzer to generate tables.yml.
-    
-    This is the core task that analyzes the source database schema,
-    generates optimal configuration, and detects changes.
-    """
-    import sys
-    import subprocess
-    
-    logging.info("Starting OpenDental schema analysis")
-    
-    # Change to ETL pipeline directory
-    analysis_script = ETL_PIPELINE_DIR / 'scripts' / 'analyze_opendental_schema.py'
-    
-    if not analysis_script.exists():
-        raise AirflowException(f"Schema analysis script not found: {analysis_script}")
-    
+    """Run the OpenDental schema analyzer to generate tables.yml."""
+    import os
+    from lib.schema_refresh import run_opendental_schema_analysis
+
     try:
-        # Set environment variable for the analysis
-        import os
         os.environ['ETL_ENVIRONMENT'] = ENVIRONMENT
-        
-        # Run the schema analysis script
-        result = subprocess.run(
-            ['python', str(analysis_script)],
-            cwd=str(ETL_PIPELINE_DIR),
-            capture_output=True,
-            text=True,
-            timeout=1800  # 30 minute timeout
-        )
-        
-        # Log output
-        logging.info("Schema analysis output:")
-        logging.info(result.stdout)
-        
-        if result.stderr:
-            logging.warning("Schema analysis warnings/errors:")
-            logging.warning(result.stderr)
-        
-        if result.returncode != 0:
-            raise AirflowException(f"Schema analysis failed with exit code {result.returncode}")
-        
-        logging.info("✅ Schema analysis completed successfully")
-        
-        # Parse output for metadata (optional)
-        # TODO: Extract tables analyzed, changes detected, etc. from output
-        
+        run_opendental_schema_analysis(PROJECT_ROOT, ENVIRONMENT)
         return True
-        
-    except subprocess.TimeoutExpired:
-        raise AirflowException("Schema analysis timed out after 30 minutes")
+    except AirflowException:
+        raise
     except Exception as e:
         logging.error(f"❌ Schema analysis failed: {e}")
-        raise AirflowException(f"Schema analysis execution failed: {e}")
+        raise AirflowException(f"Schema analysis execution failed: {e}") from e
 
 
 def analyze_schema_changes(**context):
@@ -613,9 +545,9 @@ Run this DAG:
 ## Output
 
 - **Primary**: `etl_pipeline/config/tables.yml` (configuration file)
-- **Backup**: `logs/schema_analysis/backups/tables.yml.backup.TIMESTAMP`
-- **Reports**: `logs/schema_analysis/reports/schema_analysis_TIMESTAMP.json`
-- **Changelog**: `logs/schema_analysis/reports/schema_changelog_TIMESTAMP.md`
+- **Backup**: `etl_pipeline/logs/schema_analysis/backups/tables.yml.backup.TIMESTAMP`
+- **Reports**: `etl_pipeline/logs/schema_analysis/reports/schema_analysis_TIMESTAMP.json`
+- **Changelog**: `etl_pipeline/logs/schema_analysis/reports/schema_changelog_TIMESTAMP.md`
 
 ## Notifications
 

@@ -58,6 +58,7 @@ sys.path.insert(0, str(scripts_path))
 from etl_pipeline.core.connections import ConnectionFactory
 from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
 from etl_pipeline.config.logging import get_logger, get_current_log_file_path
+from etl_pipeline.config.paths import ensure_dir, schema_analysis_backups_dir
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.orchestration import PipelineOrchestrator
 
@@ -595,9 +596,7 @@ def update_schema(backup: bool, force: bool, output_dir: str, log_level: str):
         backup_path = None
         if backup:
             timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-            backup_dir = Path("logs/schema_analysis")
-            backup_dir.mkdir(parents=True, exist_ok=True)
-            backup_path = backup_dir / f"tables.yml.backup.{timestamp}"
+            backup_path = ensure_dir(schema_analysis_backups_dir()) / f"tables.yml.backup.{timestamp}"
             
             current_config = Path(output_dir) / "tables.yml"
             if current_config.exists():

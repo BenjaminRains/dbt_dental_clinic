@@ -22,12 +22,14 @@ Data pipeline and analytics for **OpenDental**: ETL from MySQL into PostgreSQL, 
 
 ## Where things live
 
-| Layer            | Folder | What it does |
-|-----------------|--------|--------------|
-| **Ingestion**   | [etl_pipeline/](etl_pipeline/) | Replicates OpenDental MySQL → PostgreSQL (`raw` schema). Schema discovery, incremental loading, config in `config/tables.yml`. |
+| Layer | Folder | What it does |
+|-------|--------|--------------|
+| **Ingestion** | [etl_pipeline/](etl_pipeline/) | Replicates OpenDental MySQL → PostgreSQL (`raw` schema). Schema discovery, incremental loading, config in `config/tables.yml`. |
 | **Transformation** | [dbt_dental_models/](dbt_dental_models/) | dbt project: staging (88) → intermediate (50+) → marts (17). Builds the analytics warehouse. |
-| **API**         | [api/](api/) | FastAPI backend: patients, appointments, revenue, AR, providers, dashboard KPIs. Serves marts to the frontend. |
+| **Orchestration** | [airflow/](airflow/) | Nightly DAGs: schema refresh → ETL → dbt → optional publish. Calls `mdc` for dbt and analytics publish. |
+| **API** | [api/](api/) | FastAPI backend: patients, appointments, revenue, AR, providers, dashboard KPIs. Serves marts to the frontend. |
 | **Visualization** | [frontend/](frontend/) | React dashboard: KPIs, revenue, AR aging, providers, patients, appointments. |
+| **Dev CLI** | [tools/mdc_cli/](tools/mdc_cli/) | `mdc` — validate, run, deploy, and tunnel across API, ETL, dbt, and frontend. |
 
 Each folder has its own README with setup and run instructions.
 
@@ -101,12 +103,52 @@ mdc dbt validate --env local
 
 ---
 
+## mdc CLI
+
+The **`mdc` CLI** is the default developer interface for this monorepo. It replaced shell `*-init` scripts and the archived `environment_manager.ps1` with **stateless, isolated child-process runs**.
+
+**How it works:**
+
+1. You pick a component and stage (`mdc api run --env clinic`).
+2. mdc loads config through the component’s Pydantic settings (`api/settings.py`, ETL `settings_v2.py`, or `mdc_cli/dbt_env.py`).
+3. Stage-scoped vars from your parent shell are scrubbed so nothing leaks in.
+4. mdc builds a minimal child env from the validated settings and runs the tool in that component’s venv.
+
+Your shell stays clean — no dot-sourcing, no exports to remember.
+
+**Install once:**
+
+```powershell
+pip install -e tools/mdc_cli
+.\load_project.ps1    # optional aliases: status, api-run, etl-run, dbt, …
+```
+
+**Common commands:**
+
+| Task | Command |
+|------|---------|
+| Check config | `mdc status` |
+| Run API locally | `mdc api run --env local` |
+| Run API against clinic RDS (via tunnel) | `mdc tunnel clinic-db` then `mdc api run --env clinic --tunnel-db` |
+| Validate / run ETL | `mdc etl validate --env local --profile load` · `mdc etl run --env clinic --profile full` |
+| Run dbt | `mdc dbt run --env local` · `mdc dbt invoke --env local -- deps` |
+| Frontend dev server | `mdc frontend dev` |
+| Publish local marts → clinic RDS | `mdc publish analytics --env clinic` |
+| Deploy frontend / API | `mdc deploy frontend --target demo` · `mdc deploy api --env clinic` |
+
+Full command list, PowerShell alias defaults, and CI notes: [tools/mdc_cli/README.md](tools/mdc_cli/README.md).
+
+---
+
 ## How the pieces connect
 
 ```mermaid
 flowchart LR
   subgraph Source
     OD[OpenDental MySQL]
+  end
+  subgraph Orchestration
+    AF[Airflow nightly DAG]
   end
   subgraph Ingestion
     ETL[etl_pipeline]
@@ -120,54 +162,43 @@ flowchart LR
     API[FastAPI]
     FE[React dashboard]
   end
+  AF -.-> ETL
+  AF -.-> DBT
   OD --> ETL --> RAW --> DBT --> MARTS --> API --> FE
 ```
 
 Same flow in one line:  
 **OpenDental (MySQL) → ETL → PostgreSQL raw → dbt (staging → intermediate → marts) → API → Dashboard.**
 
+**Nightly orchestration:** [airflow/dags/etl_pipeline_dag.py](airflow/dags/etl_pipeline_dag.py) runs schema refresh, ETL, dbt (via `mdc dbt invoke`), and optional `mdc publish analytics`. See [airflow/README.md](airflow/README.md) and [airflow/NIGHTLY_RUN.md](airflow/NIGHTLY_RUN.md).
+
 ---
-
-## Overview
-
-- **ETL**: Replicates 432+ OpenDental tables to PostgreSQL with schema discovery and incremental loading
-- **Analytics**: dbt project with 88 staging, 50+ intermediate, and 17 mart models
-- **API**: FastAPI backend serving analytics and patient/appointment endpoints
-- **Frontend**: React dashboard for revenue, AR, providers, and patients
 
 ## Architecture
 
-### Data Flow
-```
-OpenDental (MySQL) → ETL → PostgreSQL → dbt → API / Dashboard
-    432 tables        replication   warehouse   models
-```
-
 ### ETL
-- Schema discovery over 432 tables
-- Incremental loading using timestamp columns
-- Batched processing (1K–5K rows by table size)
-- Validation and basic monitoring
+- Schema discovery over 432+ tables; incremental loading using timestamp columns
+- Batched processing (1K–5K rows by table size); validation and monitoring
+- CLI: `mdc etl run|status|validate --env <stage>`
 
 ### dbt (Analytics)
 
-#### Staging (88 models)
-- Standardized source data, metadata columns (`_loaded_at`, `_transformed_at`, `_created_by`), validation
+| Layer | Count | Role |
+|-------|-------|------|
+| Staging | 88 | Standardized source data, metadata columns, validation |
+| Intermediate | 50+ | Fees, insurance, payments, AR, collections, scheduling, patient journey |
+| Marts | 17 | Dimensions (patient, provider, …), facts (appointment, claim, …), KPI summaries |
 
-#### Intermediate (50+ models)
-- Cross-system: patient financial/treatment journey; system-specific: fees, insurance, payments, AR, collections, communications, scheduling
-
-#### Marts (17 models)
-- Dimensions: Patient, Provider, Procedure, Insurance, Date
-- Facts: Appointment, Claim, Payment, Communication
-- Summaries: production, AR, revenue lost, provider performance, patient retention
+CLI: `mdc dbt run|test|docs --env <stage>`
 
 ## Stack
 
 - **Source**: MariaDB/MySQL (OpenDental)
 - **Warehouse**: PostgreSQL
-- **ETL**: Python, CLI in `etl_pipeline/cli/`
-- **Transform**: dbt Core
+- **ETL**: Python, CLI in `etl_pipeline/cli/` (via `mdc etl …`)
+- **Transform**: dbt Core (via `mdc dbt …`)
+- **Orchestration**: Apache Airflow (native install; nightly ETL + dbt DAG)
+- **Dev tooling**: `mdc` CLI (`tools/mdc_cli/`) — env isolation, validate, run, deploy, SSM tunnels
 - **API**: FastAPI (OpenAPI, API key auth, rate limiting, CORS)
 - **Frontend**: React, TypeScript, Material-UI, Recharts
 
@@ -194,30 +225,34 @@ Optional hosted frontend (sample data): [https://dbtdentalclinic.com](https://db
 ```
 dbt_dental_clinic/
 ├── etl_pipeline/              # Ingestion: MySQL → PostgreSQL
-│   ├── etl_pipeline/           # Package (cli/, core/, config/, loaders/)
+│   ├── etl_pipeline/          # Package (cli/, core/, config/, loaders/)
 │   ├── config/                # tables.yml, env templates
 │   ├── synthetic_data_generator/   # Synthetic OpenDental-like data (see QUICKSTART.md)
 │   └── scripts/               # Schema analysis, DB setup, helpers
 ├── dbt_dental_models/         # Transformation: staging → intermediate → marts
+├── airflow/                   # Nightly DAGs (ETL, schema analysis, dbt, publish)
+│   └── dags/                  # etl_pipeline_dag.py, schema_analysis_dag.py
 ├── api/                       # FastAPI (routers, models, services)
 ├── frontend/                  # React app (src/pages, components, services)
 ├── tools/
-│   └── mdc_cli/                   # mdc CLI — env orchestration, validate, run (pip install -e)
+│   └── mdc_cli/               # mdc CLI — validate, run, deploy, tunnel (pip install -e)
 ├── scripts/
-│   ├── mdc_aliases.ps1             # optional PowerShell aliases (load_project.ps1)
-│   ├── archive/                    # legacy environment_manager (Phase 5.5 reference)
-│   ├── deployment/                 # Deploy to EC2, deploy dbt/api files, credentials
-│   ├── ec2/                      # Run dbt on EC2, setup, fixes
-│   ├── verification/             # Verify AWS resources
-│   ├── database/                 # Local demo DB setup, query
-│   ├── testing/                  # API/connection tests
-│   └── utils/                    # list_env_files, generate_api_key, backup, etc.
+│   ├── mdc_aliases.ps1        # optional PowerShell aliases (load_project.ps1)
+│   ├── archive/               # legacy environment_manager (Phase 5.5 reference)
+│   ├── deployment/            # Deploy to EC2, deploy dbt/api files, credentials
+│   ├── ec2/                   # Run dbt on EC2, setup, fixes
+│   ├── verification/          # Verify AWS resources
+│   ├── database/              # Local demo DB setup, query
+│   ├── testing/               # API/connection tests
+│   └── utils/                 # One-off tools, exports, metadata, audits
+├── consult_audio_pipe/        # Consult recording pipeline (mdc consult-audio …)
 ├── docs/                      # Deployment, env files, architecture
-└── (airflow, consult_audio_pipe, etc. — see repo root)
+└── load_project.ps1           # Load mdc PowerShell aliases from repo root
 ```
 
 **Component READMEs:**  
-- [tools/mdc_cli/README.md](tools/mdc_cli/README.md) — `mdc` CLI: validate, run, deploy, env orchestration  
+- [tools/mdc_cli/README.md](tools/mdc_cli/README.md) — `mdc` CLI: validate, run, deploy, tunnels  
+- [airflow/README.md](airflow/README.md) — DAG overview, native setup, nightly run  
 - [etl_pipeline/README.md](etl_pipeline/README.md) — ETL architecture and run instructions  
 - [dbt_dental_models/README.md](dbt_dental_models/README.md) — dbt layers and development  
 - [api/README.md](api/README.md) — API env, security, deployment  

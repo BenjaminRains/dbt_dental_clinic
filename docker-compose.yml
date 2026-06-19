@@ -1,5 +1,7 @@
 services:
-  # Airflow Services
+  # Airflow Services (optional sandbox — NOT used for Option A clinic nightly runs)
+  # Option A uses native Airflow on the host + etl_pipeline/.env_<stage> (same as mdc).
+  # ETL/dbt connection vars are intentionally NOT injected here (would override stage files).
   airflow-webserver:
     build:
       context: .
@@ -14,25 +16,7 @@ services:
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
       # Nightly DAG at 9 PM Central (cron "0 21 * * *" interpreted in this timezone)
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
-      # ETL Connection Environment Variables
-      - OPENDENTAL_SOURCE_USER=${OPENDENTAL_SOURCE_USER}
-      - OPENDENTAL_SOURCE_PW=${OPENDENTAL_SOURCE_PW}
-      - OPENDENTAL_SOURCE_HOST=${OPENDENTAL_SOURCE_HOST}
-      - OPENDENTAL_SOURCE_PORT=${OPENDENTAL_SOURCE_PORT}
-      - OPENDENTAL_SOURCE_DB=${OPENDENTAL_SOURCE_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE}
-      # dbt analytics DB (same postgres for local; set POSTGRES_ANALYTICS_* in .env for EC2)
-      - POSTGRES_ANALYTICS_HOST=${POSTGRES_ANALYTICS_HOST:-postgres}
-      - POSTGRES_ANALYTICS_PORT=${POSTGRES_ANALYTICS_PORT:-5432}
-      - POSTGRES_ANALYTICS_DB=${POSTGRES_ANALYTICS_DB:-${POSTGRES_DATABASE}}
-      - POSTGRES_ANALYTICS_USER=${POSTGRES_ANALYTICS_USER:-${POSTGRES_USER}}
-      - POSTGRES_ANALYTICS_PASSWORD=${POSTGRES_ANALYTICS_PASSWORD:-${POSTGRES_PASSWORD}}
-      - POSTGRES_ANALYTICS_SCHEMA=${POSTGRES_ANALYTICS_SCHEMA:-public}
-      # Email Configuration for Monitoring
+      # Email Configuration for Monitoring (optional)
       - SMTP_SERVER=${SMTP_SERVER:-localhost}
       - SMTP_PORT=${SMTP_PORT:-587}
       - EMAIL_USER=${EMAIL_USER}
@@ -70,24 +54,7 @@ services:
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
-      # ETL Connection Environment Variables (same as webserver)
-      - OPENDENTAL_SOURCE_USER=${OPENDENTAL_SOURCE_USER}
-      - OPENDENTAL_SOURCE_PW=${OPENDENTAL_SOURCE_PW}
-      - OPENDENTAL_SOURCE_HOST=${OPENDENTAL_SOURCE_HOST}
-      - OPENDENTAL_SOURCE_PORT=${OPENDENTAL_SOURCE_PORT}
-      - OPENDENTAL_SOURCE_DB=${OPENDENTAL_SOURCE_DB}
-      - POSTGRES_USER=${POSTGRES_USER}
-      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
-      - POSTGRES_HOST=postgres
-      - POSTGRES_PORT=5432
-      - POSTGRES_DATABASE=${POSTGRES_DATABASE}
-      - POSTGRES_ANALYTICS_HOST=${POSTGRES_ANALYTICS_HOST:-postgres}
-      - POSTGRES_ANALYTICS_PORT=${POSTGRES_ANALYTICS_PORT:-5432}
-      - POSTGRES_ANALYTICS_DB=${POSTGRES_ANALYTICS_DB:-${POSTGRES_DATABASE}}
-      - POSTGRES_ANALYTICS_USER=${POSTGRES_ANALYTICS_USER:-${POSTGRES_USER}}
-      - POSTGRES_ANALYTICS_PASSWORD=${POSTGRES_ANALYTICS_PASSWORD:-${POSTGRES_PASSWORD}}
-      - POSTGRES_ANALYTICS_SCHEMA=${POSTGRES_ANALYTICS_SCHEMA:-public}
-      # Email Configuration for Monitoring
+      # Email Configuration for Monitoring (optional)
       - SMTP_SERVER=${SMTP_SERVER:-localhost}
       - SMTP_PORT=${SMTP_PORT:-587}
       - EMAIL_USER=${EMAIL_USER}

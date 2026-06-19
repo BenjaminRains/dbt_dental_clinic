@@ -36,9 +36,10 @@ def airflow_test_env():
 
             def _mock_get(key, default_var=None):
                 defaults = {
-                    "project_root": "/opt/airflow/dbt_dental_clinic",
+                    "project_root": str(REPO_ROOT),
                     "etl_environment": "test",
                     "dbt_target": "local",
+                    "publish_environment": "",
                 }
                 return defaults.get(key, default_var)
 

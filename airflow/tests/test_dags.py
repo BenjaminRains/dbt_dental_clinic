@@ -48,8 +48,25 @@ def test_etl_pipeline_dag_has_validation_and_dbt(dag_bag):
         pytest.skip("etl_pipeline DAG not loaded")
     dag = dag_bag.dags["etl_pipeline"]
     task_ids = [t.task_id for t in dag.tasks]
-    # Validation group tasks
-    assert "validate_configuration" in task_ids
-    # dbt group tasks (task_id includes group prefix in some Airflow versions)
+    assert "validation.validate_configuration" in task_ids
     has_dbt = any("dbt" in tid for tid in task_ids)
     assert has_dbt, f"Expected dbt tasks in {task_ids}"
+
+
+def test_etl_pipeline_dag_has_schema_refresh(dag_bag):
+    """etl_pipeline refreshes tables.yml before validation."""
+    if "etl_pipeline" not in dag_bag.dags:
+        pytest.skip("etl_pipeline DAG not loaded")
+    task_ids = [t.task_id for t in dag_bag.dags["etl_pipeline"].tasks]
+    assert "refresh_schema_configuration" in task_ids
+
+
+def test_etl_pipeline_dag_has_publish_and_notify(dag_bag):
+    """etl_pipeline DAG publishes to RDS (when configured) and notifies last."""
+    if "etl_pipeline" not in dag_bag.dags:
+        pytest.skip("etl_pipeline DAG not loaded")
+    dag = dag_bag.dags["etl_pipeline"]
+    task_ids = [t.task_id for t in dag.tasks]
+    assert "publish_analytics" in task_ids
+    assert "send_completion_notification" in task_ids
+    assert "should_run_publish" in task_ids

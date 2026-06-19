@@ -17,7 +17,7 @@ dbt runs inside `airflow/dags/etl_pipeline_dag.py` as the `dbt_build` task group
 There is **no separate `dbt_build` DAG**. A standalone DAG was considered early in planning but superseded by same-run orchestration (see [discussion](30475cd5-d66b-42f7-84a3-3ae3466c2e9b), 2026-06-17).
 
 **Airflow Variables:**
-- `dbt_target`: `local` (Compose dev) or `clinic` (RDS on EC2)
+- `dbt_target`: `local` (laptop build, Option A) or `clinic` (RDS build on EC2)
 - `project_root`: path to repo root containing `dbt_dental_models/`
 
 **Profiles:** `dbt_dental_models/profiles.yml`; `DBT_PROFILES_DIR` set to project dir in BashOperator.
@@ -86,7 +86,7 @@ dbt run --selector incremental_only
 
 - Mount `dbt_dental_models` under `{project_root}/dbt_dental_models`
 - Ensure `POSTGRES_ANALYTICS_*` env vars reach the worker for `dbt_target=clinic`
-- See [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md) for ETL + dbt env gaps in Docker Compose
+- See [`ORCHESTRATION_ROADMAP.md`](../airflow/ORCHESTRATION_ROADMAP.md) for native Option A env contract
 
 ---
 

@@ -4,6 +4,8 @@ How to refresh analytics on **clinic RDS** (`opendental_analytics` behind `api-c
 
 Clinic RDS lives in a **private VPC**. Your laptop cannot connect to the RDS hostname directly (`connection … timeout expired`). Use one of the workflows below.
 
+**Linux / platform overview:** See [PLATFORM_AND_LINUX_MIGRATION.md](PLATFORM_AND_LINUX_MIGRATION.md) for stack architecture and the plan to run this workflow without PowerShell.
+
 ---
 
 ## Prerequisites
@@ -14,6 +16,8 @@ One-time setup:
 pip install -e tools/mdc_cli
 .\load_project.ps1
 ```
+
+On Linux, `load_project.ps1` is optional — `pip install -e tools/mdc_cli` is sufficient. `mdc publish analytics` requires the Python port described in [PLATFORM_AND_LINUX_MIGRATION.md](PLATFORM_AND_LINUX_MIGRATION.md) §6 Phase 1 until that work is complete.
 
 Also required for the tunnel path:
 
@@ -55,6 +59,12 @@ Waiting for connections...
 
 Default local port is **5433** (`POSTGRES_PORT` env var overrides for the tunnel command).
 
+Confirm the port is listening (optional):
+
+```powershell
+Test-NetConnection 127.0.0.1 -Port 5433
+```
+
 ### Step 3 — Publish to clinic RDS
 
 ```powershell
@@ -82,6 +92,27 @@ mdc publish analytics --env clinic --tunnel-port 5434
 2. Reads **RDS** credentials from `api/.env_api_clinic`
 3. `pg_dump` local `marts` schema
 4. `pg_restore` into clinic RDS through `127.0.0.1:<tunnel-port>` (replaces **marts** only; `int` / `staging` on RDS are unchanged)
+
+---
+
+## Workflow A2 — Airflow nightly (Option A, manual tunnel)
+
+Same local dbt + publish path, orchestrated by the `etl_pipeline` DAG on your laptop. **You** start the SSM tunnel; the DAG does not start it yet.
+
+**Before the run (scheduled 9 PM Central or manual trigger):**
+
+| Prerequisite | Command / check |
+|--------------|-----------------|
+| WireGuard (OpenDental ETL) | VPN connected to clinic LAN |
+| SSM tunnel (RDS publish) | Terminal 1: `mdc tunnel clinic-db` → wait for **Port 5433 opened** |
+| Airflow | Native scheduler + webserver running |
+| Variables | `etl_environment=clinic`, `dbt_target=local`, `publish_environment=clinic`, `project_root=<repo>` |
+
+**DAG order:** guard → schema refresh → ETL → dbt (`mdc`, local target) → `mdc publish analytics` → notify.
+
+If publish fails with tunnel not reachable, the SSM session was not open or dropped — restart `mdc tunnel clinic-db` and re-trigger from the publish task or rerun the DAG.
+
+See [`airflow/ORCHESTRATION_ROADMAP.md`](../airflow/ORCHESTRATION_ROADMAP.md) for full Option A setup.
 
 ---
 

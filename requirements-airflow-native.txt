@@ -1,0 +1,23 @@
+# Native Airflow install (Option A / Phase A on host — not Docker image base).
+# Install: pip install -r requirements-airflow-native.txt
+# Requires Python 3.11.x (matches constraints-2.7.3).
+
+-c https://raw.githubusercontent.com/apache/airflow/constraints-2.7.3/constraints-3.11.txt
+
+apache-airflow==2.7.3
+
+# DAG runtime (ETL imports, schema refresh, connections)
+pyyaml>=6.0
+psycopg2-binary>=2.9
+pymysql>=1.1
+python-dotenv>=1.0
+
+# dbt (mdc subprocess in etl_pipeline DAG)
+dbt-core>=1.6,<2
+dbt-postgres>=1.6,<2
+
+# Notifications
+apache-airflow-providers-slack>=8.0
+
+# Phase A tests
+pytest>=7.0

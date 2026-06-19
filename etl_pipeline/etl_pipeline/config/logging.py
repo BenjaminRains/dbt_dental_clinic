@@ -34,6 +34,8 @@ from typing import Optional
 import sys
 from datetime import datetime
 
+from etl_pipeline.config.paths import etl_project_root, etl_run_logs_dir, etl_test_logs_dir
+
 
 def setup_logging(
     log_level: str = "INFO",
@@ -370,23 +372,18 @@ DEFAULT_LOG_CONFIG = {
 def init_default_logger():
     """Initialize default logger configuration."""
     try:
-        # Determine project root: 
-        # etl_pipeline/etl_pipeline/config/logging.py -> etl_pipeline -> etl_pipeline -> project root
-        current_file = Path(__file__).resolve()
-        # Go up: config -> etl_pipeline -> etl_pipeline -> project root
-        project_root = current_file.parent.parent.parent
-        
+        project_root = etl_project_root()
+
         # Detect test environment and set appropriate log directory
         etl_environment = os.getenv("ETL_ENVIRONMENT", "clinic")
         if etl_environment == "test":
-            default_log_dir = project_root / "logs" / "tests"
+            default_log_dir = etl_test_logs_dir()
         else:
-            default_log_dir = project_root / "logs" / "etl_pipeline"
-        
-        # Allow override via environment variable (relative to project root)
+            default_log_dir = etl_run_logs_dir()
+
+        # Allow override via environment variable (relative to etl_pipeline project root)
         env_log_path = os.getenv("ETL_LOG_PATH")
         if env_log_path:
-            # If absolute path provided, use it; otherwise relative to project root
             if Path(env_log_path).is_absolute():
                 log_dir = Path(env_log_path)
             else:

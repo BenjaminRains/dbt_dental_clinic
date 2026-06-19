@@ -38,12 +38,12 @@ mdc deploy api --env clinic
 
 ## Root `.env` (project root) — what uses it
 
-The **project root `.env`** (created from `.env.template`) is used **only** by **Docker Compose** when you run the stack locally or on a host where Compose is used:
+The **project root `.env`** (from `.env.template`) is used **only** by **Docker Compose** when running the optional Airflow sandbox — **not** by native Option A clinic orchestration:
 
 | Consumer | How it uses root `.env` |
 |----------|-------------------------|
-| **Docker Compose** | (1) **Variable substitution** — Compose reads `.env` from the project directory and substitutes `${VAR}` in `docker-compose.yml` (e.g. `${POSTGRES_USER}`, `${AIRFLOW_FERNET_KEY}`). (2) **Container env** — The **dbt**, **postgres**, and **mysql** services have `env_file: - .env`, so those containers get their environment from the root `.env`. |
-| **Airflow containers** | Airflow services (webserver, scheduler) get values via the `environment:` section in `docker-compose.yml`; those values are substituted from the same `.env` when you run `docker-compose up`. |
+| **Docker Compose** | Variable substitution in `docker-compose.yml`; postgres/mysql/Airflow-init container env |
+| **Native Airflow (Option A)** | **Does not use** root `.env` — ETL reads `etl_pipeline/.env_<stage>`; dbt via `mdc` / `dbt_dental_models/.env_*` |
 
 **Not used by:** API (`api/settings.py` uses `api/.env_api_*` when OS env is empty), ETL (`etl_pipeline` uses `etl_pipeline/.env_*` via `settings_v2`), dbt (`mdc_cli/dbt_env.py` uses `dbt_dental_models/.env_*` or `deployment_credentials.json`), or ad-hoc Python dotenv from repo root. On EC2, `/opt/dbt_dental_clinic/.env` is the **deployed** EC2 env (from `/.env_ec2`), not this repo’s root `.env`.
 
@@ -56,7 +56,7 @@ The **project root `.env`** (created from `.env.template`) is used **only** by *
 - **dbt:** `dbt_dental_models/.env_local`, `dbt_dental_models/.env_clinic`; demo/clinic JSON via `mdc_cli/dbt_env.py` + `deployment_credentials.json`.
 - **ETL:** `etl_pipeline/.env_local`, `etl_pipeline/.env_clinic`, `etl_pipeline/.env_test` (loaded by ETL `settings_v2` when `mdc etl … --env <stage>` runs).
 
-Root env files that **are** used: `/.env` (Docker/Airflow), `/.env_ec2` (EC2 deploy source). See §1 table.
+Root env files that **are** used: `/.env` (Docker Compose sandbox only), `/.env_ec2` (EC2 deploy source). Native clinic Airflow uses `etl_pipeline/.env_clinic` only. See §4.4.
 
 ---
 
@@ -66,7 +66,7 @@ Every env file has a **unique name** = path from repo root. The same basename (e
 
 | **Component** | **Unique path (env file)** | **Template** | **Loaded by** |
 |---------------|----------------------------|-------------|---------------|
-| **Root / Docker / Airflow** | `/.env` | `/.env.template` | `docker-compose.yml`, Airflow containers |
+| **Root / Docker sandbox** | `/.env` | `/.env.template` | `docker-compose.yml` only (not native Option A) |
 | **API** | `api/.env_api_local` | (none committed) | `api/settings.py` when `API_ENVIRONMENT=local` (OS env wins; Phase 0) |
 | **API** | `api/.env_api_demo` | (none committed) | `api/settings.py` when `API_ENVIRONMENT=demo` |
 | **API** | `api/.env_api_clinic` | (none committed) | `api/settings.py` when `API_ENVIRONMENT=clinic` |
@@ -117,7 +117,7 @@ Components **declare which they support**; they don’t invent new names. Fronte
 
 ### 2.3 Conventions by component
 
-- **Root**: `/.env` (Docker/Airflow); `/.env.template` committed; `/.env_ec2` source for EC2 deploy.
+- **Root**: `/.env` (Docker Compose sandbox only); `/.env.template` committed; `/.env_ec2` source for EC2 deploy.
 - **API**: `api/.env_api_<env>` — e.g. `api/.env_api_local`, `api/.env_api_demo`, `api/.env_api_clinic`, `api/.env_api_test`. On EC2, systemd uses `api/.env` (contents from one of the `api/.env_api_*` files).
 - **ETL**: `etl_pipeline/.env_<env>` — e.g. `etl_pipeline/.env_local`, `etl_pipeline/.env_clinic`, `etl_pipeline/.env_test`. **No project-root fallback** (ETL loader reads only from `etl_pipeline/`).
 - **dbt:** `dbt_dental_models/.env_local`, `dbt_dental_models/.env_clinic`; demo/clinic from `deployment_credentials.json` via `mdc_cli/dbt_env.py`. No project-root fallback.
@@ -297,9 +297,11 @@ Development for clinic infra is often done locally before deploy, so **`.env_loc
 
 ### 4.4 Docker / Airflow
 
-- **Root `.env`:** `docker-compose.yml` uses `env_file: - .env` for postgres, mysql, dbt services. Variables like `POSTGRES_*`, `AIRFLOW_FERNET_KEY`, etc. come from this file.
-- **Creation:** Copy `.env.template` to `.env` and fill in values. Never commit `.env`.
-- **ETL stage files:** Airflow ETL tasks also need `etl_pipeline/.env_<stage>` (e.g. `.env_test`, `.env_clinic`) or equivalent OS env vars on the worker. See [`airflow/ORCHESTRATION_ROADMAP.md`](../airflow/ORCHESTRATION_ROADMAP.md) (environment gaps).
+**Option A (clinic nightly):** Native Airflow on the host — **no root `.env` ETL contract**. ETL reads `etl_pipeline/.env_<stage>`; dbt via `mdc dbt` or `dbt_dental_models/.env_local`. See [`airflow/ORCHESTRATION_ROADMAP.md`](../airflow/ORCHESTRATION_ROADMAP.md) § Environment contract.
+
+**Optional Docker sandbox:** `docker-compose.yml` runs Airflow in containers for experiments. Root `.env` supplies Airflow metadata DB credentials and Fernet key only. ETL/dbt vars are **not** injected into Airflow containers (avoids overriding stage files).
+
+- **Root `.env`:** Copy `.env.template` → `.env` for Compose postgres/mysql/Airflow-init. Never commit `.env`.
 
 ### 4.5 Frontend (`frontend/`)
 
@@ -381,7 +383,7 @@ This backs up the previous `.env`, retires any stale `api/.env_api_clinic` on th
 
 Use these to create local/env-specific files; never commit the filled-in files. Paths below are the unique env file names.
 
-- [ ] **Root:** `/.env.template` → copy to `/.env` for Docker/Airflow.
+- [ ] **Root:** `/.env.template` → copy to `/.env` only if using Docker Compose sandbox.
 - [ ] **ETL:** `etl_pipeline/.env_local.template`, `etl_pipeline/.env_clinic.template`, `etl_pipeline/.env_test.template` → copy to `etl_pipeline/.env_local`, `.env_clinic`, `.env_test` as needed.
 - [ ] **API test:** `api/.env_api_test.template` → copy to `api/.env_api_test` and fill in test DB credentials.
 - [ ] **Consult audio:** `consult_audio_pipe/.env.template` → copy to `consult_audio_pipe/.env`.

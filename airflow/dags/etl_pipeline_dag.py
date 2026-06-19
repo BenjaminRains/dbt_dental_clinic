@@ -1,21 +1,22 @@
 """
 ETL Pipeline DAG for OpenDental Data Extraction and Loading
 
-One nightly run = full ETL pass (incremental load) + dbt build.
+One nightly run = schema refresh + incremental ETL + dbt build + publish to clinic RDS.
 
 What a run is:
+0. Schema refresh: backup tables.yml and run analyze_opendental_schema.py (fresh config before ETL).
 1. Validation: tables.yml exists and is recent; all DB connections OK; optional schema drift check.
 2. ETL: Full pass over all tables by category (large → medium → small → tiny). Default is
-   incremental load (force_full_refresh=False); each table uses config from tables.yml
-   (extraction_strategy, incremental_columns, etc.). Config-driven and failure-aware:
-   validation fails fast; ETL runs by category with per-table retries; reporting runs
-   even on partial failure (ALL_DONE).
-3. Reporting: Verify loads, generate report, send notification (Slack/email).
-4. dbt: Runs only when ETL succeeded (pipeline_success). Runs dbt deps then dbt build
-   (staging → intermediate → marts).
+   incremental load (force_full_refresh=False); each table uses config from tables.yml.
+3. Reporting: Verify loads, generate execution report.
+4. dbt: When ETL succeeded — mdc dbt deps + build --target {dbt_target} (default local).
+5. Publish: When publish_environment is set (e.g. clinic) — mdc publish analytics to RDS.
+6. Notify: Slack/email summary (after report and publish when configured).
 
 Schedule: Nightly Mon–Sun at 9 PM Central (set AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago).
 Dependencies: Valid tables.yml (from Schema Analysis DAG or manual run).
+
+Airflow Variables: etl_environment, dbt_target, publish_environment, project_root (see dag doc_md).
 
 Business-hours guard: Pipeline MUST NOT run during client business hours (6 AM–8:59 PM Central)
 because ETL hogs client MySQL resources. First task checks wall clock; if in that window, the run fails.
@@ -33,7 +34,6 @@ except ImportError:
 
 from airflow import DAG
 from airflow.operators.python import PythonOperator, BranchPythonOperator, ShortCircuitOperator
-from airflow.operators.bash import BashOperator
 from airflow.utils.task_group import TaskGroup
 from airflow.models import Variable
 from airflow.exceptions import AirflowException, AirflowSkipException
@@ -73,15 +73,119 @@ dag = DAG(
 # Configuration
 # ============================================================================
 
-# Project root: override via Airflow Variable "project_root" for EC2 vs local
-PROJECT_ROOT = Path(Variable.get('project_root', default_var='/opt/airflow/dbt_dental_clinic'))
+# Project root: override via Airflow Variable "project_root" (native Option A: repo root on disk)
+_REPO_ROOT_DEFAULT = Path(__file__).resolve().parent.parent.parent
+PROJECT_ROOT = Path(Variable.get('project_root', default_var=str(_REPO_ROOT_DEFAULT)))
 ETL_PIPELINE_DIR = PROJECT_ROOT / 'etl_pipeline'
 DBT_PROJECT_DIR = PROJECT_ROOT / 'dbt_dental_models'
 DBT_PROFILES_DIR = DBT_PROJECT_DIR  # profiles.yml in project; or use Variable for .dbt path
 TABLES_YML_PATH = ETL_PIPELINE_DIR / 'etl_pipeline' / 'config' / 'tables.yml'
 
-# Environment (from Airflow Variable or default to clinic)
+# Orchestration variables (set in Airflow UI — used every run, not manual follow-up steps)
 ENVIRONMENT = Variable.get('etl_environment', default_var='clinic')
+DBT_TARGET = Variable.get('dbt_target', default_var='local')
+# When set (e.g. clinic), runs mdc publish analytics after dbt. Empty/unset skips publish.
+PUBLISH_ENVIRONMENT = Variable.get('publish_environment', default_var='')
+
+
+def _prepare_etl_runtime():
+    """
+    Align OS env with Airflow Variable etl_environment before ETL imports.
+
+    get_settings() reads ETL_ENVIRONMENT from the process environment (not the
+    Airflow Variable). Reset cached settings so the stage file (.env_test, etc.)
+    matches the DAG configuration.
+    """
+    import os
+    import sys
+
+    os.environ['ETL_ENVIRONMENT'] = ENVIRONMENT
+    os.environ['ETL_LOG_PATH'] = str(ETL_PIPELINE_DIR / 'logs' / 'etl_pipeline')
+    if str(ETL_PIPELINE_DIR) not in sys.path:
+        sys.path.insert(0, str(ETL_PIPELINE_DIR))
+    from etl_pipeline.config import reset_settings
+
+    reset_settings()
+
+
+def _run_mdc_cmd(mdc_args: list, *, timeout_seconds: int | None = None) -> None:
+    """Run mdc CLI from project root (same env isolation as manual mdc commands)."""
+    import subprocess
+
+    cmd = ['mdc', *mdc_args]
+    logging.info("Running: %s (cwd=%s)", ' '.join(cmd), PROJECT_ROOT)
+    result = subprocess.run(
+        cmd,
+        cwd=str(PROJECT_ROOT),
+        capture_output=True,
+        text=True,
+        timeout=timeout_seconds,
+    )
+    if result.stdout:
+        logging.info(result.stdout)
+    if result.stderr:
+        logging.warning(result.stderr)
+    if result.returncode != 0:
+        raise AirflowException(
+            f"mdc command failed (exit {result.returncode}): {' '.join(cmd)}"
+        )
+
+
+def run_dbt_deps(**context):
+    """Install dbt packages via mdc (loads dbt env for DBT_TARGET)."""
+    _run_mdc_cmd(['dbt', 'invoke', '--env', DBT_TARGET, '--', 'deps'])
+
+
+def run_dbt_build(**context):
+    """Run dbt build via mdc against DBT_TARGET (local = laptop Postgres)."""
+    _run_mdc_cmd(
+        ['dbt', 'invoke', '--env', DBT_TARGET, '--', 'build', '--target', DBT_TARGET],
+        timeout_seconds=7200,
+    )
+
+
+def publish_analytics(**context):
+    """
+    Publish local marts to clinic RDS via mdc publish analytics.
+
+    Requires SSM tunnel on localhost (mdc tunnel clinic-db) unless publish_skip_tunnel_check.
+    """
+    stage = (PUBLISH_ENVIRONMENT or '').strip()
+    if not stage:
+        raise AirflowSkipException("publish_environment not set")
+
+    if stage != 'clinic':
+        raise AirflowException(
+            f"publish_environment={stage!r} not supported (clinic only today)"
+        )
+
+    tunnel_port = Variable.get('publish_tunnel_port', default_var='5433')
+    cmd = ['publish', 'analytics', '--env', stage, '--tunnel-port', str(tunnel_port)]
+    if Variable.get('publish_skip_tunnel_check', default_var='').lower() in ('1', 'true', 'yes'):
+        cmd.append('--skip-tunnel-check')
+
+    _run_mdc_cmd(cmd, timeout_seconds=3600)
+    context['task_instance'].xcom_push(key='publish_success', value=True)
+    return True
+
+
+def refresh_schema_before_etl(**context):
+    """
+    Regenerate tables.yml from live OpenDental schema before ETL.
+
+    Prevents nightly failures when the source schema changed since the last
+    schema_analysis run (weekly DAG or manual). Requires same VPN access as ETL.
+    """
+    from lib.schema_refresh import refresh_schema_configuration
+
+    _prepare_etl_runtime()
+    refresh_schema_configuration(
+        PROJECT_ROOT,
+        ENVIRONMENT,
+        task_instance=context['task_instance'],
+    )
+    return True
+
 
 # Configuration thresholds
 CONFIG_STALENESS_WARNING_DAYS = 30  # Warn if config older than 30 days
@@ -250,9 +354,8 @@ def validate_database_connections(**context):
     
     Fails fast if any connection is unavailable.
     """
-    import sys
-    sys.path.insert(0, str(ETL_PIPELINE_DIR))
-    
+    _prepare_etl_runtime()
+
     from etl_pipeline.config import get_settings, DatabaseType
     from etl_pipeline.core.connections import ConnectionFactory
     
@@ -303,10 +406,10 @@ def check_schema_hash(**context):
     This is a lightweight check on a few key tables to detect schema drift.
     If significant drift detected, recommend running Schema Analysis DAG.
     """
-    import sys
     import yaml
-    sys.path.insert(0, str(ETL_PIPELINE_DIR))
-    
+
+    _prepare_etl_runtime()
+
     from etl_pipeline.config import get_settings
     from etl_pipeline.core.connections import ConnectionFactory
     
@@ -381,9 +484,8 @@ def process_tables_by_category(category: str, **context):
     This function integrates with the existing pipeline_orchestrator.py
     to leverage the established ETL logic.
     """
-    import sys
-    sys.path.insert(0, str(ETL_PIPELINE_DIR))
-    
+    _prepare_etl_runtime()
+
     from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
     
     logging.info(f"Processing {category} tables")
@@ -494,9 +596,8 @@ def verify_loads(**context):
     2. Recent load timestamps
     3. Data freshness in analytics database
     """
-    import sys
-    sys.path.insert(0, str(ETL_PIPELINE_DIR))
-    
+    _prepare_etl_runtime()
+
     from etl_pipeline.config import get_settings
     from etl_pipeline.core.connections import ConnectionFactory
     
@@ -720,6 +821,9 @@ def send_completion_notification(**context):
         # Compose message
         message = f"ETL Pipeline {status}\n\n"
         message += f"Environment: {ENVIRONMENT}\n"
+        message += f"dbt target: {DBT_TARGET}\n"
+        if (PUBLISH_ENVIRONMENT or '').strip():
+            message += f"Publish: {PUBLISH_ENVIRONMENT.strip()}\n"
         message += f"Execution: {context['execution_date'].strftime('%Y-%m-%d %H:%M:%S')}\n"
         message += f"\nResults:\n"
         message += f"  • Processed: {total_processed} tables\n"
@@ -741,6 +845,10 @@ def send_completion_notification(**context):
         
         if report['configuration']['schema_drift_detected']:
             message += f"\n⚠️  Schema drift detected. Recommend running Schema Analysis DAG.\n"
+
+        publish_ok = ti.xcom_pull(task_ids='publish_analytics', key='publish_success')
+        if publish_ok:
+            message += "\n✅ Analytics published to clinic RDS.\n"
         
         # Log message
         logging.info(f"\n{level}\n{message}")
@@ -781,6 +889,18 @@ with dag:
         **Pipeline MUST NOT run during client business hours (6 AM–8:59 PM Central)** because
         ETL hogs client server MySQL resources. This task checks current wall clock in Central;
         if in that window, the run fails. Allowed window: 9 PM–5:59 AM Central only.
+        """,
+    )
+
+    refresh_schema_task = PythonOperator(
+        task_id='refresh_schema_configuration',
+        python_callable=refresh_schema_before_etl,
+        execution_timeout=timedelta(minutes=35),
+        doc_md="""
+        ### Refresh Schema Configuration
+
+        Backs up `tables.yml` and runs `analyze_opendental_schema.py` against OpenDental
+        so ETL uses current column/table definitions. Runs every nightly before validation.
         """,
     )
 
@@ -921,20 +1041,7 @@ with dag:
             """,
         )
         
-        # Send notification
-        notify = PythonOperator(
-            task_id='send_completion_notification',
-            python_callable=send_completion_notification,
-            trigger_rule=TriggerRule.ALL_DONE,  # Always run
-            doc_md="""
-            ### Send Completion Notification
-            
-            Sends notification about pipeline execution via email/Slack.
-            Includes summary, failed tables, and recommendations.
-            """,
-        )
-        
-        verify >> report >> notify
+        verify >> report
     
     # =======================================================================
     # SHORT-CIRCUIT: Run dbt only when ETL succeeded
@@ -948,6 +1055,18 @@ with dag:
             logging.warning("ETL had failures; skipping dbt to avoid transforming partial data.")
             return False
         return True
+
+    def should_run_publish(**context):
+        """Run publish when configured and ETL succeeded (dbt upstream must succeed)."""
+        if not (PUBLISH_ENVIRONMENT or '').strip():
+            logging.info("publish_environment not set; skipping publish.")
+            return False
+        ti = context['task_instance']
+        pipeline_success = ti.xcom_pull(task_ids='generate_pipeline_report', key='pipeline_success')
+        if not pipeline_success:
+            logging.warning("ETL had failures; skipping publish.")
+            return False
+        return True
     
     short_circuit_dbt = ShortCircuitOperator(
         task_id='should_run_dbt',
@@ -957,33 +1076,69 @@ with dag:
     report >> short_circuit_dbt
     
     # =======================================================================
-    # DBT TASKS (after successful ETL)
+    # DBT TASKS (after successful ETL) — via mdc (same env as manual runs)
     # =======================================================================
     
     with TaskGroup(group_id='dbt_build', tooltip='dbt deps and dbt build (staging → marts)') as dbt_group:
-        # Worker inherits env (POSTGRES_ANALYTICS_* from docker-compose / EC2); set profiles dir in shell
-        dbt_deps = BashOperator(
+        dbt_deps = PythonOperator(
             task_id='dbt_deps',
-            bash_command=f'export DBT_PROFILES_DIR="{DBT_PROFILES_DIR}" && cd "{DBT_PROJECT_DIR}" && dbt deps',
-            doc_md="Install dbt package dependencies.",
+            python_callable=run_dbt_deps,
+            doc_md=f"Install dbt package dependencies (mdc dbt invoke --env {DBT_TARGET}).",
         )
-        # dbt target: Airflow Variable 'dbt_target' (e.g. 'local' for localhost, 'clinic' for EC2)
-        dbt_target = Variable.get('dbt_target', default_var='local')
-        dbt_build = BashOperator(
+        dbt_build = PythonOperator(
             task_id='dbt_build',
-            bash_command=f'export DBT_PROFILES_DIR="{DBT_PROFILES_DIR}" && cd "{DBT_PROJECT_DIR}" && dbt build --target {dbt_target}',
+            python_callable=run_dbt_build,
             execution_timeout=timedelta(hours=2),
-            doc_md="Run dbt build (run + test) for staging, intermediate, and marts.",
+            doc_md=f"Run dbt build --target {DBT_TARGET} via mdc.",
         )
         dbt_deps >> dbt_build
     
     short_circuit_dbt >> dbt_group
+
+    # =======================================================================
+    # PUBLISH (local marts → clinic RDS)
+    # =======================================================================
+
+    short_circuit_publish = ShortCircuitOperator(
+        task_id='should_run_publish',
+        python_callable=should_run_publish,
+        doc_md="Skips publish when publish_environment is unset or ETL failed.",
+    )
+    publish_analytics_task = PythonOperator(
+        task_id='publish_analytics',
+        python_callable=publish_analytics,
+        execution_timeout=timedelta(hours=1),
+        doc_md=f"""
+        ### Publish analytics to RDS
+
+        Runs `mdc publish analytics --env {PUBLISH_ENVIRONMENT or 'clinic'}` after dbt.
+        Requires SSM tunnel (`mdc tunnel clinic-db`) on localhost:5433 unless skipped.
+        """,
+    )
+    dbt_build >> short_circuit_publish >> publish_analytics_task
+
+    # =======================================================================
+    # NOTIFICATION (always after report; includes publish outcome when run)
+    # =======================================================================
+
+    notify = PythonOperator(
+        task_id='send_completion_notification',
+        python_callable=send_completion_notification,
+        trigger_rule=TriggerRule.ALL_DONE,
+        doc_md="""
+        ### Send Completion Notification
+
+        Sends summary via logs/Slack after ETL report and optional publish step.
+        """,
+    )
+    report >> notify
+    publish_analytics_task >> notify
     
     # =======================================================================
     # DAG FLOW
     # =======================================================================
 
-    guard_business_hours_task >> validation_group >> etl_group >> reporting_group
+    guard_business_hours_task >> refresh_schema_task >> validation_group >> etl_group >> reporting_group
 
 
 # ============================================================================
@@ -999,49 +1154,59 @@ and loads it into the PostgreSQL analytics database.
 
 ## What a Run Is (Nightly)
 
-One run = **incremental ETL** (full pass, config-driven) + **dbt build** only when ETL succeeded.
+One run = **incremental ETL** (full pass, config-driven) + **dbt build** + **publish to RDS** (when configured).
 
-- **Incremental load**: `force_full_refresh=False` by default; each table uses `tables.yml` (extraction_strategy, incremental_columns). Full refresh on demand via DAG params.
-- **Config-driven**: Tables and strategies come from `tables.yml` (from Schema Analysis DAG or manual run).
-- **Failure handling**: Validation fails fast; ETL runs by category with per-table retries; reporting/notify run even on partial failure; dbt runs only when `pipeline_success` is True.
+- **Incremental load**: `force_full_refresh=False` by default; each table uses `tables.yml`.
+- **dbt**: `mdc dbt invoke --env {dbt_target}` then `build --target {dbt_target}` when ETL succeeded.
+- **Publish**: `mdc publish analytics --env {publish_environment}` after dbt when `publish_environment` is set.
+- **Failure handling**: Validation fails fast; dbt/publish skipped when ETL failed; notify runs last.
 
 ## Data Flow
 
 ```
-OpenDental MySQL (Source)
-    ↓ Extract (incremental per table config)
-Replication MySQL (Staging)
-    ↓ Load (incremental per table config)
-PostgreSQL Analytics (Raw Schema)
-    ↓ (same DAG, on ETL success)
-dbt deps → dbt build (staging → intermediate → marts)
+OpenDental MySQL (Source, VPN)
+    ↓ analyze_opendental_schema.py (refresh tables.yml)
+    ↓ Extract / load (etl_environment=clinic)
+Local PostgreSQL (raw → staging → int → marts via dbt_target=local)
+    ↓ mdc publish analytics (publish_environment=clinic, SSM tunnel)
+Clinic RDS (marts on api-clinic)
 ```
 
 ## Pipeline Phases
 
 ### 0. Business-hours guard (first task)
 - **Pipeline MUST NOT run during 6 AM–8:59 PM Central** (client MySQL must not be hogged).
-- Checks current wall clock in America/Chicago; if in that window, the run fails.
-- Allowed window: 9 PM–5:59 AM Central only (schedule or manual trigger).
+- Allowed window: 9 PM–5:59 AM Central only.
 
-### 1. Validation
+### 1. Schema refresh (before validation)
+- Backs up and regenerates `tables.yml` from live OpenDental (`analyze_opendental_schema.py`)
+- Avoids ETL failures when source schema changed since last config generation
+
+### 2. Validation
 - Validates `tables.yml` configuration
 - Tests all database connections
 - Checks for schema drift
 
-### 2. ETL Processing (incremental by default)
+### 3. ETL Processing (incremental by default)
 - **Large Tables** (1M+ rows): Parallel processing with 5 workers
 - **Medium Tables** (100K-1M rows): Sequential processing
 - **Small Tables** (10K-100K rows): Sequential processing
 - **Tiny Tables** (<10K rows): Sequential processing
 
-### 3. Verification & Reporting
+### 4. Verification & Reporting
 - Verifies data loads
 - Generates execution report
 - Sends notifications
 
-### 4. dbt (only when ETL succeeded)
-- `dbt deps` then `dbt build` (target from Airflow Variable `dbt_target`, default `local`)
+### 5. dbt (only when ETL succeeded)
+- `mdc dbt invoke --env {dbt_target}` → deps + build (default target `local`)
+
+### 6. Publish (only when ETL succeeded and publish_environment set)
+- `mdc publish analytics --env {publish_environment}` (default `clinic`)
+- Requires SSM tunnel on localhost:5433 (`mdc tunnel clinic-db`) before the run
+
+### 7. Notification
+- Summary after report and publish (Slack optional)
 
 ## Schedule
 
@@ -1070,16 +1235,31 @@ Override when triggering manually:
 
 ### Airflow Variables
 
-- `etl_environment`: 'clinic' or 'test' (required)
-- `project_root`: Path to repo root (default `/opt/airflow/dbt_dental_clinic`); override for EC2
-- `dbt_target`: dbt profile target, e.g. `local` (localhost) or `clinic` (EC2)
-- `slack_webhook_url`: Slack webhook for notifications (optional)
+| Variable | Clinic nightly (Option A) | Phase A test |
+|----------|---------------------------|--------------|
+| `project_root` | Repo root on disk | same |
+| `etl_environment` | `clinic` | `test` |
+| `dbt_target` | `local` | `local` |
+| `publish_environment` | `clinic` | *(unset — skips publish)* |
+| `publish_tunnel_port` | `5433` (optional) | optional |
+| `slack_webhook_url` | recommended | optional |
+
+Leave `publish_environment` unset to skip RDS publish (smoke tests). Do **not** set `dbt_target=clinic` until dbt can build safely against RDS directly.
 
 ## Performance
 
-### Expected Runtime
+### Expected Runtime (clinic Option A — observed)
 
-- **Small deployment** (<1M total rows): 10-30 minutes
+| Phase | Duration |
+|-------|----------|
+| Schema refresh (`refresh_schema_configuration`) | ~7 min (446 tables; logs Mar–Jun 2026) |
+| Incremental ETL | ~25 min (typical when run every couple of days) |
+| Full `dbt build` | ~52 min (optional scope; see open decision on dbt_target) |
+| Publish to RDS | varies |
+
+**~32 min** to complete schema + ETL before dbt starts. Full pipeline with dbt + publish often **~1.5–2 hours** from 9 PM Central.
+
+Legacy category estimates (ETL-only, without schema refresh):
 - **Medium deployment** (1M-10M rows): 30-90 minutes
 - **Large deployment** (10M+ rows): 1-3 hours
 
@@ -1191,7 +1371,7 @@ Solution: Run Schema Analysis DAG to update configuration
 
 For issues or questions:
 1. Check task logs in Airflow UI
-2. Review `etl_pipeline/logs/` for detailed logs
+2. Review `etl_pipeline/logs/etl_pipeline/` for detailed ETL run logs
 3. Contact data engineering team
 """
 

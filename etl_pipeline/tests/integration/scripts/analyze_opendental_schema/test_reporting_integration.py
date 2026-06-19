@@ -204,13 +204,13 @@ class TestReportingIntegration:
                 # Verify log file exists and has content
                 assert os.path.getsize(log_file_path) >= 0
                 
+                from etl_pipeline.config.paths import schema_analysis_reports_dir
+
                 # Verify summary report exists in the organized directory structure
-                # The summary report is now saved to logs/schema_analysis/reports/ with timestamp
-                # We can check if any summary file exists in the reports directory
-                logs_base = Path('logs')
-                schema_analysis_reports = logs_base / 'schema_analysis' / 'reports'
-                summary_files = list(schema_analysis_reports.glob('*_summary.txt'))
-                assert len(summary_files) > 0, f"No summary report found in {schema_analysis_reports}"
+                summary_files = list(schema_analysis_reports_dir().glob('*_summary.txt'))
+                assert len(summary_files) > 0, (
+                    f"No summary report found in {schema_analysis_reports_dir()}"
+                )
                 
                 # Verify summary report content
                 summary_file = summary_files[0]  # Use the first summary file found
@@ -342,12 +342,14 @@ class TestReportingIntegration:
                 # Assert: Verify summary report is correctly generated for clinic stage
                 # The method should print to console and save to file
                 # We can verify the file was created in the organized logs directory
-                logs_base = Path('logs')
-                schema_analysis_reports = logs_base / 'schema_analysis' / 'reports'
-                summary_files = list(schema_analysis_reports.glob('*_summary.txt'))
-                
+                from etl_pipeline.config.paths import schema_analysis_reports_dir
+
+                summary_files = list(schema_analysis_reports_dir().glob('*_summary.txt'))
+
                 # At least one summary file should exist
-                assert len(summary_files) > 0, f"No summary report found in {schema_analysis_reports}"
+                assert len(summary_files) > 0, (
+                    f"No summary report found in {schema_analysis_reports_dir()}"
+                )
                 
                 # Verify summary report content
                 summary_file = summary_files[0]  # Use the first summary file found

@@ -8,8 +8,8 @@ This directory contains Airflow DAG definitions for orchestrating the complete O
 airflow/
 ├── README.md                    # This file
 ├── ORCHESTRATION_ROADMAP.md    # Deployment roadmap, gaps, open decisions (start here)
-├── DEPLOYMENT_STRATEGY.md      # How we deploy Airflow; how Docker fits in
-├── NIGHTLY_RUN.md              # What one nightly run is (guard → ETL → dbt)
+├── DEPLOYMENT_STRATEGY.md      # Native Option A vs optional Docker sandbox
+├── NIGHTLY_RUN.md              # What one nightly run is (guard → schema → ETL → dbt → publish)
 ├── DBT_DAG_PLAN.md             # Future dbt enhancements (selectors, Cosmos)
 ├── dags/
 │   ├── schema_analysis_dag.py  # Schema analyzer orchestration ✅
@@ -24,11 +24,11 @@ airflow/
 
 ## DAG Overview
 
-### 1. Schema Analysis DAG (`schema_analysis_dag.py`)
+### 1. Schema Analysis DAG (`schema_analysis_dag.py`) — optional
 
-**Purpose**: Analyzes OpenDental schema and generates `tables.yml` configuration.
+**Purpose**: Same analyzer as nightly schema refresh, plus change reports and notifications.
 
-**Schedule**: Weekly (Sunday 2 AM) or on-demand
+**Schedule**: Manual trigger only (not on the nightly path)
 
 **Tasks**:
 1. Validate source connection
@@ -39,15 +39,14 @@ airflow/
 6. Send notification
 
 **When to Run**:
-- Scheduled: Weekly/monthly for ongoing schema monitoring
-- Manual: Before OpenDental upgrades
-- Event-based: When schema changes are expected
-- Troubleshooting: When ETL fails with schema errors
+- Before OpenDental upgrades (when you want a changelog/Slack report)
+- Troubleshooting schema drift with detailed severity output
+- **Not required nightly** — `etl_pipeline` runs `refresh_schema_configuration` every run
 
 **Outputs**:
-- `etl_pipeline/config/tables.yml` (primary configuration)
-- Backup files in `logs/schema_analysis/backups/`
-- Change reports in `logs/schema_analysis/reports/`
+- `etl_pipeline/config/tables.yml`
+- Backup files in `etl_pipeline/logs/schema_analysis/backups/`
+- Change reports in `etl_pipeline/logs/schema_analysis/reports/`
 
 ---
 
@@ -55,33 +54,20 @@ airflow/
 
 **Purpose**: Extracts data from OpenDental to PostgreSQL analytics.
 
-**Schedule**: **Nightly Mon–Sun at 9 PM Central** (requires `AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago`). See `NIGHTLY_RUN.md` for what a run is (incremental ETL + dbt on success).
+**Schedule**: **Nightly Mon–Sun at 9 PM Central** (requires `AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago`). See `NIGHTLY_RUN.md`.
 
-**Task Groups**:
-
-1. **Validation**
-   - Validate configuration (tables.yml freshness check)
-   - Validate database connections (source, replication, analytics)
-   - Check schema drift (optional)
-
-2. **ETL Processing** (by performance category)
-   - Process large tables (1M+ rows) - **Parallel** with 5 workers
-   - Process medium tables (100K-1M rows) - Sequential
-   - Process small tables (10K-100K rows) - Sequential
-   - Process tiny tables (<10K rows) - Sequential
-
-3. **Verification & Reporting**
-   - Verify loads (row counts, timestamps)
-   - Generate execution report
-   - Send completion notification
-
-4. **dbt** (only when ETL succeeded)
-   - Short-circuit skips dbt if `pipeline_success` is False
-   - `dbt deps` then `dbt build` (target from Variable `dbt_target`, default `local`)
+**Flow** (in order):
+0. **Schema refresh** — `refresh_schema_configuration` (backup + `analyze_opendental_schema.py`)
+1. **Validation** — config freshness, DB connections, optional schema drift check
+2. **ETL** — large → medium → small → tiny
+3. **Verification & reporting** — verify loads, execution report, notify
+4. **dbt** — only when ETL succeeded (`should_run_dbt` → `dbt_deps` → `dbt_build`)
+5. **Publish** — `mdc publish analytics` when `publish_environment` is set
+6. **Final notification**
 
 **Integration**:
-- **Upstream**: Depends on valid `tables.yml` from Schema Analysis DAG
-- **dbt**: Same DAG; runs after reporting only when ETL succeeded
+- **Schema**: Regenerated every run before ETL (no dependency on `schema_analysis` DAG)
+- **dbt / publish**: Same DAG; ShortCircuit skips downstream when `pipeline_success` is False
 - **Components**: Uses `pipeline_orchestrator.py` from etl_pipeline
 
 **Parameters** (override when triggering):
@@ -118,44 +104,27 @@ airflow/
 └──────────────────────────────────────────────────────────────────────────┘
 
 ┌────────────────────────────────────────────────────────────────────────┐
-│ 1. SCHEMA ANALYSIS DAG (Weekly / On-Demand)                           │
+│ ETL PIPELINE DAG (Nightly 9 PM Central)                                 │
 ├────────────────────────────────────────────────────────────────────────┤
-│ Tasks:                                                                 │
-│  ✓ Validate source connection                                         │
-│  ✓ Backup existing config                                             │
-│  ✓ Run schema analysis                                                │
-│  ✓ Detect schema changes                                              │
-│  ✓ Validate new config                                                │
-│  ✓ Send notification (with severity: INFO/WARNING/CRITICAL)           │
+│ guard → schema refresh → validation → ETL → report                     │
+│ → (if success) dbt_build → publish_analytics → notify                  │
 ├────────────────────────────────────────────────────────────────────────┤
-│ Output: tables.yml (configuration for ETL)                             │
-└────────────────────────┬───────────────────────────────────────────────┘
-                         │
-                         ↓ Configuration file (versioned)
-                         │
-┌────────────────────────┴───────────────────────────────────────────────┐
-│ 2. ETL PIPELINE DAG (Nightly 9 PM Central, Mon–Sun)                   │
-├────────────────────────────────────────────────────────────────────────┤
-│ Validation → ETL (large → medium → small → tiny) → report / notify   │
-│ dbt (same run, only if pipeline_success):                             │
-│   should_run_dbt → dbt_deps → dbt build --target {dbt_target}         │
-├────────────────────────────────────────────────────────────────────────┤
-│ Output: raw schema populated; marts built when ETL succeeded          │
+│ Output: fresh tables.yml, raw schema loaded, marts built, RDS publish  │
 └────────────────────────────────────────────────────────────────────────┘
 
-COMMUNICATION:
-━━━━━━━━━━━━━━
-• Schema Analysis → ETL Pipeline: Via tables.yml (static configuration)
-• ETL → dbt: Same DAG run; ShortCircuit skips dbt when pipeline_success is False
-• All DAGs: Email/Slack notifications with severity levels
+┌────────────────────────────────────────────────────────────────────────┐
+│ SCHEMA ANALYSIS DAG (optional, manual)                                │
+├────────────────────────────────────────────────────────────────────────┤
+│ Same analyzer + change reports / Slack — not required for nightly runs │
+└────────────────────────────────────────────────────────────────────────┘
 
 FAILURE HANDLING:
 ━━━━━━━━━━━━━━━━
-• Schema Analysis fails: Alerts sent, ETL can still run with old config
-• ETL Pipeline fails: Individual table failures logged, retries available; dbt skipped
-• dbt build fails: Entire dbt task group fails; ETL data remains in raw schema
+• Schema refresh fails: Run stops before ETL (no stale-config load)
+• ETL fails: dbt/publish skipped; report/notify still run
+• dbt/publish fails: ETL data remains in raw schema
 
-See ORCHESTRATION_ROADMAP.md for deployment status, environment gaps, and open decisions.
+See ORCHESTRATION_ROADMAP.md for deployment status and open decisions.
 ```
 
 ## Configuration
@@ -165,10 +134,15 @@ See ORCHESTRATION_ROADMAP.md for deployment status, environment gaps, and open d
 Set these in Airflow UI (Admin → Variables):
 
 ```python
-# Required
-etl_environment = 'clinic'  # or 'test'
-dbt_target = 'local'          # or 'clinic' for RDS
-project_root = '/opt/airflow/dbt_dental_clinic'  # override on EC2 if path differs
+# Required (Option A clinic nightly)
+etl_environment = 'clinic'
+dbt_target = 'local'
+project_root = 'C:/Users/rains/dbt_dental_clinic'  # repo root on disk
+publish_environment = 'clinic'
+
+# Phase A test (native or Docker sandbox)
+# etl_environment = 'test'
+# project_root = '/opt/airflow/dbt_dental_clinic'  # Docker sandbox mount path only
 
 # Optional
 slack_webhook_url = 'https://hooks.slack.com/services/...'
@@ -187,47 +161,36 @@ slack_webhook
 
 ### Environment Variables
 
-Ensure these are set in your Airflow environment:
+For **Option A (native clinic)**, the DAG sets `ETL_ENVIRONMENT` from the Airflow Variable before calling `get_settings()`. Connection details come from `etl_pipeline/.env_clinic` — same as `mdc etl run --env clinic`. Root `/.env` is not used.
 
-```bash
-# Set in docker-compose.yml or Airflow configuration
-ETL_ENVIRONMENT=clinic
-
-# Or mount .env files to Airflow containers
-# See etl_pipeline/.env_clinic and etl_pipeline/.env_test
-```
+For **Docker sandbox**, root `/.env` supplies Airflow metadata DB credentials only; use `etl_pipeline/.env_test` for ETL.
 
 ## Deployment
 
-### Local Development (Docker Compose)
+**Production (Option A):** Native Airflow on the laptop — see [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md) and [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md).
 
 ```bash
-# Start Airflow
-docker-compose up airflow-init
-docker-compose up
-
-# Access Airflow UI
-# http://localhost:8080
-# Default: airflow/airflow
-
-# Mount this directory as /opt/airflow/dags in docker-compose.yml
-volumes:
-  - ./airflow/dags:/opt/airflow/dags
-  - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
-  - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
+pip install -r requirements-airflow.txt
+airflow db init
+airflow webserver   # separate terminal
+airflow scheduler
 ```
 
-### Production Deployment
+Set `AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago` in the environment or `airflow.cfg`.
 
-Update paths in DAG files:
+### Optional: Docker Compose sandbox (test env)
 
-```python
-# In schema_analysis_dag.py, update:
-PROJECT_ROOT = Path('/opt/airflow/dbt_dental_clinic')
+Not used for clinic nightly runs. See `docker-compose.yml` comments and [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md).
 
-# Or use Airflow Variables for flexibility:
-PROJECT_ROOT = Path(Variable.get('project_root', '/opt/airflow/dbt_dental_clinic'))
+```bash
+docker-compose --profile init run --rm airflow-init
+docker-compose up -d postgres mysql airflow-webserver airflow-scheduler
+# UI: http://localhost:8080
 ```
+
+### Production paths (deferred)
+
+EC2 or managed Airflow (MWAA) — same DAGs; revisit if moving off Option A. Set `project_root` Variable to the deployed repo path.
 
 ## Running the DAGs
 
@@ -293,7 +256,7 @@ AIRFLOW__SMTP__SMTP_MAIL_FROM=airflow@example.com
 View logs in:
 - **Airflow UI**: Task Instance → Logs
 - **File System**: `logs/scheduler/` and `logs/dag_processor/`
-- **Application Logs**: `etl_pipeline/logs/` for ETL-specific logs
+- **Application Logs**: `etl_pipeline/logs/etl_pipeline/` for ETL run logs; `etl_pipeline/logs/schema_analysis/` for schema artifacts
 
 ## Best Practices
 
@@ -304,7 +267,7 @@ View logs in:
 1. Schema Analysis DAG runs weekly (scheduled)
 2. Review notification email/Slack
 3. If changes detected:
-   a. Review changelog in logs/schema_analysis/reports/
+   a. Review changelog in etl_pipeline/logs/schema_analysis/reports/
    b. Test ETL pipeline in test environment
    c. Update dbt models if needed
    d. Run production ETL pipeline
@@ -412,9 +375,9 @@ airflow dags test schema_analysis 2025-01-01
 |-------|-------|-----------|
 | **Today (manual)** | Default | `etl-run` / `mdc etl run`, `run_dbt_on_ec2.ps1`, ad-hoc schema analysis |
 | **Code complete** | DAGs implemented | `schema_analysis`, `etl_pipeline` (+ integrated `dbt_build` task group) |
-| **Target** | Deployed + validated | Nightly unattended ETL + dbt on schedule; manual scripts as break-glass only |
+| **Target** | Deployed + validated | Nightly unattended on laptop (native Airflow + VPN); manual scripts as break-glass |
 
-**Blockers to target:** deployment, environment wiring (`.env_clinic`, replication, RDS dbt creds), end-to-end smoke test, orchestration host decision.
+**Blockers to target:** native Airflow install, end-to-end smoke test (Phase A/B), tunnel + VPN ops checklist. Orchestration host decided: Option A.
 
 Full phased plan and open decisions: [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md).
 
@@ -429,7 +392,7 @@ Full phased plan and open decisions: [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_
 
 For questions or issues:
 1. Check DAG logs in Airflow UI
-2. Review application logs in `etl_pipeline/logs/`
+2. Review application logs in `etl_pipeline/logs/etl_pipeline/`
 3. Consult team documentation
 4. Contact data engineering team
 

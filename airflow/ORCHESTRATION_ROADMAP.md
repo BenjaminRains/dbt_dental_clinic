@@ -1,7 +1,7 @@
 # Airflow Orchestration Roadmap
 
-**Status:** Planning — deployment and validation in progress  
-**Last updated:** 2026-06-17  
+**Status:** Phase A nearly complete — UI live, both DAGs loaded (paused); smoke test + Phase B next  
+**Last updated:** 2026-06-19  
 **Goal:** Move beyond manual ETL pulls (`etl-run` / `mdc etl run`) and manual dbt runs (`run_dbt_on_ec2.ps1`) to scheduled, unattended nightly orchestration.
 
 **Source discussion:** [Airflow wiring review](30475cd5-d66b-42f7-84a3-3ae3466c2e9b) (2026-06-17)
@@ -14,12 +14,13 @@ The **DAG code is largely complete**. What remains is **deployment, environment 
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `schema_analysis` DAG | ✅ Implemented | Weekly schema → `tables.yml` |
-| `etl_pipeline` DAG | ✅ Implemented | Nightly 9 PM Central, business-hours guard, incremental ETL |
+| `schema_analysis` DAG | ✅ Loaded (paused) | **Optional** — change reports + notifications; not on the nightly path |
+| `etl_pipeline` DAG | ✅ Loaded (paused) | Nightly 9 PM Central; **schema refresh first**, then validation + incremental ETL |
 | dbt orchestration | ✅ **Integrated in `etl_pipeline` DAG** | `should_run_dbt` → `dbt_deps` → `dbt_build` task group (not a separate DAG) |
-| Docker runtime | ✅ Scaffolded | `Dockerfile.airflow`, `docker-compose.yml`, `requirements-airflow.txt` |
-| Production deployment | ❌ Not wired | No EC2 deploy script; not in `deployment_credentials`; not in `docs/deployment/` |
-| End-to-end validation | ❓ Unknown | Manual workflows still in daily use |
+| Native Windows bootstrap | ✅ Done | `init-airflow-native.ps1`, `start-airflow-native.ps1`, POSIX stubs; two-terminal start |
+| Docker sandbox | ✅ Scaffolded | Optional — `Dockerfile.airflow`, `docker-compose.yml`; **not** used for clinic nightly |
+| Production deployment | 🔄 Option A (dev laptop) | **Native Airflow** (Python venv) + WireGuard VPN; no EC2 orchestrator |
+| End-to-end validation | ⏳ Next | Unpause `etl_pipeline`; manual trigger outside business hours (6 AM–8:59 PM Central blocked) |
 
 ---
 
@@ -31,27 +32,31 @@ Planning lives primarily under `airflow/`. There is **no separate Airflow plan u
 |----------|---------|
 | **This file** | Roadmap, gaps, phased plan, open decisions |
 | [`README.md`](README.md) | DAG overview, variables, local setup |
-| [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md) | Docker Compose locally → same image on EC2 → MWAA later |
-| [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) | What one run means: guard → ETL → report → dbt on success |
+| [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md) | Native Option A (clinic) vs optional Docker sandbox |
+| [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) | What one run means: guard → schema refresh → ETL → dbt → publish |
 | [`DAGS_STATUS.md`](DAGS_STATUS.md) | Quick status reference |
 | [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md) | **Future** dbt enhancements (selectors, Cosmos) — initial dbt is already in `etl_pipeline` |
-| [`docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md) §4.4 | Root `.env` → Docker/Airflow env substitution |
+| [`docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md) §4.4 | Native Airflow vs optional Compose sandbox |
 
 ---
 
 ## Architecture (current code)
 
 ```
-schema_analysis (weekly, on-demand)
+etl_pipeline (nightly 9 PM Central)
        │
-       └──► tables.yml ──► etl_pipeline (nightly 9 PM Central)
-                                    │
-                                    ├── validation
-                                    ├── ETL (large → medium → small → tiny)
-                                    ├── verify / report / notify
-                                    └── dbt_build (only if pipeline_success)
-                                            ├── dbt_deps
-                                            └── dbt_build --target {dbt_target}
+       ├── guard_business_hours
+       ├── refresh_schema_configuration   ← analyze_opendental_schema.py (every night, before ETL)
+       ├── validation (etl_environment)
+       ├── ETL (large → medium → small → tiny)
+       ├── verify / report
+       └── on ETL success:
+               ├── dbt_build (dbt_target via mdc)
+               ├── publish_analytics (publish_environment via mdc)
+               └── notify
+
+schema_analysis DAG (optional, manual trigger)
+       └── Same analyzer + change reports / Slack — not required for nightly runs
 ```
 
 dbt is **not** a third DAG. It is a task group inside `airflow/dags/etl_pipeline_dag.py` (see `should_run_dbt`, `dbt_build` group).
@@ -63,45 +68,130 @@ dbt is **not** a third DAG. It is a task group inside `airflow/dags/etl_pipeline
 | Today (manual) | After Airflow | Notes |
 |----------------|---------------|-------|
 | `etl-run` / `mdc etl run --env clinic` | `etl_pipeline` DAG @ 9 PM Central | Keep manual scripts as **break-glass** for single-table reruns |
-| `run_dbt_on_ec2.ps1 -Clinic RefreshProject` | `dbt_build` task group after ETL success | Requires EC2 dbt/RDS credentials (see TODO: Fix EC2 dbt Database Connection Credentials) |
-| Ad-hoc schema analysis | `schema_analysis` DAG (weekly) or manual trigger | Before OpenDental upgrades |
+| `run_dbt_on_ec2.ps1 -Clinic RefreshProject` | `dbt_build` task group (`dbt_target=local` via mdc) | Build on laptop Postgres |
+| `mdc publish analytics --env clinic` | `publish_analytics` task (`publish_environment=clinic`) | Requires SSM tunnel on :5433 |
+| `analyze_opendental_schema.py` / fresh `tables.yml` | `refresh_schema_configuration` in `etl_pipeline` (first step after guard) | Runs **every nightly** before ETL |
+| Ad-hoc schema analysis + change report | `schema_analysis` DAG (manual trigger) | Optional — e.g. before OpenDental upgrades |
 
 ---
 
-## Environment gaps (biggest blocker)
+## Environment contract (Option A) — **native Airflow, same files as `mdc`**
 
-The ETL pipeline loads **`etl_pipeline/.env_<stage>`** via `FileConfigProvider` / `settings_v2.py`. OS environment variables **override** file values when set (see `settings_v2` precedence).
+**Decided:** 2026-06-19 — No duplicate env files, no Compose-injected ETL overrides.
 
-Docker Compose today:
+### Why not Docker for clinic runs?
 
-| Gap | Detail |
-|-----|--------|
-| `.env_clinic` / `.env_test` | Not mounted or generated inside Airflow containers |
-| Partial root `.env` | Injects some `OPENDENTAL_*` / `POSTGRES_*` but not the full ETL contract |
-| `MYSQL_REPLICATION_*` | Not set on Airflow containers (required for 3-stage ETL: source → replication → analytics) |
-| `ETL_ENVIRONMENT` | Not set on Airflow containers (DAG uses Airflow Variable `etl_environment` for orchestration; ETL settings still need stage file or matching env vars) |
-| dbt RDS credentials | `POSTGRES_ANALYTICS_*` + Airflow Variable `dbt_target=clinic` — tied to EC2 dbt credential deploy |
+Inside a container, `localhost` in `etl_pipeline/.env_clinic` points at the **container**, not your laptop. Fixing that requires either duplicate files (`host.docker.internal`) or Compose overrides — both rejected.
 
-**Resolution options (pick one per environment):**
+**Simplest path:** run Airflow **on the host** (Python venv), same as `mdc etl run` / `mdc dbt run`. One stage file per environment; no root `.env` ETL contract.
 
-1. **Mount stage env file** — deploy `etl_pipeline/.env_clinic` (or `.env_test`) on the host; file is visible inside the mounted `etl_pipeline/` volume.
-2. **Inject full env var set** — set all `OPENDENTAL_*`, `MYSQL_REPLICATION_*`, `POSTGRES_ANALYTICS_*` in `docker-compose.yml` or container env (OS wins over file).
+### What loads what
 
-For dbt, ensure `POSTGRES_ANALYTICS_*` reach the container and set Airflow Variable `dbt_target` (`local` for Compose dev, `clinic` for RDS).
+| Concern | Source | Notes |
+|---------|--------|-------|
+| **ETL** | `etl_pipeline/.env_<stage>` | DAG sets `ETL_ENVIRONMENT` from Airflow Variable → same file `mdc` uses |
+| **dbt** | `mdc dbt invoke --env {dbt_target}` in DAG | `dbt_target=local` → same as `mdc dbt run --env local` |
+| **Publish** | `mdc publish analytics --env {publish_environment}` in DAG | `publish_environment=clinic` — no manual publish step |
+| **Airflow metadata** | Local Postgres DB (e.g. database `airflow` on your existing instance) | Not the analytics warehouse |
+| **Airflow Variables** | `etl_environment`, `dbt_target`, `publish_environment`, `project_root` | See table below |
+| **Root `/.env`** | **Not used** for Option A clinic orchestration | Only needed if you use optional Docker sandbox |
+| **SSM tunnel** | `mdc tunnel clinic-db` on localhost:5433 before publish task | Must be running when publish runs (see ops note below) |
+
+### Airflow Variables (Option A clinic nightly)
+
+| Variable | Value |
+|----------|-------|
+| `project_root` | Repo root, e.g. `C:\Users\rains\dbt_dental_clinic` |
+| `etl_environment` | `clinic` |
+| `dbt_target` | `local` |
+| `publish_environment` | `clinic` |
+| `publish_tunnel_port` | `5433` (optional) |
+| `slack_webhook_url` | optional |
+
+Leave `publish_environment` **unset** for Phase A smoke tests (skips publish). Do **not** set `dbt_target=clinic` until dbt can build directly against RDS safely.
+
+### SSM tunnel (publish prerequisite) — **manual for now**
+
+**Decided:** Start the tunnel yourself before the nightly run (or before a manual DAG trigger). No Scheduled Task or DAG `start_tunnel` task yet.
+
+`mdc publish analytics` (inside the DAG) connects to RDS via **`127.0.0.1:5433`**. That port only works while an SSM port-forward session is active.
+
+**Before 9 PM Central (or before triggering the DAG):**
+
+1. Open a **dedicated terminal** (leave it open for the whole run).
+2. Run:
+
+   ```powershell
+   mdc tunnel clinic-db
+   ```
+
+3. Wait until you see:
+
+   ```
+   Port 5433 opened ...
+   Waiting for connections...
+   ```
+
+4. Optional check:
+
+   ```powershell
+   Test-NetConnection 127.0.0.1 -Port 5433
+   ```
+
+   `TcpTestSucceeded` should be `True`.
+
+The tunnel uses **AWS SSM** through the clinic API EC2 instance into the private RDS VPC — separate from **WireGuard** (which is only needed for OpenDental ETL). You need both on nightly runs: **VPN for ETL**, **SSM tunnel for publish**.
+
+**Future (Phase D):** automate tunnel start (Scheduled Task or DAG task). Until then, if publish fails with “tunnel not reachable,” the tunnel terminal was not open or the session dropped.
+
+### Pre-flight (same as manual)
+
+```powershell
+mdc etl validate --env clinic --profile full   # VPN on
+mdc dbt validate --env local
+```
+
+If those pass, Airflow tasks using the same files will see the same connections.
+
+### Optional: Docker Compose sandbox
+
+`docker-compose.yml` can still spin up Airflow + Compose postgres/mysql for **isolated experiments**. It is **not** the Option A clinic path — do not rely on it for nightly clinic runs. ETL/dbt connection vars are **not** injected into Airflow containers (avoids overriding mounted stage files).
 
 ---
 
-## Orchestration host (open decision)
+## Orchestration host — **Decision: Option A (dev machine over VPN)**
 
-The nightly run must execute on a host that can reach **client OpenDental MySQL** (VPN/tunnel) without running during business hours (6 AM–8:59 PM Central — enforced by `guard_business_hours`).
+**Decided:** 2026-06-19 — Run Airflow **natively on the developer laptop** (Python venv), with **WireGuard VPN** to reach clinic OpenDental (`192.168.2.x`). Same env files as `mdc`; **not** Docker Compose for clinic nightly runs.
 
-| Option | Pros | Cons |
-|--------|------|------|
-| **A. Dev machine over VPN** | Fastest to validate | Not production-grade; machine must be on at 9 PM |
-| **B. Dedicated EC2 orchestrator** | Recommended for unattended runs | New infra + deploy work |
-| **C. Clinic API EC2 (`i-0b7013339cf648e0f`)** | Reuses existing instance | Mixes API + heavy ETL on `t3.small`; resource contention |
+The nightly run must execute on a host that can reach **client OpenDental MySQL** without running during business hours (6 AM–8:59 PM Central — enforced by `guard_business_hours`).
 
-`docs/deployment/CLINIC_INFRASTRUCTURE_PLAN.md` does **not** yet assign an orchestration host.
+### Why Option A
+
+| Factor | Detail |
+|--------|--------|
+| Network | OpenDental is on clinic LAN; laptop + VPN already works for manual ETL |
+| Cost | No new EC2 or site-to-site VPN (~$20–45+/mo avoided) |
+| Schema refresh | ~**7 min** (446 tables; `schema_analysis` logs, Mar–Jun 2026) |
+| Incremental ETL | ~**25 min** when runs are every couple of days (observed) |
+| Full nightly window | 9 PM → ~**7 min schema** + ~**25 min ETL** + dbt (see open decision #3) + publish → ~**32 min** before dbt; full `dbt build` adds ~52 min |
+
+### Operational requirements (Option A)
+
+- [ ] **Machine on at 9 PM Central** — disable sleep during the run window, or use “Never sleep when plugged in”
+- [ ] **WireGuard connected** before scheduler fires (manual, or OS startup task / scheduled connect at 8:55 PM)
+- [ ] **SSM tunnel** — `mdc tunnel clinic-db` in a separate terminal; wait for port **5433** before 9 PM (see § SSM tunnel above)
+- [ ] **Native Airflow** — venv with `requirements-airflow-native.txt`; scheduler + webserver via `start-airflow-native.ps1` (Windows) or host processes (not Docker)
+- [ ] **`etl_pipeline/.env_clinic`** — unchanged; same file as `mdc etl run --env clinic`
+- [ ] **Airflow Variable `project_root`** — repo root on disk (not `/opt/airflow/...`)
+- [ ] **dbt + RDS** — DAG runs `mdc publish analytics` when `publish_environment=clinic` (tunnel required)
+
+### Deferred options (revisit if laptop becomes unreliable)
+
+| Option | When to reconsider |
+|--------|-------------------|
+| **B. Dedicated EC2** | Need 24/7 unattended runs without laptop; willing to add site-to-site VPN |
+| **C. Clinic API EC2** | Not recommended — resource contention on `t3.small` |
+| **D. On-prem MDC server** | Clinic IT prefers orchestration on LAN; no AWS VPN |
 
 ---
 
@@ -109,40 +199,55 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 
 ### Phase A — Local proof (1–2 days)
 
-- [ ] Copy `.env.template` → `.env`; copy `etl_pipeline/.env_test.template` → `etl_pipeline/.env_test` (or `.env_clinic` for clinic-shaped test)
-- [ ] `docker-compose build airflow-webserver airflow-scheduler`
-- [ ] `docker-compose --profile init run --rm airflow-init`
-- [ ] `docker-compose up -d postgres mysql airflow-webserver airflow-scheduler`
-- [ ] Set Airflow Variables: `etl_environment=test`, `dbt_target=local`, `project_root=/opt/airflow/dbt_dental_clinic`
-- [ ] Enable `etl_pipeline`; trigger manually **outside** business hours (or temporarily adjust guard for testing)
+- [x] Create venv; `pip install -r requirements-airflow-native.txt` (Airflow 2.7.3 pinned)
+- [x] `airflow db init` (metadata DB — SQLite `airflow/airflow.db` on dev laptop)
+- [x] Set Airflow Variables: `etl_environment=test`, `dbt_target=local`, `project_root=<repo root>`
+- [x] Windows native bootstrap: POSIX stubs, `run_airflow.py`, scheduler + webserver (two terminals)
+- [x] Confirm DAGs load in UI — `etl_pipeline` + `schema_analysis` visible at http://localhost:8080
+- [ ] **Unpause `etl_pipeline`** in UI (leave `schema_analysis` paused unless testing change reports)
+- [ ] Confirm `etl_pipeline/.env_test` exists; `mdc etl validate --env test --profile full`
+- [ ] Trigger `etl_pipeline` manually **outside** business hours (after 9 PM Central)
 - [ ] Confirm: validation → ETL → `dbt_build` completes
 - [ ] `pytest airflow/tests/ -v`
-- [ ] Fix any env/mount gaps discovered in `docker-compose.yml`
 
-### Phase B — Clinic orchestrator (2–3 days)
+**Start commands (Windows, from repo root):**
 
-- [ ] **Decide orchestration host** (see open decisions below)
-- [ ] Deploy same Docker image + Compose (or equivalent) on chosen host
-- [ ] Wire `etl_pipeline/.env_clinic` + RDS as `POSTGRES_ANALYTICS_*`
-- [ ] Deploy dbt credentials (`.env_ec2` / `setup_ec2_dbt_env.sh` — see TODO: Fix EC2 dbt Database Connection Credentials)
-- [ ] Set Variables: `etl_environment=clinic`, `dbt_target=clinic`, `project_root=/opt/dbt_dental_clinic` (or mounted path)
-- [ ] First manual trigger against clinic; verify raw load + dbt marts
+```powershell
+# Terminal 1 — scheduler
+.\scripts\utils\start-airflow-native.ps1 -SchedulerOnly
 
-### Phase C — Production cutover (1 day)
+# Terminal 2 — webserver (Flask debug mode; not gunicorn)
+.\scripts\utils\start-airflow-native.ps1 -WebserverOnly
+```
+
+Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing. Do not use `airflow standalone` on Windows; use the two-terminal pattern above.
+
+### Phase B — Clinic on dev laptop (Option A) (2–3 days)
+
+- [x] **Decide orchestration host** → Option A (dev machine over VPN)
+- [x] **Env model** → native Airflow; single `etl_pipeline/.env_clinic` (no duplicates, no Compose overrides)
+- [ ] WireGuard auto-connect or pre-run checklist (VPN up before 9 PM)
+- [ ] Set Airflow Variables: `etl_environment=clinic`, `dbt_target=local`, `project_root=<repo root>`
+- [ ] `mdc etl validate --env clinic --profile full` with VPN on
+- [ ] First manual DAG trigger outside business hours; confirm schema refresh (~7 min) → ETL (~25 min) → dbt → publish → notify
+- [ ] SSM tunnel running before publish task (`mdc tunnel clinic-db` → port 5433 open)
+
+### Phase C — Production cutover on laptop (1 day)
 
 - [ ] Enable nightly schedule (already `0 21 * * *` with `America/Chicago`)
-- [ ] Configure Slack (`slack_webhook_url` Variable) and/or SMTP alerts
-- [ ] Restrict Airflow UI (port 8080) — VPN / security group only
-- [ ] Monitor 2–3 consecutive nightly runs
-- [ ] Document break-glass procedures for manual ETL/dbt reruns
+- [ ] Configure Slack (`slack_webhook_url` Variable) and/or SMTP alerts on failure
+- [ ] Airflow UI (localhost:8080) — no public exposure; laptop-only
+- [ ] Monitor 2–3 consecutive nightly runs (VPN + **tunnel terminal open** + native Airflow up)
+- [ ] Document break-glass: manual `mdc etl run`, `mdc dbt run`, `mdc publish analytics`
+- [ ] (Later) Automate SSM tunnel start before publish task
 
 ### Phase D — Hardening (later)
 
 - [ ] Layered dbt selectors (see [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md))
 - [ ] Astronomer Cosmos for model-level tasks and retries
 - [ ] Split `mart_patient_retention` to separate schedule (~52 min of full `dbt build`; see TODO: Optimize mart_patient_retention)
-- [ ] EC2 deploy script + `deployment_credentials` entry for Airflow
-- [ ] Cross-link from `docs/deployment/` when clinic orchestration host is chosen
+- [ ] Re-evaluate EC2/on-prem orchestrator if laptop schedule proves unreliable
+- [ ] EC2 deploy script + `deployment_credentials` entry for Airflow (only if moving off Option A)
 
 ---
 
@@ -152,9 +257,9 @@ Record answers here as they are made.
 
 | # | Question | Options | Decision |
 |---|----------|---------|----------|
-| 1 | **Where should the 9 PM clinic run execute?** | Dedicated EC2 · Dev machine over VPN · Existing API EC2 | _TBD_ |
-| 2 | **First validation target?** | Local/test env in Compose · Go straight to clinic RDS | _TBD_ |
-| 3 | **dbt scope nightly?** | Full `dbt build` (~52 min; dominated by `mart_patient_retention`) · Split slow marts to weekly DAG/selector | _TBD_ |
+| 1 | **Where should the 9 PM clinic run execute?** | Dedicated EC2 · Dev machine over VPN · Existing API EC2 | **Option A — dev laptop + VPN** (2026-06-19) |
+| 2 | **First validation target?** | Native venv + `etl_environment=test` · Go straight to clinic | **Phase A: native test env · Phase B: clinic via `.env_clinic`** |
+| 3 | **dbt scope nightly?** | Full `dbt build` (~52 min; dominated by `mart_patient_retention`) · Split slow marts to weekly DAG/selector | _TBD_ — schema ~7 min + ETL ~25 min observed; dbt dominates total if full build |
 
 ---
 
@@ -164,8 +269,9 @@ These are small but prevent confusion:
 
 - [ ] Update placeholder email in DAG `default_args` (`data-team@example.com`)
 - [ ] Confirm `project_root` Variable works on EC2 without code changes (already supported)
-- [ ] Align `scripts/utils/init-airflow.sh` with root `.env` (script references `config/.env`)
-- [ ] Add orchestration host to clinic infra plan once decided
+- [x] Windows native start scripts (`init-airflow-native.ps1`, `start-airflow-native.ps1`, POSIX stubs)
+- [x] Align `scripts/utils/init-airflow.sh` with root `.env` (was `config/.env`)
+- [x] Add Option A orchestration note to clinic infra / deployment docs (laptop + VPN, native Airflow)
 
 ---
 
@@ -179,11 +285,12 @@ These are small but prevent confusion:
 
 ## Quick reference: Airflow Variables
 
-| Variable | Local dev | Clinic production |
-|----------|-----------|-------------------|
-| `project_root` | `/opt/airflow/dbt_dental_clinic` | `/opt/dbt_dental_clinic` (or host path) |
+| Variable | Phase A (test) | Option A clinic (native) |
+|----------|----------------|---------------------------|
+| `project_root` | `<repo root>` | same |
 | `etl_environment` | `test` | `clinic` |
-| `dbt_target` | `local` | `clinic` |
+| `dbt_target` | `local` | `local` |
+| `publish_environment` | *(unset)* | `clinic` |
 | `slack_webhook_url` | optional | recommended |
 
 See [`README.md`](README.md) and [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) for schedule and run semantics.
