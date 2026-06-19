@@ -1,3 +1,11 @@
+# ARCHIVED (Phase 5.5) — not loaded by default. Daily workflow: pip install -e tools/mdc_cli; mdc ...
+# Kept for reference and emergency rollback. Load via scripts/archive/ only if needed.
+#
+# Legacy ETL PowerShell helpers (Pipenv shell activation + manual etl_pipeline/.env parsing).
+# Superseded by:
+#   - pydantic-settings: etl_pipeline/.env_<stage> via etl_pipeline/etl_pipeline/config/settings_v2.py
+#   - stateless mdc CLI: .\load_project.ps1 → scripts/mdc_aliases.ps1 (etl-run, etl-validate, etl-test, etl-status)
+#
 # ETL Pipeline Functions
 # This file contains functions for managing the ETL pipeline environment
 
