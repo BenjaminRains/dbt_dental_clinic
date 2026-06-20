@@ -25,9 +25,9 @@ from airflow.exceptions import AirflowException
 
 # Default arguments for all tasks
 default_args = {
-    'owner': 'data-engineering',
+    'owner': 'benjamin-rains',
     'depends_on_past': False,
-    'email': ['data-team@example.com'],  # TODO: Update with your email
+    'email': ['rains.bp@gmail.com'],
     'email_on_failure': True,
     'email_on_retry': False,
     'retries': 2,

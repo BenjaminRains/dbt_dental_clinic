@@ -1,2 +1,4 @@
 # Legacy design notes — not Python DAGs
 .*\.txt
+# Shared helpers imported by DAG files — not DAG definitions
+lib/

@@ -39,11 +39,13 @@ from airflow.models import Variable
 from airflow.exceptions import AirflowException, AirflowSkipException
 from airflow.utils.trigger_rule import TriggerRule
 
+from lib.mdc_runner import run_mdc, run_mdc_etl_invoke
+
 # Default arguments for all tasks
 default_args = {
-    'owner': 'data-engineering',
+    'owner': 'benjamin-rains',
     'depends_on_past': False,
-    'email': ['data-team@example.com'],  # TODO: Update with your email
+    'email': ['rains.bp@gmail.com'],
     'email_on_failure': True,
     'email_on_retry': False,
     'retries': 1,  # Reduced retries for data pipeline (tables can be retried individually)
@@ -88,47 +90,9 @@ DBT_TARGET = Variable.get('dbt_target', default_var='local')
 PUBLISH_ENVIRONMENT = Variable.get('publish_environment', default_var='')
 
 
-def _prepare_etl_runtime():
-    """
-    Align OS env with Airflow Variable etl_environment before ETL imports.
-
-    get_settings() reads ETL_ENVIRONMENT from the process environment (not the
-    Airflow Variable). Reset cached settings so the stage file (.env_test, etc.)
-    matches the DAG configuration.
-    """
-    import os
-    import sys
-
-    os.environ['ETL_ENVIRONMENT'] = ENVIRONMENT
-    os.environ['ETL_LOG_PATH'] = str(ETL_PIPELINE_DIR / 'logs' / 'etl_pipeline')
-    if str(ETL_PIPELINE_DIR) not in sys.path:
-        sys.path.insert(0, str(ETL_PIPELINE_DIR))
-    from etl_pipeline.config import reset_settings
-
-    reset_settings()
-
-
 def _run_mdc_cmd(mdc_args: list, *, timeout_seconds: int | None = None) -> None:
     """Run mdc CLI from project root (same env isolation as manual mdc commands)."""
-    import subprocess
-
-    cmd = ['mdc', *mdc_args]
-    logging.info("Running: %s (cwd=%s)", ' '.join(cmd), PROJECT_ROOT)
-    result = subprocess.run(
-        cmd,
-        cwd=str(PROJECT_ROOT),
-        capture_output=True,
-        text=True,
-        timeout=timeout_seconds,
-    )
-    if result.stdout:
-        logging.info(result.stdout)
-    if result.stderr:
-        logging.warning(result.stderr)
-    if result.returncode != 0:
-        raise AirflowException(
-            f"mdc command failed (exit {result.returncode}): {' '.join(cmd)}"
-        )
+    run_mdc(mdc_args, cwd=PROJECT_ROOT, timeout_seconds=timeout_seconds)
 
 
 def run_dbt_deps(**context):
@@ -178,7 +142,6 @@ def refresh_schema_before_etl(**context):
     """
     from lib.schema_refresh import refresh_schema_configuration
 
-    _prepare_etl_runtime()
     refresh_schema_configuration(
         PROJECT_ROOT,
         ENVIRONMENT,
@@ -346,221 +309,119 @@ def validate_configuration(**context):
 def validate_database_connections(**context):
     """
     Validate all database connections before starting ETL.
-    
-    Tests connections to:
-    1. OpenDental source (MySQL)
-    2. Replication database (MySQL)
-    3. Analytics database (PostgreSQL)
-    
-    Fails fast if any connection is unavailable.
-    """
-    _prepare_etl_runtime()
 
-    from etl_pipeline.config import get_settings, DatabaseType
-    from etl_pipeline.core.connections import ConnectionFactory
-    
+    Runs via mdc etl test-connections (ETL Pipenv), not in-process in .venv-airflow.
+    """
     logging.info("Validating database connections")
-    
-    try:
-        settings = get_settings()
-        
-        # Test 1: Source connection (OpenDental MySQL)
-        logging.info("Testing source connection...")
-        source_engine = ConnectionFactory.get_source_connection(settings)
-        with source_engine.connect() as conn:
-            result = conn.execute("SELECT 1 as test, DATABASE() as db")
-            row = result.fetchone()
-            logging.info(f"✅ Source connected: {row[1]}")
-        source_engine.dispose()
-        
-        # Test 2: Replication connection (Local MySQL)
-        logging.info("Testing replication connection...")
-        replication_engine = ConnectionFactory.get_replication_connection(settings)
-        with replication_engine.connect() as conn:
-            result = conn.execute("SELECT 1 as test, DATABASE() as db")
-            row = result.fetchone()
-            logging.info(f"✅ Replication connected: {row[1]}")
-        replication_engine.dispose()
-        
-        # Test 3: Analytics connection (PostgreSQL)
-        logging.info("Testing analytics connection...")
-        analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
-        with analytics_engine.connect() as conn:
-            result = conn.execute("SELECT 1 as test, current_database() as db, current_schema() as schema")
-            row = result.fetchone()
-            logging.info(f"✅ Analytics connected: {row[1]}.{row[2]}")
-        analytics_engine.dispose()
-        
-        logging.info("✅ All database connections validated")
-        return True
-        
-    except Exception as e:
-        logging.error(f"❌ Database connection validation failed: {e}")
-        raise AirflowException(f"Failed to connect to databases: {e}")
+    run_mdc(
+        ['etl', 'test-connections', '--env', ENVIRONMENT],
+        cwd=PROJECT_ROOT,
+    )
+    logging.info("✅ All database connections validated")
+    return True
 
 
 def check_schema_hash(**context):
     """
     Optional: Quick check if source schema has changed since config generation.
-    
-    This is a lightweight check on a few key tables to detect schema drift.
-    If significant drift detected, recommend running Schema Analysis DAG.
+
+    Runs via mdc etl invoke check-schema-drift (ETL Pipenv).
     """
-    import yaml
-
-    _prepare_etl_runtime()
-
-    from etl_pipeline.config import get_settings
-    from etl_pipeline.core.connections import ConnectionFactory
-    
     logging.info("Checking for schema drift (quick check)")
-    
-    try:
-        # Load expected schema hash from config
-        with open(TABLES_YML_PATH, 'r') as f:
-            config = yaml.safe_load(f)
-        
-        expected_hash = config['metadata'].get('schema_hash')
-        
-        # Quick check: Count tables in source database
-        settings = get_settings()
-        source_engine = ConnectionFactory.get_source_connection(settings)
-        
-        with source_engine.connect() as conn:
-            result = conn.execute(
-                "SELECT COUNT(*) FROM information_schema.tables "
-                "WHERE table_schema = DATABASE() "
-                "AND table_type = 'BASE TABLE'"
-            )
-            current_table_count = result.scalar()
-        
-        source_engine.dispose()
-        
-        expected_table_count = config['metadata'].get('total_tables', 0)
-        
-        # Check if table count matches (simple drift detection)
-        if current_table_count != expected_table_count:
-            drift_pct = abs(current_table_count - expected_table_count) / expected_table_count * 100
-            
-            if drift_pct > 5:  # More than 5% difference
-                logging.warning(
-                    f"⚠️  Significant schema drift detected!\n"
-                    f"Expected tables: {expected_table_count}\n"
-                    f"Current tables: {current_table_count}\n"
-                    f"Drift: {drift_pct:.1f}%\n"
-                    f"Recommend running Schema Analysis DAG before continuing."
-                )
-                context['task_instance'].xcom_push(key='schema_drift_detected', value=True)
-                context['task_instance'].xcom_push(key='drift_percentage', value=drift_pct)
-            else:
-                logging.info(
-                    f"Minor schema drift: {expected_table_count} → {current_table_count} tables"
-                )
-                context['task_instance'].xcom_push(key='schema_drift_detected', value=False)
-        else:
-            logging.info(f"✅ No schema drift detected ({current_table_count} tables)")
-            context['task_instance'].xcom_push(key='schema_drift_detected', value=False)
-        
-        return True
-        
-    except Exception as e:
-        logging.warning(f"Schema drift check failed (non-critical): {e}")
-        # Don't fail the pipeline for drift check failures
-        context['task_instance'].xcom_push(key='schema_drift_detected', value=False)
-        return True
+
+    result = run_mdc_etl_invoke(
+        ENVIRONMENT,
+        ['check-schema-drift', '--config', str(TABLES_YML_PATH)],
+        project_root=PROJECT_ROOT,
+    )
+
+    schema_drift = result.get('schema_drift_detected', False)
+    context['task_instance'].xcom_push(key='schema_drift_detected', value=schema_drift)
+    if 'drift_percentage' in result:
+        context['task_instance'].xcom_push(
+            key='drift_percentage', value=result['drift_percentage']
+        )
+
+    if schema_drift:
+        logging.warning("⚠️  Significant schema drift detected")
+    else:
+        logging.info("✅ No significant schema drift detected")
+
+    return True
 
 
 # ============================================================================
 # Task Functions - ETL Processing
 # ============================================================================
 
+_CATEGORY_TIMEOUT_SECONDS = {
+    'large': 3 * 3600,
+    'medium': 2 * 3600,
+    'small': 3600,
+    'tiny': 30 * 60,
+}
+
+
 def process_tables_by_category(category: str, **context):
     """
-    Process all tables in a given performance category.
-    
-    Args:
-        category: 'large', 'medium', 'small', or 'tiny'
-    
-    This function integrates with the existing pipeline_orchestrator.py
-    to leverage the established ETL logic.
+    Process all tables in a given performance category via mdc etl invoke run-category.
     """
-    _prepare_etl_runtime()
-
-    from etl_pipeline.orchestration.pipeline_orchestrator import PipelineOrchestrator
-    
     logging.info(f"Processing {category} tables")
-    
-    # Get parameters
+
     force_full = context['params'].get('force_full_refresh', False)
     max_workers = context['params'].get('max_workers', DEFAULT_MAX_WORKERS)
-    
+
+    invoke_args = [
+        'run-category',
+        '--category', category,
+        '--parallel', str(max_workers),
+        '--config', str(TABLES_YML_PATH),
+    ]
+    if force_full:
+        invoke_args.append('--force')
+
     try:
-        # Initialize orchestrator
-        orchestrator = PipelineOrchestrator(environment=ENVIRONMENT)
-        
-        # Initialize connections
-        if not orchestrator.initialize_connections():
-            raise AirflowException(f"Failed to initialize connections for {category} tables")
-        
-        # Process tables in this category
-        results = orchestrator.process_tables_by_performance_category(
-            category=category,
-            max_workers=max_workers if category == 'large' else 1,  # Only parallel for large
-            force_full=force_full
+        result = run_mdc_etl_invoke(
+            ENVIRONMENT,
+            invoke_args,
+            project_root=PROJECT_ROOT,
+            timeout_seconds=_CATEGORY_TIMEOUT_SECONDS.get(category),
         )
-        
-        # Cleanup
-        orchestrator.cleanup()
-        
-        # Analyze results
-        if not results:
-            logging.warning(f"No tables found in category: {category}")
-            raise AirflowSkipException(f"No {category} tables to process")
-        
-        success_count = sum(1 for success in results.values() if success)
-        failure_count = sum(1 for success in results.values() if not success)
-        total_count = len(results)
-        
-        # Store results in XCom
-        context['task_instance'].xcom_push(key='success_count', value=success_count)
-        context['task_instance'].xcom_push(key='failure_count', value=failure_count)
-        context['task_instance'].xcom_push(key='total_count', value=total_count)
-        context['task_instance'].xcom_push(key='failed_tables', value=[
-            table for table, success in results.items() if not success
-        ])
-        
-        logging.info(
-            f"✅ {category.upper()} tables processed: "
-            f"{success_count} succeeded, {failure_count} failed, "
-            f"{total_count} total"
-        )
-        
-        # If any critical tables failed, raise exception
-        if failure_count > 0:
-            failed_tables = [table for table, success in results.items() if not success]
-            logging.error(f"Failed tables in {category}: {failed_tables}")
-            
-            # For large tables, failure is critical
-            if category == 'large':
-                raise AirflowException(
-                    f"Critical large table failures: {failed_tables}"
-                )
-            
-            # For other categories, log but continue
-            logging.warning(f"Some {category} tables failed but pipeline continues")
-        
-        return {
-            'category': category,
-            'success': success_count,
-            'failed': failure_count,
-            'total': total_count
-        }
-        
-    except AirflowSkipException:
-        raise  # Re-raise skip exceptions
-    except Exception as e:
+    except AirflowException as e:
         logging.error(f"❌ Failed to process {category} tables: {e}")
-        raise AirflowException(f"ETL processing failed for {category} tables: {e}")
+        raise AirflowException(f"ETL processing failed for {category} tables: {e}") from e
+
+    if result.get('skipped') or result.get('total_count', 0) == 0:
+        logging.warning(f"No tables found in category: {category}")
+        raise AirflowSkipException(f"No {category} tables to process")
+
+    success_count = result.get('success_count', 0)
+    failure_count = result.get('failure_count', 0)
+    total_count = result.get('total_count', 0)
+    failed_tables = result.get('failed_tables', [])
+
+    context['task_instance'].xcom_push(key='success_count', value=success_count)
+    context['task_instance'].xcom_push(key='failure_count', value=failure_count)
+    context['task_instance'].xcom_push(key='total_count', value=total_count)
+    context['task_instance'].xcom_push(key='failed_tables', value=failed_tables)
+
+    logging.info(
+        f"✅ {category.upper()} tables processed: "
+        f"{success_count} succeeded, {failure_count} failed, {total_count} total"
+    )
+
+    if failure_count > 0:
+        logging.error(f"Failed tables in {category}: {failed_tables}")
+        if category == 'large':
+            raise AirflowException(f"Critical large table failures: {failed_tables}")
+        logging.warning(f"Some {category} tables failed but pipeline continues")
+
+    return {
+        'category': category,
+        'success': success_count,
+        'failed': failure_count,
+        'total': total_count,
+    }
 
 
 def process_large_tables(**context):
@@ -589,84 +450,27 @@ def process_tiny_tables(**context):
 
 def verify_loads(**context):
     """
-    Verify that data was loaded successfully.
-    
-    Checks:
-    1. Row counts in tracking tables
-    2. Recent load timestamps
-    3. Data freshness in analytics database
+    Verify that data was loaded successfully via mdc etl invoke verify-loads.
     """
-    _prepare_etl_runtime()
-
-    from etl_pipeline.config import get_settings
-    from etl_pipeline.core.connections import ConnectionFactory
-    
     logging.info("Verifying data loads")
-    
-    try:
-        settings = get_settings()
-        
-        # Check replication tracking table
-        replication_engine = ConnectionFactory.get_replication_connection(settings)
-        with replication_engine.connect() as conn:
-            result = conn.execute(
-                """
-                SELECT 
-                    COUNT(*) as total_tables,
-                    SUM(CASE WHEN copy_status = 'success' THEN 1 ELSE 0 END) as successful,
-                    SUM(CASE WHEN copy_status = 'failed' THEN 1 ELSE 0 END) as failed,
-                    MAX(last_copy_date) as latest_copy
-                FROM etl_copy_status
-                WHERE DATE(last_copy_date) = CURDATE()
-                """
-            )
-            row = result.fetchone()
-            
-            if row:
-                logging.info(
-                    f"Replication status (today): "
-                    f"{row[1]} successful, {row[2]} failed, "
-                    f"latest: {row[3]}"
-                )
-        
-        replication_engine.dispose()
-        
-        # Check analytics tracking table
-        analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
-        with analytics_engine.connect() as conn:
-            result = conn.execute(
-                """
-                SELECT 
-                    COUNT(*) as total_tables,
-                    SUM(CASE WHEN load_status = 'success' THEN 1 ELSE 0 END) as successful,
-                    SUM(CASE WHEN load_status = 'failed' THEN 1 ELSE 0 END) as failed,
-                    MAX(last_load_date) as latest_load
-                FROM raw.etl_load_status
-                WHERE DATE(last_load_date) = CURRENT_DATE
-                """
-            )
-            row = result.fetchone()
-            
-            if row:
-                logging.info(
-                    f"Analytics status (today): "
-                    f"{row[1]} successful, {row[2]} failed, "
-                    f"latest: {row[3]}"
-                )
-                
-                context['task_instance'].xcom_push(key='analytics_successful', value=row[1])
-                context['task_instance'].xcom_push(key='analytics_failed', value=row[2])
-        
-        analytics_engine.dispose()
-        
-        logging.info("✅ Load verification completed")
-        return True
-        
-    except Exception as e:
-        logging.error(f"❌ Load verification failed: {e}")
-        # Don't fail the pipeline for verification failures
-        logging.warning("Continuing despite verification failure")
-        return True
+
+    result = run_mdc_etl_invoke(
+        ENVIRONMENT,
+        ['verify-loads'],
+        project_root=PROJECT_ROOT,
+    )
+
+    context['task_instance'].xcom_push(
+        key='analytics_successful',
+        value=result.get('analytics_successful', 0),
+    )
+    context['task_instance'].xcom_push(
+        key='analytics_failed',
+        value=result.get('analytics_failed', 0),
+    )
+
+    logging.info("✅ Load verification completed")
+    return True
 
 
 def generate_pipeline_report(**context):
@@ -682,16 +486,16 @@ def generate_pipeline_report(**context):
         # Collect results from all tasks
         ti = context['task_instance']
         
-        # Configuration info
-        total_tables = ti.xcom_pull(task_ids='validate_configuration', key='total_tables')
-        config_age = ti.xcom_pull(task_ids='validate_configuration', key='config_age_days')
+        # Configuration info (TaskGroup prefixes task_id)
+        total_tables = ti.xcom_pull(task_ids='validation.validate_configuration', key='total_tables')
+        config_age = ti.xcom_pull(task_ids='validation.validate_configuration', key='config_age_days')
         
         # Processing results by category
         categories = ['large', 'medium', 'small', 'tiny']
         results_by_category = {}
         
         for category in categories:
-            task_id = f'process_{category}_tables'
+            task_id = f'etl_processing.process_{category}_tables'
             success = ti.xcom_pull(task_ids=task_id, key='success_count') or 0
             failed = ti.xcom_pull(task_ids=task_id, key='failure_count') or 0
             total = ti.xcom_pull(task_ids=task_id, key='total_count') or 0
@@ -710,11 +514,11 @@ def generate_pipeline_report(**context):
         total_processed = sum(r['total'] for r in results_by_category.values())
         
         # Verification results
-        analytics_successful = ti.xcom_pull(task_ids='verify_loads', key='analytics_successful') or 0
-        analytics_failed = ti.xcom_pull(task_ids='verify_loads', key='analytics_failed') or 0
+        analytics_successful = ti.xcom_pull(task_ids='reporting.verify_loads', key='analytics_successful') or 0
+        analytics_failed = ti.xcom_pull(task_ids='reporting.verify_loads', key='analytics_failed') or 0
         
         # Schema drift check
-        schema_drift = ti.xcom_pull(task_ids='check_schema_hash', key='schema_drift_detected')
+        schema_drift = ti.xcom_pull(task_ids='validation.check_schema_hash', key='schema_drift_detected')
         
         # Generate report
         report = {
@@ -767,8 +571,8 @@ def generate_pipeline_report(**context):
         # Store report in XCom for notification task
         context['task_instance'].xcom_push(key='pipeline_report', value=report)
         
-        # Determine if pipeline was successful
-        pipeline_success = (total_failed == 0)
+        # Determine if pipeline was successful (must have processed tables, not just zero failures)
+        pipeline_success = total_processed > 0 and total_failed == 0
         context['task_instance'].xcom_push(key='pipeline_success', value=pipeline_success)
         
         return report
@@ -796,8 +600,8 @@ def send_completion_notification(**context):
     try:
         # Get report from previous task
         ti = context['task_instance']
-        report = ti.xcom_pull(task_ids='generate_pipeline_report', key='pipeline_report')
-        pipeline_success = ti.xcom_pull(task_ids='generate_pipeline_report', key='pipeline_success')
+        report = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_report')
+        pipeline_success = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_success')
         
         if not report:
             logging.warning("No report available for notification")
@@ -1050,7 +854,7 @@ with dag:
     def should_run_dbt(**context):
         """Run dbt only when pipeline_success is True (no critical ETL failures)."""
         ti = context['task_instance']
-        pipeline_success = ti.xcom_pull(task_ids='generate_pipeline_report', key='pipeline_success')
+        pipeline_success = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_success')
         if not pipeline_success:
             logging.warning("ETL had failures; skipping dbt to avoid transforming partial data.")
             return False
@@ -1062,7 +866,7 @@ with dag:
             logging.info("publish_environment not set; skipping publish.")
             return False
         ti = context['task_instance']
-        pipeline_success = ti.xcom_pull(task_ids='generate_pipeline_report', key='pipeline_success')
+        pipeline_success = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_success')
         if not pipeline_success:
             logging.warning("ETL had failures; skipping publish.")
             return False

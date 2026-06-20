@@ -32,8 +32,13 @@ if (-not (Test-Path $Python)) {
 }
 
 $env:PYTHONPATH = if ($env:PYTHONPATH) { "$StubsDir;$env:PYTHONPATH" } else { $StubsDir }
-# Wrapper dir first so standalone child `airflow` calls use run_airflow.py (not bare airflow.exe).
-$env:Path = "$WrapperDir;$ScriptsDir;$env:Path"
+# mdc + pipenv (user Python Scripts) — DAG tasks subprocess mdc etl/dbt/publish
+$UserPyScripts = Join-Path $env:LOCALAPPDATA "Programs\Python\Python311\Scripts"
+$PathPrefix = "$WrapperDir;$ScriptsDir"
+if (Test-Path $UserPyScripts) {
+    $PathPrefix = "$UserPyScripts;$PathPrefix"
+}
+$env:Path = "$PathPrefix;$env:Path"
 $env:AIRFLOW_HOME = $AirflowHome
 $env:PYTHONUTF8 = "1"
 $env:AIRFLOW__CORE__LOAD_EXAMPLES = "False"

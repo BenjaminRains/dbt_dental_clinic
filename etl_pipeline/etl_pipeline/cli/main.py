@@ -11,7 +11,15 @@ project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
 import click
-from etl_pipeline.cli.commands import run, status, test_connections, update_schema
+from etl_pipeline.cli.commands import (
+    run,
+    status,
+    test_connections,
+    update_schema,
+    run_category,
+    check_schema_drift,
+    verify_loads_cmd,
+)
 
 @click.group()
 def cli():
@@ -23,6 +31,9 @@ cli.add_command(run)
 cli.add_command(status)
 cli.add_command(test_connections)
 cli.add_command(update_schema)
+cli.add_command(run_category)
+cli.add_command(check_schema_drift)
+cli.add_command(verify_loads_cmd)
 
 def main():
     """Main CLI entry point."""

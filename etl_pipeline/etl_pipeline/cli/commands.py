@@ -38,7 +38,7 @@ import sys
 import time
 import shutil
 from typing import Optional, Dict, Any, List
-from datetime import datetime
+from datetime import datetime, timedelta
 import json
 import yaml
 from pathlib import Path
@@ -60,6 +60,7 @@ from etl_pipeline.monitoring.unified_metrics import UnifiedMetricsCollector
 from etl_pipeline.config.logging import get_logger, get_current_log_file_path
 from etl_pipeline.config.paths import ensure_dir, schema_analysis_backups_dir
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
+from etl_pipeline.config.config_reader import ConfigReader
 from etl_pipeline.orchestration import PipelineOrchestrator
 
 # =============================
@@ -789,3 +790,350 @@ def _detect_schema_changes(backup_path: Optional[Path], new_config_path: Path) -
         changes.append("Configuration updated (change detection failed)")
     
     return changes
+
+
+# ---------------------------------------------------------------------------
+# Airflow orchestration helpers (invoked via `mdc etl invoke --env <stage> --`)
+# Emit ###AIRFLOW_RESULT###<json> on the last line for XCom parsing in the DAG.
+# ---------------------------------------------------------------------------
+
+AIRFLOW_RESULT_PREFIX = "###AIRFLOW_RESULT###"
+
+
+def _emit_airflow_result(payload: Dict[str, Any]) -> None:
+    click.echo(f"{AIRFLOW_RESULT_PREFIX}{json.dumps(payload)}")
+
+
+def _summarize_tracking_status(
+    configured_tables: set[str],
+    rows: List[tuple],
+    recent_cutoff: datetime,
+) -> Dict[str, Any]:
+    """Summarize tracking rows against tables.yml for verify-loads."""
+    cutoff = recent_cutoff.replace(tzinfo=None) if recent_cutoff.tzinfo else recent_cutoff
+
+    def _naive_ts(value: Any) -> Optional[datetime]:
+        if value is None:
+            return None
+        if isinstance(value, datetime) and value.tzinfo is not None:
+            return value.replace(tzinfo=None)
+        return value
+
+    by_table: Dict[str, tuple] = {}
+    for table_name, status, activity_at in rows:
+        by_table[table_name] = (status or "pending", _naive_ts(activity_at))
+
+    successful: List[str] = []
+    failed: List[str] = []
+    missing: List[str] = []
+    other: List[str] = []
+    recent_success: List[str] = []
+
+    for table in configured_tables:
+        if table not in by_table:
+            missing.append(table)
+            continue
+        status, activity_at = by_table[table]
+        if status == "success":
+            successful.append(table)
+            if activity_at is not None and activity_at >= cutoff:
+                recent_success.append(table)
+        elif status == "failed":
+            failed.append(table)
+        else:
+            other.append(table)
+
+    latest_activity = None
+    for status, activity_at in by_table.values():
+        if activity_at is not None and (latest_activity is None or activity_at > latest_activity):
+            latest_activity = activity_at
+
+    return {
+        "successful": len(successful),
+        "failed": len(failed),
+        "missing": len(missing),
+        "other": len(other),
+        "recent_success": len(recent_success),
+        "latest_activity": latest_activity,
+        "failed_tables": failed[:20],
+        "missing_tables": missing[:20],
+        "other_tables": other[:20],
+    }
+
+
+def _echo_tracking_summary(label: str, expected: int, summary: Dict[str, Any], hours: int) -> None:
+    click.echo(f"{label} (configured {expected} tables):")
+    click.echo(
+        f"  success={summary['successful']}, failed={summary['failed']}, "
+        f"missing={summary['missing']}, other={summary['other']}"
+    )
+    click.echo(
+        f"  touched in last {hours}h: {summary['recent_success']}, "
+        f"latest activity={summary['latest_activity']}"
+    )
+    if summary["failed_tables"]:
+        click.echo(f"  failed tables: {', '.join(summary['failed_tables'])}")
+    if summary["missing_tables"]:
+        click.echo(f"  missing from tracking: {', '.join(summary['missing_tables'])}")
+
+
+@click.command("run-category")
+@click.option(
+    "--category",
+    required=True,
+    type=click.Choice(["large", "medium", "small", "tiny"]),
+)
+@click.option("--parallel", "-p", default=5, type=int, help="Parallel workers (large only)")
+@click.option("--force", is_flag=True, help="Force full refresh")
+@click.option("--config", "-c", type=click.Path(exists=True), default=None)
+@click.option("--environment", type=click.Choice(["local", "test", "clinic"]), default=None)
+def run_category(
+    category: str,
+    parallel: int,
+    force: bool,
+    config: Optional[str],
+    environment: Optional[str],
+) -> None:
+    """Process tables in a performance category (Airflow etl_processing tasks)."""
+    resolved_env = _resolve_environment(environment)
+    _assert_env_consistency(environment, resolved_env)
+
+    if parallel < 1 or parallel > 20:
+        click.echo("❌ Error: Parallel workers must be between 1 and 20")
+        raise click.Abort()
+
+    max_workers = parallel if category == "large" else 1
+    orchestrator = PipelineOrchestrator(config_path=config, environment=resolved_env)
+
+    try:
+        if not orchestrator.initialize_connections():
+            click.echo("❌ Failed to initialize connections")
+            raise click.Abort()
+
+        results = orchestrator.process_tables_by_performance_category(
+            category=category,
+            max_workers=max_workers,
+            force_full=force,
+        )
+
+        if not results:
+            click.echo(f"No tables in category: {category}")
+            _emit_airflow_result(
+                {
+                    "category": category,
+                    "success_count": 0,
+                    "failure_count": 0,
+                    "total_count": 0,
+                    "failed_tables": [],
+                    "skipped": True,
+                }
+            )
+            return
+
+        success_count = sum(1 for ok in results.values() if ok)
+        failure_count = sum(1 for ok in results.values() if not ok)
+        failed_tables = [name for name, ok in results.items() if not ok]
+
+        click.echo(
+            f"✅ {category.upper()}: {success_count} succeeded, "
+            f"{failure_count} failed, {len(results)} total"
+        )
+        _emit_airflow_result(
+            {
+                "category": category,
+                "success_count": success_count,
+                "failure_count": failure_count,
+                "total_count": len(results),
+                "failed_tables": failed_tables,
+                "skipped": False,
+            }
+        )
+
+        if failure_count > 0:
+            if category == "large":
+                raise click.Abort()
+            click.echo(f"⚠️ Some {category} tables failed; pipeline continues")
+    finally:
+        orchestrator.cleanup()
+
+
+@click.command("check-schema-drift")
+@click.option("--config", "-c", type=click.Path(exists=True), default=None)
+@click.option("--environment", type=click.Choice(["local", "test", "clinic"]), default=None)
+def check_schema_drift(config: Optional[str], environment: Optional[str]) -> None:
+    """Quick schema drift check by comparing source table count to tables.yml."""
+    resolved_env = _resolve_environment(environment)
+    _assert_env_consistency(environment, resolved_env)
+
+    config_path = Path(config) if config else Path(
+        os.environ.get(
+            "ETL_CONFIG_PATH",
+            Path(__file__).resolve().parent.parent / "config" / "tables.yml",
+        )
+    )
+
+    with open(config_path, "r", encoding="utf-8") as f:
+        tables_config = yaml.safe_load(f)
+
+    expected_table_count = tables_config["metadata"].get("total_tables", 0)
+    schema_drift_detected = False
+    drift_percentage = 0.0
+
+    try:
+        settings = get_settings()
+        source_engine = ConnectionFactory.get_source_connection(settings)
+        with source_engine.connect() as conn:
+            result = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.tables "
+                    "WHERE table_schema = DATABASE() "
+                    "AND table_type = 'BASE TABLE'"
+                )
+            )
+            current_table_count = result.scalar()
+        source_engine.dispose()
+
+        if current_table_count != expected_table_count:
+            drift_percentage = (
+                abs(current_table_count - expected_table_count)
+                / max(expected_table_count, 1)
+                * 100
+            )
+            schema_drift_detected = drift_percentage > 5
+            click.echo(
+                f"Table count: expected={expected_table_count}, "
+                f"current={current_table_count}, drift={drift_percentage:.1f}%"
+            )
+        else:
+            click.echo(f"✅ No schema drift ({current_table_count} tables)")
+    except Exception as e:
+        click.echo(f"⚠️ Schema drift check failed (non-critical): {e}")
+
+    _emit_airflow_result(
+        {
+            "schema_drift_detected": schema_drift_detected,
+            "drift_percentage": drift_percentage,
+        }
+    )
+
+
+@click.command("verify-loads")
+@click.option("--config", "-c", type=click.Path(exists=True), default=None)
+@click.option(
+    "--hours",
+    default=36,
+    show_default=True,
+    type=int,
+    help="Label tables copied/loaded within this many hours as recently touched",
+)
+@click.option("--environment", type=click.Choice(["local", "test", "clinic"]), default=None)
+def verify_loads_cmd(
+    config: Optional[str],
+    hours: int,
+    environment: Optional[str],
+) -> None:
+    """Verify replication and analytics tracking against tables.yml."""
+    if hours < 1:
+        click.echo("❌ --hours must be at least 1")
+        raise click.Abort()
+
+    resolved_env = _resolve_environment(environment)
+    _assert_env_consistency(environment, resolved_env)
+
+    config_reader = ConfigReader(config_path=config)
+    configured_tables = set(config_reader.config.get("tables", {}).keys())
+    expected_tables = len(configured_tables)
+    recent_cutoff = datetime.now() - timedelta(hours=hours)
+
+    settings = get_settings()
+    replication_summary: Dict[str, Any] = {
+        "successful": 0,
+        "failed": 0,
+        "missing": expected_tables,
+        "other": 0,
+        "recent_success": 0,
+        "latest_activity": None,
+        "failed_tables": [],
+        "missing_tables": list(configured_tables)[:20],
+        "other_tables": [],
+    }
+    analytics_summary = dict(replication_summary)
+
+    replication_engine = ConnectionFactory.get_replication_connection(settings)
+    try:
+        with replication_engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT table_name, copy_status, last_copied
+                    FROM etl_copy_status
+                    """
+                )
+            ).fetchall()
+        replication_summary = _summarize_tracking_status(
+            configured_tables,
+            [(row[0], row[1], row[2]) for row in rows],
+            recent_cutoff,
+        )
+        _echo_tracking_summary("Replication", expected_tables, replication_summary, hours)
+    except Exception as e:
+        click.echo(f"⚠️ Replication load verification failed (non-fatal): {e}")
+    finally:
+        replication_engine.dispose()
+
+    analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
+    try:
+        with analytics_engine.connect() as conn:
+            rows = conn.execute(
+                text(
+                    """
+                    SELECT table_name, load_status, _loaded_at
+                    FROM raw.etl_load_status
+                    """
+                )
+            ).fetchall()
+        analytics_summary = _summarize_tracking_status(
+            configured_tables,
+            [(row[0], row[1], row[2]) for row in rows],
+            recent_cutoff,
+        )
+        _echo_tracking_summary("Analytics", expected_tables, analytics_summary, hours)
+    except Exception as e:
+        click.echo(f"❌ Analytics load verification failed: {e}")
+        raise
+    finally:
+        analytics_engine.dispose()
+
+    analytics_ok = (
+        analytics_summary["failed"] == 0
+        and analytics_summary["missing"] == 0
+        and analytics_summary["other"] == 0
+        and analytics_summary["successful"] == expected_tables
+    )
+
+    if analytics_ok:
+        click.echo(
+            f"✅ Load verification passed: {analytics_summary['successful']}/{expected_tables} "
+            f"configured tables show load_status=success"
+        )
+    else:
+        click.echo(
+            f"❌ Load verification failed: {analytics_summary['successful']}/{expected_tables} "
+            f"configured tables show load_status=success"
+        )
+        raise click.Abort()
+
+    _emit_airflow_result(
+        {
+            "expected_tables": expected_tables,
+            "hours_window": hours,
+            "replication_successful": replication_summary["successful"],
+            "replication_failed": replication_summary["failed"],
+            "replication_missing": replication_summary["missing"],
+            "replication_recent": replication_summary["recent_success"],
+            "analytics_successful": analytics_summary["successful"],
+            "analytics_failed": analytics_summary["failed"],
+            "analytics_missing": analytics_summary["missing"],
+            "analytics_recent": analytics_summary["recent_success"],
+        }
+    )

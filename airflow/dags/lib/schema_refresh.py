@@ -7,14 +7,12 @@ Used by etl_pipeline (before every nightly ETL) and schema_analysis DAG.
 from __future__ import annotations
 
 import logging
-import os
 import shutil
-import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Any, Optional
 
-from airflow.exceptions import AirflowException
+from lib.mdc_runner import run_mdc
 
 logger = logging.getLogger(__name__)
 
@@ -80,38 +78,12 @@ def backup_tables_yml(
 
 
 def run_opendental_schema_analysis(project_root: Path, environment: str) -> None:
-    """Run analyze_opendental_schema.py; raises AirflowException on failure."""
-    pipeline_dir = etl_pipeline_dir(project_root)
-    analysis_script = pipeline_dir / "scripts" / "analyze_opendental_schema.py"
-
-    if not analysis_script.exists():
-        raise AirflowException(f"Schema analysis script not found: {analysis_script}")
-
-    os.environ["ETL_ENVIRONMENT"] = environment
-    logger.info("Starting OpenDental schema analysis (ETL_ENVIRONMENT=%s)", environment)
-
-    try:
-        result = subprocess.run(
-            ["python", str(analysis_script)],
-            cwd=str(pipeline_dir),
-            capture_output=True,
-            text=True,
-            timeout=SCHEMA_ANALYSIS_TIMEOUT_SECONDS,
-        )
-    except subprocess.TimeoutExpired as exc:
-        raise AirflowException(
-            f"Schema analysis timed out after {SCHEMA_ANALYSIS_TIMEOUT_SECONDS // 60} minutes"
-        ) from exc
-
-    if result.stdout:
-        logger.info("Schema analysis output:\n%s", result.stdout)
-    if result.stderr:
-        logger.warning("Schema analysis stderr:\n%s", result.stderr)
-    if result.returncode != 0:
-        raise AirflowException(
-            f"Schema analysis failed with exit code {result.returncode}"
-        )
-
+    """Run OpenDental schema analysis via mdc (ETL Pipenv + stage env)."""
+    run_mdc(
+        ["etl", "schema", "--env", environment],
+        cwd=project_root,
+        timeout_seconds=SCHEMA_ANALYSIS_TIMEOUT_SECONDS,
+    )
     logger.info("Schema analysis completed successfully")
 
 
