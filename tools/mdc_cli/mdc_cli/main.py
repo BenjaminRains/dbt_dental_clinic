@@ -14,6 +14,7 @@ from mdc_cli.commands import (
     etl,
     frontend,
     publish,
+    secrets,
     ssm,
     status,
     tunnel,
@@ -35,6 +36,7 @@ app.add_typer(frontend.frontend_app, name="frontend")
 app.add_typer(consult_audio.consult_audio_app, name="consult-audio")
 app.add_typer(ssm.ssm_app, name="ssm")
 app.add_typer(tunnel.tunnel_app, name="tunnel")
+app.add_typer(secrets.secrets_app, name="secrets")
 app.add_typer(airflow.airflow_app, name="airflow")
 
 

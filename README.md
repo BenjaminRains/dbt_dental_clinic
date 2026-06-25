@@ -50,6 +50,7 @@ Both use synthetic data only; no database or code required.
    .\load_project.ps1
    mdc status
    ```
+   `mdc status` shows config validation and **data freshness** (ETL load times, mart refresh, latest business dates). For clinic RDS: `mdc tunnel clinic-db` in another terminal, then `mdc status --env clinic --tunnel-db`.
 2. **Backend:** from repo root:
    ```powershell
    mdc api run --env local

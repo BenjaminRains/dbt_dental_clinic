@@ -3,11 +3,27 @@
 import os
 
 from mdc_cli.run_helper import (
+    apply_tunnel_db_overrides,
     build_isolated_child_env,
     load_env_dict_isolated,
     scrub_parent_stage_env,
     _ensure_dbt_target,
 )
+
+
+def test_apply_tunnel_db_overrides_sets_ssl_prefer():
+    env = apply_tunnel_db_overrides(
+        {
+            "POSTGRES_ANALYTICS_HOST": "rds.example.com",
+            "POSTGRES_ANALYTICS_PORT": "5432",
+            "POSTGRES_ANALYTICS_SSLMODE": "require",
+        },
+        local_port=5433,
+    )
+    assert env["POSTGRES_ANALYTICS_HOST"] == "127.0.0.1"
+    assert env["POSTGRES_ANALYTICS_PORT"] == "5433"
+    assert env["POSTGRES_ANALYTICS_SSLMODE"] == "prefer"
+    assert env["PGSSLMODE"] == "prefer"
 
 
 def test_scrub_parent_stage_env_removes_stage_keys_only(monkeypatch):

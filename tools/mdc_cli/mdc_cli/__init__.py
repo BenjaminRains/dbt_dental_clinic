@@ -1,3 +1,3 @@
 """mdc — monorepo dev CLI (Phase 4)."""
 
-__version__ = "0.8.1"
+__version__ = "0.9.2"

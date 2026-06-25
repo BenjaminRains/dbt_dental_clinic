@@ -111,7 +111,7 @@ $rdsConn = @{
     Port     = if ($UseDirectRds) { $remote.POSTGRES_ANALYTICS_PORT } else { "$TunnelPort" }
     Database = if ($remote.POSTGRES_ANALYTICS_DB) { $remote.POSTGRES_ANALYTICS_DB } else { "opendental_analytics" }
     User     = if ($remote.POSTGRES_ANALYTICS_USER) { $remote.POSTGRES_ANALYTICS_USER } else { "analytics_user" }
-    Password = $remote.POSTGRES_ANALYTICS_PASSWORD
+    Password = if ($env:MDC_CLINIC_RDS_PASSWORD) { $env:MDC_CLINIC_RDS_PASSWORD } else { $remote.POSTGRES_ANALYTICS_PASSWORD }
     SslMode  = if ($remote.POSTGRES_ANALYTICS_SSLMODE) { $remote.POSTGRES_ANALYTICS_SSLMODE } else { "require" }
 }
 

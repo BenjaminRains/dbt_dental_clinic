@@ -63,6 +63,10 @@ desktop.ini
 !dbt_project.json
 !package.json
 !deployment_credentials.json.template
+!scripts/iam/cloudtrail_lookup_readonly_policy.json
+!scripts/iam/clinic_secrets_put_only_policy.json
+!scripts/iam/clinic_secrets_developer_policy.json
+!scripts/aws/cloudtrail_bucket_policy.template.json
 *.xml
 *.txt
 !requirements.txt
@@ -134,6 +138,8 @@ docs/
 /docs/*
 !docs/ENVIRONMENT_FILES.md
 !docs/CLINIC_ANALYTICS_WORKFLOW.md
+!docs/CLOUDTRAIL_SETUP.md
+!docs/ENVIRONMENT_HANDLING_REVIEW.md
 !docs/ml/
 !docs/ml/**
 !docs/deployment-connections/

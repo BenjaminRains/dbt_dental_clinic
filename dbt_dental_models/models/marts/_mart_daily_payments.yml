@@ -40,4 +40,8 @@ models:
         description: "Count of payments with is_insurance_payment = true."
       - name: other_payment_count
         description: "Count of payments that are neither patient nor insurance. Always payment_count - patient_payment_count - insurance_payment_count."
+      - name: _transformed_at
+        description: "When this mart model was last built by dbt."
+      - name: _mart_refreshed_at
+        description: "When this mart was last refreshed (publish time on clinic RDS)."
 

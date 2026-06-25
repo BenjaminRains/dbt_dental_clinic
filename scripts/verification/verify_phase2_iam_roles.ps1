@@ -1,5 +1,5 @@
 # Verify Phase 2 IAM roles (demo vs clinic) are separate and clean.
-# Demo role must NOT have clinic secret (dental-clinic/database) or RDS permissions.
+# Demo role must NOT have clinic RDS secret (rds!db-...) or RDS permissions.
 # Usage: .\scripts\verify_phase2_iam_roles.ps1
 #        .\scripts\verify_phase2_iam_roles.ps1 -FailIfDemoHasClinicAccess
 #
@@ -13,8 +13,8 @@ param(
 
 $ErrorActionPreference = "Stop"
 
-# Clinic secret name that demo must NOT have access to (Step 6)
-$ClinicSecretName = "dental-clinic/database"
+# Clinic RDS credentials demo must NOT have access to (Step 6)
+$ClinicSecretName = "rds!db-83a24c7f-7e85-4168-ba14-ad6e63905c49"
 
 function Get-RoleDetails {
     param([string]$RoleName)
@@ -68,6 +68,7 @@ function Test-PolicyDocumentGrantsClinicOrRds {
     param($Document)
     $jsonStr = $Document | ConvertTo-Json -Depth 10 -Compress
     if ($jsonStr -match "dental-clinic/database") { return $true }
+    if ($jsonStr -match 'rds!db-') { return $true }
     if ($jsonStr -match '"rds:[^"]*"') { return $true }
     return $false
 }

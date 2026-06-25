@@ -89,9 +89,61 @@ mdc publish analytics --env clinic --tunnel-port 5434
 ### What publish does
 
 1. Reads **local** connection from `etl_pipeline/.env_clinic` (falls back to `dbt_dental_models/.env_local`)
-2. Reads **RDS** credentials from `api/.env_api_clinic`
+2. Reads **RDS** host/user/db from `api/.env_api_clinic` and the **live password from the RDS master user secret** (`rds!db-...` in Secrets Manager) at publish time — rotation-safe
 3. `pg_dump` local `marts` schema
 4. `pg_restore` into clinic RDS through `127.0.0.1:<tunnel-port>` (replaces **marts** only; `int` / `staging` on RDS are unchanged)
+
+### RDS password rotation (Secrets Manager)
+
+Clinic RDS has **one** authoritative credential in Secrets Manager:
+
+| Secret | Role |
+|--------|------|
+| `rds!db-...` | **RDS-owned master user secret** — rotates every ~7 days; this is the password PostgreSQL accepts |
+
+The legacy secret **`dental-clinic/database`** was a duplicate copy (never rotated with RDS). CloudTrail audit (Jun 2025) showed no production callers — **delete it** in the AWS console and do not recreate it.
+
+**Runtime on EC2:** the clinic API reads **`/opt/dbt_dental_clinic/api/.env`** (deployed from `api/.env_api_clinic`). It does **not** call Secrets Manager at runtime.
+
+**Developer laptop:** `mdc publish analytics`, `mdc status --env clinic --tunnel-db`, and `mdc secrets pull clinic` fetch the **live** password via `GetSecretValue` on `rds!db-...`.
+
+**Sync local deploy file + EC2 after rotation or password change:**
+
+```powershell
+mdc secrets pull clinic      # writes api/.env_api_clinic from rds!db-...
+mdc deploy api --env clinic  # copies .env_api_clinic → EC2 api/.env
+```
+
+**IAM (developer user):** `GetSecretValue` on `rds!db-...` plus `rds:DescribeDBInstances` (to resolve the master secret ARN). These are typically included in `RDSAndSecretsManagerAccess` or equivalent — no `PutSecretValue` needed.
+
+Find the master secret name for instance `dental-clinic-analytics`:
+
+```powershell
+aws rds describe-db-instances --db-instance-identifier dental-clinic-analytics `
+  --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text
+```
+
+**Force stale file password** (debug only): `--use-env-file` on `mdc publish` / `mdc status`.
+
+After rotation (~7 days), if the **clinic API on EC2** fails `/health/db`, run `mdc secrets pull clinic` then `mdc deploy api --env clinic`.
+
+#### Delete legacy `dental-clinic/database` (one-time)
+
+After CloudTrail confirms no production callers (see [CLOUDTRAIL_SETUP.md](CLOUDTRAIL_SETUP.md)):
+
+1. AWS Console → **Secrets Manager** → region **us-east-1**
+2. Open **`dental-clinic/database`** → **Actions** → **Delete secret**
+3. Choose immediate delete (or minimum recovery window you prefer)
+4. **Do not delete** `rds!db-...` — that secret is owned by RDS and required for rotation
+
+Then on your laptop:
+
+```powershell
+mdc secrets pull clinic
+mdc status --env clinic --tunnel-db
+```
+
+Update `password_source` / `secret_name` in your local **`deployment_credentials.json`** (gitignored) to match [`deployment_credentials.json.template`](../deployment_credentials.json.template) — RDS master secret, not `dental-clinic/database`.
 
 ---
 
@@ -138,6 +190,8 @@ EC2 has direct network access to RDS. Use this after raw/ETL loads on clinic or 
 
 | Symptom | Likely cause | Fix |
 |--------|----------------|-----|
+| `password authentication failed` for `analytics_user` | Stale password in `api/.env_api_clinic` or EC2 `api/.env` vs rotated RDS master | `mdc secrets pull clinic` then `mdc deploy api --env clinic` |
+| `AccessDeniedException` on `GetSecretValue` (rds!db-...) | IAM user cannot read RDS master secret | Grant `secretsmanager:GetSecretValue` on `rds!db-*` and `rds:DescribeDBInstances` |
 | `Tunnel not reachable on 127.0.0.1:5433` | Tunnel not running | Start `mdc tunnel clinic-db` in another terminal first |
 | `ModuleNotFoundError: No module named 'mdc_cli'` | `mdc` not installed in that shell | `pip install -e tools/mdc_cli` from repo root |
 | dbt `timeout expired` to `*.rds.amazonaws.com` | Hitting RDS without tunnel/VPC access | Use `mdc dbt run --env local` + publish, or EC2 workflow |

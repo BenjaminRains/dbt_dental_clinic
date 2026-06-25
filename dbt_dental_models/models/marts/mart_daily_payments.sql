@@ -120,7 +120,10 @@ final as (
         payment_count,
         patient_payment_count,
         insurance_payment_count,
-        other_payment_count
+        other_payment_count,
+
+        {{ standardize_mart_metadata(preserve_source_metadata=false) }}
+
     from daily_agg
 )
 

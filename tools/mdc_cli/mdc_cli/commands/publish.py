@@ -6,7 +6,11 @@ import typer
 
 from mdc_cli.paths import REPO_ROOT
 from mdc_cli.ps_invoke import invoke_ps_script_file
-from mdc_cli.run_helper import is_local_tcp_port_open
+from mdc_cli.run_helper import is_local_tcp_port_open, load_env_dict_isolated
+from mdc_cli.secrets_manager import (
+    CLINIC_RDS_PASSWORD_ENV,
+    resolve_clinic_rds_password,
+)
 from mdc_cli.stages import require_api_stage
 
 publish_app = typer.Typer(help="Publish local marts schema to clinic RDS")
@@ -46,6 +50,11 @@ def publish_analytics(
         "--skip-tunnel-check",
         help="Skip localhost tunnel preflight (script still checks before restore)",
     ),
+    use_env_file: bool = typer.Option(
+        False,
+        "--use-env-file",
+        help="Use password from api/.env_api_clinic only (skip Secrets Manager live fetch)",
+    ),
 ) -> None:
     """Copy local marts schema to clinic RDS via pg_dump + pg_restore."""
     require_api_stage(env)
@@ -70,11 +79,27 @@ def publish_analytics(
                 _echo_tunnel_missing(tunnel_port)
                 raise typer.Exit(code=1)
 
+    extra_env: dict[str, str] = {}
+    try:
+        base_env = load_env_dict_isolated("api", "clinic")
+        file_password = (base_env.get("POSTGRES_ANALYTICS_PASSWORD") or "").strip() or None
+        resolution = resolve_clinic_rds_password(
+            file_password,
+            prefer_secrets_manager=not use_env_file,
+        )
+        extra_env[CLINIC_RDS_PASSWORD_ENV] = resolution.password
+        typer.echo(f"  RDS password: {resolution.source}")
+        if resolution.warning:
+            typer.echo(f"  Warning: {resolution.warning}", err=True)
+    except Exception as exc:
+        typer.echo(f"Failed to resolve clinic RDS password: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
     args: list[str] = ["-TunnelPort", str(tunnel_port)]
     if dry_run:
         args.append("-DryRun")
     if use_direct_rds:
         args.append("-UseDirectRds")
 
-    code = invoke_ps_script_file(script, args)
+    code = invoke_ps_script_file(script, args, extra_env=extra_env)
     raise typer.Exit(code=code)

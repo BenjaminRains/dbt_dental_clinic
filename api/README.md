@@ -70,7 +70,7 @@
 - **Clinic Database** (`opendental_analytics`): Used by localhost API (local) or clinic API (clinic deployment)
   - Contains real patient data (PHI)
   - **Never accessible via public demo API**
-  - Stored in AWS Secrets Manager as `dental-clinic/database`
+  - Password authority: **RDS master user secret** (`rds!db-...` in Secrets Manager; rotates ~7 days). Sync into `api/.env_api_clinic` with `mdc secrets pull clinic` — not a separate app secret.
   - Only accessible from localhost (local) or IP-restricted networks (clinic)
 
 **Important Notes:**
@@ -513,7 +513,7 @@ POSTGRES_ANALYTICS_HOST=<RDS endpoint>
 POSTGRES_ANALYTICS_PORT=5432
 POSTGRES_ANALYTICS_DB=opendental_analytics  # ⚠️ CLINIC DATABASE (contains PHI)
 POSTGRES_ANALYTICS_USER=analytics_user
-POSTGRES_ANALYTICS_PASSWORD=<retrieved from Secrets Manager: dental-clinic/database>
+POSTGRES_ANALYTICS_PASSWORD=<sync via mdc secrets pull clinic — RDS master secret rds!db-...>
 
 # API Configuration
 API_PORT=8000
@@ -553,7 +553,7 @@ POSTGRES_ANALYTICS_HOST=<RDS endpoint>
 POSTGRES_ANALYTICS_PORT=5432
 POSTGRES_ANALYTICS_DB=opendental_analytics  # ⚠️ CLINIC DATABASE (contains PHI)
 POSTGRES_ANALYTICS_USER=analytics_user
-POSTGRES_ANALYTICS_PASSWORD=<retrieved from Secrets Manager: dental-clinic/database>
+POSTGRES_ANALYTICS_PASSWORD=<sync via mdc secrets pull clinic — RDS master secret rds!db-...>
 
 # API Configuration
 API_PORT=8000
@@ -564,7 +564,7 @@ API_CORS_ORIGINS=https://clinic.dbtdentalclinic.com
 CLINIC_API_KEY=<CLINIC_API_KEY>  # Clinic API key (IP-restricted)
 ```
 
-**Note:** Local dev uses `api/.env_api_*` by stage. On EC2, both demo and clinic APIs use `api/.env` (systemd `EnvironmentFile`); source files are `api/.env_api_demo` or `api/.env_api_clinic` at deploy time. See `ENVIRONMENT_HANDLING_REVIEW.md` (Phase 0).
+**Note:** Local dev uses `api/.env_api_*` by stage. On EC2, both demo and clinic APIs use `api/.env` (systemd `EnvironmentFile`); source files are `api/.env_api_demo` or `api/.env_api_clinic` at deploy time. See [docs/ENVIRONMENT_HANDLING_REVIEW.md](../docs/ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0).
 
 **Security Notes:**
 - Database passwords are retrieved from AWS Secrets Manager at startup

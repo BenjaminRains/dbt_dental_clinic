@@ -139,6 +139,10 @@ def apply_tunnel_db_overrides(
     merged = dict(settings)
     merged["POSTGRES_ANALYTICS_HOST"] = local_host
     merged["POSTGRES_ANALYTICS_PORT"] = port
+    # SSM port-forward to RDS: SSL is negotiated with RDS through the tunnel; prefer avoids
+    # false "password authentication failed" from strict sslmode=require on localhost.
+    merged["POSTGRES_ANALYTICS_SSLMODE"] = "prefer"
+    merged["PGSSLMODE"] = "prefer"
     return merged
 
 

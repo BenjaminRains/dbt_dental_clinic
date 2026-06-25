@@ -2,7 +2,7 @@
 
 This document is the **single source of truth** for how `.env` and related environment files are managed across the dbt_dental_clinic codebase. Use it to onboard, audit, or refactor environment configuration.
 
-See also **[ENVIRONMENT_HANDLING_REVIEW.md](../ENVIRONMENT_HANDLING_REVIEW.md)** (Phases 0–5 complete; mdc **0.8.1**) and **`tools/mdc_cli/README.md`** for daily commands.
+See also **[ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md)** (Phases 0–5 complete; Phase 6 planned) and **`tools/mdc_cli/README.md`** for daily commands.
 
 ---
 
@@ -190,7 +190,7 @@ Each component should have a single config entrypoint that:
 
 | **Improvement** | **Status** | **Notes** |
 |-----------------|------------|------------|
-| Document precedence (process > file > defaults) in code + doc | **Done (Phase 0–1)** | API, ETL `providers.py`, ad-hoc ETL scripts use `override=False`; see `ENVIRONMENT_HANDLING_REVIEW.md`. |
+| Document precedence (process > file > defaults) in code + doc | **Done (Phase 0–1)** | API, ETL `providers.py`, ad-hoc ETL scripts use `override=False`; see [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md). |
 | One official loader in production (e.g. API on EC2: systemd only) | **Done (Phase 0)** | `api/settings.py` skips `.env_api_*` when OS env is populated; deploy writes `api/.env` only. |
 | Canonical location only, or noisy + optional fallback | Todo | ETL/dbt today fall back to root; add WARNING and/or flag. |
 | Global env set (local, demo, clinic, test, prod) | Doc only | §2.2; components to declare “unsupported” instead of new names. |
@@ -210,7 +210,7 @@ Each component should have a single config entrypoint that:
 - **On EC2:** systemd uses `EnvironmentFile=/opt/dbt_dental_clinic/api/.env`. Deploy with `mdc deploy api --env clinic` (wraps `deploy_api_file.ps1 -ClinicEnv`). Clinic unit: `dental-clinic-api-clinic` (`api/dental-clinic-api-clinic.service`).
 - **Local:** `mdc api test-config --env local` or alias `api-test`. Run with `mdc api run --env local` / `api-run`. Clinic + tunnel: `mdc tunnel clinic-db` then `mdc api run --env clinic --tunnel-db`.
 
-See **ENVIRONMENT_HANDLING_REVIEW.md** (Phase 0) and `api/settings.py`.
+See [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0) and `api/settings.py`.
 
 ### 4.2 ETL pipeline (`etl_pipeline/`)
 
@@ -361,7 +361,7 @@ Requires `deployment_credentials.json` → `backend_api.clinic_api.ec2.instance_
 .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
 ```
 
-This backs up the previous `.env`, retires any stale `api/.env_api_clinic` on the instance, restarts the API, and verifies `/health/db` (unless `-SkipHealthCheck`). See `ENVIRONMENT_HANDLING_REVIEW.md` (Phase 0).
+This backs up the previous `.env`, retires any stale `api/.env_api_clinic` on the instance, restarts the API, and verifies `/health/db` (unless `-SkipHealthCheck`). See [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0).
 
 - **Root on EC2:** `deployment_credentials.json.template` references `environment_file: ".env_ec2"` and `environment_file_path: "/opt/dbt_dental_clinic/.env"` for dbt on EC2; that is separate from `api/.env`.
 
@@ -407,7 +407,7 @@ This lists known env file paths and reports Present / Missing. See script header
 ## 8. Related docs
 
 - **Daily CLI:** [tools/mdc_cli/README.md](../tools/mdc_cli/README.md), [scripts/README.md](../scripts/README.md)
-- **Environment modernization:** [ENVIRONMENT_HANDLING_REVIEW.md](../ENVIRONMENT_HANDLING_REVIEW.md), [ENVIRONMENT_HANDLING_REVIEW_PHASE5_PROPOSAL.md](../ENVIRONMENT_HANDLING_REVIEW_PHASE5_PROPOSAL.md)
+- **Environment modernization (phase history):** [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md)
 - **API env in detail:** [docs/api/API_ENV_FILE_EXPLANATION.md](api/API_ENV_FILE_EXPLANATION.md)
 - **EC2 env file rename/setup:** [docs/deployment/EC2_ENV_FILE_RENAME_GUIDE.md](deployment/EC2_ENV_FILE_RENAME_GUIDE.md), [docs/deployment/EC2_ENV_FILE_RENAME_COMMANDS.md](deployment/EC2_ENV_FILE_RENAME_COMMANDS.md)
 - **Deployment credentials (env file refs):** `deployment_credentials.json.template`
