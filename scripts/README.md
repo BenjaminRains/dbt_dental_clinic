@@ -17,9 +17,12 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 
 | Path | Purpose |
 |------|---------|
+| **airflow/** | Native Airflow bootstrap, start, logs (Windows + Docker init) |
 | **archive/** | Archived Phase 5.5 legacy orchestration (reference only) |
+| **dbt/** | Local dbt runners (pipenv / shell) |
 | **deployment/** | Deploy code/config to AWS/EC2 |
-| **ec2/** | EC2 dbt runtime, setup script, fixes |
+| **ec2/** | EC2 dbt runtime, SSM helpers, setup scripts, fixes |
+| **publish/** | Publish local marts to clinic RDS |
 | **verification/** | Verify AWS resources (IAM, security groups, target groups, etc.) |
 | **database/** | Local demo DB setup and queries |
 | **testing/** | API and connection tests |
@@ -132,6 +135,17 @@ See `docs/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
 .\scripts\verification\check_ec2_setup.ps1
 .\scripts\verification\verify_clinic_api_smoke.ps1
 ```
+
+### Native Airflow (Windows)
+
+```powershell
+.\scripts\airflow\init-airflow-native.ps1
+.\scripts\airflow\start-airflow-native.ps1 -SchedulerOnly   # terminal 1
+.\scripts\airflow\start-airflow-native.ps1 -WebserverOnly   # terminal 2
+.\scripts\airflow\airflow-logs.ps1
+```
+
+See `airflow/ORCHESTRATION_ROADMAP.md` for the full orchestration plan.
 
 ### Utilities
 

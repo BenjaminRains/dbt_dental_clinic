@@ -78,7 +78,7 @@ if ($Local) {
     } elseif ($demo.ec2 -and $demo.ec2.private_ip) {
         $demoHost = $demo.ec2.private_ip
     } else {
-        # Fallback to hardcoded value from run_dbt_ssm.ps1
+        # Fallback to hardcoded value from scripts/ec2/run_dbt_ssm.ps1
         $demoHost = "172.31.25.7"
     }
     

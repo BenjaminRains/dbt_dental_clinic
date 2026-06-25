@@ -2,11 +2,11 @@
 # Loads airflow/.env.native (Fernet key, etc.) and UTF-8 mode for DAG files.
 #
 # Usage (from repo root):
-#   .\scripts\utils\start-airflow-native.ps1 -SchedulerOnly   # terminal 1
-#   .\scripts\utils\start-airflow-native.ps1 -WebserverOnly     # terminal 2
+#   .\scripts\airflow\start-airflow-native.ps1 -SchedulerOnly   # terminal 1
+#   .\scripts\airflow\start-airflow-native.ps1 -WebserverOnly     # terminal 2
 #
 # Windows notes:
-# - PYTHONPATH includes scripts/utils/windows_posix_stubs (pwd/grp for python-daemon)
+# - PYTHONPATH includes scripts/airflow/windows_posix_stubs (pwd/grp for python-daemon)
 # - .venv-airflow\Scripts must be on PATH for `airflow standalone` child processes
 # - Two-terminal mode (-SchedulerOnly / -WebserverOnly) is more reliable than standalone
 
@@ -23,12 +23,12 @@ $AirflowHome = Join-Path $RepoRoot "airflow"
 $LocalEnvFile = Join-Path $AirflowHome ".env.native"
 $ScriptsDir = Join-Path $RepoRoot ".venv-airflow\Scripts"
 $Python = Join-Path $ScriptsDir "python.exe"
-$RunAirflow = Join-Path $RepoRoot "scripts\utils\run_airflow.py"
-$WrapperDir = Join-Path $RepoRoot "scripts\utils\windows_airflow_wrapper"
-$StubsDir = Join-Path $RepoRoot "scripts\utils\windows_posix_stubs"
+$RunAirflow = Join-Path $RepoRoot "scripts\airflow\run_airflow.py"
+$WrapperDir = Join-Path $RepoRoot "scripts\airflow\windows_airflow_wrapper"
+$StubsDir = Join-Path $RepoRoot "scripts\airflow\windows_posix_stubs"
 
 if (-not (Test-Path $Python)) {
-    Write-Error "Run .\scripts\utils\init-airflow-native.ps1 first."
+    Write-Error "Run .\scripts\airflow\init-airflow-native.ps1 first."
 }
 
 $env:PYTHONPATH = if ($env:PYTHONPATH) { "$StubsDir;$env:PYTHONPATH" } else { $StubsDir }
@@ -75,8 +75,8 @@ Write-Host "AIRFLOW_HOME=$AirflowHome"
 Write-Host "Login: admin / (see airflow\.env.native)"
 Write-Host ""
 Write-Host "Recommended on Windows - use two terminals instead:" -ForegroundColor Yellow
-Write-Host "  .\scripts\utils\start-airflow-native.ps1 -SchedulerOnly"
-Write-Host "  .\scripts\utils\start-airflow-native.ps1 -WebserverOnly"
+Write-Host "  .\scripts\airflow\start-airflow-native.ps1 -SchedulerOnly"
+Write-Host "  .\scripts\airflow\start-airflow-native.ps1 -WebserverOnly"
 Write-Host ""
 
 & $Python $RunAirflow standalone

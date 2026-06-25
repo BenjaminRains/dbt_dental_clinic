@@ -2,7 +2,7 @@
 # Does NOT trigger a DAG run.
 #
 # Usage (from repo root):
-#   .\scripts\utils\init-airflow-native.ps1
+#   .\scripts\airflow\init-airflow-native.ps1
 #
 # Optional env overrides:
 #   AIRFLOW_ADMIN_PASSWORD   default: random 16-char
@@ -26,11 +26,12 @@ if (-not (Test-Path $VenvDir)) {
     python -m venv $VenvDir
 }
 
-Write-Step "Install Airflow 2.7.3 + DAG deps"
+Write-Step "Install Airflow 2.11.1 + DAG deps"
 & $Python -m pip install --upgrade pip | Out-Null
 & $Python -m pip install -r (Join-Path $RepoRoot "requirements-airflow-native.txt")
 
 Write-Step "Install Windows POSIX patch (all Python subprocesses in venv)"
+$StubsDir = Join-Path $RepoRoot "scripts\airflow\windows_posix_stubs"
 $SitePackages = Join-Path $VenvDir "Lib\site-packages"
 $PatchSrc = Join-Path $StubsDir "airflow_win_patch.py"
 Copy-Item -Force $PatchSrc (Join-Path $SitePackages "airflow_win_patch.py")
@@ -39,7 +40,6 @@ Set-Content -Path (Join-Path $SitePackages "airflow_win_bootstrap.pth") -Value "
 Write-Step "Configure AIRFLOW_HOME"
 $env:AIRFLOW_HOME = $AirflowHome
 $env:PYTHONUTF8 = "1"
-$StubsDir = Join-Path $RepoRoot "scripts\utils\windows_posix_stubs"
 $env:PYTHONPATH = if ($env:PYTHONPATH) { "$StubsDir;$env:PYTHONPATH" } else { $StubsDir }
 $env:AIRFLOW__CORE__LOAD_EXAMPLES = "False"
 $env:AIRFLOW__CORE__DEFAULT_TIMEZONE = "America/Chicago"
@@ -111,8 +111,11 @@ New-Item -ItemType Directory -Force -Path (Join-Path $AirflowHome "dags") | Out-
 New-Item -ItemType Directory -Force -Path (Join-Path $AirflowHome "logs") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $AirflowHome "plugins") | Out-Null
 
-Write-Step "Initialize metadata DB (airflow db init)"
-& $Airflow db init
+Write-Step "Initialize / migrate metadata DB"
+# Airflow emits POSIX warnings on stderr for Windows; avoid terminating the script.
+$ErrorActionPreference = 'Continue'
+& $Airflow db migrate 2>&1 | Out-Host
+if ($LASTEXITCODE -ne 0) { throw "airflow db migrate failed (exit $LASTEXITCODE)" }
 
 Write-Step "Create admin user (skip if exists)"
 $adminUser = $env:AIRFLOW_ADMIN_USERNAME
@@ -146,5 +149,5 @@ Write-Step "Run DAG unit tests"
 Write-Host "`nDone. Native Airflow ready (no DAG run triggered)." -ForegroundColor Green
 Write-Host "  AIRFLOW_HOME: $AirflowHome"
 Write-Host "  Admin login:  $adminUser / (see airflow\.env.native)"
-Write-Host "  Start UI:     .\scripts\utils\start-airflow-native.ps1"
+Write-Host "  Start UI:     .\scripts\airflow\start-airflow-native.ps1"
 Write-Host "  Full DAG run: after 9 PM Central (business-hours guard)"

@@ -1,10 +1,10 @@
 # List recent etl_pipeline runs and log folder paths (Windows-safe).
 #
 # Usage (repo root):
-#   .\scripts\utils\airflow-logs.ps1
-#   .\scripts\utils\airflow-logs.ps1 -RunId "manual__2026-06-20T03:55:54.158231+00:00"
-#   .\scripts\utils\airflow-logs.ps1 -Task refresh_schema_configuration
-#   .\scripts\utils\airflow-logs.ps1 -Tail 30
+#   .\scripts\airflow\airflow-logs.ps1
+#   .\scripts\airflow\airflow-logs.ps1 -RunId "manual__2026-06-20T03:55:54.158231+00:00"
+#   .\scripts\airflow\airflow-logs.ps1 -Task refresh_schema_configuration
+#   .\scripts\airflow\airflow-logs.ps1 -Tail 30
 
 param(
     [string]$DagId = "etl_pipeline",

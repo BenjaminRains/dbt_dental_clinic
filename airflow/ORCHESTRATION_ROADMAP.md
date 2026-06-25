@@ -36,6 +36,7 @@ Planning lives primarily under `airflow/`. There is **no separate Airflow plan u
 | [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) | What one run means: guard → schema refresh → ETL → dbt → publish |
 | [`DAGS_STATUS.md`](DAGS_STATUS.md) | Quick status reference |
 | [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md) | **Future** dbt enhancements (selectors, Cosmos) — initial dbt is already in `etl_pipeline` |
+| [`AIRFLOW_UPGRADE_PLAN.md`](AIRFLOW_UPGRADE_PLAN.md) | Security-driven upgrade 2.7.3 → 2.11.1 (Dependabot Airflow CVEs) |
 | [`docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md) §4.4 | Native Airflow vs optional Compose sandbox |
 
 ---
@@ -199,7 +200,7 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 
 ### Phase A — Local proof (1–2 days)
 
-- [x] Create venv; `pip install -r requirements-airflow-native.txt` (Airflow 2.7.3 pinned)
+- [x] Create venv; `pip install -r requirements-airflow-native.txt` (Airflow **2.11.1** pinned)
 - [x] `airflow db init` (metadata DB — SQLite `airflow/airflow.db` on dev laptop)
 - [x] Set Airflow Variables: `etl_environment=test`, `dbt_target=local`, `project_root=<repo root>`
 - [x] Windows native bootstrap: POSIX stubs, `run_airflow.py`, scheduler + webserver (two terminals)
@@ -214,10 +215,10 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 
 ```powershell
 # Terminal 1 — scheduler
-.\scripts\utils\start-airflow-native.ps1 -SchedulerOnly
+.\scripts\airflow\start-airflow-native.ps1 -SchedulerOnly
 
 # Terminal 2 — webserver (Flask debug mode; not gunicorn)
-.\scripts\utils\start-airflow-native.ps1 -WebserverOnly
+.\scripts\airflow\start-airflow-native.ps1 -WebserverOnly
 ```
 
 Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing. Do not use `airflow standalone` on Windows; use the two-terminal pattern above.
@@ -243,6 +244,7 @@ Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing
 
 ### Phase D — Hardening (later)
 
+- [ ] **Wire dbt source freshness** — run `dbt source freshness` before `dbt build` in the `dbt_build` task group; YAML thresholds already exist on raw sources (`_loaded_at`). Closes the late-data gap that `verify-loads` does not enforce. See [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md) § Wire dbt source freshness.
 - [ ] Layered dbt selectors (see [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md))
 - [ ] Astronomer Cosmos for model-level tasks and retries
 - [ ] Split `mart_patient_retention` to separate schedule (~52 min of full `dbt build`; see TODO: Optimize mart_patient_retention)
@@ -270,7 +272,7 @@ These are small but prevent confusion:
 - [ ] Update placeholder email in DAG `default_args` (`data-team@example.com`)
 - [ ] Confirm `project_root` Variable works on EC2 without code changes (already supported)
 - [x] Windows native start scripts (`init-airflow-native.ps1`, `start-airflow-native.ps1`, POSIX stubs)
-- [x] Align `scripts/utils/init-airflow.sh` with root `.env` (was `config/.env`)
+- [x] Align `scripts/airflow/init-airflow.sh` with root `.env` (was `config/.env`)
 - [x] Add Option A orchestration note to clinic infra / deployment docs (laptop + VPN, native Airflow)
 
 ---
