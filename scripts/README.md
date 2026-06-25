@@ -23,6 +23,7 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | **verification/** | Verify AWS resources (IAM, security groups, target groups, etc.) |
 | **database/** | Local demo DB setup and queries |
 | **testing/** | API and connection tests |
+| **maintenance/** | Scheduled housekeeping (log pruning) |
 | **utils/** | One-off tools, exports, metadata, audits |
 
 ## Common Workflows
@@ -75,6 +76,15 @@ mdc publish analytics --env clinic
 ```powershell
 dbt-docs-deploy
 # or: mdc deploy dbt-docs
+```
+
+### Prune old log files (weekly)
+
+```powershell
+.\scripts\maintenance\prune_logs.ps1 -DryRun
+.\scripts\maintenance\prune_logs.ps1                    # Recycle Bin (Windows default)
+.\scripts\maintenance\prune_logs.ps1 -Permanent        # Hard delete
+.\scripts\maintenance\prune_logs.ps1 -ListCategories
 ```
 
 ### Deploy clinic API env to EC2
