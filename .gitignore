@@ -134,6 +134,8 @@ docs/
 /docs/*
 !docs/ENVIRONMENT_FILES.md
 !docs/CLINIC_ANALYTICS_WORKFLOW.md
+!docs/ml/
+!docs/ml/**
 !docs/deployment-connections/
 !docs/deployment-connections/README.md
 !docs/deployment-connections/connections.template.yaml
