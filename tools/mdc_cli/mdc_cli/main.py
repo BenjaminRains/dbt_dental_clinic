@@ -5,7 +5,19 @@ from __future__ import annotations
 import typer
 
 from mdc_cli import __version__
-from mdc_cli.commands import api, consult_audio, dbt, deploy, etl, frontend, publish, ssm, status, tunnel
+from mdc_cli.commands import (
+    airflow,
+    api,
+    consult_audio,
+    dbt,
+    deploy,
+    etl,
+    frontend,
+    publish,
+    ssm,
+    status,
+    tunnel,
+)
 
 app = typer.Typer(
     name="mdc",
@@ -23,6 +35,7 @@ app.add_typer(frontend.frontend_app, name="frontend")
 app.add_typer(consult_audio.consult_audio_app, name="consult-audio")
 app.add_typer(ssm.ssm_app, name="ssm")
 app.add_typer(tunnel.tunnel_app, name="tunnel")
+app.add_typer(airflow.airflow_app, name="airflow")
 
 
 @app.command("version")

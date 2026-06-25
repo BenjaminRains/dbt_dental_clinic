@@ -208,8 +208,8 @@ WHERE patient_age != EXTRACT(YEAR FROM AGE(birth_date))
 
 #### 3. Data Freshness
 - **Target**: <24 hours for all data
-- **Measurement**: Time since last successful update
-- **Monitoring**: Real-time freshness tracking
+- **Measurement**: Time since last successful update (`_loaded_at` on raw sources; `loaded_at_field` in `models/staging/opendental/_sources/*.yml`)
+- **Monitoring**: dbt source freshness thresholds are **configured** (warn/error per source and table) but **not yet run** in the nightly Airflow DAG — only `dbt build` runs today. Planned: `dbt source freshness` before build ([`airflow/DBT_DAG_PLAN.md`](../airflow/DBT_DAG_PLAN.md) § Wire dbt source freshness). ETL `verify-loads` checks load success per table, not recency.
 
 #### 4. Data Volume Validation
 - **Target**: <5% variance from expected volumes

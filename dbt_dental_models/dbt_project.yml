@@ -3,6 +3,11 @@ name: 'dbt_dental_models'
 version: '1.0.0'
 config-version: 2
 
+# dbt 1.10.8+ defaults require_generic_test_arguments_property: true, which warns on
+# ~2k legacy YAML tests (relationships, dbt_utils.*, etc.). Opt out until bulk migration.
+flags:
+  require_generic_test_arguments_property: false
+
 # Make sure this matches exactly what's in your profiles.yml
 profile: 'dbt_dental_models'
 

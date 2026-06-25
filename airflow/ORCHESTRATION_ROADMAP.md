@@ -215,10 +215,10 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 
 ```powershell
 # Terminal 1 — scheduler
-.\scripts\airflow\start-airflow-native.ps1 -SchedulerOnly
+mdc airflow start --scheduler
 
 # Terminal 2 — webserver (Flask debug mode; not gunicorn)
-.\scripts\airflow\start-airflow-native.ps1 -WebserverOnly
+mdc airflow start --webserver
 ```
 
 Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing. Do not use `airflow standalone` on Windows; use the two-terminal pattern above.

@@ -139,9 +139,21 @@ See `docs/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
 ### Native Airflow (Windows)
 
 ```powershell
+mdc airflow init
+mdc airflow start --scheduler   # terminal 1
+mdc airflow start --webserver   # terminal 2
+mdc airflow logs
+mdc airflow logs --task refresh_schema_configuration --tail 30
+```
+
+Aliases: `airflow-init`, `airflow-start-scheduler`, `airflow-start-webserver`, `airflow-logs`.
+
+Direct scripts (same behavior):
+
+```powershell
 .\scripts\airflow\init-airflow-native.ps1
-.\scripts\airflow\start-airflow-native.ps1 -SchedulerOnly   # terminal 1
-.\scripts\airflow\start-airflow-native.ps1 -WebserverOnly   # terminal 2
+.\scripts\airflow\start-airflow-native.ps1 -SchedulerOnly
+.\scripts\airflow\start-airflow-native.ps1 -WebserverOnly
 .\scripts\airflow\airflow-logs.ps1
 ```
 

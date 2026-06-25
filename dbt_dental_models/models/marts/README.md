@@ -66,4 +66,4 @@ Exposures are defined in `exposures.yml` and describe dashboard/app consumption.
 | `mart_production_summary` | Production and collection rollups | Enables revenue tracking and clinical throughput insights | — |
 | `mart_provider_performance` | Provider productivity and efficiency metrics | Supports coaching, scheduling balance, and quality oversight | `provider_performance_dashboard`, `executive_dashboard` |
 | `mart_revenue_lost` | Missed opportunity and revenue leakage analysis | Prioritizes recovery workflows and prevents future revenue loss | `revenue_analytics_dashboard`, `executive_dashboard` |
-| `mart_treatment_plan_summary` | Treatment plan pipeline and status | Monitors care plan follow-through and future production | — |
+| `mart_treatment_plan_summary` | Treatment plan pipeline and status | Monitors care plan follow-through and future production | Planned — see `_mart_treatment_plan_summary.yml.planned` |

@@ -32,6 +32,7 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
 4. **dbt** – Only when ETL succeeded
    - Short-circuit: if `pipeline_success` is False, dbt is skipped.
    - When success: `mdc dbt invoke --env {dbt_target}` → deps + build (default `local`).
+   - **Not yet wired:** `dbt source freshness` (late-data checks on `raw._loaded_at` are defined in source YAML but not executed nightly — see [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md) § Wire dbt source freshness).
 
 5. **Publish** – Only when ETL succeeded and `publish_environment` is set (e.g. `clinic`)
    - `mdc publish analytics --env clinic` via SSM tunnel on **127.0.0.1:5433**

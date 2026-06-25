@@ -103,6 +103,25 @@ models:
       pii_fields: ["patient_id", "provider_id"]
       contains_phi: true
       phi_justification: "Contains patient payment allocation data linked to procedures"
+      business_process: "Payment Allocation & Reconciliation"
+      refresh_frequency: "hourly"
+      business_impact: "High"
+      data_quality_requirements:
+        - "All splits must have a valid payment_id"
+        - "Split amounts must be within reasonable ranges"
+        - "Zero amount splits must be valid"
+        - "Unearned revenue splits must have a provider"
+        - "Splits must be properly allocated to procedures or adjustments"
+        - "Split dates must be within valid business date ranges"
+        - "Split types must be valid"
+        - "Split impact must be properly calculated"
+        - "Amount categories must be properly assigned"
+        - "High-split administrative entries must be properly validated"
+        - "Payment type 0 entries require additional verification"
+        - "Hidden splits must have appropriate unearned type flags"
+        - "Income transfers must be tracked for hidden/visible status changes"
+        - "Clinic and provider inheritance rules must be followed"
+        - "Overpayment warnings must be generated appropriately"
     
     columns:
       - name: paysplit_id
@@ -523,26 +542,3 @@ models:
           config:
             severity: error
             description: "Split amounts must be within reasonable ranges"
-
-    meta:
-      owner: "dental_finance_team"
-      contains_pii: true
-      business_process: "Payment Allocation & Reconciliation"
-      refresh_frequency: "hourly"
-      business_impact: "High"
-      data_quality_requirements:
-        - "All splits must have a valid payment_id"
-        - "Split amounts must be within reasonable ranges"
-        - "Zero amount splits must be valid"
-        - "Unearned revenue splits must have a provider"
-        - "Splits must be properly allocated to procedures or adjustments"
-        - "Split dates must be within valid business date ranges"
-        - "Split types must be valid"
-        - "Split impact must be properly calculated"
-        - "Amount categories must be properly assigned"
-        - "High-split administrative entries must be properly validated"
-        - "Payment type 0 entries require additional verification"
-        - "Hidden splits must have appropriate unearned type flags"
-        - "Income transfers must be tracked for hidden/visible status changes"
-        - "Clinic and provider inheritance rules must be followed"
-        - "Overpayment warnings must be generated appropriately"

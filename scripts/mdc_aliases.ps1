@@ -149,6 +149,22 @@ function consult-audio-run {
     Invoke-MDC @("consult-audio", "pipeline", "run") + $args
 }
 
+function airflow-init {
+    Invoke-MDC @("airflow", "init") + $args
+}
+
+function airflow-start-scheduler {
+    Invoke-MDC @("airflow", "start", "--scheduler") + $args
+}
+
+function airflow-start-webserver {
+    Invoke-MDC @("airflow", "start", "--webserver") + $args
+}
+
+function airflow-logs {
+    Invoke-MDC @("airflow", "logs") + $args
+}
+
 function dbt-init {
     param(
         [ValidateSet("local", "demo", "clinic")]
@@ -222,6 +238,10 @@ Write-Host "  clinic-frontend-deploy       mdc deploy frontend --target clinic" 
 Write-Host "  dbt-docs-deploy              mdc deploy dbt-docs" -ForegroundColor Cyan
 Write-Host "  consult-audio-validate       mdc consult-audio validate" -ForegroundColor Cyan
 Write-Host "  consult-audio-run            mdc consult-audio pipeline run" -ForegroundColor Cyan
+Write-Host "  airflow-init                 mdc airflow init" -ForegroundColor Cyan
+Write-Host "  airflow-start-scheduler      mdc airflow start --scheduler" -ForegroundColor Cyan
+Write-Host "  airflow-start-webserver      mdc airflow start --webserver" -ForegroundColor Cyan
+Write-Host "  airflow-logs                 mdc airflow logs" -ForegroundColor Cyan
 Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api-clinic" -ForegroundColor Cyan
 Write-Host "  mdc api run --env clinic --tunnel-db  clinic API via mdc tunnel clinic-db" -ForegroundColor Cyan
 Write-Host "  ssm-connect-clinic-api       SSM shell on clinic API EC2" -ForegroundColor Cyan

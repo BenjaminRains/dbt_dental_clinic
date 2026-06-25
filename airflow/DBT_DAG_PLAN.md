@@ -75,9 +75,24 @@ dbt run --selector daily_critical
 dbt run --selector incremental_only
 ```
 
+### Wire dbt source freshness (late / missing data)
+
+**Status:** Configured in dbt, **not run** in the nightly DAG.
+
+Source freshness thresholds are defined on OpenDental raw sources (`dbt_dental_models/models/staging/opendental/_sources/*.yml` and `models/staging/raw/_sources.yml`): `loaded_at_field: "_loaded_at"` with source-level defaults (warn 24h, error 30d) and tighter per-table overrides for transactional tables (e.g. appointment, payment — 24–48h).
+
+**Gap:** `dbt build` does not execute source freshness. `verify-loads` (ETL reporting) checks that every configured table has `load_status=success` in `raw.etl_load_status` but does **not** fail on stale `_loaded_at` (the 36h “recently touched” count is informational only). The `check_etl_freshness` macro in `macros/utils/etl_tracking_helpers.sql` is unused.
+
+**Proposed wiring** (in `etl_pipeline_dag.py` `dbt_build` task group, after `should_run_dbt`):
+
+1. Add `dbt_source_freshness` — `mdc dbt invoke --env {dbt_target} -- source freshness` (fail the DAG on `error` status).
+2. Keep `dbt_deps` → `dbt_build` order; run freshness after deps (packages available) and **before** `build` so stale raw data is caught before transforms.
+3. Optionally align Airflow alerts with dbt freshness results (Slack/email on warn or error).
+
+**Related:** [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) (dbt step), [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md) Phase D, [`dbt_docs/data_quality.md`](../dbt_docs/data_quality.md) (Timeliness).
+
 ### Other iteration ideas
 
-- Add `dbt source freshness` before `build`
 - Use `--select state:modified+` for faster CI/CD runs
 - Run `mart_patient_retention` on a separate weekly schedule (see TODO: Optimize mart_patient_retention)
 - Persist artifacts to durable storage and wire into observability
@@ -96,4 +111,4 @@ dbt run --selector incremental_only
 - When adding Cosmos or selector-based task groups
 - When multi-tenant schema routing (MDC/GLIC) affects dbt targets
 
-**Last updated:** 2026-06-17
+**Last updated:** 2026-06-23
