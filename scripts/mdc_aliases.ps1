@@ -224,7 +224,9 @@ Write-Host 'Dental Clinic Dev CLI (mdc aliases)' -ForegroundColor Blue
 Write-Host '-----------------------------------' -ForegroundColor DarkBlue
 Write-Host ""
 Write-Host "Quick start (no *-init required):" -ForegroundColor White
-Write-Host "  status / env-status          mdc status" -ForegroundColor Cyan
+Write-Host "  status / env-status          mdc status (includes data freshness)" -ForegroundColor Cyan
+Write-Host "  status-clinic-rds            mdc tunnel clinic-db + mdc status --env clinic --tunnel-db" -ForegroundColor Cyan
+Write-Host "  secrets-pull-clinic         mdc secrets pull clinic (sync rotating RDS password to .env)" -ForegroundColor Cyan
 Write-Host "  api-run                      mdc api run --env local" -ForegroundColor Cyan
 Write-Host "  api-test                     mdc api test-config --env local" -ForegroundColor Cyan
 Write-Host "  etl-validate                 mdc etl validate --env local --profile load" -ForegroundColor Cyan

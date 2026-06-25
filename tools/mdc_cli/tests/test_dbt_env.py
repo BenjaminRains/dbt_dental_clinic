@@ -101,6 +101,36 @@ def test_load_dbt_env_dict_clinic_from_credentials(tmp_path, monkeypatch, clean_
     assert data["POSTGRES_ANALYTICS_SSLMODE"] == "require"
 
 
+def test_load_dbt_env_dict_clinic_from_backend_api_reference(tmp_path, monkeypatch, clean_dbt_os_env):
+    monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
+    creds_path = tmp_path / "deployment_credentials.json"
+    monkeypatch.setattr(dbt_env, "DEPLOYMENT_CREDENTIALS", creds_path)
+    creds_path.write_text(
+        json.dumps(
+            {
+                "backend_api": {
+                    "clinic_database_reference": {
+                        "rds": {
+                            "database_connections": {
+                                "opendental_analytics": {
+                                    "host": "nested.example.com",
+                                    "port": 5432,
+                                    "database": "opendental_analytics",
+                                    "user": "analytics_user",
+                                    "password": "secret",
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        ),
+        encoding="utf-8",
+    )
+    data = dbt_env.load_dbt_env_dict("clinic")
+    assert data["POSTGRES_ANALYTICS_HOST"] == "nested.example.com"
+
+
 def test_load_dbt_env_dict_demo_localhost_defaults(tmp_path, monkeypatch, clean_dbt_os_env):
     monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
     creds_path = tmp_path / "deployment_credentials.json"

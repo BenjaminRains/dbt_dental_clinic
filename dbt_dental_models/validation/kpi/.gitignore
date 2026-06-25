@@ -1,0 +1,6 @@
+# OD report UI screenshots may show patient or financial detail — keep local.
+screenshots/*
+!screenshots/.gitkeep
+
+# Optional working manifest with real totals; commit only if aggregates contain no PHI.
+# golden/golden_manifest.yml

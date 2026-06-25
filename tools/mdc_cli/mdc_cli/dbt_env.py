@@ -7,8 +7,10 @@ import os
 from pathlib import Path
 from typing import Optional
 
+from mdc_cli.credentials import _dig
 from mdc_cli import paths
 from mdc_cli.paths import DEPLOYMENT_CREDENTIALS
+from mdc_cli.secrets_manager import normalize_clinic_password_value
 
 LOCAL_CLINIC_REQUIRED = (
     "POSTGRES_ANALYTICS_HOST",
@@ -88,22 +90,63 @@ def _load_credentials_json() -> dict:
         raise ValueError(f"Invalid JSON in {DEPLOYMENT_CREDENTIALS}: {exc}") from exc
 
 
-def _clinic_from_credentials(data: dict) -> Optional[dict[str, str]]:
-    pg = (data.get("clinic_database") or {}).get("postgresql")
-    if not pg or not pg.get("host"):
+def _clinic_postgres_node_to_env(pg: dict) -> Optional[dict[str, str]]:
+    host = pg.get("host")
+    password_raw = pg.get("password")
+    if not host or not password_raw:
         return None
-    password = pg.get("password")
+    password = normalize_clinic_password_value(str(password_raw))
     if not password:
         return None
+    user = pg.get("user") or pg.get("username") or "analytics_user"
+    database = pg.get("database") or pg.get("dbname") or "opendental_analytics"
     return {
-        "POSTGRES_ANALYTICS_HOST": str(pg["host"]),
+        "POSTGRES_ANALYTICS_HOST": str(host),
         "POSTGRES_ANALYTICS_PORT": str(pg.get("port", 5432)),
-        "POSTGRES_ANALYTICS_DB": str(pg.get("database", "opendental_analytics")),
-        "POSTGRES_ANALYTICS_USER": str(pg.get("user", "analytics_user")),
-        "POSTGRES_ANALYTICS_PASSWORD": str(password),
-        "POSTGRES_ANALYTICS_SCHEMA": "dbt",
-        "POSTGRES_ANALYTICS_SSLMODE": "require",
+        "POSTGRES_ANALYTICS_DB": str(database),
+        "POSTGRES_ANALYTICS_USER": str(user),
+        "POSTGRES_ANALYTICS_PASSWORD": password,
+        "POSTGRES_ANALYTICS_SCHEMA": str(pg.get("schema", "dbt")),
+        "POSTGRES_ANALYTICS_SSLMODE": str(pg.get("sslmode", "require")),
     }
+
+
+def _clinic_from_credentials(data: dict) -> Optional[dict[str, str]]:
+    """
+    Resolve clinic RDS connection from deployment_credentials.json.
+
+    Precedence:
+      1. clinic_database.postgresql (canonical, Phase 6)
+      2. backend_api.clinic_database_reference.rds.database_connections.opendental_analytics
+      3. backend_api.clinic_database_reference.rds.credentials.secrets.opendental_analytics.current_value
+    """
+    candidates = [
+        (data.get("clinic_database") or {}).get("postgresql"),
+        _dig(
+            data,
+            "backend_api",
+            "clinic_database_reference",
+            "rds",
+            "database_connections",
+            "opendental_analytics",
+        ),
+        _dig(
+            data,
+            "backend_api",
+            "clinic_database_reference",
+            "rds",
+            "credentials",
+            "secrets",
+            "opendental_analytics",
+            "current_value",
+        ),
+    ]
+    for pg in candidates:
+        if isinstance(pg, dict):
+            env = _clinic_postgres_node_to_env(pg)
+            if env:
+                return env
+    return None
 
 
 def _demo_from_credentials(data: dict) -> Optional[dict[str, str]]:
@@ -177,8 +220,9 @@ def load_dbt_env_dict(stage: str) -> dict[str, str]:
             file_vals = _read_env_file(file_path)
             if not file_vals:
                 raise ValueError(
-                    f"No clinic dbt env found. Add clinic_database to "
-                    f"{DEPLOYMENT_CREDENTIALS.name} or create {file_path}."
+                    f"No clinic dbt env found. Add clinic_database.postgresql (or "
+                    f"backend_api.clinic_database_reference RDS sections) to "
+                    f"{DEPLOYMENT_CREDENTIALS.name}."
                 )
             merged.update(file_vals)
             source = str(file_path)

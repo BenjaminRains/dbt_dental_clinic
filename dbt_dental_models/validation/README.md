@@ -1,7 +1,7 @@
 # Validation Framework
 
-**Last Updated**: 2026-01-23  
-**Purpose**: Comprehensive guide to data validation processes for staging, intermediate, and mart models
+**Last Updated**: 2026-06-25  
+**Purpose**: Comprehensive guide to data validation processes for staging, intermediate, mart models, and KPI benchmarking
 
 ---
 
@@ -13,6 +13,7 @@ This directory contains validation queries, investigation documents, and analysi
 - **Staging Models**: Source data quality, completeness, and transformation accuracy
 - **Intermediate Models**: Business logic validation, data relationships, and calculated fields
 - **Mart Models**: Final data quality, status category mappings, and business rule compliance
+- **KPI Benchmarking**: Compare marts and dashboard KPIs to OpenDental standard reports (`kpi/`)
 
 ---
 
@@ -22,6 +23,12 @@ This directory contains validation queries, investigation documents, and analysi
 validation/
 ├── README.md (this file)
 ├── VALIDATION_TEMPLATE.md (generalized template for new validations)
+├── kpi/                  # KPI vs OpenDental report benchmarking
+│   ├── README.md
+│   ├── KPI_VALIDATION_REGISTRY.md
+│   ├── golden/           # OD report CSV exports land here (local; *.csv gitignored)
+│   ├── compare/          # Comparison SQL (marts vs golden totals)
+│   └── screenshots/      # Optional OD filter screenshots (local)
 ├── staging/              # Validation for staging models
 │   └── {model_name}/
 │       ├── investigate_{issue}.sql
@@ -446,8 +453,19 @@ After implementation:
 
 ---
 
+## KPI validation (OpenDental reports)
+
+Use `validation/kpi/` when the benchmark is an **OpenDental standard report**, not just the
+`raw` schema. Workflow: register KPI → export CSV to `kpi/golden/` → record totals in
+`golden_manifest.yml` → run SQL in `kpi/compare/`.
+
+See `validation/kpi/README.md` and `validation/kpi/KPI_VALIDATION_REGISTRY.md`.
+
+---
+
 ## Related Documentation
 
+- **KPI Benchmarking**: `validation/kpi/README.md` - OpenDental report comparison workflow
 - **Validation Template**: `validation/VALIDATION_TEMPLATE.md` - Starting point for new validations
 - **Business Rules Mapping Example**: `validation/marts/fact_claim/fact_claim_business_rules_to_dbt_tests.md` - Example of mapping validation findings to dbt tests
 - **dbt Tests**: `tests/` - Automated dbt tests
