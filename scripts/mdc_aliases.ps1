@@ -30,6 +30,14 @@ function status {
     Invoke-MDC @("status") + $args
 }
 
+function status-clinic-rds {
+    Invoke-MDC @("status", "--env", "clinic", "--tunnel-db") + $args
+}
+
+function secrets-pull-clinic {
+    Invoke-MDC @("secrets", "pull", "clinic") + $args
+}
+
 function env-status {
     status @args
 }

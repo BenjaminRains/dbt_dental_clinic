@@ -26,7 +26,7 @@ $expected = @(
     # API
     @{ Path = "api\.env_api_local";  Desc = "API local";  Template = "api\.env_api_local.template"; Deprecated = $false },
     @{ Path = "api\.env_api_demo";   Desc = "API demo";   Template = $null; Deprecated = $false },
-    @{ Path = "api\.env_api_clinic"; Desc = "API clinic (deploy + RDS cache)"; Template = "api\.env_api_clinic.template"; Deprecated = $false },
+    @{ Path = "api\.env_api_clinic"; Desc = "API clinic (deploy file; sync password via mdc secrets pull clinic)"; Template = "api\.env_api_clinic.template"; Deprecated = $false },
     @{ Path = "api\.env_api_test";   Desc = "API test";   Template = "api\.env_api_test.template"; Deprecated = $false },
     @{ Path = "api\.env_api_local.template";  Desc = "API local template (committed)"; Template = $null; Deprecated = $false },
     @{ Path = "api\.env_api_clinic.template"; Desc = "API clinic template (committed)"; Template = $null; Deprecated = $false },

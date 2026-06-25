@@ -67,15 +67,15 @@ Every env file has a **unique name** = path from repo root. The same basename (e
 | **Component** | **Unique path (env file)** | **Template** | **Loaded by** |
 |---------------|----------------------------|-------------|---------------|
 | **Root / Docker sandbox** | `/.env` | `/.env.template` | `docker-compose.yml` only (not native Option A) |
-| **API** | `api/.env_api_local` | (none committed) | `api/settings.py` when `API_ENVIRONMENT=local` (OS env wins; Phase 0) |
+| **API** | `api/.env_api_local` | `api/.env_api_local.template` | `api/settings.py` when `API_ENVIRONMENT=local` (OS env wins; Phase 0) |
 | **API** | `api/.env_api_demo` | (none committed) | `api/settings.py` when `API_ENVIRONMENT=demo` |
-| **API** | `api/.env_api_clinic` | (none committed) | `api/settings.py` when `API_ENVIRONMENT=clinic` |
+| **API** | `api/.env_api_clinic` | `api/.env_api_clinic.template` | `api/settings.py` when `API_ENVIRONMENT=clinic` |
 | **API** | `api/.env_api_test` | `api/.env_api_test.template` | `api/settings.py` when `API_ENVIRONMENT=test` |
 | **API on EC2** | `api/.env` (on EC2: `/opt/dbt_dental_clinic/api/.env`) | Contents from `api/.env_api_demo` or `api/.env_api_clinic` | systemd `EnvironmentFile`; **not** by Python |
 | **ETL pipeline** | `etl_pipeline/.env_local` | `etl_pipeline/.env_local.template` | `settings_v2` via `mdc etl … --env local` |
 | **ETL pipeline** | `etl_pipeline/.env_clinic` | `etl_pipeline/.env_clinic.template` | `settings_v2` via `mdc etl … --env clinic` |
 | **ETL pipeline** | `etl_pipeline/.env_test` | `etl_pipeline/.env_test.template` | `settings_v2` via `mdc etl … --env test` |
-| **dbt local** | `dbt_dental_models/.env_local` | `etl_pipeline/.env_local.template` (copy vars) | `mdc_cli/dbt_env.py` via `mdc dbt … --env local` |
+| **dbt local** | `dbt_dental_models/.env_local` | `dbt_dental_models/.env_local.template` | `mdc_cli/dbt_env.py` via `mdc dbt … --env local` |
 | **dbt clinic** | `dbt_dental_models/.env_clinic` (optional) | `etl_pipeline/.env_clinic.template` | `mdc_cli/dbt_env.py` + `deployment_credentials.json` |
 | **dbt demo** | (no file) | — | `mdc_cli/dbt_env.py` from `deployment_credentials.json` |
 | **Frontend** | `frontend/.env` | (see frontend README) | Vite (dev); build-time for production |
@@ -194,7 +194,7 @@ Each component should have a single config entrypoint that:
 | One official loader in production (e.g. API on EC2: systemd only) | **Done (Phase 0)** | `api/settings.py` skips `.env_api_*` when OS env is populated; deploy writes `api/.env` only. |
 | Canonical location only, or noisy + optional fallback | Todo | ETL/dbt today fall back to root; add WARNING and/or flag. |
 | Global env set (local, demo, clinic, test, prod) | Doc only | §2.2; components to declare “unsupported” instead of new names. |
-| Commit sanitized templates for API + frontend | Todo | Add `api/.env_api_local.template`, `api/.env_api_demo.template`, `api/.env_api_clinic.template`, `frontend/.env.template` (variable names + comments, no secrets). High ROI for collaborators. |
+| Commit sanitized templates for API + frontend | **Partial** | **Done:** `api/.env_api_local.template`, `api/.env_api_clinic.template`, `dbt_dental_models/.env_local.template`. **Todo:** `api/.env_api_demo.template`, `frontend/.env.template`. |
 | Config module: load once, log source, validate required | **Done (Phase 2–4)** | `api/settings.py`, ETL `settings_v2.py`; `mdc status` / `mdc * validate` |
 | Track `docs/ENVIRONMENT_FILES.md` in git | **Done (Phase 1)** | Whitelisted in `.gitignore`; README link resolves. |
 | `dbt_dental_models/profiles.yml.template` | **Done** | Uses `env_var()`; copy to local `profiles.yml`. |
@@ -287,9 +287,10 @@ Development for clinic infra is often done locally before deploy, so **`.env_loc
 
 - **Driver:** `mdc dbt … --env <stage>` (`local`, `demo`, `clinic`). Child env sets `DBT_TARGET` and connection vars.
 - **Loader:** `tools/mdc_cli/mdc_cli/dbt_env.py` — mirrors legacy `dbt-init` rules:
-  - **local:** `dbt_dental_models/.env_local`
-  - **clinic:** `deployment_credentials.json` first; fallback `dbt_dental_models/.env_clinic`
+  - **local:** `dbt_dental_models/.env_local` (from `dbt_dental_models/.env_local.template`)
+  - **clinic:** `deployment_credentials.json` (`clinic_database.postgresql`, or nested `backend_api.clinic_database_reference.rds.*`); optional fallback `dbt_dental_models/.env_clinic` (deprecated)
   - **demo:** `deployment_credentials.json` only (no `.env_demo` file)
+  - Password values in JSON are normalized (handles accidental full Secrets Manager JSON blobs in the password field)
 - **Validate:** `mdc dbt validate --env local`
 - **Run:** `mdc dbt run --env clinic -- --select …` (passthrough after `--`)
 - **Clinic from laptop:** RDS is private — see [CLINIC_ANALYTICS_WORKFLOW.md](CLINIC_ANALYTICS_WORKFLOW.md) (local dbt + tunnel + publish, or EC2 dbt)
@@ -385,10 +386,13 @@ Use these to create local/env-specific files; never commit the filled-in files. 
 
 - [ ] **Root:** `/.env.template` → copy to `/.env` only if using Docker Compose sandbox.
 - [ ] **ETL:** `etl_pipeline/.env_local.template`, `etl_pipeline/.env_clinic.template`, `etl_pipeline/.env_test.template` → copy to `etl_pipeline/.env_local`, `.env_clinic`, `.env_test` as needed.
+- [ ] **dbt local:** `dbt_dental_models/.env_local.template` → copy to `dbt_dental_models/.env_local`.
+- [ ] **API local:** `api/.env_api_local.template` → copy to `api/.env_api_local`.
+- [ ] **API clinic:** `api/.env_api_clinic.template` → copy to `api/.env_api_clinic`, then `mdc secrets pull clinic` for the RDS password.
 - [ ] **API test:** `api/.env_api_test.template` → copy to `api/.env_api_test` and fill in test DB credentials.
 - [ ] **Consult audio:** `consult_audio_pipe/.env.template` → copy to `consult_audio_pipe/.env`.
 - [ ] **Synthetic data:** `etl_pipeline/synthetic_data_generator/.env_demo.template` → copy to `etl_pipeline/synthetic_data_generator/.env_demo`.
-- **API local/demo/clinic / Frontend:** No committed templates for `api/.env_api_local`, `api/.env_api_demo`, `api/.env_api_clinic`, or `frontend/.env`; create from component READMEs or copy from team docs.
+- **API demo / Frontend:** No committed templates yet for `api/.env_api_demo` or `frontend/.env`; create from component READMEs or copy from team docs.
 
 ---
 
