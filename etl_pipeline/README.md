@@ -2,9 +2,11 @@
 
 A modern, comprehensive ETL pipeline ecosystem for extracting data from OpenDental MySQL, replicating it locally, and loading it into a PostgreSQL analytics database with intelligent orchestration, priority-based processing, and automated management tools.
 
+**Production orchestration:** Nightly runs are orchestrated by Apache Airflow in [`../airflow/`](../airflow/). The `etl_pipeline` DAG calls this package via `mdc etl invoke` (Pipenv isolation). See [Airflow Orchestration](#airflow-orchestration) below and [`../airflow/README.md`](../airflow/README.md).
+
 ## Architecture Overview
 
-The pipeline follows a **two-phase architecture** with clear separation between **management/setup** and **nightly ETL execution**:
+The pipeline follows a **two-phase architecture** with clear separation between **management/setup** and **nightly ETL execution**. **Airflow** (repo root [`airflow/`](../airflow/)) orchestrates the nightly path: schema refresh → ETL → dbt → optional publish to clinic RDS.
 
 ### Phase 1: Pipeline Management & Setup
 ```
@@ -54,6 +56,16 @@ The pipeline follows a **two-phase architecture** with clear separation between 
                         │ • TableProcessor    │
                         │ • PriorityProcessor │
                         │ • Static Config     │ ← Modern Configuration
+                        └─────────────────────┘
+                                    ▲
+                                    │
+                        ┌─────────────────────┐
+                        │   Airflow (nightly) │
+                        │   etl_pipeline DAG  │
+                        │                     │
+                        │ • mdc etl invoke    │
+                        │ • run-category      │
+                        │ • verify-loads      │
                         └─────────────────────┘
 ```
 
@@ -121,7 +133,7 @@ PostgreSQL data loading with optimization:
 #### 5. **Command Line Interface** (`cli/`)
 User-friendly command interface:
 
-- **`commands.py`**: CLI commands for pipeline operations (3 main commands)
+- **`commands.py`**: CLI commands for pipeline operations — `run`, `status`, `test-connections`, `update-schema`, plus Airflow helpers (`run-category`, `check-schema-drift`, `verify-loads`)
 - **`agent_commands.py`**: Agent-oriented CLI with machine-readable JSON output (`status` command); invokes `ops` module
 - **`main.py`**: CLI entry point with Click-based interface
 - **`__main__.py`**: Module entry point for `python -m etl_pipeline`
@@ -206,6 +218,8 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 - Sequential processing for resource management
 - Comprehensive error handling and recovery
 
+**Nightly (Airflow):** The `etl_pipeline` DAG splits ETL by performance category (`run-category`) instead of a single `run` call, then runs `verify-loads` before dbt and publish. See [Airflow Orchestration](#airflow-orchestration).
+
 ## Key Features
 
 ### **Two-Phase Architecture**
@@ -254,11 +268,12 @@ PipelineOrchestrator → PriorityProcessor → TableProcessor → Static Config
 
 ### **Modern CLI Interface**
 - **Click-Based**: Modern CLI framework with command groups
-- **Multiple Commands**: `run`, `status`, `test_connections` with comprehensive options
+- **Multiple Commands**: `run`, `status`, `test-connections`, `update-schema`, plus Airflow orchestration helpers
 - **Agent CLI**: Separate `agent_commands` module for machine-readable JSON output (status, run summaries) backed by `ops` layer
 - **Dry Run Mode**: Preview pipeline operations without making changes
 - **Real-Time Status**: Monitor pipeline progress and status
 - **Connection Testing**: Validate database connections before execution
+- **Airflow Contract**: Orchestration commands emit `###AIRFLOW_RESULT###<json>` on the last line for XCom parsing in the DAG
 
 ### **Modern Configuration**
 - **Environment Variables**: Secure configuration through environment variables
@@ -297,6 +312,8 @@ Copy the template and configure your environment:
 cp .env_clinic.template .env_clinic
 cp .env_test.template .env_test
 ```
+
+For **clinic nightly (Airflow Option A)**, `etl_pipeline/.env_clinic` holds OpenDental source + local MySQL replication only. Clinic RDS Postgres credentials (`POSTGRES_ANALYTICS_*`) are composed by `mdc` from `deployment_credentials.json` + Secrets Manager — do not duplicate them in `.env_clinic`. See [`../docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md).
 
 Required environment variables:
 ```bash
@@ -430,7 +447,9 @@ python etl_pipeline/scripts/update_pipeline_config.py --validate-test
 
 ### **Phase 2: Nightly ETL Execution**
 
-#### **Command Line Interface**
+Nightly runs can be triggered **manually** (CLI below) or **automated** via the `etl_pipeline` Airflow DAG. Production target is **Option A**: native Airflow on the dev laptop with WireGuard + SSM tunnel for publish. See [`../airflow/NIGHTLY_RUN.md`](../airflow/NIGHTLY_RUN.md).
+
+#### **Command Line Interface (manual / break-glass)**
 
 ```bash
 # Process all tables by priority
@@ -453,7 +472,39 @@ python -m etl_pipeline status
 
 # Test database connections
 python -m etl_pipeline test-connections
+
+# Refresh tables.yml from live OpenDental schema
+python -m etl_pipeline update-schema
 ```
+
+#### **Airflow orchestration commands**
+
+These commands are designed for the `etl_pipeline` DAG. Airflow invokes them through **`mdc etl invoke`** so ETL runs in the Pipenv environment (separate from the Airflow venv):
+
+```bash
+# Same as above, but with mdc env isolation (how the DAG calls ETL)
+mdc etl invoke --env clinic -- run --tables patient
+mdc etl invoke --env clinic -- run-category --category large --parallel 5
+mdc etl invoke --env clinic -- check-schema-drift
+mdc etl invoke --env clinic -- verify-loads --hours 36
+mdc etl invoke --env clinic -- update-schema
+```
+
+Each orchestration command prints human-readable logs and ends with a machine-readable result line:
+
+```
+###AIRFLOW_RESULT###{"category":"large","success_count":12,"failure_count":0,...}
+```
+
+The DAG parses this line via `airflow/dags/lib/mdc_runner.py` for XCom and reporting.
+
+| Command | Purpose in nightly DAG |
+|---------|------------------------|
+| `update-schema` | Regenerate `tables.yml` before ETL (`refresh_schema_configuration`) |
+| `check-schema-drift` | Optional validation — compare source table count to config |
+| `run-category` | Process tables by size: large → medium → small → tiny |
+| `verify-loads` | Post-ETL check against replication and analytics tracking tables |
+| `run` | Full pipeline in one shot (manual use; DAG uses `run-category` instead) |
 
 #### **Agent-Oriented Status CLI (machine-readable)**
 
@@ -511,6 +562,92 @@ table_config = config_reader.get_table_config('patient')
 critical_tables = config_reader.get_tables_by_importance('critical')
 ```
 
+## Airflow Orchestration
+
+Apache Airflow DAGs live in [`../airflow/`](../airflow/). They orchestrate this ETL package together with dbt and analytics publish — one nightly run covers the full clinic analytics refresh.
+
+### DAG overview
+
+| DAG | Schedule | Role |
+|-----|----------|------|
+| **`etl_pipeline`** | 9 PM Central, Mon–Sun | Nightly path: guard → schema refresh → validation → ETL → verify → report → dbt → publish → notify |
+| **`schema_analysis`** | Manual only | Optional — same analyzer plus change reports and Slack; not required nightly |
+
+dbt runs **inside** `etl_pipeline` (task group `dbt_build`), not as a separate DAG. After ETL succeeds, the DAG runs `mdc dbt invoke --env {dbt_target}` then `mdc publish analytics` when `publish_environment` is set.
+
+### Nightly flow (ETL tasks)
+
+```
+guard (business hours)
+  → refresh_schema_configuration (update-schema)
+  → validate config + connections (+ optional check-schema-drift)
+  → run-category large → medium → small → tiny
+  → verify-loads
+  → report + notify
+  → (if ETL success) dbt_deps → dbt_build
+  → (if configured) mdc publish analytics
+  → final notification
+```
+
+**Business-hours guard:** Runs are blocked during **6 AM–8:59 PM Central** because ETL load on client MySQL is too heavy during clinic hours. Allowed window: **9 PM–5:59 AM Central**.
+
+**Schema refresh every run:** `tables.yml` is regenerated from live OpenDental before ETL starts, so nightly runs do not depend on the optional `schema_analysis` DAG.
+
+### How Airflow calls ETL
+
+Airflow's `.venv-airflow` has orchestration dependencies only. ETL code runs through **`mdc etl invoke --env <stage> -- <subcommand>`**, the same isolation path as manual `mdc etl run`:
+
+```
+Airflow task (PythonOperator)
+  → mdc_runner.run_mdc_etl_invoke(environment, ["run-category", "--category", "large", ...])
+  → mdc etl invoke --env clinic -- run-category --category large
+  → python -m etl_pipeline run-category ...  (inside etl_pipeline Pipenv)
+  → stdout ends with ###AIRFLOW_RESULT###<json>
+  → DAG parses JSON for XCom / execution report
+```
+
+### Airflow Variables (clinic nightly)
+
+Set in Airflow UI (Admin → Variables):
+
+| Variable | Clinic nightly example |
+|----------|------------------------|
+| `project_root` | Repo root on disk (e.g. `C:/Users/rains/dbt_dental_clinic`) |
+| `etl_environment` | `clinic` |
+| `dbt_target` | `local` |
+| `publish_environment` | `clinic` |
+
+Connection details come from `etl_pipeline/.env_clinic` — same as `mdc etl run --env clinic`. Root `/.env` is **not** used for Option A clinic runs.
+
+### Preflight (Option A laptop)
+
+Before a scheduled or manual DAG run:
+
+1. **WireGuard** connected (OpenDental source reachable)
+2. **SSM tunnel** for publish: `mdc tunnel clinic-db` in a separate terminal (port **5433**)
+3. **Native Airflow** scheduler + webserver running (`pip install -r requirements-airflow.txt`)
+
+Observed run times (clinic): schema refresh ~7 min, incremental ETL ~25 min, full `dbt build` ~52 min. Plan **~1.5–2 hours** end-to-end with dbt + publish.
+
+### Manual vs automated
+
+| Manual (break-glass) | Automated (nightly) |
+|----------------------|---------------------|
+| `mdc etl run --env clinic` | `etl_pipeline` DAG |
+| `python -m etl_pipeline run --tables patient` | Single-table reruns only |
+| `python etl_pipeline/scripts/analyze_opendental_schema.py` | `refresh_schema_configuration` every run |
+| `mdc dbt run --env local` + `mdc publish analytics` | `dbt_build` + publish tasks in same DAG |
+
+Keep manual CLI commands for debugging, single-table reruns, and when Airflow is unavailable.
+
+### Further reading
+
+- [`../airflow/README.md`](../airflow/README.md) — DAG documentation, deployment, monitoring
+- [`../airflow/NIGHTLY_RUN.md`](../airflow/NIGHTLY_RUN.md) — run semantics, failure handling, schedule
+- [`../airflow/DAGS_STATUS.md`](../airflow/DAGS_STATUS.md) — implementation status
+- [`../airflow/ORCHESTRATION_ROADMAP.md`](../airflow/ORCHESTRATION_ROADMAP.md) — deployment roadmap
+- [`../docs/CLINIC_ANALYTICS_WORKFLOW.md`](../docs/CLINIC_ANALYTICS_WORKFLOW.md) — clinic RDS publish workflow
+
 ## Monitoring and Observability
 
 ### **Logging**
@@ -548,8 +685,16 @@ etl_pipeline/
 │   ├── integration/  # Integration tests
 │   ├── e2e/          # End-to-end tests
 │   ├── comprehensive/ # Comprehensive test scenarios
+│   ├── contracts/    # Result contract tests (incl. Airflow JSON payloads)
 │   └── fixtures/     # Test fixtures and utilities
 └── docs/             # Documentation
+
+../airflow/            # Airflow DAGs (orchestrate etl_pipeline via mdc)
+├── dags/
+│   ├── etl_pipeline_dag.py
+│   ├── schema_analysis_dag.py
+│   └── lib/mdc_runner.py
+└── tests/
 ```
 
 ### **Testing Strategy**
@@ -628,6 +773,14 @@ etl_pipeline/
    - Run `setup_test_databases.py` to recreate test environment
    - Validate test configuration with `update_pipeline_config.py --validate-test`
    - Check test database connectivity and permissions
+
+6. **Airflow / nightly run issues**
+   - Confirm business-hours guard: runs blocked 6 AM–8:59 PM Central
+   - Check Airflow Variables: `project_root`, `etl_environment`, `dbt_target`, `publish_environment`
+   - Verify WireGuard (source) and `mdc tunnel clinic-db` (publish) before triggering
+   - Inspect task logs in Airflow UI; ETL stdout is also in `etl_pipeline/logs/etl_pipeline/`
+   - Run orchestration commands manually: `mdc etl invoke --env clinic -- verify-loads`
+   - See [`../airflow/README.md`](../airflow/README.md) troubleshooting section
 
 ### **Debugging Tools**
 - **Detailed Logging**: Comprehensive log output for debugging
