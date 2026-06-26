@@ -42,14 +42,18 @@ def test_etl_validate_load_profile(mock_validate):
     result = runner.invoke(app, ["etl", "validate", "--env", "local"])
     assert result.exit_code == 0
     assert "profile=load" in result.stdout
-    mock_validate.assert_called_once_with("local", profile="load")
+    mock_validate.assert_called_once_with(
+        "local", profile="load", tunnel_db=False, tunnel_port=None
+    )
 
 
 @patch("mdc_cli.commands.etl.validate_etl_stage", return_value=(True, None))
 def test_etl_validate_full_profile(mock_validate):
     result = runner.invoke(app, ["etl", "validate", "--env", "clinic", "--profile", "full"])
     assert result.exit_code == 0
-    mock_validate.assert_called_once_with("clinic", profile="full")
+    mock_validate.assert_called_once_with(
+        "clinic", profile="full", tunnel_db=False, tunnel_port=None
+    )
 
 
 @patch("mdc_cli.commands.dbt.validate_dbt_stage", return_value=(True, None))

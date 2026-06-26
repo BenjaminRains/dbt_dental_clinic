@@ -2,6 +2,7 @@
 
 from unittest.mock import patch
 
+import pytest
 from typer.testing import CliRunner
 
 from mdc_cli.main import app
@@ -21,6 +22,12 @@ runner = CliRunner()
 
 RDS_MASTER_ARN = "arn:aws:secretsmanager:us-east-1:123:secret:rds!db-abc"
 RDS_MASTER_NAME = "rds!db-83a24c7f-7e85-4168-ba14-ad6e63905c49"
+
+
+@pytest.fixture(autouse=True)
+def suppress_deprecated_etl_key_warnings():
+    with patch("mdc_cli.postgres_env.deprecated_etl_analytics_keys", return_value=[]):
+        yield
 
 
 @patch("mdc_cli.secrets_manager.fetch_live_clinic_rds_secret")

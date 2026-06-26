@@ -109,7 +109,23 @@ def test_etl_run_passes_passthrough_args(
 def test_dbt_run_delegates(mock_validate, mock_run):
     result = runner.invoke(app, ["dbt", "run", "--env", "local"])
     assert result.exit_code == 0
-    mock_run.assert_called_once_with("local", ["run"])
+    mock_run.assert_called_once_with("local", ["run"], tunnel_db=False, tunnel_port=None)
+
+
+@patch("mdc_cli.commands.dbt.run_dbt_command", return_value=0)
+@patch("mdc_cli.commands.dbt.validate_dbt_stage", return_value=(True, None))
+def test_dbt_run_clinic_tunnel_db(mock_validate, mock_run):
+    result = runner.invoke(
+        app,
+        ["dbt", "run", "--env", "clinic", "--tunnel-db", "--tunnel-port", "5433", "--", "--select", "mart_daily_payments"],
+    )
+    assert result.exit_code == 0
+    mock_run.assert_called_once_with(
+        "clinic",
+        ["run", "--select", "mart_daily_payments"],
+        tunnel_db=True,
+        tunnel_port=5433,
+    )
 
 
 @patch("mdc_cli.commands.dbt.run_dbt_command", return_value=0)
@@ -120,4 +136,4 @@ def test_dbt_invoke_passthrough(mock_validate, mock_run):
         ["dbt", "invoke", "--env", "clinic", "--", "deps"],
     )
     assert result.exit_code == 0
-    mock_run.assert_called_once_with("clinic", ["deps"])
+    mock_run.assert_called_once_with("clinic", ["deps"], tunnel_db=False, tunnel_port=None)

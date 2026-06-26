@@ -6,6 +6,8 @@ import subprocess
 from pathlib import Path
 from typing import Optional, Sequence
 
+from mdc_cli.dbt_env import load_dbt_env_dict, validate_dbt_stage
+from mdc_cli.etl_env import compose_etl_env_dict
 from mdc_cli.paths import (
     ETL_DIR,
     default_etl_profile,
@@ -13,7 +15,6 @@ from mdc_cli.paths import (
     ensure_api_importable,
     ensure_etl_importable,
 )
-from mdc_cli.dbt_env import load_dbt_env_dict, validate_dbt_stage
 
 
 def load_api_env_dict(stage: str) -> dict[str, str]:
@@ -23,15 +24,20 @@ def load_api_env_dict(stage: str) -> dict[str, str]:
     return export_api_env_dict(environment=stage)
 
 
-def load_etl_env_dict(stage: str, profile: Optional[str] = None) -> dict[str, str]:
-    ensure_etl_importable()
-    from etl_pipeline.config.settings_v2 import load_etl_env_dict
-
-    resolved_profile = profile or default_etl_profile(stage)
-    return load_etl_env_dict(
-        environment=stage,
-        config_dir=ETL_DIR,
-        profile=resolved_profile,
+def load_etl_env_dict(
+    stage: str,
+    profile: Optional[str] = None,
+    *,
+    tunnel_db: bool = False,
+    tunnel_port: Optional[int] = None,
+    prefer_secrets_manager: bool = True,
+) -> dict[str, str]:
+    return compose_etl_env_dict(
+        stage,
+        profile,
+        tunnel_db=tunnel_db,
+        tunnel_port=tunnel_port,
+        prefer_secrets_manager=prefer_secrets_manager,
     )
 
 
@@ -46,11 +52,18 @@ def load_env_dict(
     stage: str,
     *,
     profile: Optional[str] = None,
+    tunnel_db: bool = False,
+    tunnel_port: Optional[int] = None,
 ) -> dict[str, str]:
     if component == "api":
         return load_api_env_dict(stage)
     if component == "etl":
-        return load_etl_env_dict(stage, profile=profile)
+        return load_etl_env_dict(
+            stage,
+            profile=profile,
+            tunnel_db=tunnel_db,
+            tunnel_port=tunnel_port,
+        )
     if component == "dbt":
         return load_dbt_env_dict(stage)
     raise ValueError(f"Unsupported component for env load: {component}")
@@ -67,16 +80,19 @@ def validate_api_stage(stage: str) -> tuple[bool, Optional[str]]:
         return False, str(exc)
 
 
-def validate_etl_stage(stage: str, profile: Optional[str] = None) -> tuple[bool, Optional[str]]:
+def validate_etl_stage(
+    stage: str,
+    profile: Optional[str] = None,
+    *,
+    tunnel_db: bool = False,
+    tunnel_port: Optional[int] = None,
+) -> tuple[bool, Optional[str]]:
     try:
-        ensure_etl_importable()
-        from etl_pipeline.config.settings_v2 import load_etl_connection_settings
-
-        resolved_profile = profile or default_etl_profile(stage)
-        load_etl_connection_settings(
-            environment=stage,
-            config_dir=ETL_DIR,
-            profile=resolved_profile,
+        load_etl_env_dict(
+            stage,
+            profile=profile,
+            tunnel_db=tunnel_db,
+            tunnel_port=tunnel_port,
         )
         return True, None
     except ModuleNotFoundError as exc:
@@ -90,11 +106,18 @@ def validate_component_stage(
     stage: str,
     *,
     profile: Optional[str] = None,
+    tunnel_db: bool = False,
+    tunnel_port: Optional[int] = None,
 ) -> tuple[bool, Optional[str]]:
     if component == "api":
         return validate_api_stage(stage)
     if component == "etl":
-        return validate_etl_stage(stage, profile=profile)
+        return validate_etl_stage(
+            stage,
+            profile=profile,
+            tunnel_db=tunnel_db,
+            tunnel_port=tunnel_port,
+        )
     if component == "dbt":
         return validate_dbt_stage(stage)
     return False, f"Unknown component: {component}"
@@ -106,6 +129,8 @@ def run_with_env(
     cmd: Sequence[str],
     *,
     profile: Optional[str] = None,
+    tunnel_db: bool = False,
+    tunnel_port: Optional[int] = None,
     cwd: Optional[Path] = None,
     check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
@@ -116,7 +141,13 @@ def run_with_env(
     """
     from mdc_cli.run_helper import build_isolated_child_env, load_env_dict_isolated, venv_root_from_python
 
-    settings = load_env_dict_isolated(component, stage, profile=profile)
+    settings = load_env_dict_isolated(
+        component,
+        stage,
+        profile=profile,
+        tunnel_db=tunnel_db,
+        tunnel_port=tunnel_port,
+    )
     python = discover_component_python(component)
     venv_root = venv_root_from_python(python) if python else None
     child_env = build_isolated_child_env(settings, venv_root=venv_root)

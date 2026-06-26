@@ -4,7 +4,7 @@ import json
 
 import pytest
 
-from mdc_cli import dbt_env, paths
+from mdc_cli import dbt_env, paths, postgres_env
 
 DBT_ENV_KEYS = (
     "POSTGRES_ANALYTICS_HOST",
@@ -56,7 +56,9 @@ def test_load_dbt_env_dict_local(tmp_path, monkeypatch, clean_dbt_os_env):
 
 def test_load_dbt_env_dict_clinic_from_file(tmp_path, monkeypatch, clean_dbt_os_env):
     monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
-    monkeypatch.setattr(dbt_env, "DEPLOYMENT_CREDENTIALS", tmp_path / "missing.json")
+    creds_path = tmp_path / "missing.json"
+    monkeypatch.setattr(dbt_env, "DEPLOYMENT_CREDENTIALS", creds_path)
+    monkeypatch.setattr(postgres_env, "DEPLOYMENT_CREDENTIALS", creds_path)
     env_file = tmp_path / ".env_clinic"
     env_file.write_text(
         "\n".join(
@@ -79,6 +81,7 @@ def test_load_dbt_env_dict_clinic_from_credentials(tmp_path, monkeypatch, clean_
     monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
     creds_path = tmp_path / "deployment_credentials.json"
     monkeypatch.setattr(dbt_env, "DEPLOYMENT_CREDENTIALS", creds_path)
+    monkeypatch.setattr(postgres_env, "DEPLOYMENT_CREDENTIALS", creds_path)
     creds_path.write_text(
         json.dumps(
             {
@@ -105,6 +108,7 @@ def test_load_dbt_env_dict_clinic_from_backend_api_reference(tmp_path, monkeypat
     monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
     creds_path = tmp_path / "deployment_credentials.json"
     monkeypatch.setattr(dbt_env, "DEPLOYMENT_CREDENTIALS", creds_path)
+    monkeypatch.setattr(postgres_env, "DEPLOYMENT_CREDENTIALS", creds_path)
     creds_path.write_text(
         json.dumps(
             {
@@ -157,7 +161,7 @@ def test_load_dbt_env_dict_demo_localhost_defaults(tmp_path, monkeypatch, clean_
 
 def test_load_dbt_env_dict_local_missing_file(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
-    with pytest.raises(ValueError, match="No dbt local env found"):
+    with pytest.raises(ValueError, match="No local warehouse env found"):
         dbt_env.load_dbt_env_dict("local")
 
 

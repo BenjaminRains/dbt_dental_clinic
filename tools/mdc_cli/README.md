@@ -37,8 +37,8 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 ### Runtime (stateless, isolated child env)
 
 - `mdc api run --env <stage>` — uvicorn; `--reload` default on `local` only; `--tunnel-db` for clinic + `mdc tunnel clinic-db`
-- `mdc etl run|status|test-connections --env <stage> [--profile full] -- [args]`
-- `mdc dbt run|test|docs --env <stage> -- [args]`
+- `mdc etl run|status|test-connections|exec --env <stage> [--profile full] [--tunnel-db] -- [args]`
+- `mdc dbt run|test|docs --env <stage> [--tunnel-db] [--tunnel-port 5433] -- [args]`
 - `mdc dbt invoke --env <stage> -- deps` — arbitrary dbt subcommands
 - `mdc publish analytics --env clinic` — local marts → clinic RDS (live Secrets Manager password; see [docs/CLINIC_ANALYTICS_WORKFLOW.md](../../docs/CLINIC_ANALYTICS_WORKFLOW.md))
 - `mdc secrets pull clinic` — read RDS master secret (`rds!db-...`), sync password into `api/.env_api_clinic` (see [CLINIC_ANALYTICS_WORKFLOW.md](../../docs/CLINIC_ANALYTICS_WORKFLOW.md))

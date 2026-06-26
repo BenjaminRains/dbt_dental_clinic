@@ -10,7 +10,7 @@ from pathlib import Path
 from typing import Any, Optional
 
 from mdc_cli.credentials import _dig, load_deployment_credentials
-from mdc_cli.paths import API_DIR, DEPLOYMENT_CREDENTIALS, REPO_ROOT
+from mdc_cli.paths import API_DIR, DEPLOYMENT_CREDENTIALS, ETL_DIR, REPO_ROOT
 from mdc_cli.process_util import find_executable, run_subprocess_completed
 
 CLINIC_RDS_INSTANCE_DEFAULT = "dental-clinic-analytics"
@@ -820,6 +820,26 @@ def check_clinic_credential_sync() -> ClinicCredentialSyncReport:
                 live_plain,
             )
         )
+
+    from mdc_cli.postgres_env import deprecated_etl_analytics_keys
+
+    for stage in ("clinic", "local"):
+        stale_keys = deprecated_etl_analytics_keys(stage)
+        if stale_keys:
+            try:
+                target = str((ETL_DIR / f".env_{stage}").relative_to(REPO_ROOT))
+            except ValueError:
+                target = str(ETL_DIR / f".env_{stage}")
+            rows.append(
+                CredentialSyncRow(
+                    target=target,
+                    status="warn",
+                    note=(
+                        "deprecated POSTGRES_ANALYTICS_* — remove; mdc composes analytics "
+                        f"({', '.join(stale_keys[:3])}{'...' if len(stale_keys) > 3 else ''})"
+                    ),
+                )
+            )
 
     return ClinicCredentialSyncReport(
         secret_id=live.secret_id,

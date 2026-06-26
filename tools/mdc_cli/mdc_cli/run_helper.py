@@ -151,11 +151,19 @@ def load_env_dict_isolated(
     stage: str,
     *,
     profile: Optional[str] = None,
+    tunnel_db: bool = False,
+    tunnel_port: Optional[int] = None,
 ) -> dict[str, str]:
     with scrub_parent_stage_env():
         from mdc_cli.env import load_env_dict
 
-        return load_env_dict(component, stage, profile=profile)
+        return load_env_dict(
+            component,
+            stage,
+            profile=profile,
+            tunnel_db=tunnel_db,
+            tunnel_port=tunnel_port,
+        )
 
 
 def venv_root_from_python(python: Path) -> Path:
@@ -247,8 +255,13 @@ def run_component_python(
 def run_dbt_command(
     stage: str,
     dbt_args: Sequence[str],
+    *,
+    tunnel_db: bool = False,
+    tunnel_port: Optional[int] = None,
 ) -> int:
     settings = load_env_dict_isolated("dbt", stage)
+    if tunnel_db:
+        settings = apply_tunnel_db_overrides(settings, local_port=tunnel_port)
     dbt = require_dbt_executable()
     python = discover_dbt_python()
     venv_root = venv_root_from_python(python) if python else None

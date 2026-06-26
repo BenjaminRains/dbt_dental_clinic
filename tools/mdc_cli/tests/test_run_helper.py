@@ -72,7 +72,7 @@ def test_load_env_dict_isolated_scrubs_before_load(monkeypatch):
 
     called = {}
 
-    def fake_load(component, stage, profile=None):
+    def fake_load(component, stage, profile=None, tunnel_db=False, tunnel_port=None):
         called["host_during_load"] = os.environ.get("POSTGRES_ANALYTICS_HOST")
         return {"API_ENVIRONMENT": stage, "POSTGRES_ANALYTICS_HOST": "from-loader"}
 
