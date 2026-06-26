@@ -3,7 +3,7 @@
  */
 export const VALIDATED_KPIS = {
     dailyNetCollections: {
-        id: 'daily-net-collections',
+        id: 'payments',
         name: 'Daily net collections',
         model: 'mart_daily_payments',
         field: 'net_collections_amount',

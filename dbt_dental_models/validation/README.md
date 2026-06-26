@@ -455,9 +455,17 @@ After implementation:
 
 ## KPI validation (OpenDental reports)
 
-Use `validation/kpi/` when the benchmark is an **OpenDental standard report**, not just the
-`raw` schema. Workflow: register KPI → export CSV to `kpi/golden/` → record totals in
-`golden_manifest.yml` → run SQL in `kpi/compare/`.
+Use `validation/kpi/` when the benchmark is an **OpenDental standard report**. The goal is
+**business-logic parity** with OD (definitions, filters, grain).
+
+**Process:** Pick random **spot-check dates**, export OD report CSV (golden), compare in four
+layers — (1) golden vs `staging`, (2) `staging` vs `marts`, (3) `marts` vs golden, (4) API SQL /
+frontend vs `marts` on the same dates. See [validation/kpi/README.md](./kpi/README.md#how-validation-works).
+
+**Example (complete):** [daily-payments/VALIDATION_REPORT.md](./kpi/daily-payments/VALIDATION_REPORT.md) — three dates vs `marts.mart_daily_payments`.
+
+Each KPI has its own folder (`daily-payments/`, `production-and-income/`, …) with
+`compare/`, `golden/`, `findings/`, and `FIELD_MAP.md`.
 
 See `validation/kpi/README.md` and `validation/kpi/KPI_VALIDATION_REGISTRY.md`.
 

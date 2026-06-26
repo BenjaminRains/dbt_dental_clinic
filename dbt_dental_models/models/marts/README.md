@@ -10,8 +10,8 @@ Most marts are in-progress validation. See `dbt_dental_models/validation/README.
 for the validation workflow and `dbt_dental_models/validation/marts/` for current
 investigations and analyses.
 
-KPI benchmarking against OpenDental reports (CSV golden exports, comparison SQL):
-`dbt_dental_models/validation/kpi/`.
+KPI benchmarking against OpenDental reports: `dbt_dental_models/validation/kpi/` — one folder
+per KPI (e.g. `daily-payments/`).
 
 Currently tracked validation artifacts:
 - `validation/marts/dim_patient/`

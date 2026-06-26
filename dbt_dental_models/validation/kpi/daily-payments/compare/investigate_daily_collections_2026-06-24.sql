@@ -6,7 +6,7 @@
 --   raw.*           OpenDental names ("PayNum", "PayAmt", "PayDate", "PayType", "PatNum")
 --   staging/int/marts  dbt snake_case (payment_id, payment_amount, payment_date, ...)
 --
--- OD golden (daily_payments_06242026_ins_pat_split.csv):
+-- OD golden (od_daily_payments_06242026_06242026.csv):
 --   net_collections  11197.40  (Metlife 3977.80 + Check 1051.30 + Cash 677 + CC 4172.10 + Cherry 1319.20)
 --   mart result      5644.10   → gap -5553.30
 

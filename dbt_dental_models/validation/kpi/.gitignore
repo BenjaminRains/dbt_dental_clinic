@@ -1,6 +1,20 @@
-# OD report UI screenshots may show patient or financial detail — keep local.
-screenshots/*
-!screenshots/.gitkeep
+# =============================================================================
+# KPI validation — private clinic artifacts (never commit)
+# =============================================================================
+# Golden exports, findings, screenshots, and manifests contain PHI and/or
+# clinic financial detail. Keep on clinic secure workstations only.
+#
+# Versioned in git: compare/*.sql, scripts/*.py, README.md, FIELD_MAP.md,
+# golden_manifest.example.yml (templates with no real data), .gitkeep stubs.
 
-# Optional working manifest with real totals; commit only if aggregates contain no PHI.
-# golden/golden_manifest.yml
+**/findings/**
+**/golden/**
+**/screenshots/**
+!**/screenshots/.gitkeep
+!**/golden/.gitkeep
+
+# Local manifest with real export metadata / totals (copy from golden_manifest.example.yml)
+**/golden_manifest.yml
+
+# Folder stubs only (contents above stay ignored)
+!**/findings/.gitkeep

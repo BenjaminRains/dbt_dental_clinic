@@ -7,7 +7,7 @@ models:
 
       Patient collections from stg_opendental__payment (PayDate). Insurance collections from
       stg_opendental__claimpayment (CheckDate). Validated against OD Daily Payments export
-      2026-06-24 (see validation/kpi/compare/investigate_daily_collections_2026-06-24.sql).
+      2026-06-24 (see validation/kpi/daily-payments/compare/investigate_daily_collections_2026-06-24.sql).
     config:
       materialized: table
       schema: marts
