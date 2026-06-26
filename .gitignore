@@ -149,6 +149,7 @@ docs/
 !docs/etl/
 !docs/etl/findings/
 !docs/etl/findings/**
+docs/etl/archive/
 api/clinic-portal-users.json
 docs/deployment-connections/clinic-portal-users.json
 /docs/analytics/

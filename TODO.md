@@ -1,38 +1,151 @@
 # TODO List
 
-This file contains all pending TODO items organized by codebase area.
-
-## 🎯 PRIORITY GUIDE (Updated June 2026)
-
-**CRITICAL (Do First):**
-- **Airflow** — Phase A nearly complete: native Windows Airflow up, both DAGs loaded (paused); unpause `etl_pipeline` + smoke test, then Phase B clinic cutover
-- **Frontend evolution** — shift clinic UX from metric dashboards to role-based operational decision platform ([proposal](docs/frontend/FRONTEND_EVOLUTION_PROPOSAL.md))
-- **Frontend split** — portfolio vs clinic two-app refactor ([plan](docs/frontend/FRONTEND_SPLIT_PLAN.md))
-- Client server deployment — **Phases 1–3.5 largely complete**; remaining: **additional tenant schemas + multi-tenant infra** (Phase 4)
-- QuickBooks Online integration
-- BI tool connectors (Power BI / Tableau)
-- Snowflake integration (dual-warehouse / portfolio)
-
-**HIGH (Important but not blocking):**
-- ETL standardization refactor (stable but could benefit)
-- ETL performance optimization (stable but could be faster)
-
-**MEDIUM (Nice to have):**
-- dbt test fixes
-- dbt model fixes
-- Frontend enhancements
-
-**LOW (Back seat - defer):**
-- **AWS cost optimization** — account ~$105/month; within expectations (see cost section below)
-- **Event-driven analytics layer** — Kafka replay from existing marts; portfolio/educational only ([proposal](docs/streaming/EVENT_DRIVEN_ANALYTICS_PROPOSAL.md))
-- **ML on analytics warehouse** — churn / no-show / collections; batch scoring first ([proposal](docs/ml/ML_ANALYTICS_PROPOSAL.md))
-- Dashboard development
-- Additional modeling work
-- Non-critical refactoring
+Organized by **recommended execution order** (June 2026), not codebase area. Work top to bottom within each tier; Tier 5 can run in parallel with Tiers 2–3.
 
 ---
 
-## 🚨 CRITICAL PRIORITY - Airflow Orchestration
+## Recommended execution order
+
+| Step | Tier | Focus | Why now |
+| ---: | --- | --- | --- |
+| **1** | [Tier 1](#tier-1--fix-trust-first) | ETL-FND-001 + KPI #2 | Only active **production correctness** blocker |
+| **2** | [Tier 2](#tier-2--finish-whats-90-done) | Airflow smoke + clinic nightly | ~90% done; unlocks hands-off ETL→dbt→publish |
+| **3** | [Tier 3](#tier-3--ship-the-clinic-product) | Frontend evolution Phase 1 | Biggest **new product** surface; stub home page today |
+| **4** | [Tier 5](#tier-5--dbt-maintenance-parallel-background) | dbt test triage + staging YAML pilot | Largest **checklist volume**; safe background work |
+| **5** | [Tier 4](#tier-4--scale-the-platform-multi-tenant) | Phase 4 multi-tenant | When MDC stable + GLIC onboarding needed |
+| **6** | [Tier 6](#tier-6--etl-improvements-after-tier-1) | ETL perf + schema drift + verification | Stable pipeline; optimize after correctness fix |
+| **7** | [Tier 7](#tier-7--integrations-when-clinic-asks) | QBO, BI, Snowflake | Greenfield; parallel when clinic requests |
+| **8** | [Tier 8](#tier-8--defer--portfolio--nice-to-have) | Portfolio, ML, Kafka, AWS costs | Explicitly back seat |
+
+### Quick reference
+
+| Question | Answer |
+| --- | --- |
+| **What blocks trust today?** | [ETL-FND-001](#etl-fnd-001--replica-row-drift-procedurelog) → [daily-production-by-procedure KPI](#validation-workflow-component-for-portfolio) |
+| **What's closest to done?** | Airflow Phase A, clinic Phases 1–3.5, [daily-payments KPI](#validation-workflow-component-for-portfolio) |
+| **Most remaining hours?** | Frontend evolution/split → dbt debt → ETL perf |
+| **Single-tenant go-live?** | ✅ Works today — Phase 4 is for GLIC + isolation |
+
+### Shipped (not in active queue)
+
+- Clinic deployment Phases 1–3.5 — `clinic.dbtdentalclinic.com` live
+- ETL `update-schema` v1 — CLI + nightly Airflow
+- KPI **daily-payments** — [VALIDATION_REPORT.md](dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md)
+
+### Index (one-liner per item)
+
+| Tier | Item | One-liner |
+| --- | --- | --- |
+| **1** | KPI validation | daily-payments ✅; daily-production blocked on ETL-FND-001 |
+| **1** | ETL-FND-001 | Fix `procedurelog` row drift (TP→Complete missed by watermark sync) |
+| **2** | Airflow | Unpause DAG, smoke-test ETL→dbt, enable clinic nightly schedule |
+| **2** | EC2 dbt credentials | Deploy `.env_ec2` so `dbt --target clinic` works on RDS |
+| **2** | Clinic go-live | Phases 1–3.5 ✅ single-tenant live; Phase 4 → Tier 4 |
+| **3** | Frontend evolution | Role-based home pages + work queues (stub `ClinicHome` today) |
+| **3** | Frontend split | Split portfolio vs clinic into separate deployable apps |
+| **4** | Phase 4 multi-tenant | MDC + GLIC schema isolation across ETL, dbt, API, publish |
+| **5** | dbt build triage | 52 errors + 216 warnings post–1.10 upgrade |
+| **5** | Incremental `_loaded_at` | Fix 9 remaining models with wrong incremental filters |
+| **5** | Staging YAML migration | Move `{{ config() }}` out of 91 staging SQL files (8/91 done) |
+| **5** | `mart_patient_retention` perf | One model = ~52 min (~99% of full dbt run) |
+| **6** | `update-schema` deferred | v1 shipped; dry-run, rollback CLI, notifications backlog |
+| **6** | postgres_loader verify | Refactor merged — staged test/clinic verification pending |
+| **6** | Raw ingestion contract | Standardize contracts + churn monitoring (`commlog` investigation) |
+| **6** | ETL performance | 12h full sync → target 2h (COPY, batch sizes, parallel medium tables) |
+| **6** | Runtime schema drift | Tiered ALTER vs DROP+tracking reset at load time (not built) |
+| **6** | ETL refactors | Load-status rename, MySQLReplicator rename, Settings naming |
+| **7** | QuickBooks | OAuth + extract + ETL + dbt financial reconciliation |
+| **7** | BI connectors | Power BI / Tableau read-only Postgres access + docs |
+| **7** | Snowflake | Dual-warehouse portfolio demo (Postgres clinic stays source of truth) |
+| **8** | Portfolio / defer | KPI tooltips, validation UI, ML, Kafka, dbt Cloud, demo tests, AWS costs |
+
+---
+
+## Tier 1 — Fix trust first
+
+### Validation Workflow Component for Portfolio
+
+**Status:** **In progress** — repo KPI validation workflow underway (1 complete, 1 blocked); portfolio React UI not started  
+**Priority:** **LOW** for portfolio UI (not blocking); **HIGH** for completing KPI sign-off before production analytics trust  
+**Goal:** Validate mart models against OpenDental reports (repo workflow), then showcase that methodology on the React portfolio
+
+**Repo validation progress (2026-06-26):**
+
+| KPI | OD report | Mart | Status |
+| --- | --- | --- | --- |
+| [daily-payments](../dbt_dental_models/validation/kpi/daily-payments/) | Daily → Payments | `mart_daily_payments` | ✅ **Complete** — 3 golden dates; layers 1–4 PASS; [VALIDATION_REPORT.md](../dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md) |
+| [daily-production-by-procedure](../dbt_dental_models/validation/kpi/daily-production-by-procedure/) | Daily → Production by Procedure | `fact_procedure` | ⏸ **Blocked** — [ETL-FND-001](../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md); golden 2026-06-10: OD 140 / $15,239 vs raw 48 / $3,719 ([findings/2026-06-10.md](../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md)) |
+
+**Unblock daily-production-by-procedure:** See [ETL-FND-001](#etl-fnd-001--replica-row-drift-procedurelog) — lookback re-sync + drift detection on `procedurelog`; then re-run compare SQL.
+
+**Overview:**
+The validation methodology is live in `dbt_dental_models/validation/kpi/` (registry, golden exports, compare SQL, findings). **daily-payments** is the first KPI through the full OD → mart → API workflow. The portfolio component will showcase this pattern (originally planned around `fact_claim`; **daily-payments** is now the stronger live example).
+
+**Key Features (portfolio UI — not started):**
+- Overview section explaining validation methodology
+- Workflow diagram showing data flow and validation lanes
+- Case study — lead with **daily-payments** (complete); add **daily-production-by-procedure** when unblocked
+- Three "proof" validations (row count reconciliation, financial balance, sentinel/exception handling)
+- Business rules → tests operationalization taxonomy
+- Real-world impact section
+
+**Implementation Plan (portfolio UI):**
+- [ ] **Phase 1:** Add "Validation Workflow" tile under Project Components
+- [ ] **Phase 2:** Create `/validation` page with content structure
+- [ ] **Phase 3:** Add Mermaid diagram (workflow visualization)
+- [ ] **Phase 4:** Add proof validations — **daily-payments** as primary case study
+- [ ] **Phase 5:** Add "rules→tests" taxonomy section
+- [ ] **Phase 6:** Add links to repo documentation ([KPI registry](../dbt_dental_models/validation/kpi/KPI_VALIDATION_REGISTRY.md), compare SQL, findings)
+- [ ] **Phase 7:** (Optional) Add synthetic "results" widget
+
+**Estimated Effort (portfolio UI):** 12–16 hours (can start Phase 1–3 using daily-payments artifacts now)
+
+**Related Files:**
+- **KPI registry:** [`dbt_dental_models/validation/kpi/KPI_VALIDATION_REGISTRY.md`](../dbt_dental_models/validation/kpi/KPI_VALIDATION_REGISTRY.md)
+- **Completed KPI:** [`dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md`](../dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md)
+- **Blocked KPI:** [`dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md`](../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md)
+- **ETL blocker:** [`docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md`](../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md)
+- **Feature Plan:** [`docs/frontend/validation_workflow_component.md`](../docs/frontend/validation_workflow_component.md)
+- **Validation docs:** [`dbt_dental_models/validation/README.md`](../dbt_dental_models/validation/README.md)
+- **Legacy mart example:** [`dbt_dental_models/validation/marts/fact_claim/fact_claim_validation_plan.md`](../dbt_dental_models/validation/marts/fact_claim/fact_claim_validation_plan.md)
+
+---
+
+
+### ETL-FND-001 — Replica row drift (`procedurelog`)
+
+**Status:** Finding documented — review pending → branch → implement → test  
+**Priority:** **TIER 1 — CRITICAL** (data correctness; blocks [daily-production-by-procedure KPI validation](dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md))  
+**Type:** Pipeline defect + observability gap (not dbt, not golden, not source data quality)  
+**Finding:** [`docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md`](docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md)
+
+**Problem:** Watermark incremental sync copies `procedurelog` once, then misses in-place updates (e.g. TP → Complete). Same `ProcNum` **drifts** — MySQL `ProcStatus = 2`, `raw` still `ProcStatus = 1`. Example: D1206 — 21 rows / $672 in MySQL, 21 rows / $660 as status 1 in analytics (2026-06-10).
+
+**One-time backfill (before or after fix):**
+- [ ] `mdc etl run --env clinic --profile full` (or targeted full refresh `procedurelog`)
+- [ ] `dbt run --full-refresh --select stg_opendental__procedurelog+`
+- [ ] Re-run KPI Query 8 — expect raw complete ≈ 140 / $15,239 for 2026-06-10
+- [ ] Re-run `compare_daily_production_by_procedure_by_code.sql` — PASS
+
+**Workflow — review → branch → implement → test:**
+- [ ] **Review** finding with team; confirm OpenDental `DateTStamp` behavior on TP → Complete (spot-edit test)
+- [ ] **Branch** e.g. `fix/etl-fnd-001-procedurelog-row-drift`
+- [ ] **Implement P0** — post-ETL drift detection: MySQL vs `raw.procedurelog` complete-production totals (rolling 14-day window); fail/warn in pipeline or Airflow
+- [ ] **Implement P1** — lookback window re-sync for `procedurelog` (union watermark incremental with `DateComplete` / `ProcDate` in last N days; upsert on `ProcNum`)
+- [ ] **Implement P1** — review clinic `tables.yml`: `primary_incremental_column` = `DateTStamp`; re-evaluate `and_logic` vs `or_logic`
+- [ ] **Implement P2** — extend `postgres_loader` stale detection when aggregates diverge (not only when incremental returns 0 rows)
+- [ ] **Test** — unit/integration tests for lookback query builder; e2e on test DB with simulated TP → Complete update
+- [ ] **Test** — clinic: run incremental ETL after lookback deploy; drift check green; KPI 2026-06-10 compare PASS without full refresh
+- [ ] **Document** — Layer 0 replica check in KPI validation; close finding when acceptance criteria in ETL-FND-001 met
+
+**Explicitly not the durable fix:** weekly full refresh of `procedurelog` (masks drift; does not detect it).
+
+**Related:** [`docs/etl/ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md`](docs/etl/ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md), [`etl_pipeline/scripts/audit_table_row_counts.py`](etl_pipeline/scripts/audit_table_row_counts.py)
+
+---
+
+
+## Tier 2 — Finish what's ~90% done
 
 ### Airflow Orchestration — Deploy and Validate
 
@@ -76,7 +189,79 @@ This file contains all pending TODO items organized by codebase area.
 
 ---
 
-## 🚨 CRITICAL PRIORITY - Frontend Evolution (Operational Decision Platform)
+
+### Fix EC2 dbt Database Connection Credentials
+
+**Status:** Ready for Deployment and Testing  
+**Priority:** **HIGH** (Blocks dbt runs on EC2)  
+**Goal:** Deploy dbt credentials/SSL config to EC2 and verify RDS connection
+
+**Credentials Source:**
+- `deployment_credentials.json` → `backend_api.clinic_database_reference.rds.credentials.secrets.opendental_analytics.current_value`
+
+**Action Items:**
+- [ ] **Deploy Files to EC2**
+  - [ ] Deploy `setup_ec2_dbt_env.sh` to `/opt/dbt_dental_clinic/scripts/` on EC2
+  - [ ] Deploy `.env_ec2` to `/opt/dbt_dental_clinic/.env` on EC2 using `deploy_ec2_env.ps1`
+  - [ ] Make setup script executable: `chmod +x /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh`
+  - [ ] Optionally add to `~/.bashrc` for persistence: `echo 'source /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh' >> ~/.bashrc`
+  
+- [ ] **Test Connection** (pending)
+  - [ ] Verify `setup_ec2_dbt_env.sh` successfully loads credentials from `deployment_credentials.json`
+  - [ ] Verify dbt can connect to RDS with credentials
+  - [ ] Test `dbt run --target clinic --select fact_claim` (AWS production)
+  - [ ] Verify SSL connection is working
+
+**Deployment Instructions:**
+```powershell
+# 1. Deploy .env file to EC2
+.\scripts\deploy_ec2_env.ps1
+
+# 2. Deploy setup script to EC2 (using deploy_dbt_file.ps1 or manual)
+.\scripts\deploy_dbt_file.ps1 scripts/setup_ec2_dbt_env.sh
+
+# 3. On EC2 instance, make script executable and test:
+# aws ssm start-session --target <EC2_INSTANCE_ID>
+# chmod +x /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh
+# source /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh
+# cd /opt/dbt_dental_clinic/dbt_dental_models
+# dbt run --target clinic --select fact_claim
+```
+
+**Key Files:**
+- `scripts/setup_ec2_dbt_env.sh`, `scripts/deploy_ec2_env.ps1`, `scripts/run_dbt_on_ec2.ps1`
+- `dbt_dental_models/profiles.yml`
+
+---
+
+
+### Clinic go-live status (Phases 1–3.5 ✅)
+
+**Status:** **Single-tenant go-live complete** (2026-06-17) — Phase 4 deferred to [Tier 4](#tier-4--scale-the-platform-multi-tenant)  
+**Priority:** **Done** for MDC today; Phase 4 when GLIC onboarding begins  
+**Goal:** Hosted clinic site serves real analytics (achieved); MDC + GLIC isolation is Tier 4
+
+**Rollup:** [docs/deployment/CLINIC_DEPLOYMENT_STATUS.md](docs/deployment/CLINIC_DEPLOYMENT_STATUS.md)
+
+#### Completed
+
+| Phase | Focus | Status | Notes |
+|-------|--------|--------|--------|
+| **1** | Frontend infra (S3, CloudFront, WAF, DNS, SSL) | ✅ Complete | `clinic.dbtdentalclinic.com`; WAF **clinic-frontend-prod-waf** (IP allowlist) |
+| **2** | Demo/clinic API isolation | ✅ Complete | Separate EC2 + target groups; `api-clinic.dbtdentalclinic.com`; IAM/log separation |
+| **3** | Clinic frontend build & deploy | ✅ Complete | `mdc deploy frontend --target clinic` / `clinic-frontend-deploy`; SPA loads from allowlisted IPs |
+| **3.5** | Analytics data on RDS (single-tenant) | ✅ Complete | `mdc publish analytics --env clinic`; `marts`/`int`/`staging` on RDS; dashboard KPIs return 200 |
+
+**Current live stack (N. Virginia):**
+- **Frontend:** S3 + CloudFront → `https://clinic.dbtdentalclinic.com`
+- **API:** Clinic EC2 via ALB host routing → `https://api-clinic.dbtdentalclinic.com`
+- **Database:** RDS `dental-clinic-analytics` / `opendental_analytics` — **single-tenant** schemas (`raw`, `staging`, `int`, `marts`)
+
+**Phase 4 (multi-tenant):** Deferred to [Tier 4](#tier-4--scale-the-platform-multi-tenant).
+
+---
+
+## Tier 3 — Ship the clinic product
 
 ### Role-Based Clinic UX — From Dashboards to Decision Support
 
@@ -118,7 +303,6 @@ This file contains all pending TODO items organized by codebase area.
 
 ---
 
-## 🚨 CRITICAL PRIORITY - Frontend Split (Portfolio vs Clinic)
 
 ### Two Deployable Apps — Shared Packages, Separate Products
 
@@ -144,29 +328,15 @@ This file contains all pending TODO items organized by codebase area.
 
 ---
 
-## 🚨 CRITICAL PRIORITY - Client Deployment & Integration
 
-### Client Server Deployment - Secure Frontend Access
+## Tier 4 — Scale the platform (multi-tenant)
 
-**Status:** **Phases 1–3.5 largely complete** (2026-06-17) — **Phase 4 (multi-tenant schemas + infra) next**  
-**Priority:** **CRITICAL** (remaining work only)  
-**Goal:** Hosted clinic site serves real analytics; MDC + GLIC isolated in separate tenant schemas on shared RDS
+### Client Deployment — Phase 4: Multi-tenant schemas & infra
 
-**Rollup:** [docs/deployment/CLINIC_DEPLOYMENT_STATUS.md](docs/deployment/CLINIC_DEPLOYMENT_STATUS.md)
-
-#### Completed
-
-| Phase | Focus | Status | Notes |
-|-------|--------|--------|--------|
-| **1** | Frontend infra (S3, CloudFront, WAF, DNS, SSL) | ✅ Complete | `clinic.dbtdentalclinic.com`; WAF **clinic-frontend-prod-waf** (IP allowlist) |
-| **2** | Demo/clinic API isolation | ✅ Complete | Separate EC2 + target groups; `api-clinic.dbtdentalclinic.com`; IAM/log separation |
-| **3** | Clinic frontend build & deploy | ✅ Complete | `mdc deploy frontend --target clinic` / `clinic-frontend-deploy`; SPA loads from allowlisted IPs |
-| **3.5** | Analytics data on RDS (single-tenant) | ✅ Complete | `mdc publish analytics --env clinic`; `marts`/`int`/`staging` on RDS; dashboard KPIs return 200 |
-
-**Current live stack (N. Virginia):**
-- **Frontend:** S3 + CloudFront → `https://clinic.dbtdentalclinic.com`
-- **API:** Clinic EC2 via ALB host routing → `https://api-clinic.dbtdentalclinic.com`
-- **Database:** RDS `dental-clinic-analytics` / `opendental_analytics` — **single-tenant** schemas (`raw`, `staging`, `int`, `marts`)
+**Status:** ⏸ Not started — do after single-tenant go-live is stable  
+**Priority:** **HIGH** when GLIC onboarding begins (not blocking MDC today)  
+**Plan:** [docs/deployment/CLINIC_DEPLOYMENT_PHASE4_ACTION_PLAN.md](docs/deployment/CLINIC_DEPLOYMENT_PHASE4_ACTION_PLAN.md)  
+**Parent rollup:** [docs/deployment/CLINIC_DEPLOYMENT_STATUS.md](docs/deployment/CLINIC_DEPLOYMENT_STATUS.md)
 
 #### Remaining — Phase 4: Additional schemas & multi-tenant infra
 
@@ -216,6 +386,446 @@ This file contains all pending TODO items organized by codebase area.
 **Business impact:** **MEDIUM** for go-live (single-tenant works today); **HIGH** for GLIC onboarding and true multi-clinic isolation
 
 ---
+
+
+## Tier 5 — dbt maintenance (parallel background)
+
+### Review dbt build failures and warnings (post–1.10 upgrade)
+
+**Status:** Logged — needs triage  
+**Priority:** **MEDIUM**  
+**Date observed:** 2026-06-19  
+**Command:** `mdc dbt invoke --env local -- build --target local` (dbt **1.10.22**)
+
+**Last build summary:** `PASS=2485` · `WARN=216` · `ERROR=52` · `SKIP=2270` · `TOTAL=5023`
+
+**Action items:**
+- [ ] Triage **52 failing tests** — group by model/test type; separate data issues vs config/threshold issues
+- [ ] Review **216 warnings** — e.g. `warn_procedures_missing_descriptions` on `int_procedure_complete` (1,645 rows); decide fix vs `severity` / threshold / accept
+- [ ] Clear **parse deprecations** (re-run with `--no-partial-parse --show-all-deprecations`):
+  - `DuplicateYAMLKeysDeprecation` (~22–23 files — duplicate `meta` / `tests` / `config` in schema YAML)
+  - `MissingArgumentsPropertyInGenericTestDeprecation` (~2,268 — nest generic test args under `arguments:` or finish migration; flag `require_generic_test_arguments_property: false` in `dbt_project.yml` is temporary)
+- [ ] Re-run full build after fixes; confirm nightly Airflow `dbt_build` path still green
+
+**Related:** `docs/DEPENDENCY_ALERTS.md` (dbt 1.10 upgrade), `dbt_dental_models/dbt_project.yml` (`flags`), `_mart_treatment_plan_summary.yml.planned` (unimplemented mart)
+
+---
+
+
+### Incremental `_loaded_at` refactor
+
+**Status:** Identified - Needs Implementation  
+**Priority:** **MEDIUM** (Model fixes, not blocking but should be addressed)  
+**Goal:** Fix incremental model filters to use `_loaded_at` with appropriate source timestamps instead of business dates or wrong target columns  
+
+📄 **See:** `docs/refactor/DBT_INCREMENTAL_MODEL_LOADED_AT_REFACTOR_STATUS.md` — Status, remaining 9 models, fix specs, and testing plan
+
+**Overview:**
+Phases 1–2 complete (18 models fixed). Phase 3 (9 MEDIUM models) and validation remain.
+
+**Action Items:**
+- [ ] **Phase 3: Review MEDIUM Priority Models (9 models)**
+  - [ ] Review `int_collection_tasks` and `int_collection_communication` (unknown target column `model_created_at`)
+  - [ ] Determine correct source timestamp for models with no target column
+  - [ ] Add incremental filters to models missing them (7 models identified):
+    - **Staging (4):** `stg_opendental__tasknote` (use `"DateTimeNote"`), `stg_opendental__document` (use `"DateTStamp"`), `stg_opendental__timeadjust` (use `"TimeEntry"`), `stg_opendental__toothinitial` (use `"SecDateTEdit"`)
+    - **Intermediate (3):** `int_insurance_payment_allocated`, `int_patient_payment_allocated`, `int_payment_split` (filter on upstream `p._loaded_at` / `ps._loaded_at` from payment/paysplit refs)
+   - [ ] Test all fixes
+
+- [ ] **Phase 4: Validation**
+  - [ ] Run full dbt build to verify all fixes
+  - [ ] Check zero-row models now return data
+  - [ ] Verify incremental loads work correctly
+  - [ ] Monitor for any regressions
+
+**Reference:**
+- `docs/refactor/DBT_INCREMENTAL_MODEL_LOADED_AT_REFACTOR_STATUS.md` - Status, remaining models, and testing plan
+- `dbt_dental_models/REFACTOR_PLAN.json` - JSON export of model analysis (if present)
+
+---
+
+
+### Staging layer refactor — config in YAML (`stg_opendental__*`)
+
+**Status:** Patterns adopted; config migration **not started** (91/91 SQL still has `{{ config(...) }}`)  
+**Priority:** **MEDIUM** (code quality / maintainability; not blocking KPI or ETL correctness)  
+**Goal:** Centralize static model config in YAML; SQL files hold transform logic only  
+**Guide:** [`docs/etl/STAGING_LAYER_REFACTOR_GUIDE.md`](docs/etl/STAGING_LAYER_REFACTOR_GUIDE.md)
+
+**Progress (2026-06-26 audit — 91 models):**
+
+| Step | Target | Done |
+| --- | --- | ---: |
+| Step 3 — `source_data` → `renamed_columns` CTE pattern | 91 | 90 |
+| Step 4–5 — YAML columns, tests, `meta` | Per model | Partial (strong on core models) |
+| Step 1 — model `config:` in YAML (`materialized`, `unique_key`, tags) | 91 | 8 |
+| Step 2 — remove SQL `{{ config(...) }}` | 0 SQL blocks | 0 |
+
+**Completion criterion (from guide §6):** No staging SQL file retains static `{{ config(...) }}`; config lives in `_stg_opendental__*.yml`.
+
+**Rollout (one model per PR):**
+- [ ] **Pilot** — finish config migration on low-risk models already partially done in YAML: `procedurecode`, `procedurelog`, `refattach`, `schedule`, `scheduleop`, `recall`, `recalltype`, `treatplan` (8 with YAML `materialized:` — remove duplicate SQL config, verify `dbt run` / `dbt test`)
+- [ ] **Wave 1** — core high-impact: `patient`, `claimproc`, `procnote`, `payment`, `paysplit`, `adjustment`, `appointment`
+- [ ] **Wave 2** — remaining ~76 models (batch by domain: claims, scheduling, insurance, …)
+- [ ] **Fix outlier** — one model missing `with source_data as` CTE (align to guide §3.2)
+- [ ] **Final pass** — grep confirms zero `{{ config(` in `stg_opendental__*.sql`; optional `docs/refactor/staging_config_migration_progress.md` checklist
+
+**Per-model checklist (from guide §7):**
+- [ ] Step 1: YAML `config:` added (`materialized`, `incremental_strategy`, `unique_key`, `tags`)
+- [ ] Step 2: SQL `config()` removed
+- [ ] Step 3: SQL structure normalized (`source_data` / `renamed_columns`)
+- [ ] Step 4: YAML columns & tests aligned
+- [ ] Step 5: `meta` standardized (`record_count`, `data_scope`, `business_rules`, `known_issues`)
+- [ ] Verified: `dbt run -s stg_opendental__<model>` and `dbt test -s stg_opendental__<model>` pass
+
+**Note:** Default materialization for staging is `view` in `dbt_project.yml`; incremental/table overrides must move to YAML per model.
+
+---
+
+
+### Optimize mart_patient_retention Performance (dbt run time)
+
+**Status:** Pending  
+**Priority:** **MEDIUM** (Full dbt run ~52 min; one model dominates)  
+**Goal:** Reduce `mart_patient_retention` build time so full pipeline runs in minutes instead of ~52 minutes.
+
+**Current situation:**
+- Full `dbt run`: 157 models in ~52 min; **mart_patient_retention** alone is ~52 min (~99% of total).
+- Model does four full scans of fact tables (fact_appointment, fact_payment, fact_claim, fact_communication) with large aggregations by patient_id, then joins to dim_patient, dim_date, dim_provider.
+
+**Action items:**
+- [ ] Pre-aggregate patient-level metrics in intermediate models (e.g. int_patient_appointment_summary, int_patient_financial_summary); make those incremental or tables; have mart join pre-aggregated data only
+- [ ] Consider making mart_patient_retention incremental by snapshot date (e.g. only (re)build today’s rows) or run it on a separate schedule (e.g. nightly)
+- [ ] After changes: `dbt run --select mart_patient_retention` and re-run `list_slow_models.ps1` / EXPLAIN (ANALYZE, BUFFERS) to confirm improvement
+
+**Reference:** `docs/dbt/DBT_PERFORMANCE_INVESTIGATION.md`
+
+---
+
+
+## Tier 6 — ETL improvements (after Tier 1)
+
+### ETL schema update (`update-schema`) — v1 shipped
+
+**Status:** **v1 complete** (CLI + nightly Airflow); enhancement backlog open  
+**Priority:** **LOW** for deferred items (core feature is production)  
+**Goal:** Keep `tables.yml` synchronized with live OpenDental schema  
+**Spec:** [`docs/etl/etl_schema_update_command_feature.md`](docs/etl/etl_schema_update_command_feature.md)  
+**SCD implementation (analyzer):** [`docs/etl/schema_analysis_scd_improvements.md`](docs/etl/schema_analysis_scd_improvements.md) — backup, `compare_with_previous_schema()`, markdown changelogs
+
+**Shipped:**
+
+| Component | How to run |
+| --- | --- |
+| Manual refresh | `mdc etl schema --env clinic` or `mdc etl invoke --env clinic -- update-schema` |
+| Nightly (Airflow) | `etl_pipeline` DAG → `refresh_schema_configuration` |
+| Drift sanity check | `mdc etl invoke --env clinic -- check-schema-drift` |
+| Analyzer | `etl_pipeline/scripts/analyze_opendental_schema.py` — SCD: [schema_analysis_scd_improvements.md](docs/etl/schema_analysis_scd_improvements.md) |
+| Backups | `etl_pipeline/logs/schema_analysis/backups/tables.yml.backup.{timestamp}` |
+
+**Deferred enhancements:**
+
+- [ ] `--dry-run` flag on `update-schema`
+- [ ] `restore-schema` (or equivalent) rollback CLI from backup
+- [ ] Rich column-level diff in CLI output (analyzer changelog remains source of truth)
+- [ ] Dedicated pytest for `update_schema` / `_detect_schema_changes` (today: `tools/mdc_cli/tests/test_phase45.py` only)
+- [ ] Change notifications (Slack/email) on schema changes
+- [ ] Pre-ETL breaking-change gate (dbt-aware impact check)
+
+**Related:** [`docs/etl/ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md`](docs/etl/ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md) §2 schema CDC, [`docs/etl/schema_analysis_scd_improvements.md`](docs/etl/schema_analysis_scd_improvements.md), [`airflow/ORCHESTRATION_ROADMAP.md`](airflow/ORCHESTRATION_ROADMAP.md)
+
+---
+
+
+### Complete postgres_loader Refactor
+
+**Status:** Implementation Complete, Verification Pending  
+**Priority:** **HIGH** (ETL is stable, refactor can wait)  
+**Goal:** Verify refactored `postgres_loader.py` in test and clinic environments
+
+**Approach:** Gradual rollout with monitoring at each stage
+
+#### 6.1 Test Environment Verification (Basic Functionality Check)
+- [ ] Run ETL pipeline on **test environment** to verify basic functionality
+- [ ] Verify test tables load successfully (patient, appointment, procedurelog)
+- [ ] Check row counts match expected test data
+- [ ] Review logs for any errors or warnings
+
+#### 6.2 Clinic Verification - Small Tables First (Primary Verification)
+- [ ] Run pipeline for **small/medium tables only** (low risk, fast to verify)
+- [ ] **Verify using compare_databases.py script** (automated comparison)
+- [ ] **Verify tracking information** for each table
+- [ ] **Manual verification** (spot check)
+
+#### 6.3 Clinic Verification - Medium Tables (Gradual Expansion)
+- [ ] After small tables verify correctly, expand to **medium tables**
+- [ ] **Verify using compare_databases.py** for all medium tables
+- [ ] Monitor during execution
+- [ ] Compare results with previous runs for these tables
+
+#### 6.4 Clinic Verification - Full Pipeline (Final Step)
+- [ ] After medium tables verify correctly, run **full pipeline** on clinic
+- [ ] **Comprehensive verification using compare_databases.py**
+- [ ] **Compare ETL tracking tables**
+- [ ] Monitor during execution
+
+#### 6.5 Compare Results with Previous Runs
+- [ ] Save baseline comparison before refactor
+- [ ] Compare after refactor (using compare_databases.py or SQL queries)
+- [ ] Check performance metrics
+
+#### 6.6 Verify HYBRID FIX Works Correctly
+- [ ] Check HYBRID FIX Triggers (expected: 0-5 per run is normal)
+- [ ] Verify Change Detection in UPSERT (check PostgreSQL stats)
+
+#### 6.7 Monitor for Regressions
+- [ ] Daily monitoring (first week)
+- [ ] Weekly review (first month)
+
+**Reference Documentation:**
+- **Method Deprecation Analysis:** [etl_pipeline/docs/METHOD_DEPRECATION_ANALYSIS.md](etl_pipeline/docs/METHOD_DEPRECATION_ANALYSIS.md)
+- **Database Comparison Script:** `etl_pipeline/scripts/compare_databases.py`
+- **HYBRID FIX Monitoring:** `etl_pipeline/docs/monitoring_hybrid_fix.md`
+- **Performance Review:** `etl_pipeline/docs/PERFORMANCE_REVIEW_20251222.md`
+- **Pipeline Architecture:** `etl_pipeline/docs/PIPELINE_ARCHITECTURE.md`
+
+---
+
+
+### ETL Raw Ingestion Contract & Pipeline Health Metrics
+
+**Status:** Investigation Complete, Implementation Pending  
+**Priority:** **HIGH** (ETL is stable, standardization can wait)  
+**Goal:** Fix unconditional UPSERT churn and establish reusable patterns for all raw ingestion tables
+
+**Investigation Summary:**
+Root cause identified: Unconditional UPSERT updates without change detection in `PostgresLoader._build_upsert_sql()` causing no-op updates and high `n_tup_upd` counts.
+
+**Next Steps:**
+
+### 1. Implement Raw Ingestion Contract
+- [ ] Update `etl_pipeline/config/tables.yml` to support contract definitions
+- [ ] Document contract requirements in `etl_pipeline/docs/DATA_CONTRACTS.md`
+
+
+### 2. Create Pipeline Health Metrics
+- [ ] Create `dbt_dental_models/models/monitoring/raw_table_churn_metrics.sql`
+- [ ] Add churn monitoring to `etl_pipeline/monitoring/pipeline_health.py`
+- [ ] Set up alert thresholds (Critical > 2.0, Warning > 1.0, Info > 0.5)
+- [ ] Document in `etl_pipeline/docs/PIPELINE_MONITORING.md`
+
+**Reference:** `docs/etl_commlog_churn_analysis.md`
+
+---
+
+
+### ETL Pipeline Performance Optimization
+
+**Status:** Investigation Complete, Implementation Pending  
+**Priority:** **HIGH** (ETL is stable, optimization can wait)  
+**Goal:** Optimize ETL pipeline bulk insert performance from 200-250 rows/sec to 1,000-5,000+ rows/sec, reducing full sync time from 12+ hours to 1-2 hours
+
+**Note:** ETL is currently stable and working. This optimization is valuable but not blocking client deployment.
+
+**Reference:** `etl_pipeline/docs/PERFORMANCE_REVIEW_20251222.md`
+
+
+**Current Performance:**
+- Large tables: 130-180 rows/second
+- Medium tables: 200-250 rows/second
+- Full sync: 12+ hours
+
+**Target Performance:**
+- Large tables: 1,000-5,000 rows/second (5-30x improvement)
+- Medium tables: 1,000-5,000 rows/second (4-25x improvement)
+- Full sync: 1-2 hours (6-12x improvement)
+
+**Critical Bottlenecks Identified:**
+- Payment table: 40-50 seconds per 10,000-row batch (200-250 rows/sec)
+- Securitylog table: 6.55 hours to load 4.2M rows (178 rows/sec)
+
+### 1.1 Investigate PostgreSQL Insert Performance
+- [ ] Check if indexes are being maintained during bulk inserts
+- [ ] Verify foreign key constraints and their impact on insert performance
+- [ ] Review triggers on target tables (payment, securitylog, paysplit, etc.)
+- [ ] Compare UPSERT vs INSERT performance for full syncs
+- [ ] Check PostgreSQL `pg_stat_statements` for slow queries during inserts
+- [ ] Review connection pooling and transaction settings
+- [ ] Measure network latency between ETL server and PostgreSQL
+
+**Expected Impact:** 5-20x performance improvement
+
+
+### 1.2 Optimize Bulk Insert Strategy for Full Syncs
+- [ ] For full syncs, use `TRUNCATE` + `INSERT` instead of `UPSERT` (already implemented, verify usage)
+- [ ] Consider using PostgreSQL `COPY` command for bulk loads instead of `executemany`
+- [ ] Disable indexes during load, rebuild after (for large tables)
+- [ ] Increase batch sizes for full syncs (50K-100K rows instead of 10K)
+- [ ] Review `bulk_insert_optimized()` method for optimization opportunities
+- [ ] Test `COPY FROM STDIN` vs current `executemany` approach
+
+**Expected Impact:** 2-5x performance improvement
+
+
+### 2.1 Fix Duplicate Schema Detection
+- [ ] Review schema detection caching logic in `PostgresSchema` class
+- [ ] Ensure schema cache is checked before running detection
+- [ ] Cache results for entire ETL run duration
+- [ ] Fix payment table column detection running twice
+
+**Expected Impact:** 5-10 seconds saved per table
+
+
+### 2.2 Parallelize Medium Table Processing
+- [ ] Process medium tables in parallel (2-4 workers)
+- [ ] Balance parallelization with database connection limits
+- [ ] Monitor resource usage during parallel processing
+- [ ] Update `priority_processor.py` to support parallel medium table processing
+
+**Expected Impact:** 30-50% reduction in total time for medium tables
+
+
+### 2.3 Fix Metrics Collection Error
+- [ ] Review `UnifiedMetricsCollector.record_performance_metric()` signature
+- [ ] Fix method call to match expected parameters (remove `duration` keyword or update method)
+- [ ] Ensure all performance metrics are properly recorded
+- [ ] Update all call sites to use correct method signature
+
+**Expected Impact:** Better visibility into performance trends
+
+
+### 3.1 PostgreSQL Configuration Review
+- [ ] Review PostgreSQL `postgresql.conf` settings
+- [ ] Configure `wal_buffers` appropriately (requires server restart)
+- [ ] Review other WAL and checkpoint settings
+- [ ] Document required PostgreSQL configuration for optimal performance
+- [ ] Fix warnings about `wal_buffers` requiring restart (currently just warnings)
+
+**Expected Impact:** 10-20% performance improvement
+
+
+### 3.2 Add Performance Monitoring
+- [ ] Add detailed timing logs for each phase (extract, transform, load)
+- [ ] Track rows/second metrics per table
+- [ ] Create performance dashboard/report
+- [ ] Set up alerts for performance degradation
+- [ ] Add batch-level timing to identify slow batches
+
+**Expected Impact:** Better visibility and early detection of issues
+
+**Success Metrics:**
+- [ ] Payment table: <5 minutes (currently 34+ minutes)
+- [ ] Securitylog table: <1 hour (currently 6.55 hours)
+- [ ] Full sync: <2 hours (currently 12+ hours)
+- [ ] All large tables: >1,000 rows/second
+- [ ] All medium tables: >1,000 rows/second
+
+---
+
+---
+
+
+### Runtime schema drift automatic handling — not started
+
+**Status:** Planned — refactor spec only; no tiered implementation  
+**Priority:** **MEDIUM** (partial mitigations exist; manual recovery still required for some breaking changes)  
+**Goal:** Classify MySQL ↔ PostgreSQL `raw.*` schema diffs at load time — Tier 1 `ALTER TABLE` for compatible changes; Tier 2 `DROP CASCADE` + **`etl_load_status` reset** + full reload + notify  
+**Spec:** [`docs/etl/schema_drift_automatic_handling.md`](docs/etl/schema_drift_automatic_handling.md)
+
+**Not the same as (already shipped):** [`update-schema`](docs/etl/etl_schema_update_command_feature.md) / [SCD analyzer](docs/etl/schema_analysis_scd_improvements.md) — those refresh **`tables.yml` config**, not PostgreSQL table DDL.
+
+**Partial mitigations today:**
+
+| Capability | Location |
+| --- | --- |
+| Column verify + `DROP … CASCADE` recreate | `etl_pipeline/etl_pipeline/core/postgres_schema.py` |
+| Stale incremental → full load fallback | `etl_pipeline/etl_pipeline/loaders/postgres_loader.py` |
+| Table-count drift check | `check-schema-drift` CLI |
+
+**Implementation checklist (Phases 1–5 in spec):**
+
+- [ ] **Phase 1** — `SchemaComparator`, `TrackingMetadataManager`, `raw.etl_schema_changes` table, unit tests
+- [ ] **Phase 2** — Tier 1: `ALTER TABLE` for add-column / compatible type widen; wire into `ensure_table_exists()`
+- [ ] **Phase 3** — Tier 2: breaking-change path with guaranteed tracking reset + notifications
+- [ ] **Phase 4** — Test env → clinic rollout; manual override runbook
+- [ ] **Phase 5** — Monitor change frequency; optimize ALTER performance; richer classification
+
+**Related:** [`docs/etl/ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md`](docs/etl/ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md), [`docs/etl/schema_drift_automatic_handling.md`](docs/etl/schema_drift_automatic_handling.md) § Status
+
+---
+
+
+### Refactor Load Status Method Names
+
+**Status:** Planned  
+**Priority:** **MEDIUM** (Code quality improvement, not urgent)  
+**Goal:** Improve code clarity by renaming internal methods to be self-documenting
+
+**Overview:**
+Rename two internal methods in `PostgresLoader`:
+- `_update_load_status_hybrid()` → `_update_load_status_with_primary_value()`
+- `_update_load_status()` → `_update_load_status_timestamp_only()`
+
+**To complete:**
+- [ ] Create branch `refactor/rename-load-status-methods` from `main`
+- [ ] Work through the checklist in the refactor doc (PostgresLoader, table_processor, integration + unit tests, verification)
+- [ ] Run full test suite and optional ETL smoke run
+- [ ] Merge to `main` only after all tests pass on the branch
+
+**Reference:** `docs/refactor/REFACTOR_LOAD_STATUS_METHOD_NAMES.md` — full checklist, line references, and verification steps
+
+---
+
+
+### Refactor SimpleMySQLReplicator → MySQLReplicator
+
+**Status:** Planned  
+**Priority:** **MEDIUM** (Code quality, not urgent)  
+**Goal:** Rename class and remove all "simple" naming from the replicator and its dependencies.
+
+**To complete:** Rename class to `MySQLReplicator`, module to `mysql_replicator.py`, test packages and test files, update all imports/patches/markers/result keys and docstrings. Do on a dedicated branch; run full test suite before merging.
+
+**Reference:** `docs/refactor/REFACTOR_SIMPLE_MYSQL_REPLICATOR_TO_MYSQL_REPLICATOR.md` — scope, renames, and verification
+
+---
+
+
+### Settings Access Patterns - Naming Improvements
+
+**Status:** ✅ Documentation Complete, Implementation Pending  
+**Priority:** **MEDIUM** (Code works correctly, naming clarity improvement)  
+**Goal:** Improve naming conventions for Settings access patterns to make them clearer for new developers
+
+**Description:**
+The ETL pipeline uses three Settings access patterns intentionally for test/clinic isolation. However, the current function names (`get_settings()`, `create_settings()`) don't clearly communicate their purpose, which can be challenging for new developers.
+
+**Key Findings:**
+- Current names don't clearly indicate singleton vs new instance behavior
+- Unclear when to use `get_settings()` vs `Settings(...)` vs `create_settings()`
+- Three patterns exist intentionally but naming doesn't reflect their purpose
+
+**Action Items:**
+- [ ] Review `etl_pipeline/CODE_REVIEW.md` section 3.3 "Settings Global Instance Management" for detailed analysis
+- [ ] Review `etl_pipeline/docs/SETTINGS_ACCESS_PATTERNS.md` for comprehensive pattern documentation and naming improvement options
+- [ ] Decide on naming improvement approach:
+  - Option 1: Add descriptive aliases (recommended - backward compatible)
+  - Option 2: Rename existing functions (breaking change)
+  - Option 3: Use class methods (more OOP style)
+- [ ] Implement chosen naming improvements
+- [ ] Update codebase to use new naming conventions
+- [ ] Update documentation to reflect new naming
+
+**Related Files:**
+- **Code Review:** `etl_pipeline/CODE_REVIEW.md` - Section 3.3 for analysis
+- **Pattern Documentation:** `etl_pipeline/docs/SETTINGS_ACCESS_PATTERNS.md` - Complete guide with naming improvement recommendations
+
+**Recommendation:**
+See `etl_pipeline/docs/SETTINGS_ACCESS_PATTERNS.md` "Naming Convention Improvements" section for three implementation options with detailed code examples and trade-offs.
+
+---
+
+
+## Tier 7 — Integrations (when clinic asks)
 
 ### QuickBooks Online Integration
 
@@ -284,6 +894,7 @@ This file contains all pending TODO items organized by codebase area.
 **Business Impact:** **HIGH** - Enables comprehensive financial analytics and reconciliation
 
 ---
+
 
 ### BI Tool Connectors - Power BI & Tableau
 
@@ -358,6 +969,7 @@ This file contains all pending TODO items organized by codebase area.
 
 ---
 
+
 ### Snowflake Integration
 
 **Status:** New — Planning  
@@ -400,117 +1012,42 @@ This file contains all pending TODO items organized by codebase area.
 
 ---
 
-## dbt (Data Transformation)
 
-**Priority Note:** dbt modeling and test fixes are **MEDIUM/LOW** priority - should take back seat to client deployment and integrations
+## Tier 8 — Defer / portfolio / nice-to-have
 
-### Review dbt build failures and warnings (post–1.10 upgrade)
+### KPI Definitions — Hover Tooltips (Phase 4)
 
-**Status:** Logged — needs triage  
-**Priority:** **MEDIUM**  
-**Date observed:** 2026-06-19  
-**Command:** `mdc dbt invoke --env local -- build --target local` (dbt **1.10.22**)
+**Status:** Planned  
+**Priority:** **LOW** (Enhancement, not blocking)  
+**Goal:** Add hover-over tooltips to dashboard KPIs linking to `/kpi-definitions`
 
-**Last build summary:** `PASS=2485` · `WARN=216` · `ERROR=52` · `SKIP=2270` · `TOTAL=5023`
+- [ ] **Phase 4:** Future Enhancement - Hover Tooltips
 
-**Action items:**
-- [ ] Triage **52 failing tests** — group by model/test type; separate data issues vs config/threshold issues
-- [ ] Review **216 warnings** — e.g. `warn_procedures_missing_descriptions` on `int_procedure_complete` (1,645 rows); decide fix vs `severity` / threshold / accept
-- [ ] Clear **parse deprecations** (re-run with `--no-partial-parse --show-all-deprecations`):
-  - `DuplicateYAMLKeysDeprecation` (~22–23 files — duplicate `meta` / `tests` / `config` in schema YAML)
-  - `MissingArgumentsPropertyInGenericTestDeprecation` (~2,268 — nest generic test args under `arguments:` or finish migration; flag `require_generic_test_arguments_property: false` in `dbt_project.yml` is temporary)
-- [ ] Re-run full build after fixes; confirm nightly Airflow `dbt_build` path still green
-
-**Related:** `docs/DEPENDENCY_ALERTS.md` (dbt 1.10 upgrade), `dbt_dental_models/dbt_project.yml` (`flags`), `_mart_treatment_plan_summary.yml.planned` (unimplemented mart)
+**Related Files:** `frontend/src/pages/KPIDefinitions.tsx`, `frontend/src/components/layout/Layout.tsx`
 
 ---
 
 
-**Status:** Identified - Needs Implementation  
-**Priority:** **MEDIUM** (Model fixes, not blocking but should be addressed)  
-**Goal:** Fix incremental model filters to use `_loaded_at` with appropriate source timestamps instead of business dates or wrong target columns  
+### ML on Analytics Warehouse
 
-📄 **See:** `docs/refactor/DBT_INCREMENTAL_MODEL_LOADED_AT_REFACTOR_STATUS.md` — Status, remaining 9 models, fix specs, and testing plan
+**Status:** Proposal drafted — not scheduled  
+**Priority:** **LOW** (defer until Tier 1 marts stable and Airflow nightly validated)  
+**Goal:** Supervised models for churn, no-show, or collections using dbt feature marts + batch scoring
 
-**Overview:**
-Phases 1–2 complete (18 models fixed). Phase 3 (9 MEDIUM models) and validation remain.
+- [ ] Pick first target (churn vs no-show vs new-patient value)
+- [ ] Phase 1: point-in-time `ml_*` training mart on `opendental_demo`
+- [ ] Evaluate vs rule-based scores (`churn_risk_score`, etc.)
 
-**Action Items:**
-- [ ] **Phase 3: Review MEDIUM Priority Models (9 models)**
-  - [ ] Review `int_collection_tasks` and `int_collection_communication` (unknown target column `model_created_at`)
-  - [ ] Determine correct source timestamp for models with no target column
-  - [ ] Add incremental filters to models missing them (7 models identified):
-    - **Staging (4):** `stg_opendental__tasknote` (use `"DateTimeNote"`), `stg_opendental__document` (use `"DateTStamp"`), `stg_opendental__timeadjust` (use `"TimeEntry"`), `stg_opendental__toothinitial` (use `"SecDateTEdit"`)
-    - **Intermediate (3):** `int_insurance_payment_allocated`, `int_patient_payment_allocated`, `int_payment_split` (filter on upstream `p._loaded_at` / `ps._loaded_at` from payment/paysplit refs)
-   - [ ] Test all fixes
-
-- [ ] **Phase 4: Validation**
-  - [ ] Run full dbt build to verify all fixes
-  - [ ] Check zero-row models now return data
-  - [ ] Verify incremental loads work correctly
-  - [ ] Monitor for any regressions
-
-**Reference:**
-- `docs/refactor/DBT_INCREMENTAL_MODEL_LOADED_AT_REFACTOR_STATUS.md` - Status, remaining models, and testing plan
-- `dbt_dental_models/REFACTOR_PLAN.json` - JSON export of model analysis (if present)
+**Docs:** [docs/ml/ML_ANALYTICS_PROPOSAL.md](docs/ml/ML_ANALYTICS_PROPOSAL.md) · [docs/ml/ML_SERVING_ARCHITECTURE.md](docs/ml/ML_SERVING_ARCHITECTURE.md)
 
 ---
 
-### Fix EC2 dbt Database Connection Credentials
-
-**Status:** Ready for Deployment and Testing  
-**Priority:** **HIGH** (Blocks dbt runs on EC2)  
-**Goal:** Deploy dbt credentials/SSL config to EC2 and verify RDS connection
-
-**Credentials Source:**
-- `deployment_credentials.json` → `backend_api.clinic_database_reference.rds.credentials.secrets.opendental_analytics.current_value`
-
-**Action Items:**
-- [ ] **Deploy Files to EC2**
-  - [ ] Deploy `setup_ec2_dbt_env.sh` to `/opt/dbt_dental_clinic/scripts/` on EC2
-  - [ ] Deploy `.env_ec2` to `/opt/dbt_dental_clinic/.env` on EC2 using `deploy_ec2_env.ps1`
-  - [ ] Make setup script executable: `chmod +x /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh`
-  - [ ] Optionally add to `~/.bashrc` for persistence: `echo 'source /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh' >> ~/.bashrc`
-  
-- [ ] **Test Connection** (pending)
-  - [ ] Verify `setup_ec2_dbt_env.sh` successfully loads credentials from `deployment_credentials.json`
-  - [ ] Verify dbt can connect to RDS with credentials
-  - [ ] Test `dbt run --target clinic --select fact_claim` (AWS production)
-  - [ ] Verify SSL connection is working
-
-**Deployment Instructions:**
-```powershell
-# 1. Deploy .env file to EC2
-.\scripts\deploy_ec2_env.ps1
-
-# 2. Deploy setup script to EC2 (using deploy_dbt_file.ps1 or manual)
-.\scripts\deploy_dbt_file.ps1 scripts/setup_ec2_dbt_env.sh
-
-# 3. On EC2 instance, make script executable and test:
-# aws ssm start-session --target <EC2_INSTANCE_ID>
-# chmod +x /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh
-# source /opt/dbt_dental_clinic/scripts/setup_ec2_dbt_env.sh
-# cd /opt/dbt_dental_clinic/dbt_dental_models
-# dbt run --target clinic --select fact_claim
-```
-
-**Key Files:**
-- `scripts/setup_ec2_dbt_env.sh`, `scripts/deploy_ec2_env.ps1`, `scripts/run_dbt_on_ec2.ps1`
-- `dbt_dental_models/profiles.yml`
+- `docs/AGENT_ACCESSIBILITY_AND_CLI_DESIGN.md` documents agent accessibility goals and CLI design decisions.
+- Plan `agent_commands.py` module to provide curated, agent-safe command entrypoints aligned with that design
+- See also ops.py
 
 ---
 
-### Test aws-ssm-init POSTGRES_ANALYTICS_* for Port Forwarding
-
-**Status:** Pending verification  
-**Priority:** MEDIUM  
-**Goal:** Verify `aws-ssm-init` sets correct `POSTGRES_ANALYTICS_*` for local port forwarding (localhost:5433)
-
-- [ ] Test `aws-ssm-init` sets correct `POSTGRES_ANALYTICS_*` for port forwarding
-
-**Reference:** `scripts/environment_manager.ps1` — `Initialize-AWSSSMEnvironment`
-
----
 
 ### Set Up dbt Cloud Account for Documentation Deployment
 
@@ -577,6 +1114,7 @@ Phases 1–2 complete (18 models fixed). Phase 3 (9 MEDIUM models) and validatio
 
 ---
 
+
 ### Snowflake Integration (Career/Portfolio)
 
 **Status:** Planned  
@@ -586,6 +1124,7 @@ Phases 1–2 complete (18 models fixed). Phase 3 (9 MEDIUM models) and validatio
 **Reference:** `docs/career/platform_projects/snowflake_integration_plan.md`
 
 ---
+
 
 ### Event-Driven Analytics Layer (Kafka Replay)
 
@@ -610,24 +1149,6 @@ Phases 1–2 complete (18 models fixed). Phase 3 (9 MEDIUM models) and validatio
 
 ---
 
-### Optimize mart_patient_retention Performance (dbt run time)
-
-**Status:** Pending  
-**Priority:** **MEDIUM** (Full dbt run ~52 min; one model dominates)  
-**Goal:** Reduce `mart_patient_retention` build time so full pipeline runs in minutes instead of ~52 minutes.
-
-**Current situation:**
-- Full `dbt run`: 157 models in ~52 min; **mart_patient_retention** alone is ~52 min (~99% of total).
-- Model does four full scans of fact tables (fact_appointment, fact_payment, fact_claim, fact_communication) with large aggregations by patient_id, then joins to dim_patient, dim_date, dim_provider.
-
-**Action items:**
-- [ ] Pre-aggregate patient-level metrics in intermediate models (e.g. int_patient_appointment_summary, int_patient_financial_summary); make those incremental or tables; have mart join pre-aggregated data only
-- [ ] Consider making mart_patient_retention incremental by snapshot date (e.g. only (re)build today’s rows) or run it on a separate schedule (e.g. nightly)
-- [ ] After changes: `dbt run --select mart_patient_retention` and re-run `list_slow_models.ps1` / EXPLAIN (ANALYZE, BUFFERS) to confirm improvement
-
-**Reference:** `docs/dbt/DBT_PERFORMANCE_INVESTIGATION.md`
-
----
 
 ### Review Explicit Column Selection Findings Document
 
@@ -655,6 +1176,7 @@ A comprehensive modeling review has been completed that identified widespread us
 **Reference:** `docs/dbt/explicit_column_selection_findings.md`
 
 ---
+
 
 ### Fix dbt Test Failures - Demo Database
 
@@ -690,6 +1212,7 @@ A comprehensive modeling review has been completed that identified widespread us
 
 ---
 
+
 ### Appointment Workflow Improvement - Type Classification
 
 **Status:** Investigation Complete, Implementation Pending  
@@ -720,6 +1243,7 @@ A comprehensive modeling review has been completed that identified widespread us
 
 ---
 
+
 ### Fix Synthetic Data Dashboard Metrics
 
 **Status:** Code Complete, Verification Pending  
@@ -736,335 +1260,19 @@ A comprehensive modeling review has been completed that identified widespread us
 
 ---
 
-## ETL Pipeline
 
-**Current Status:** ✅ **STABLE** - ETL is working reliably  
-**Priority Note:** ETL refactoring and optimization are **HIGH** priority (not critical) - can be done after client deployment is complete
+### Test aws-ssm-init POSTGRES_ANALYTICS_* for Port Forwarding
 
-### Complete postgres_loader Refactor
+**Status:** Pending verification  
+**Priority:** MEDIUM  
+**Goal:** Verify `aws-ssm-init` sets correct `POSTGRES_ANALYTICS_*` for local port forwarding (localhost:5433)
 
-**Status:** Implementation Complete, Verification Pending  
-**Priority:** **HIGH** (ETL is stable, refactor can wait)  
-**Goal:** Verify refactored `postgres_loader.py` in test and clinic environments
+- [ ] Test `aws-ssm-init` sets correct `POSTGRES_ANALYTICS_*` for port forwarding
 
-**Approach:** Gradual rollout with monitoring at each stage
-
-#### 6.1 Test Environment Verification (Basic Functionality Check)
-- [ ] Run ETL pipeline on **test environment** to verify basic functionality
-- [ ] Verify test tables load successfully (patient, appointment, procedurelog)
-- [ ] Check row counts match expected test data
-- [ ] Review logs for any errors or warnings
-
-#### 6.2 Clinic Verification - Small Tables First (Primary Verification)
-- [ ] Run pipeline for **small/medium tables only** (low risk, fast to verify)
-- [ ] **Verify using compare_databases.py script** (automated comparison)
-- [ ] **Verify tracking information** for each table
-- [ ] **Manual verification** (spot check)
-
-#### 6.3 Clinic Verification - Medium Tables (Gradual Expansion)
-- [ ] After small tables verify correctly, expand to **medium tables**
-- [ ] **Verify using compare_databases.py** for all medium tables
-- [ ] Monitor during execution
-- [ ] Compare results with previous runs for these tables
-
-#### 6.4 Clinic Verification - Full Pipeline (Final Step)
-- [ ] After medium tables verify correctly, run **full pipeline** on clinic
-- [ ] **Comprehensive verification using compare_databases.py**
-- [ ] **Compare ETL tracking tables**
-- [ ] Monitor during execution
-
-#### 6.5 Compare Results with Previous Runs
-- [ ] Save baseline comparison before refactor
-- [ ] Compare after refactor (using compare_databases.py or SQL queries)
-- [ ] Check performance metrics
-
-#### 6.6 Verify HYBRID FIX Works Correctly
-- [ ] Check HYBRID FIX Triggers (expected: 0-5 per run is normal)
-- [ ] Verify Change Detection in UPSERT (check PostgreSQL stats)
-
-#### 6.7 Monitor for Regressions
-- [ ] Daily monitoring (first week)
-- [ ] Weekly review (first month)
-
-**Reference Documentation:**
-- **Method Deprecation Analysis:** [etl_pipeline/docs/METHOD_DEPRECATION_ANALYSIS.md](etl_pipeline/docs/METHOD_DEPRECATION_ANALYSIS.md)
-- **Database Comparison Script:** `etl_pipeline/scripts/compare_databases.py`
-- **HYBRID FIX Monitoring:** `etl_pipeline/docs/monitoring_hybrid_fix.md`
-- **Performance Review:** `etl_pipeline/docs/PERFORMANCE_REVIEW_20251222.md`
-- **Pipeline Architecture:** `etl_pipeline/docs/PIPELINE_ARCHITECTURE.md`
+**Reference:** `scripts/environment_manager.ps1` — `Initialize-AWSSSMEnvironment`
 
 ---
 
-### ETL Raw Ingestion Contract & Pipeline Health Metrics
-
-**Status:** Investigation Complete, Implementation Pending  
-**Priority:** **HIGH** (ETL is stable, standardization can wait)  
-**Goal:** Fix unconditional UPSERT churn and establish reusable patterns for all raw ingestion tables
-
-**Investigation Summary:**
-Root cause identified: Unconditional UPSERT updates without change detection in `PostgresLoader._build_upsert_sql()` causing no-op updates and high `n_tup_upd` counts.
-
-**Next Steps:**
-
-### 1. Implement Raw Ingestion Contract
-- [ ] Update `etl_pipeline/config/tables.yml` to support contract definitions
-- [ ] Document contract requirements in `etl_pipeline/docs/DATA_CONTRACTS.md`
-
-### 2. Create Pipeline Health Metrics
-- [ ] Create `dbt_dental_models/models/monitoring/raw_table_churn_metrics.sql`
-- [ ] Add churn monitoring to `etl_pipeline/monitoring/pipeline_health.py`
-- [ ] Set up alert thresholds (Critical > 2.0, Warning > 1.0, Info > 0.5)
-- [ ] Document in `etl_pipeline/docs/PIPELINE_MONITORING.md`
-
-**Reference:** `docs/etl_commlog_churn_analysis.md`
-
----
-
-### ETL Pipeline Performance Optimization
-
-**Status:** Investigation Complete, Implementation Pending  
-**Priority:** **HIGH** (ETL is stable, optimization can wait)  
-**Goal:** Optimize ETL pipeline bulk insert performance from 200-250 rows/sec to 1,000-5,000+ rows/sec, reducing full sync time from 12+ hours to 1-2 hours
-
-**Note:** ETL is currently stable and working. This optimization is valuable but not blocking client deployment.
-
-**Reference:** `etl_pipeline/docs/PERFORMANCE_REVIEW_20251222.md`
-
----
-
-### Settings Access Patterns - Naming Improvements
-
-**Status:** ✅ Documentation Complete, Implementation Pending  
-**Priority:** **MEDIUM** (Code works correctly, naming clarity improvement)  
-**Goal:** Improve naming conventions for Settings access patterns to make them clearer for new developers
-
-**Description:**
-The ETL pipeline uses three Settings access patterns intentionally for test/clinic isolation. However, the current function names (`get_settings()`, `create_settings()`) don't clearly communicate their purpose, which can be challenging for new developers.
-
-**Key Findings:**
-- Current names don't clearly indicate singleton vs new instance behavior
-- Unclear when to use `get_settings()` vs `Settings(...)` vs `create_settings()`
-- Three patterns exist intentionally but naming doesn't reflect their purpose
-
-**Action Items:**
-- [ ] Review `etl_pipeline/CODE_REVIEW.md` section 3.3 "Settings Global Instance Management" for detailed analysis
-- [ ] Review `etl_pipeline/docs/SETTINGS_ACCESS_PATTERNS.md` for comprehensive pattern documentation and naming improvement options
-- [ ] Decide on naming improvement approach:
-  - Option 1: Add descriptive aliases (recommended - backward compatible)
-  - Option 2: Rename existing functions (breaking change)
-  - Option 3: Use class methods (more OOP style)
-- [ ] Implement chosen naming improvements
-- [ ] Update codebase to use new naming conventions
-- [ ] Update documentation to reflect new naming
-
-**Related Files:**
-- **Code Review:** `etl_pipeline/CODE_REVIEW.md` - Section 3.3 for analysis
-- **Pattern Documentation:** `etl_pipeline/docs/SETTINGS_ACCESS_PATTERNS.md` - Complete guide with naming improvement recommendations
-
-**Recommendation:**
-See `etl_pipeline/docs/SETTINGS_ACCESS_PATTERNS.md` "Naming Convention Improvements" section for three implementation options with detailed code examples and trade-offs.
-
----
-
-**Current Performance:**
-- Large tables: 130-180 rows/second
-- Medium tables: 200-250 rows/second
-- Full sync: 12+ hours
-
-**Target Performance:**
-- Large tables: 1,000-5,000 rows/second (5-30x improvement)
-- Medium tables: 1,000-5,000 rows/second (4-25x improvement)
-- Full sync: 1-2 hours (6-12x improvement)
-
-**Critical Bottlenecks Identified:**
-- Payment table: 40-50 seconds per 10,000-row batch (200-250 rows/sec)
-- Securitylog table: 6.55 hours to load 4.2M rows (178 rows/sec)
-
-## Priority 1: Critical (Immediate Action Required)
-
-### 1.1 Investigate PostgreSQL Insert Performance
-- [ ] Check if indexes are being maintained during bulk inserts
-- [ ] Verify foreign key constraints and their impact on insert performance
-- [ ] Review triggers on target tables (payment, securitylog, paysplit, etc.)
-- [ ] Compare UPSERT vs INSERT performance for full syncs
-- [ ] Check PostgreSQL `pg_stat_statements` for slow queries during inserts
-- [ ] Review connection pooling and transaction settings
-- [ ] Measure network latency between ETL server and PostgreSQL
-
-**Expected Impact:** 5-20x performance improvement
-
-### 1.2 Optimize Bulk Insert Strategy for Full Syncs
-- [ ] For full syncs, use `TRUNCATE` + `INSERT` instead of `UPSERT` (already implemented, verify usage)
-- [ ] Consider using PostgreSQL `COPY` command for bulk loads instead of `executemany`
-- [ ] Disable indexes during load, rebuild after (for large tables)
-- [ ] Increase batch sizes for full syncs (50K-100K rows instead of 10K)
-- [ ] Review `bulk_insert_optimized()` method for optimization opportunities
-- [ ] Test `COPY FROM STDIN` vs current `executemany` approach
-
-**Expected Impact:** 2-5x performance improvement
-
-## Priority 2: High (Should Address Soon)
-
-### 2.1 Fix Duplicate Schema Detection
-- [ ] Review schema detection caching logic in `PostgresSchema` class
-- [ ] Ensure schema cache is checked before running detection
-- [ ] Cache results for entire ETL run duration
-- [ ] Fix payment table column detection running twice
-
-**Expected Impact:** 5-10 seconds saved per table
-
-### 2.2 Parallelize Medium Table Processing
-- [ ] Process medium tables in parallel (2-4 workers)
-- [ ] Balance parallelization with database connection limits
-- [ ] Monitor resource usage during parallel processing
-- [ ] Update `priority_processor.py` to support parallel medium table processing
-
-**Expected Impact:** 30-50% reduction in total time for medium tables
-
-### 2.3 Fix Metrics Collection Error
-- [ ] Review `UnifiedMetricsCollector.record_performance_metric()` signature
-- [ ] Fix method call to match expected parameters (remove `duration` keyword or update method)
-- [ ] Ensure all performance metrics are properly recorded
-- [ ] Update all call sites to use correct method signature
-
-**Expected Impact:** Better visibility into performance trends
-
-## Priority 3: Medium (Nice to Have)
-
-### 3.1 PostgreSQL Configuration Review
-- [ ] Review PostgreSQL `postgresql.conf` settings
-- [ ] Configure `wal_buffers` appropriately (requires server restart)
-- [ ] Review other WAL and checkpoint settings
-- [ ] Document required PostgreSQL configuration for optimal performance
-- [ ] Fix warnings about `wal_buffers` requiring restart (currently just warnings)
-
-**Expected Impact:** 10-20% performance improvement
-
-### 3.2 Add Performance Monitoring
-- [ ] Add detailed timing logs for each phase (extract, transform, load)
-- [ ] Track rows/second metrics per table
-- [ ] Create performance dashboard/report
-- [ ] Set up alerts for performance degradation
-- [ ] Add batch-level timing to identify slow batches
-
-**Expected Impact:** Better visibility and early detection of issues
-
-**Success Metrics:**
-- [ ] Payment table: <5 minutes (currently 34+ minutes)
-- [ ] Securitylog table: <1 hour (currently 6.55 hours)
-- [ ] Full sync: <2 hours (currently 12+ hours)
-- [ ] All large tables: >1,000 rows/second
-- [ ] All medium tables: >1,000 rows/second
-
----
-
-### Refactor Load Status Method Names
-
-**Status:** Planned  
-**Priority:** **MEDIUM** (Code quality improvement, not urgent)  
-**Goal:** Improve code clarity by renaming internal methods to be self-documenting
-
-**Overview:**
-Rename two internal methods in `PostgresLoader`:
-- `_update_load_status_hybrid()` → `_update_load_status_with_primary_value()`
-- `_update_load_status()` → `_update_load_status_timestamp_only()`
-
-**To complete:**
-- [ ] Create branch `refactor/rename-load-status-methods` from `main`
-- [ ] Work through the checklist in the refactor doc (PostgresLoader, table_processor, integration + unit tests, verification)
-- [ ] Run full test suite and optional ETL smoke run
-- [ ] Merge to `main` only after all tests pass on the branch
-
-**Reference:** `docs/refactor/REFACTOR_LOAD_STATUS_METHOD_NAMES.md` — full checklist, line references, and verification steps
-
----
-
-### Refactor SimpleMySQLReplicator → MySQLReplicator
-
-**Status:** Planned  
-**Priority:** **MEDIUM** (Code quality, not urgent)  
-**Goal:** Rename class and remove all "simple" naming from the replicator and its dependencies.
-
-**To complete:** Rename class to `MySQLReplicator`, module to `mysql_replicator.py`, test packages and test files, update all imports/patches/markers/result keys and docstrings. Do on a dedicated branch; run full test suite before merging.
-
-**Reference:** `docs/refactor/REFACTOR_SIMPLE_MYSQL_REPLICATOR_TO_MYSQL_REPLICATOR.md` — scope, renames, and verification
-
----
-
-## Frontend
-
-### KPI Definitions — Hover Tooltips (Phase 4)
-
-**Status:** Planned  
-**Priority:** **LOW** (Enhancement, not blocking)  
-**Goal:** Add hover-over tooltips to dashboard KPIs linking to `/kpi-definitions`
-
-- [ ] **Phase 4:** Future Enhancement - Hover Tooltips
-
-**Related Files:** `frontend/src/pages/KPIDefinitions.tsx`, `frontend/src/components/layout/Layout.tsx`
-
----
-
-### Validation Workflow Component for Portfolio
-
-**Status:** Planning - Feature Plan Complete  
-**Priority:** **LOW** (Portfolio enhancement, not blocking)  
-**Goal:** Add a "Validation Workflow" component to the React portfolio that demonstrates how mart models are validated through source reconciliation, business rule testing, and operationalized dbt tests
-
-**Overview:**
-A feature plan has been created that outlines a portfolio component showcasing the validation methodology used for mart models. This demonstrates the difference between "building models" and "shipping trusted analytics" - a key differentiator for data engineering roles.
-
-**Key Features:**
-- Overview section explaining validation methodology
-- Workflow diagram showing data flow and validation lanes
-- Case study using `fact_claim` as the flagship example
-- Three "proof" validations (row count reconciliation, financial balance, sentinel/exception handling)
-- Business rules → tests operationalization taxonomy
-- Real-world impact section
-
-**Implementation Plan:**
-- [ ] **Phase 1:** Add "Validation Workflow" tile under Project Components
-- [ ] **Phase 2:** Create `/validation` page with content structure
-- [ ] **Phase 3:** Add Mermaid diagram (workflow visualization)
-- [ ] **Phase 4:** Add 3 proof validations (detailed examples)
-- [ ] **Phase 5:** Add "rules→tests" taxonomy section
-- [ ] **Phase 6:** Add links to repo documentation
-- [ ] **Phase 7:** (Optional) Add synthetic "results" widget
-
-**Priority:** **LOW** - Portfolio enhancement, not blocking core functionality  
-**Estimated Effort:** 12-16 hours
-
-**Related Files:**
-- **Feature Plan:** `docs/frontend/validation_workflow_component.md` ✅
-- **Validation Documentation:** `dbt_dental_models/validation/README.md`
-- **Fact Claim Validation Plan:** `dbt_dental_models/validation/marts/fact_claim/fact_claim_validation_plan.md`
-- **Business Rules Mapping:** `dbt_dental_models/validation/marts/fact_claim/BUSINESS_RULES_TO_DBT_TESTS.md`
-
----
-
-### ML on Analytics Warehouse
-
-**Status:** Proposal drafted — not scheduled  
-**Priority:** **LOW** (defer until Tier 1 marts stable and Airflow nightly validated)  
-**Goal:** Supervised models for churn, no-show, or collections using dbt feature marts + batch scoring
-
-- [ ] Pick first target (churn vs no-show vs new-patient value)
-- [ ] Phase 1: point-in-time `ml_*` training mart on `opendental_demo`
-- [ ] Evaluate vs rule-based scores (`churn_risk_score`, etc.)
-
-**Docs:** [docs/ml/ML_ANALYTICS_PROPOSAL.md](docs/ml/ML_ANALYTICS_PROPOSAL.md) · [docs/ml/ML_SERVING_ARCHITECTURE.md](docs/ml/ML_SERVING_ARCHITECTURE.md)
-
----
-
-## API
-
-- `docs/AGENT_ACCESSIBILITY_AND_CLI_DESIGN.md` documents agent accessibility goals and CLI design decisions.
-- Plan `agent_commands.py` module to provide curated, agent-safe command entrypoints aligned with that design
-- See also ops.py
-
----
-
-## Deployment / Infrastructure
 
 ### Portfolio Site Reconfiguration
 
@@ -1097,11 +1305,6 @@ A feature plan has been created that outlines a portfolio component showcasing t
 
 ---
 
-### Frontend split — see CRITICAL section above
-
-Tracking checklist and phase detail: [docs/frontend/FRONTEND_SPLIT_PLAN.md](docs/frontend/FRONTEND_SPLIT_PLAN.md) · Frontend evolution: [docs/frontend/FRONTEND_EVOLUTION_PROPOSAL.md](docs/frontend/FRONTEND_EVOLUTION_PROPOSAL.md)
-
----
 
 ### AWS Cost Optimization & Savings Opportunities
 
@@ -1162,3 +1365,11 @@ Tracking checklist and phase detail: [docs/frontend/FRONTEND_SPLIT_PLAN.md](docs
 **Notes:**
 - These savings are for the **clinic S3/CloudFront deployment and associated analytics stack**, not the demo portfolio environment alone.
 - Re-run AWS Cost Explorer "Savings opportunities" after changes to verify recommendations are cleared.
+
+## API (defer)
+
+- `docs/AGENT_ACCESSIBILITY_AND_CLI_DESIGN.md` — agent accessibility goals and CLI design
+- [ ] Plan `agent_commands.py` — curated agent-safe command entrypoints
+- See also `ops.py`
+
+---
