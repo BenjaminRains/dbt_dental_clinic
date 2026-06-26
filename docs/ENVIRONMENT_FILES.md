@@ -186,6 +186,27 @@ Each component should have a single config entrypoint that:
 - **Validates required vars** and fails fast with a good error (no silent defaults for required credentials).
 - Optionally: a **lightweight schema** — e.g. `required_vars = [...]` per component, or Pydantic/TypedSettings.
 
+### 3.6 Phase 6 — Postgres authority matrix
+
+| Connection role | Authority | Consumed by |
+|-----------------|-----------|-------------|
+| Local warehouse Postgres | `dbt_dental_models/.env_local` | `mdc dbt --env local`, `mdc etl --env local`, `mdc publish analytics` (local side) |
+| Clinic RDS host/db/user | `deployment_credentials.json` → `clinic_database.postgresql` | `mdc dbt --env clinic`, `mdc etl --env clinic` (composed) |
+| Clinic RDS password (live) | Secrets Manager `rds!db-...` (fallback: `api/.env_api_clinic`) | `overlay_clinic_rds_credentials` in etl/dbt/freshness/publish |
+| Clinic API deploy | `api/.env_api_clinic` → EC2 `api/.env` | `mdc deploy api --env clinic`, `mdc secrets pull clinic` |
+| OpenDental source + MySQL replication | `etl_pipeline/.env_clinic` | `mdc etl --env clinic` (source/repl only — **no** `POSTGRES_ANALYTICS_*`) |
+
+**Do not** duplicate `POSTGRES_ANALYTICS_*` in `etl_pipeline/.env_clinic`. Use:
+
+```powershell
+mdc etl run --env clinic --tunnel-db --profile full
+mdc etl exec --env clinic --tunnel-db -- pipenv run python scripts/initialize_etl_tracking_tables.py clinic
+```
+
+`mdc status` warns when deprecated analytics keys remain in ETL env files.
+
+---
+
 ### 3.5 Planned improvements (checklist)
 
 | **Improvement** | **Status** | **Notes** |
@@ -193,6 +214,7 @@ Each component should have a single config entrypoint that:
 | Document precedence (process > file > defaults) in code + doc | **Done (Phase 0–1)** | API, ETL `providers.py`, ad-hoc ETL scripts use `override=False`; see [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md). |
 | One official loader in production (e.g. API on EC2: systemd only) | **Done (Phase 0)** | `api/settings.py` skips `.env_api_*` when OS env is populated; deploy writes `api/.env` only. |
 | Canonical location only, or noisy + optional fallback | Todo | ETL/dbt today fall back to root; add WARNING and/or flag. |
+| **Phase 6 credential dedup** | **Done** | `postgres_env.py`, `etl_env.py`, `mdc etl --tunnel-db`, `mdc etl exec`; see §3.6. |
 | Global env set (local, demo, clinic, test, prod) | Doc only | §2.2; components to declare “unsupported” instead of new names. |
 | Commit sanitized templates for API + frontend | **Partial** | **Done:** `api/.env_api_local.template`, `api/.env_api_clinic.template`, `dbt_dental_models/.env_local.template`. **Todo:** `api/.env_api_demo.template`, `frontend/.env.template`. |
 | Config module: load once, log source, validate required | **Done (Phase 2–4)** | `api/settings.py`, ETL `settings_v2.py`; `mdc status` / `mdc * validate` |

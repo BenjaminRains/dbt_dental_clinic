@@ -14,7 +14,7 @@ The old root-level `ENVIRONMENT_HANDLING_REVIEW.md` and `ENVIRONMENT_HANDLING_RE
 | **1** | Component-scoped env files; track `docs/ENVIRONMENT_FILES.md` | Done |
 | **2–4** | Typed settings (`api/settings.py`, ETL `settings_v2.py`); `mdc` CLI with isolated child env | Done |
 | **5** | Retire shell `*-init` / `environment_manager.ps1` | Done (archived under `scripts/archive/`) |
-| **6** | Credential dedup — one authority per connection role | Planned |
+| **6** | Credential dedup — one authority per connection role | Done |
 
 Current **`mdc` version:** see `tools/mdc_cli/pyproject.toml` (0.9.x at time of writing).
 
@@ -49,22 +49,30 @@ See [ENVIRONMENT_FILES.md §4](ENVIRONMENT_FILES.md#4-who-loads-what-by-componen
 
 ---
 
-## Phase 6 — Credential dedup (planned)
+## Phase 6 — Credential dedup (done)
 
 **Goal:** One source of truth per connection role; stop duplicating `POSTGRES_ANALYTICS_*` across ETL, dbt, and API clinic files.
 
-| Role | Target authority |
-|------|------------------|
+| Role | Authority |
+|------|-----------|
 | Local warehouse Postgres | `dbt_dental_models/.env_local` |
 | Clinic RDS metadata | `deployment_credentials.json` → `clinic_database.postgresql` |
-| Clinic RDS password (live) | RDS master user secret in AWS Secrets Manager (`rds!db-...`) |
-| Clinic RDS deploy file | `api/.env_api_clinic` → EC2 `api/.env` via `mdc deploy api --env clinic` (password synced via `mdc secrets pull clinic`) |
-| OpenDental source + replication | `etl_pipeline/.env_clinic` only (no analytics vars) |
-| Retire | `dbt_dental_models/.env_clinic` |
+| Clinic RDS password (live) | RDS master user secret (`rds!db-...`) via `overlay_clinic_rds_credentials` |
+| Clinic RDS deploy file | `api/.env_api_clinic` → EC2 `api/.env` via `mdc deploy api --env clinic` |
+| OpenDental source + replication | `etl_pipeline/.env_clinic` only (no `POSTGRES_ANALYTICS_*`) |
+| Retired | `dbt_dental_models/.env_clinic` (deprecated fallback) |
 
-Implementation order: doc updates → manual file cleanup on dev machines → `mdc` composition overlay for ETL clinic + dbt local → publish default local source flip → guardrails (`mdc status` / doctor).
+**Implementation:**
 
-Details to be added to [ENVIRONMENT_FILES.md](ENVIRONMENT_FILES.md) §3.6 when Phase 6 starts.
+- `mdc_cli/postgres_env.py` — shared clinic/local warehouse Postgres resolution
+- `mdc_cli/etl_env.py` — `compose_etl_env_dict()` overlays analytics authority for `mdc etl …`
+- `mdc etl … --tunnel-db` — clinic RDS via SSM tunnel (same as dbt/api)
+- `mdc etl exec` — run ad-hoc scripts (e.g. `initialize_etl_tracking_tables.py`) with composed env
+- `mdc status` / `mdc secrets pull clinic` — warn on deprecated `POSTGRES_ANALYTICS_*` in `etl_pipeline/.env_clinic`
+- ETL `connections.py` — honors `POSTGRES_ANALYTICS_SSLMODE` / `PGSSLMODE`
+- `mdc publish analytics` — local source defaults to `dbt_dental_models/.env_local`
+
+See [ENVIRONMENT_FILES.md §3.6](ENVIRONMENT_FILES.md#36-phase-6--postgres-authority-matrix).
 
 ---
 

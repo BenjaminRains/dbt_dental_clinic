@@ -7,7 +7,8 @@
 #   - Local Postgres has fresh dbt marts output
 #   - pg_dump / pg_restore on PATH (PostgreSQL client tools)
 #   - RDS reachable: mdc tunnel clinic-db (default) OR -UseDirectRds
-#   - etl_pipeline/.env_clinic (local POSTGRES_ANALYTICS_*)
+#   - dbt_dental_models/.env_local (local POSTGRES_ANALYTICS_*; Phase 6 authority)
+#   - etl_pipeline/.env_clinic (legacy fallback only)
 #   - api/.env_api_clinic (RDS credentials; tunnel uses 127.0.0.1:TunnelPort)
 #
 # Usage (from repo root):
@@ -79,9 +80,9 @@ if ([string]::IsNullOrEmpty($ProjectRoot)) {
 }
 
 if (-not $LocalEnvFile) {
-    $LocalEnvFile = Join-Path $ProjectRoot "etl_pipeline\.env_clinic"
+    $LocalEnvFile = Join-Path $ProjectRoot "dbt_dental_models\.env_local"
     if (-not (Test-Path -LiteralPath $LocalEnvFile)) {
-        $LocalEnvFile = Join-Path $ProjectRoot "dbt_dental_models\.env_local"
+        $LocalEnvFile = Join-Path $ProjectRoot "etl_pipeline\.env_clinic"
     }
 }
 if (-not $RemoteEnvFile) {

@@ -242,10 +242,16 @@ class ConnectionFactory:
             if not schema:
                 schema = 'raw'
                 logger.warning(f"No schema specified for PostgreSQL connection to {database}, using default: raw")
-            
+
+            sslmode = (
+                os.environ.get("POSTGRES_ANALYTICS_SSLMODE")
+                or os.environ.get("PGSSLMODE")
+                or "prefer"
+            )
+
             # Create connection string
             connection_string = f"postgresql+psycopg2://{user}:{password}@{host}:{port}/{database}"
-            
+
             # Create engine with connection pool settings and schema
             engine = create_engine(
                 connection_string,
@@ -255,7 +261,8 @@ class ConnectionFactory:
                 pool_timeout=pool_timeout,
                 pool_recycle=pool_recycle,
                 connect_args={
-                    'options': f'-csearch_path={schema}'
+                    'options': f'-csearch_path={schema}',
+                    'sslmode': sslmode,
                 }
             )
             
