@@ -59,6 +59,34 @@ if sys.platform == "win32":
 
     _www_app.create_app = _create_app_windows
 
+    def _patch_static_manifest_paths() -> None:
+        """Airflow uses os.path.join('dist', file) for static URLs; on Windows that
+        produces backslashes, so browsers request /static/dist\\main.css and get 404."""
+        import os as _os
+
+        import airflow.www.extensions.init_manifest_files as _imf
+
+        _orig_configure = _imf.configure_manifest_files
+
+        def configure_manifest_files(app):
+            _orig_join = _os.path.join
+
+            def _join(*parts):
+                path = _orig_join(*parts)
+                if len(parts) == 2 and parts[0] == "dist":
+                    return path.replace("\\", "/")
+                return path
+
+            _os.path.join = _join
+            try:
+                return _orig_configure(app)
+            finally:
+                _os.path.join = _orig_join
+
+        _imf.configure_manifest_files = configure_manifest_files
+
+    _patch_static_manifest_paths()
+
 from airflow.__main__ import main
 
 if __name__ == "__main__":
