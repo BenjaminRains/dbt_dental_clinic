@@ -21,8 +21,9 @@ Shortcuts into the Production and Income report with preset date ranges:
 | More Options | *(opens report dialog — no export folder)* |
 | Monthly Production Goal | [monthly-production-goal](./monthly-production-goal/) |
 
-Full custom report: use **More Options** or the standard Production and Income export workflow;
-mart mapping lives in [production-and-income](./production-and-income/) when validated.
+Full custom **Production and Income** report uses date-range shortcuts (`today/`, `this-month/`,
+…) — separate from **Daily → Production by Procedure**, which is validated under
+[daily-production-by-procedure](./daily-production-by-procedure/).
 
 ---
 
@@ -38,7 +39,7 @@ mart mapping lives in [production-and-income](./production-and-income/) when val
 | Routing Slips | [routing-slips](./routing-slips/) | |
 | Unfinalized Insurance Payments | [unfinalized-insurance-payments](./unfinalized-insurance-payments/) | |
 | Patient Portion Uncollected | [patient-portion-uncollected](./patient-portion-uncollected/) | |
-| Production by Procedure | [production-by-procedure](./production-by-procedure/) | Scroll list continues below fold |
+| Production by Procedure | [daily-production-by-procedure](./daily-production-by-procedure/) | Active KPI validation (golden 2026-06-26) |
 
 ---
 

@@ -61,16 +61,17 @@ flowchart LR
 
 
 
-### Three layers we compare
-
-
+### Four layers we compare
 
 | Step | Compare | What it proves |
 | --- | --- | --- |
-| **1. OD → staging** | Golden CSV section totals vs `staging` reconstruction SQL | ETL is current; warehouse has the same underlying rows OD used (PayDate / CheckDate, amounts). Catches **ETL lag** before blaming the mart. |
+| **0. Source → raw** | MySQL vs `raw.*` reconciliation (row counts, or complete-production totals by day) | **Replica fidelity** — catches [replica row drift](../../../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md) before blaming staging or mart. Required for tables with in-place updates (`procedurelog` ProcStatus, etc.). |
+| **1. OD → staging** | Golden CSV section totals vs `staging` reconstruction SQL | Warehouse has the same underlying rows OD used. Catches **ETL lag** (late inserts) before blaming the mart. |
 | **2. Staging → mart** | `compare_*_staging.sql` | dbt mart is a faithful aggregation of staging — no dropped insurance, wrong PayType filter, etc. |
 | **3. Mart → OD** | `compare_*_collections.sql` + `FIELD_MAP.md` | **End-to-end:** `opendental_analytics.marts.mart_*` matches what the OD report shows the practice. This is the KPI sign-off. |
-| **4. API / frontend** | `compare/compare_daily_collections_api.sql` + optional `api/tests/kpi/verify_daily_collections.py` | Clinic app reads mart via `GET /kpi/daily-collections` with **no extra logic**. SQL must match mart; UI must show the same numbers. |
+| **4. API / frontend** | `compare/compare_daily_collections_api.sql` + optional `api/tests/kpi/verify_daily_collections.py` | Clinic app reads mart via API with **no extra logic**. SQL must match mart; UI must show the same numbers. |
+
+**Platform findings** (pipeline defects affecting multiple KPIs): [docs/etl/findings/](../../../docs/etl/findings/README.md)
 
 
 
@@ -342,9 +343,7 @@ When OD total is zero and mart is zero, treat as PASS. When OD golden is not yet
 | --- | --- | --- | --- |
 
 | [daily-payments](./daily-payments/) | `mart_daily_payments` | **`within_tolerance` — complete** | [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md) |
-
-| [production-and-income](./production-and-income/) | `mart_provider_performance` | Not started | — |
-
+| [daily-production-by-procedure](./daily-production-by-procedure/) | `fact_procedure` (agg.) | `golden_exported` | [README.md](./daily-production-by-procedure/README.md) |
 | [aging-of-a-r](./aging-of-a-r/) | `mart_ar_summary` | Not started | — |
 
 

@@ -146,6 +146,9 @@ docs/
 !docs/deployment-connections/README.md
 !docs/deployment-connections/connections.template.yaml
 !docs/deployment-connections/clinic-portal-users.template.json
+!docs/etl/
+!docs/etl/findings/
+!docs/etl/findings/**
 api/clinic-portal-users.json
 docs/deployment-connections/clinic-portal-users.json
 /docs/analytics/

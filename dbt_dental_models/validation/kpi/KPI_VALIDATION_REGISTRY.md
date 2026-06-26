@@ -33,12 +33,7 @@ is the check that implemented logic produces the same result as OD on golden dat
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 | within_tolerance | [daily-payments](./daily-payments/) | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Payments | Reports → Standard → Daily → Payments | ±0.5% or ±$10 | **Complete (2026-06-26):** 3 golden dates; layers 1–4 PASS; [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md). ETL before same-day validate; income transfers net to $0. |
-
-| not_started | [production-and-income](./production-and-income/) | Total production | `mart_provider_performance` | `total_production` | Production and Income | Reports → Standard → *TBD* | ±0.5% | Completed vs TP status; fee vs UCR |
-
-| not_started | [production-and-income](./production-and-income/) | Total collections | `mart_provider_performance` | `total_collections` | Production and Income | Reports → Standard → *TBD* | ±0.5% | Income vs refund direction |
-
-| not_started | [production-and-income](./production-and-income/) | Collection rate | `mart_provider_performance` | `collection_efficiency` | Production and Income | Reports → Standard → *TBD* | ±1.0% | Rolling 365d vs OD default window |
+| golden_exported | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `fact_procedure` | `sum(actual_fee)` by `date_complete` | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **Blocked:** [ETL-FND-001](../../../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md) — instance [2026-06-10](./daily-production-by-procedure/findings/2026-06-10.md) |
 
 | not_started | [aging-of-a-r](./aging-of-a-r/) | AR total | `mart_ar_summary` | `total_ar_balance` | Aging of A/R | Reports → Standard → Monthly → Aging of A/R | ±$50 or ±0.5% | Simplified DSO in exposures |
 
@@ -118,7 +113,31 @@ Golden path: `daily-payments/golden/`
 
 
 
-**Naming:** `od_daily_payments_{mm}{dd}{yyyy}_{mm}{dd}{yyyy}.csv` — compact MMDDYYYY for report from/to dates (same date twice for single-day exports). Example: `od_daily_payments_06242026_06242026.csv`. Snapshot: `golden/snapshots/od_daily_payments_06242026_06242026.snapshot.yml`.
+**Naming:** `od_daily_payments_{mm}{dd}{yyyy}_{mm}{dd}{yyyy}.csv`
+
+
+
+---
+
+
+
+## Validation windows (daily-production-by-procedure)
+
+
+
+| window_id | date_from | date_to | notes |
+
+| --- | --- | --- | --- |
+
+| daily_2026-06-10 | 2026-06-10 | 2026-06-10 | Blocked on [ETL-FND-001](../../../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md) — [findings/2026-06-10.md](./daily-production-by-procedure/findings/2026-06-10.md) |
+
+
+
+Golden path: `daily-production-by-procedure/golden/`
+
+
+
+**Naming:** `od_daily_production_by_procedure_{mm}{dd}{yyyy}_{mm}{dd}{yyyy}.csv`
 
 
 
@@ -152,5 +171,25 @@ Golden path: `daily-payments/golden/`
 
 
 
-Future reports: add compare SQL under `production-and-income/compare/`, `aging-of-a-r/compare/`, etc.
+## Comparison SQL index (daily-production-by-procedure)
+
+
+
+| compare_sql | status |
+
+| --- | --- |
+
+| [compare/compare_daily_production_by_procedure_total.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_total.sql) | golden exported 2026-06-10 |
+
+| [compare/compare_daily_production_by_procedure_staging.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_staging.sql) | mart vs staging |
+
+| [compare/compare_daily_production_by_procedure_by_code.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_by_code.sql) | code-level vs snapshot |
+
+| [compare/investigate_daily_production_by_procedure_2026-06-10.sql](./daily-production-by-procedure/compare/investigate_daily_production_by_procedure_2026-06-10.sql) | first golden date drill-down |
+
+
+
+Future reports: add compare SQL under `aging-of-a-r/compare/`, etc. Period **Production and Income**
+shortcuts (`today/`, `this-month/`, …) are separate OD exports — not the same as Daily →
+Production by Procedure.
 

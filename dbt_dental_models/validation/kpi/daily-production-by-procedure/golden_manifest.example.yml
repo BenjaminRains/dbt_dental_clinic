@@ -1,0 +1,30 @@
+# Copy to golden_manifest.yml (gitignored). Golden CSVs live under golden/.
+
+version: 1
+
+validation_window:
+  window_id: example_single_day
+  date_from: "2026-06-10"
+  date_to: "2026-06-10"
+
+snapshots:
+  - id: daily_production_by_procedure_2026-06-10
+    status: golden_exported
+    od_report: Production by Procedure
+    od_menu_path: "Reports → Standard → Daily → Production by Procedure"
+    source_file: od_daily_production_by_procedure_06102026_06102026.csv
+    exported_at: null
+    parameters:
+      date_from: "2026-06-10"
+      date_to: "2026-06-10"
+      providers: all
+    od_totals:
+      total_fees: 15239.00
+      procedure_code_count: 28
+    our_model: fact_procedure
+    our_field_or_measure: sum(procedure_fee) by date_complete, status 2
+    compare_sql: daily-production-by-procedure/compare/compare_daily_production_by_procedure_total.sql
+    tolerance:
+      amount_abs: 10.00
+      pct: 0.005
+    last_result: null

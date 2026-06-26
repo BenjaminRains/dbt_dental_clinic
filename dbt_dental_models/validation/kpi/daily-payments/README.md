@@ -15,7 +15,7 @@
 | 4 | API / frontend | `verify_daily_collections.py`, Practice Manager Home | 3/3 PASS |
 | 5 | Registry + app | [KPI_VALIDATION_REGISTRY.md](../KPI_VALIDATION_REGISTRY.md), `validatedKpis.ts` | Done |
 
-Use this folder as the **template** for the next KPI (`production-and-income`, `aging-of-a-r`, …).
+Use this folder as the **template** for the next KPI (`daily-production-by-procedure`, `aging-of-a-r`, …).
 
 ## Golden spot-check dates
 
