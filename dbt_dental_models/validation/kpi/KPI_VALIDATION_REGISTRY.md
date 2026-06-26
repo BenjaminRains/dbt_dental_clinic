@@ -11,7 +11,7 @@ manual URLs as you confirm them against your OpenDental version and `reference/o
 
 | status | kpi_name | our_model | our_field_or_measure | od_report | od_menu_path | od_manual_url | date_basis | grain | tolerance | known_deltas |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| not_started | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Daily Payments | Reports → Standard → *TBD* | *TBD* | payment date | day | ±0.5% or ±$10 | Refunds negative; unmapped payment types in `other_*` |
+| within_tolerance | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Daily Payments | Reports → Standard → Daily Payments | *TBD* | patient: PayDate; insurance: CheckDate | day | ±0.5% or ±$10 | ETL must include same-day payments before validate; income transfers net to $0 in OD |
 | not_started | Total production | `mart_provider_performance` | `total_production` | Production and Income | Reports → Standard → *TBD* | *TBD* | procedure date | day × provider | ±0.5% | Completed vs TP status; fee vs UCR |
 | not_started | Total collections | `mart_provider_performance` | `total_collections` | Production and Income | Reports → Standard → *TBD* | *TBD* | payment date | day × provider | ±0.5% | Income vs refund direction |
 | not_started | Collection rate | `mart_provider_performance` | `collection_efficiency` | Production and Income | Reports → Standard → *TBD* | *TBD* | mixed | day × provider | ±1.0% | Rolling 365d in exposures vs OD default window |
@@ -43,6 +43,7 @@ Record frozen windows used for golden exports so comparisons stay reproducible.
 | window_id | date_from | date_to | notes |
 | --- | --- | --- | --- |
 | pilot_2025h2 | 2025-07-01 | 2026-06-12 | Aligns with `powerbi/report_checklist.md` |
+| daily_2026-06-24 | 2026-06-24 | 2026-06-24 | Golden `daily_payments_06242026_ins_pat_split.csv`; PASS $11,197.40 — see `DAILY_COLLECTIONS_2026-06-24_FINDINGS.md` |
 
 ---
 
@@ -57,6 +58,6 @@ Maintained in `golden/golden_manifest.yml` when exports exist. CSV files live in
 
 | kpi_name | compare_sql | status |
 | --- | --- | --- |
-| Daily net collections | `compare/compare_daily_collections.sql` | placeholder |
+| Daily net collections | `compare/compare_daily_collections.sql` | validated 2026-06-24 |
 | Total production | `compare/compare_production_by_provider.sql` | not started |
 | AR total | `compare/compare_ar_aging.sql` | not started |

@@ -34,6 +34,8 @@ import {
     TopPatientBalance,
     ReferralSourceKPIRow,
     ReferralSourceSummaryResponse,
+    DailyCollectionsKPI,
+    LatestCollectionsDate,
 } from '../types/api';
 
 // Configure axios base URL
@@ -424,6 +426,22 @@ export const dashboardApi = {
     },
 };
 
+export const kpiApi = {
+    getDailyCollections: async (
+        paymentDate?: string
+    ): Promise<ApiResponse<DailyCollectionsKPI>> => {
+        return apiCall(() =>
+            api.get('/kpi/daily-collections', {
+                params: paymentDate ? { payment_date: paymentDate } : undefined,
+            })
+        );
+    },
+
+    getLatestCollectionsDate: async (): Promise<ApiResponse<LatestCollectionsDate>> => {
+        return apiCall(() => api.get('/kpi/daily-collections/latest-date'));
+    },
+};
+
 // Patient API calls
 export const patientApi = {
     getPatients: async (skip: number = 0, limit: number = 100): Promise<ApiResponse<{ patients: Patient[], total: number }>> => {
@@ -476,8 +494,51 @@ export const appointmentApi = {
 
 // Utility functions for date formatting
 export const dateUtils = {
+    /** Local calendar date as YYYY-MM-DD (avoids UTC shift from toISOString). */
+    formatLocalDate: (date: Date): string => {
+        const year = date.getFullYear();
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        return `${year}-${month}-${day}`;
+    },
+
     formatDate: (date: Date): string => {
-        return date.toISOString().split('T')[0];
+        return dateUtils.formatLocalDate(date);
+    },
+
+    getTodayLocal: (): string => dateUtils.formatLocalDate(new Date()),
+
+    getYesterdayLocal: (): string => {
+        const d = new Date();
+        d.setDate(d.getDate() - 1);
+        return dateUtils.formatLocalDate(d);
+    },
+
+    /** Calendar date in America/Chicago (matches OpenDental / clinic reporting). */
+    getClinicCalendarDate: (offsetDays = 0): string => {
+        const timeZone = 'America/Chicago';
+        const formatter = new Intl.DateTimeFormat('en-CA', {
+            timeZone,
+            year: 'numeric',
+            month: '2-digit',
+            day: '2-digit',
+        });
+        const todayIso = formatter.format(new Date()); // YYYY-MM-DD in Central
+        if (offsetDays === 0) {
+            return todayIso;
+        }
+        const [year, month, day] = todayIso.split('-').map(Number);
+        return new Date(Date.UTC(year, month - 1, day + offsetDays)).toISOString().slice(0, 10);
+    },
+
+    getClinicToday: (): string => dateUtils.getClinicCalendarDate(0),
+
+    getClinicYesterday: (): string => dateUtils.getClinicCalendarDate(-1),
+
+    /** Weekday label for a YYYY-MM-DD string (timezone-neutral calendar date). */
+    formatCalendarWeekday: (isoDate: string): string => {
+        const [year, month, day] = isoDate.split('-').map(Number);
+        return new Date(year, month - 1, day).toLocaleDateString('en-US', { weekday: 'long' });
     },
 
     getDateRange: (days: number): DateRange => {
@@ -578,6 +639,7 @@ export const apiService = {
     provider: providerApi,
     ar: arApi,
     dashboard: dashboardApi,
+    kpi: kpiApi,
     appointment: appointmentApi,
     dbt: dbtMetadataApi,
     treatmentAcceptance: treatmentAcceptanceApi,

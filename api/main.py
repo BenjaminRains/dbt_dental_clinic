@@ -38,6 +38,7 @@ from routers import (
     treatment_acceptance,
     hygiene,
     portal_auth,
+    kpi,
 )
 from config import APIConfig
 from deps import get_api_settings_optional
@@ -244,6 +245,7 @@ app.include_router(ar.router)
 app.include_router(treatment_acceptance.router)
 app.include_router(hygiene.router)
 app.include_router(portal_auth.router)
+app.include_router(kpi.router)
 
 @app.get("/")
 def read_root():

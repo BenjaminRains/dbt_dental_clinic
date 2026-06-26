@@ -8,103 +8,123 @@
 }}
 
 /*
-Daily payments KPI
+Daily payments KPI — aligned with OpenDental Daily Payments report.
 
 Grain:
-- One row per payment_date (calendar date derived from fact_payment.payment_date).
+- One row per calendar payment_date.
 
-Business logic assumptions:
-- Uses all rows from marts.fact_payment (no additional filtering by payment_type beyond the flags below).
-- patient_payment_amount / insurance_payment_amount use boolean flags from fact_payment
-  (is_patient_payment, is_insurance_payment), which are derived from payment_type_id.
-- income_amount / refund_amount are based on payment_direction from fact_payment:
-  - 'Income' = positive payment_amount
-  - 'Refund' = negative payment_amount
-  - 'Zero'   = zero-amount records; these contribute to total_payment_amount but not to
-    income_amount or refund_amount.
-- net_collections_amount = income_amount + refund_amount (refunds are negative).
-- All monetary fields are cast to numeric(18,2) and rounded to 2 decimals for financial reporting.
+Sources (validated 2026-06-24 vs OD golden export):
+- Patient / practice payments: stg_opendental__payment on PayDate (payment_date).
+- Insurance claim payments (e.g. Metlife EFT): stg_opendental__claimpayment on CheckDate (check_date).
 
-Payment source breakdown (patient / insurance / other):
-- In principle, payments are either from the patient or from insurance. In this mart they are
-  grouped using fact_payment’s is_patient_payment and is_insurance_payment (based on
-  payment_type_id = 0 and 1 respectively). Any payment not classified as patient or insurance
-  is counted and summed as "other".
-- "Other" includes: Partial, PrePayment, Adjustment, Refund (as payment type), and any
-  payment_type_id not mapped to Patient (0) or Insurance (1) in fact_payment. Many clinics
-  use OpenDental payment type IDs such as 69, 70, 71, 391, 412, etc.; if those are not
-  mapped to Patient/Insurance in fact_payment, they appear here as other_payment_count /
-  other_payment_amount. So payment_count = patient_payment_count + insurance_payment_count
-  + other_payment_count, and total_payment_amount = patient + insurance + other amounts.
+OD Daily Payments nets income-transfer sections to zero; non-zero patient payment headers plus
+claim check totals match the report total. Zero-amount payment headers are excluded from net
+collections and counts (they do not change dollar totals).
 
-Intended uses:
-- Daily collections tracking and comparison to OpenDental daily deposit / payment logs.
-- High-level patient vs insurance mix by day.
-- Upstream input to dashboard KPIs and deposit-reconciliation views.
+PayType mapping (clinic patient types on payment.PayType):
+- Patient: 69, 70, 71, 391, 412, 417, 574, 634, 676 (Check, Cash, Credit Card, Cherry, etc.)
+- Insurance on this mart comes from claimpayment, not payment.PayType 261/303/464/...
 */
 
-with source_payments as (
-    select *
-    from {{ ref('fact_payment') }}
-),
-
-payments_clean as (
+with patient_payments as (
     select
         payment_date::date as payment_date,
-        payment_amount::numeric(18, 2) as payment_amount,
-        payment_direction,
-        payment_type,
-        is_patient_payment,
-        is_insurance_payment
-    from source_payments
+        payment_type_id,
+        payment_amount::numeric(18, 2) as payment_amount
+    from {{ ref('stg_opendental__payment') }}
+    where payment_date is not null
+),
+
+patient_daily as (
+    select
+        payment_date,
+
+        round(coalesce(sum(payment_amount) filter (where payment_amount <> 0), 0), 2)
+            as patient_payment_amount,
+
+        round(coalesce(sum(payment_amount) filter (
+            where payment_amount <> 0
+              and payment_type_id not in (69, 70, 71, 391, 412, 417, 574, 634, 676)
+        ), 0), 2) as patient_other_type_amount,
+
+        round(coalesce(sum(payment_amount) filter (where payment_amount > 0), 0), 2)
+            as patient_income_amount,
+
+        round(coalesce(sum(payment_amount) filter (where payment_amount < 0), 0), 2)
+            as patient_refund_amount,
+
+        count(*) filter (where payment_amount <> 0) as patient_payment_count,
+        count(*) filter (
+            where payment_amount <> 0
+              and payment_type_id not in (69, 70, 71, 391, 412, 417, 574, 634, 676)
+        ) as patient_other_type_count
+
+    from patient_payments
+    group by payment_date
+),
+
+insurance_daily as (
+    select
+        check_date::date as payment_date,
+
+        round(coalesce(sum(check_amount::numeric), 0), 2) as insurance_payment_amount,
+
+        round(coalesce(sum(check_amount::numeric) filter (where check_amount > 0), 0), 2)
+            as insurance_income_amount,
+
+        round(coalesce(sum(check_amount::numeric) filter (where check_amount < 0), 0), 2)
+            as insurance_refund_amount,
+
+        count(*) as insurance_payment_count
+
+    from {{ ref('stg_opendental__claimpayment') }}
+    where check_date is not null
+    group by check_date::date
+),
+
+all_dates as (
+    select payment_date from patient_daily
+    union
+    select payment_date from insurance_daily
 ),
 
 daily_agg as (
     select
-        payment_date,
+        d.payment_date,
 
-        -- Raw sums
-        round(sum(payment_amount), 2) as total_payment_amount,
+        round(
+            coalesce(p.patient_payment_amount, 0) + coalesce(i.insurance_payment_amount, 0),
+            2
+        ) as total_payment_amount,
 
-        -- Patient vs insurance using boolean flags from fact_payment
-        round(
-            coalesce(sum(case when is_patient_payment then payment_amount end), 0),
-            2
-        ) as patient_payment_amount,
-        round(
-            coalesce(sum(case when is_insurance_payment then payment_amount end), 0),
-            2
-        ) as insurance_payment_amount,
-        round(
-            coalesce(sum(case when not is_patient_payment and not is_insurance_payment then payment_amount end), 0),
-            2
-        ) as other_payment_amount,
+        coalesce(p.patient_payment_amount, 0)::numeric(18, 2) as patient_payment_amount,
+        coalesce(i.insurance_payment_amount, 0)::numeric(18, 2) as insurance_payment_amount,
+        coalesce(p.patient_other_type_amount, 0)::numeric(18, 2) as other_payment_amount,
 
-        -- Direction-based views
         round(
-            coalesce(sum(case when payment_direction = 'Income' then payment_amount end), 0),
+            coalesce(p.patient_income_amount, 0) + coalesce(i.insurance_income_amount, 0),
             2
         ) as income_amount,
+
         round(
-            coalesce(sum(case when payment_direction = 'Refund' then payment_amount end), 0),
+            coalesce(p.patient_refund_amount, 0) + coalesce(i.insurance_refund_amount, 0),
             2
         ) as refund_amount,
 
-        -- Net (collections minus refunds)
         round(
-            coalesce(sum(case when payment_direction = 'Income' then payment_amount end), 0) +
-            coalesce(sum(case when payment_direction = 'Refund' then payment_amount end), 0),
+            coalesce(p.patient_payment_amount, 0) + coalesce(i.insurance_payment_amount, 0),
             2
         ) as net_collections_amount,
 
-        -- Volumetrics
-        count(*) as payment_count,
-        count(*) filter (where is_patient_payment)   as patient_payment_count,
-        count(*) filter (where is_insurance_payment) as insurance_payment_count,
-        count(*) filter (where not is_patient_payment and not is_insurance_payment) as other_payment_count
+        coalesce(p.patient_payment_count, 0) + coalesce(i.insurance_payment_count, 0)
+            as payment_count,
+        coalesce(p.patient_payment_count, 0) as patient_payment_count,
+        coalesce(i.insurance_payment_count, 0) as insurance_payment_count,
+        coalesce(p.patient_other_type_count, 0) as other_payment_count
 
-    from payments_clean
-    group by payment_date
+    from all_dates d
+    left join patient_daily p on d.payment_date = p.payment_date
+    left join insurance_daily i on d.payment_date = i.payment_date
 ),
 
 final as (
@@ -129,4 +149,3 @@ final as (
 
 select *
 from final
-

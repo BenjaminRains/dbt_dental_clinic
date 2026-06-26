@@ -3,45 +3,44 @@ version: 2
 models:
   - name: mart_daily_payments
     description: >
-      Daily payments KPI aggregated from fact_payment.
-      
-      Provides one row per payment_date with total collections, patient vs insurance
-      breakdown, income vs refund amounts, and counts. Intended to reconcile against
-      daily deposit logs and OpenDental daily payment reports.
+      Daily payments KPI for OpenDental Daily Payments reconciliation.
+
+      Patient collections from stg_opendental__payment (PayDate). Insurance collections from
+      stg_opendental__claimpayment (CheckDate). Validated against OD Daily Payments export
+      2026-06-24 (see validation/kpi/compare/investigate_daily_collections_2026-06-24.sql).
     config:
       materialized: table
       schema: marts
       tags: ['kpi', 'daily', 'revenue_cycle']
     columns:
       - name: payment_date
-        description: "Date of payments (one row per day)."
+        description: "Calendar date: PayDate for patient payments; CheckDate for insurance claim payments."
         tests:
           - not_null
           - unique
       - name: total_payment_amount
-        description: "Sum of all payment_amount for that payment_date."
+        description: "Patient (non-zero PayAmt) plus insurance (CheckAmt) for the date."
       - name: patient_payment_amount
-        description: "Sum of payment_amount where is_patient_payment is true for that date."
+        description: "Sum of payment_amount from stg_opendental__payment where amount <> 0."
       - name: insurance_payment_amount
-        description: "Sum of payment_amount where is_insurance_payment is true for that date."
+        description: "Sum of check_amount from stg_opendental__claimpayment on check_date."
       - name: other_payment_amount
-        description: "Sum of payment_amount for payments that are neither patient nor insurance (Partial, PrePayment, Adjustment, Refund, or unmapped payment_type_id)."
+        description: "Non-zero patient payments whose PayType is not a mapped clinic patient type (69, 70, 71, 391, 412, 417, 574, 634, 676)."
       - name: income_amount
-        description: "Sum of payment_amount where payment_direction = 'Income' for that date."
+        description: "Sum of positive amounts from patient payments and claim checks."
       - name: refund_amount
-        description: "Sum of payment_amount where payment_direction = 'Refund' for that date."
+        description: "Sum of negative amounts from patient payments and claim checks."
       - name: net_collections_amount
-        description: "Net collections for the day: income_amount + refund_amount (refunds are negative)."
+        description: "Daily net collections aligned with OD Daily Payments: patient_payment_amount + insurance_payment_amount."
       - name: payment_count
-        description: "Count of all payment records for that date."
+        description: "Non-zero patient payment count plus insurance claim payment count."
       - name: patient_payment_count
-        description: "Count of payments with is_patient_payment = true."
+        description: "Count of non-zero patient payments on payment_date."
       - name: insurance_payment_count
-        description: "Count of payments with is_insurance_payment = true."
+        description: "Count of claim payments on check_date."
       - name: other_payment_count
-        description: "Count of payments that are neither patient nor insurance. Always payment_count - patient_payment_count - insurance_payment_count."
+        description: "Count of non-zero patient payments with unmapped PayTypes."
       - name: _transformed_at
         description: "When this mart model was last built by dbt."
       - name: _mart_refreshed_at
         description: "When this mart was last refreshed (publish time on clinic RDS)."
-

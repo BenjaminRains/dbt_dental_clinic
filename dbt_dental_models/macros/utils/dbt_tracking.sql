@@ -1,10 +1,19 @@
+{% macro etl_transform_status_relation() %}
+    {{ return(adapter.get_relation(
+        database=target.database,
+        schema='raw',
+        identifier='etl_transform_status'
+    )) }}
+{% endmacro %}
+
 {% macro update_etl_transform_status(status) %}
     {# 
     Macro to update the overall ETL transform status.
     This is called by on-run-start and on-run-end hooks.
+    Skips quietly when raw.etl_transform_status is not provisioned (e.g. clinic RDS).
     #}
     
-    {% if execute %}
+    {% if execute and etl_transform_status_relation() is not none %}
         {% set update_sql %}
             INSERT INTO {{ target.database }}.raw.etl_transform_status (
                 table_name, 
@@ -28,6 +37,8 @@
         
         {% do run_query(update_sql) %}
         {{ log("Updated ETL transform status to: " ~ status, info=true) }}
+    {% elif execute %}
+        {{ log("Skipping ETL transform status update: raw.etl_transform_status not found", info=true) }}
     {% endif %}
 {% endmacro %}
 
@@ -37,7 +48,7 @@
     This is called by on-model-start and on-model-end hooks.
     #}
     
-    {% if execute %}
+    {% if execute and etl_transform_status_relation() is not none %}
         {% set update_sql %}
             INSERT INTO {{ target.database }}.raw.etl_transform_status (
                 table_name, 
@@ -75,6 +86,14 @@
     Useful for incremental models to check if source data has been transformed.
     #}
     
+    {% if etl_transform_status_relation() is none %}
+        {{ return({
+            'status': 'pending',
+            'last_transformed': none,
+            'rows_transformed': 0
+        }) }}
+    {% endif %}
+
     {% set query %}
         SELECT 
             transform_status,

@@ -42,7 +42,14 @@ Build models on **local** Postgres, then copy the **`marts`** schema to clinic R
 mdc dbt run --env local
 ```
 
-Use `--env local`, not `--env clinic`. The `clinic` dbt target points at the RDS hostname and will time out without a tunnel (and `mdc dbt` does not yet have `--tunnel-db` like the API).
+Use `--env local`, not `--env clinic`, unless you use an SSM tunnel. The `clinic` target loads the RDS hostname from `deployment_credentials.json`; without a tunnel that host times out from a laptop. Use:
+
+```powershell
+mdc tunnel clinic-db
+mdc dbt run --env clinic --tunnel-db -- --select mart_daily_payments
+```
+
+`--tunnel-db` points dbt at `127.0.0.1:5433` (same as `mdc api run --tunnel-db`).
 
 ### Step 2 — Start the tunnel (separate terminal)
 

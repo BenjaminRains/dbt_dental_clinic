@@ -440,6 +440,21 @@ export interface DashboardKPIs {
     providers: ProviderKPIs;
 }
 
+/** mart_daily_payments — validated vs OD Daily Payments */
+export interface DailyCollectionsKPI {
+    payment_date: string;
+    net_collections_amount: number;
+    patient_payment_amount: number;
+    insurance_payment_amount: number;
+    payment_count: number;
+    has_data: boolean;
+}
+
+export interface LatestCollectionsDate {
+    payment_date: string | null;
+    has_data: boolean;
+}
+
 // API Query Parameters
 export interface DateRange {
     start_date?: string;

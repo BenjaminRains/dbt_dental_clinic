@@ -4,22 +4,22 @@
 -- Prerequisites:
 --   1. Export OD report CSV to validation/kpi/golden/ (see golden_manifest.example.yml)
 --   2. Enter OD total in the od_total CTE below (from export total row or sum)
---   3. Match date window and filters documented in KPI_VALIDATION_REGISTRY.md
+--   3. Match date and filters documented in KPI_VALIDATION_REGISTRY.md
+--      Golden: golden/daily_payments_06242026_ins_pat_split.csv (2026-06-24)
+--      Mart logic: patient stg_opendental__payment + insurance stg_opendental__claimpayment
 
 WITH params AS (
-    SELECT
-        DATE '2025-07-01' AS date_from,
-        DATE '2026-06-12' AS date_to
+    SELECT DATE '2026-06-24' AS payment_date
 ),
 od_total AS (
     -- Replace with aggregate from golden CSV / golden_manifest.yml
-    SELECT NULL::numeric(18, 2) AS net_collections
+    SELECT 11197.40::numeric(18, 2) AS net_collections
 ),
 mart_total AS (
     SELECT SUM(m.net_collections_amount)::numeric(18, 2) AS net_collections
     FROM marts.mart_daily_payments m
     CROSS JOIN params p
-    WHERE m.payment_date BETWEEN p.date_from AND p.date_to
+    WHERE m.payment_date = p.payment_date
 ),
 comparison AS (
     SELECT
