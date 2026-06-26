@@ -56,6 +56,26 @@ models:
         - Created and updated timestamps are generated at load time, not from source system
         - Investigation needed into why all treatment plan references are orphaned
     
+      relationships:
+        - name: treatment_plan
+          description: Each treatment plan attachment belongs to one treatment plan
+          model: stg_opendental__treatplan
+          field_mapping:
+            - from: treatplan_id
+              to: treatment_plan_id
+          config:
+            severity: warn
+            description: >
+              Expected orphaned records exist for treatment plans before 2023-01-01.
+              These are intentionally excluded from the treatment plan model.
+        
+        - name: treatment_plan_params
+          description: Treatment plan parameters can be defined for the same treatment plan
+          model: stg_opendental__treatplanparam
+          field_mapping:
+            - from: treatplan_id
+              to: treatplan_id
+          type: related_through_parent
     columns:
       # Primary Key
       - name: treatplan_attach_id
@@ -122,24 +142,3 @@ models:
           - not_null
 
     # Relationships with other models
-    meta:
-      relationships:
-        - name: treatment_plan
-          description: Each treatment plan attachment belongs to one treatment plan
-          model: stg_opendental__treatplan
-          field_mapping:
-            - from: treatplan_id
-              to: treatment_plan_id
-          config:
-            severity: warn
-            description: >
-              Expected orphaned records exist for treatment plans before 2023-01-01.
-              These are intentionally excluded from the treatment plan model.
-        
-        - name: treatment_plan_params
-          description: Treatment plan parameters can be defined for the same treatment plan
-          model: stg_opendental__treatplanparam
-          field_mapping:
-            - from: treatplan_id
-              to: treatplan_id
-          type: related_through_parent

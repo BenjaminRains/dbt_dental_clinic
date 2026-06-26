@@ -53,6 +53,18 @@ models:
         - Be aware that metadata timestamps reflect statement creation, not product addition
         - Consider doc_id and late_charge_adj_id for additional context when available
 
+      relationships:
+        - relationship: many_to_one
+          field: statement_id
+          related_to: stg_opendental__statement.statement_id
+        - relationship: many_to_one
+          field: doc_id
+          related_to: stg_opendental__document.document_id
+          severity: warn
+        - relationship: many_to_one
+          field: late_charge_adj_id
+          related_to: stg_opendental__adjustment.adjustment_id
+          severity: warn
     columns:
       # Primary Key
       - name: statement_prod_id
@@ -132,16 +144,3 @@ models:
             severity: warn
             description: "Ensures all statement products are from statements with valid dates"
 
-    meta:
-      relationships:
-        - relationship: many_to_one
-          field: statement_id
-          related_to: stg_opendental__statement.statement_id
-        - relationship: many_to_one
-          field: doc_id
-          related_to: stg_opendental__document.document_id
-          severity: warn
-        - relationship: many_to_one
-          field: late_charge_adj_id
-          related_to: stg_opendental__adjustment.adjustment_id
-          severity: warn

@@ -73,6 +73,25 @@ models:
         - Task notes from before 2023-01-01 are not included
         - Future dates (2025) may indicate data entry issues
 
+      relationships:
+        - relationship: many_to_one
+          field: task_list_id
+          related_to: stg_opendental__tasklist.task_list_id
+          severity: warn
+        - relationship: many_to_one
+          field: key_id
+          related_to: stg_opendental__patient.patient_id
+          severity: warn
+          where: "object_type = 1"
+        - relationship: many_to_one
+          field: from_id
+          related_to: stg_opendental__userod.user_id
+          severity: warn
+        - relationship: many_to_one
+          field: user_id
+          related_to: stg_opendental__userod.user_id
+          severity: warn
+      
     columns:
       # Primary Key
       - name: task_id
@@ -231,23 +250,3 @@ models:
             severity: warn
             description: "Ensures all tasks are from 2023-01-01 onwards as per business requirements"
 
-    meta:
-      relationships:
-        - relationship: many_to_one
-          field: task_list_id
-          related_to: stg_opendental__tasklist.task_list_id
-          severity: warn
-        - relationship: many_to_one
-          field: key_id
-          related_to: stg_opendental__patient.patient_id
-          severity: warn
-          where: "object_type = 1"
-        - relationship: many_to_one
-          field: from_id
-          related_to: stg_opendental__userod.user_id
-          severity: warn
-        - relationship: many_to_one
-          field: user_id
-          related_to: stg_opendental__userod.user_id
-          severity: warn
-      

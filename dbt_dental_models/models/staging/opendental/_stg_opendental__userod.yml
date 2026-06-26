@@ -83,6 +83,17 @@ models:
         - All timestamps are in UTC
         - Contains sensitive security information - handle with appropriate security measures
     
+      business_owners: ["system_administrators", "security_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "real-time"
+      contains_pii: true
+      data_quality_requirements:
+        - "All user records must have valid usernames"
+        - "Users must be associated with valid security groups"
+        - "Employee and provider relationships must be valid when present"
+        - "Security settings must be properly configured"
+        - "All required fields must be non-null"
+        - "User references must be valid"
     columns:
       # Primary Key
       - name: user_id
@@ -255,15 +266,3 @@ models:
               - Edward Karateew (51) - Hidden provider
               And system/unknown users (54, 9280, 9281)
 
-    meta:
-      business_owners: ["system_administrators", "security_team"]
-      technical_owners: ["data_engineering_team"]
-      refresh_frequency: "real-time"
-      contains_pii: true
-      data_quality_requirements:
-        - "All user records must have valid usernames"
-        - "Users must be associated with valid security groups"
-        - "Employee and provider relationships must be valid when present"
-        - "Security settings must be properly configured"
-        - "All required fields must be non-null"
-        - "User references must be valid"

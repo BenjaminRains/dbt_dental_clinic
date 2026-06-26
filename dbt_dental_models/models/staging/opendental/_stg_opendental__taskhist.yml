@@ -81,6 +81,32 @@ models:
         - Date type values: false=No Date, true=Due Date
         - Object type values: 0=None, 1=Patient, 2=Procedure
 
+      relationships:
+        - relationship: many_to_one
+          field: task_id
+          related_to: stg_opendental__task.task_id
+          severity: warn
+        - relationship: many_to_one
+          field: user_hist_id
+          related_to: stg_opendental__userod.user_id
+          severity: warn
+        - relationship: many_to_one
+          field: task_list_id
+          related_to: stg_opendental__tasklist.task_list_id
+          severity: warn
+        - relationship: many_to_one
+          field: key_id
+          related_to: stg_opendental__patient.patient_id
+          severity: warn
+          where: "object_type = 1"
+        - relationship: many_to_one
+          field: from_id
+          related_to: stg_opendental__userod.user_id
+          severity: warn
+        - relationship: many_to_one
+          field: user_id
+          related_to: stg_opendental__userod.user_id
+          severity: warn
     columns:
       # Primary Key
       - name: task_hist_id
@@ -270,30 +296,3 @@ models:
             severity: warn
             description: "Ensures all task history records are from 2023-01-01 onwards as per business requirements"
 
-    meta:
-      relationships:
-        - relationship: many_to_one
-          field: task_id
-          related_to: stg_opendental__task.task_id
-          severity: warn
-        - relationship: many_to_one
-          field: user_hist_id
-          related_to: stg_opendental__userod.user_id
-          severity: warn
-        - relationship: many_to_one
-          field: task_list_id
-          related_to: stg_opendental__tasklist.task_list_id
-          severity: warn
-        - relationship: many_to_one
-          field: key_id
-          related_to: stg_opendental__patient.patient_id
-          severity: warn
-          where: "object_type = 1"
-        - relationship: many_to_one
-          field: from_id
-          related_to: stg_opendental__userod.user_id
-          severity: warn
-        - relationship: many_to_one
-          field: user_id
-          related_to: stg_opendental__userod.user_id
-          severity: warn

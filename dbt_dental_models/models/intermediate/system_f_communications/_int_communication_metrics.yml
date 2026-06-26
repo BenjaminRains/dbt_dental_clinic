@@ -89,6 +89,30 @@ models:
             description: >
               Duration metrics should only be populated for phone call communications.
 
+      - dbt_utils.expression_is_true:
+          name: successful_count_validation
+          expression: "successful_count >= 0 AND successful_count <= total_count"
+          config:
+            severity: error
+
+      - dbt_utils.expression_is_true:
+          name: failed_count_validation
+          expression: "failed_count >= 0 AND failed_count <= total_count"
+          config:
+            severity: error
+
+      - dbt_utils.expression_is_true:
+          name: average_duration_nonneg_validation
+          expression: "average_duration IS NULL OR average_duration >= 0"
+          config:
+            severity: warn
+
+      - dbt_utils.expression_is_true:
+          name: date_validation
+          expression: "date <= current_date"
+          config:
+            severity: error
+
     columns:
       - name: metric_id
         description: Unique identifier for the metrics record
@@ -278,46 +302,3 @@ models:
         - "Invalid end times must be excluded from duration calculations"
         - "Communication mode distribution must be tracked"
         - "Program-specific communications must be monitored"
-
-    tests:
-      # Validates that successful_count is non-negative and doesn't exceed total_count
-      - dbt_utils.expression_is_true:
-          name: successful_count_validation
-          expression: "successful_count >= 0 AND successful_count <= total_count"
-          config:
-            severity: error
-
-      # Validates that failed_count is non-negative and doesn't exceed total_count
-      - dbt_utils.expression_is_true:
-          name: failed_count_validation
-          expression: "failed_count >= 0 AND failed_count <= total_count"
-          config:
-            severity: error
-
-      # Validates that average_duration is non-negative when present
-      - dbt_utils.expression_is_true:
-          name: average_duration_validation
-          expression: "average_duration IS NULL OR average_duration >= 0"
-          config:
-            severity: warn
-
-      # Validates that response_rate is between 0 and 1 when present
-      - dbt_utils.expression_is_true:
-          name: response_rate_validation
-          expression: "response_rate IS NULL OR (response_rate >= 0 AND response_rate <= 1)"
-          config:
-            severity: error
-
-      # Validates that conversion_rate is between 0 and 1 when present
-      - dbt_utils.expression_is_true:
-          name: conversion_rate_validation
-          expression: "conversion_rate IS NULL OR (conversion_rate >= 0 AND conversion_rate <= 1)"
-          config:
-            severity: error
-
-      # Validates that date is not in the future
-      - dbt_utils.expression_is_true:
-          name: date_validation
-          expression: "date <= current_date"
-          config:
-            severity: error

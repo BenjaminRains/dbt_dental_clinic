@@ -70,6 +70,18 @@ models:
         - No associated tasks with orphaned list subscriptions
         - Affects a small number of users (6) and lists (5)
 
+      relationships:
+        - relationship: many_to_one
+          field: user_id
+          related_to: stg_opendental__userod.user_id
+        - relationship: many_to_one
+          field: task_list_id
+          related_to: stg_opendental__tasklist.task_list_id
+          severity: warn
+        - relationship: many_to_one
+          field: task_id
+          related_to: stg_opendental__task.task_id
+          severity: warn
     columns:
       # Primary Key
       - name: task_subscription_id
@@ -123,16 +135,3 @@ models:
             severity: warn
             description: "Ensures subscriptions are for either a task or a list, but not both"
 
-    meta:
-      relationships:
-        - relationship: many_to_one
-          field: user_id
-          related_to: stg_opendental__userod.user_id
-        - relationship: many_to_one
-          field: task_list_id
-          related_to: stg_opendental__tasklist.task_list_id
-          severity: warn
-        - relationship: many_to_one
-          field: task_id
-          related_to: stg_opendental__task.task_id
-          severity: warn

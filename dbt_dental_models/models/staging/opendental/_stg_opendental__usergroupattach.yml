@@ -41,6 +41,17 @@ models:
         - All timestamps are in UTC
         - Contains PII - handle with appropriate security measures
     
+      business_owners: ["system_administrators", "security_team"]
+      technical_owners: ["data_engineering_team"]
+      refresh_frequency: "real-time"
+      contains_pii: true
+      data_quality_requirements:
+        - "All user group assignments must be valid"
+        - "Users must be assigned to at least one group"
+        - "Group assignments must be unique per user"
+        - "All required fields must be non-null"
+        - "User references must be valid"
+        - "Group references must be valid"
     columns:
       # Primary Key
       - name: user_group_attach_id
@@ -102,15 +113,3 @@ models:
             severity: error
             description: "Each user can only be assigned to a specific group once"
 
-    meta:
-      business_owners: ["system_administrators", "security_team"]
-      technical_owners: ["data_engineering_team"]
-      refresh_frequency: "real-time"
-      contains_pii: true
-      data_quality_requirements:
-        - "All user group assignments must be valid"
-        - "Users must be assigned to at least one group"
-        - "Group assignments must be unique per user"
-        - "All required fields must be non-null"
-        - "User references must be valid"
-        - "Group references must be valid"

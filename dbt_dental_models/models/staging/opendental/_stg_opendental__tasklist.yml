@@ -83,6 +83,15 @@ models:
         - Future-dated task subscriptions should be reviewed for validity
         - Missing task list references are more common in completed tasks
 
+      relationships:
+        - relationship: many_to_one
+          field: parent_id
+          related_to: stg_opendental__tasklist.task_list_id
+          severity: warn
+        - relationship: many_to_one
+          field: from_id
+          related_to: stg_opendental__userod.user_id
+          severity: warn
     columns:
       # Primary Key
       - name: task_list_id
@@ -186,13 +195,3 @@ models:
             severity: warn
             description: "Ensures all task lists are from 2023-01-01 onwards as per business requirements"
 
-    meta:
-      relationships:
-        - relationship: many_to_one
-          field: parent_id
-          related_to: stg_opendental__tasklist.task_list_id
-          severity: warn
-        - relationship: many_to_one
-          field: from_id
-          related_to: stg_opendental__userod.user_id
-          severity: warn

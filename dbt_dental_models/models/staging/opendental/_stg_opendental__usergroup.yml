@@ -36,6 +36,14 @@ models:
         - Note that creation and update timestamps are not available in source
         - All timestamps are in UTC
     
+      relationships:
+        - name: users
+          description: "Users can belong to one or more user groups"
+          model: stg_opendental__userod
+          field_mapping:
+            - from: usergroup_id
+              to: usergroup_id
+          type: many_to_many
     columns:
       # Primary Key
       - name: usergroup_id
@@ -72,12 +80,3 @@ models:
           - not_null
 
     # Relationships with other models
-    meta:
-      relationships:
-        - name: users
-          description: "Users can belong to one or more user groups"
-          model: stg_opendental__userod
-          field_mapping:
-            - from: usergroup_id
-              to: usergroup_id
-          type: many_to_many

@@ -38,6 +38,13 @@ models:
         - Consider has_mobile_layout when building mobile interfaces
         - Review auto_check_save_image settings for document management
     
+      relationships:
+        - relationship: one_to_many
+          field: sheet_def_id
+          related_to: stg_opendental__sheet.sheet_def_id
+        - relationship: one_to_many
+          field: sheet_def_id
+          related_to: stg_opendental__sheetfielddef.sheet_def_id
     columns:
       - name: sheet_def_id
         description: "Primary key - unique identifier for each sheet definition (maps to SheetDefNum in OpenDental)"
@@ -169,11 +176,3 @@ models:
           combination_of_columns:
             - sheet_def_id
 
-    meta:
-      relationships:
-        - relationship: one_to_many
-          field: sheet_def_id
-          related_to: stg_opendental__sheet.sheet_def_id
-        - relationship: one_to_many
-          field: sheet_def_id
-          related_to: stg_opendental__sheetfielddef.sheet_def_id

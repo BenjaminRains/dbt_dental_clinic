@@ -76,6 +76,14 @@ models:
         - Most large negative balance statements are regular statements (not receipts/invoices)
         - Only a small percentage of large negative balance statements have insurance estimates
 
+      relationships:
+        - relationship: many_to_one
+          field: patient_id
+          related_to: stg_opendental__patient.patient_id
+        - relationship: many_to_one
+          field: document_id
+          related_to: stg_opendental__document.document_id
+          severity: warn
     columns:
       # Primary Key
       - name: statement_id
@@ -263,12 +271,3 @@ models:
             severity: warn
             description: "Identifies statements with large negative balances (over $10,000) that may need review"
 
-    meta:
-      relationships:
-        - relationship: many_to_one
-          field: patient_id
-          related_to: stg_opendental__patient.patient_id
-        - relationship: many_to_one
-          field: document_id
-          related_to: stg_opendental__document.document_id
-          severity: warn

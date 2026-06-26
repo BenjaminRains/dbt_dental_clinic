@@ -40,6 +40,21 @@ models:
         - Display parameters control what information is shown in treatment plan views
         - Parameters can be customized per treatment plan to control presentation
     
+      relationships:
+        - name: treatment_plan
+          description: Each set of treatment plan parameters belongs to one treatment plan
+          model: stg_opendental__treatplan
+          field_mapping:
+            - from: treatplan_id
+              to: treatment_plan_id
+        
+        - name: treatment_plan_attachments
+          description: A treatment plan can have both parameters and procedure attachments
+          model: stg_opendental__treatplanattach
+          field_mapping:
+            - from: treatplan_id
+              to: treatplan_id
+          type: related_through_parent
     columns:
       # Primary Key
       - name: treatplan_param_id
@@ -123,19 +138,3 @@ models:
           - not_null
 
     # Relationships with other models
-    meta:
-      relationships:
-        - name: treatment_plan
-          description: Each set of treatment plan parameters belongs to one treatment plan
-          model: stg_opendental__treatplan
-          field_mapping:
-            - from: treatplan_id
-              to: treatment_plan_id
-        
-        - name: treatment_plan_attachments
-          description: A treatment plan can have both parameters and procedure attachments
-          model: stg_opendental__treatplanattach
-          field_mapping:
-            - from: treatplan_id
-              to: treatplan_id
-          type: related_through_parent

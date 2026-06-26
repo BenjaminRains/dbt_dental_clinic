@@ -70,6 +70,14 @@ models:
         - Multiple users involved in creating orphaned notes
         - Peak activity in early 2021, declining trend over time
 
+      relationships:
+        - relationship: many_to_one
+          field: task_id
+          related_to: stg_opendental__task.task_id
+          severity: warn
+        - relationship: many_to_one
+          field: user_id
+          related_to: stg_opendental__userod.user_id
     columns:
       # Primary Key
       - name: task_note_id
@@ -139,12 +147,3 @@ models:
             severity: warn
             description: "Ensures all task notes have valid creation dates"
 
-    meta:
-      relationships:
-        - relationship: many_to_one
-          field: task_id
-          related_to: stg_opendental__task.task_id
-          severity: warn
-        - relationship: many_to_one
-          field: user_id
-          related_to: stg_opendental__userod.user_id

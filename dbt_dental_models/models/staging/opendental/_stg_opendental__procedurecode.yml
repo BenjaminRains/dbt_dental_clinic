@@ -127,6 +127,7 @@ models:
       materialized: incremental
       unique_key: procedure_code_id
     
+      tags: ['staging', 'opendental', 'procedure']
     tests:
       - validate_procedure_code_flag:
           column_name: procedure_code
@@ -360,5 +361,3 @@ models:
         tests:
           - not_null
 
-    config:
-      tags: ['staging', 'opendental', 'procedure']

@@ -56,6 +56,25 @@ models:
         - Payment types indicate different processing workflows and should be considered in analysis
         - Negative amounts indicate refunds or adjustments
     
+      relationships:
+        - related_model: stg_opendental__claim
+          description: >
+            While there is no direct foreign key from claim payments to claims in the database schema,
+            claim payments are logically connected to claims through the claim procedures (claimproc) table.
+            A single claim payment can be distributed across multiple claims.
+        
+        - related_model: stg_opendental__claimproc
+          field: claim_payment_id
+          description: >
+            Claim procedures reference claim payments through the claim_payment_id field.
+            Each claim payment can be associated with multiple claim procedures, showing how
+            the payment was allocated across different procedures within a claim.
+        
+        - related_model: stg_opendental__claimtracking
+          description: >
+            Claim tracking entries may reference payment events for a claim, though there is
+            no direct foreign key relationship. The tracking records provide status updates
+            on claims which may include payment information.
     tests:
       - dbt_utils.expression_is_true:
           expression: "case when payment_type_id = 463 then check_amount = 0 else true end"
@@ -220,23 +239,3 @@ models:
           - dbt_utils.expression_is_true:
                expression: ">= 0"
 
-    meta:
-      relationships:
-        - related_model: stg_opendental__claim
-          description: >
-            While there is no direct foreign key from claim payments to claims in the database schema,
-            claim payments are logically connected to claims through the claim procedures (claimproc) table.
-            A single claim payment can be distributed across multiple claims.
-        
-        - related_model: stg_opendental__claimproc
-          field: claim_payment_id
-          description: >
-            Claim procedures reference claim payments through the claim_payment_id field.
-            Each claim payment can be associated with multiple claim procedures, showing how
-            the payment was allocated across different procedures within a claim.
-        
-        - related_model: stg_opendental__claimtracking
-          description: >
-            Claim tracking entries may reference payment events for a claim, though there is
-            no direct foreign key relationship. The tracking records provide status updates
-            on claims which may include payment information.

@@ -47,6 +47,42 @@ models:
         complex procedures or secondary insurance claims. Use in conjunction with claim and
         payment models for complete financial picture.
     
+      relationships:
+        - related_model: stg_opendental__claim
+          field: claim_id
+          description: >
+            Each claim procedure is directly associated with a claim through the claim_id field.
+            Multiple procedures can be included in a single claim (one-to-many relationship).
+            This relationship is critical for understanding claim-level processing and bundling.
+        
+        - related_model: stg_opendental__claimpayment
+          field: claim_payment_id
+          description: >
+            Claim procedures are linked to claim payments through the claim_payment_id field,
+            showing which insurance payment covered specific procedures. This is the key
+            relationship that connects payments to claims and their procedures, enabling
+            accurate financial reconciliation and revenue tracking.
+        
+        - related_model: stg_opendental__claimtracking
+          through_field: claim_id
+          description: >
+            Claim procedures and claim tracking are indirectly related through their
+            common claim_id field. Tracking entries provide status updates for claims
+            that contain these procedures, offering workflow and processing visibility.
+        
+        - related_model: stg_opendental__procedurelog
+          field: procedure_id
+          description: >
+            Links insurance claim procedures to the actual clinical procedures performed,
+            connecting financial processing to clinical work. Essential for understanding
+            what services were provided and how they were reimbursed.
+        
+        - related_model: stg_opendental__patient
+          field: patient_id
+          description: >
+            Every claim procedure is associated with a patient, enabling patient-level
+            financial analysis and insurance processing tracking. Critical for understanding
+            patient financial responsibility and insurance benefits utilization.
     tests:
       - dbt_utils.expression_is_true:
           expression: "insurance_payment_estimate <= fee_billed OR insurance_payment_estimate IS NULL OR fee_billed IS NULL"
@@ -555,40 +591,3 @@ models:
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
         # No tests - allowing NULL values since some records may have missing user information
 
-    meta:
-      relationships:
-        - related_model: stg_opendental__claim
-          field: claim_id
-          description: >
-            Each claim procedure is directly associated with a claim through the claim_id field.
-            Multiple procedures can be included in a single claim (one-to-many relationship).
-            This relationship is critical for understanding claim-level processing and bundling.
-        
-        - related_model: stg_opendental__claimpayment
-          field: claim_payment_id
-          description: >
-            Claim procedures are linked to claim payments through the claim_payment_id field,
-            showing which insurance payment covered specific procedures. This is the key
-            relationship that connects payments to claims and their procedures, enabling
-            accurate financial reconciliation and revenue tracking.
-        
-        - related_model: stg_opendental__claimtracking
-          through_field: claim_id
-          description: >
-            Claim procedures and claim tracking are indirectly related through their
-            common claim_id field. Tracking entries provide status updates for claims
-            that contain these procedures, offering workflow and processing visibility.
-        
-        - related_model: stg_opendental__procedurelog
-          field: procedure_id
-          description: >
-            Links insurance claim procedures to the actual clinical procedures performed,
-            connecting financial processing to clinical work. Essential for understanding
-            what services were provided and how they were reimbursed.
-        
-        - related_model: stg_opendental__patient
-          field: patient_id
-          description: >
-            Every claim procedure is associated with a patient, enabling patient-level
-            financial analysis and insurance processing tracking. Critical for understanding
-            patient financial responsibility and insurance benefits utilization.

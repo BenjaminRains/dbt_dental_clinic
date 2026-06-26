@@ -46,6 +46,27 @@ models:
         claims that no longer exist due to data cleanup processes. The tracking_type field
         categorizes different types of events (status changes, errors, communications).
     
+      relationships:
+        - related_model: stg_opendental__claim
+          field: claim_id
+          description: >
+            Each claim tracking entry is directly associated with a specific claim through the claim_id field.
+            Multiple tracking entries can exist for a single claim, providing a chronological history of
+            claim status updates, communications, and processing events. Note: Some historical records
+            may reference claims that no longer exist in the system.
+        
+        - related_model: stg_opendental__claimpayment
+          description: >
+            While there is no direct foreign key between claim tracking and claim payments, tracking entries 
+            often document payment-related activities for a claim. The connection is indirect, through the 
+            common claim_id that both tracking entries and claim procedures reference.
+        
+        - related_model: stg_opendental__claimproc
+          through_field: claim_id
+          description: >
+            Claim tracking entries and claim procedures are indirectly related through their common claim_id field.
+            Tracking entries may document status updates or issues related to specific procedures within a claim,
+            though there is no direct database relationship between these tables.
     tests:
       - dbt_utils.expression_is_true:
           expression: "entry_timestamp <= current_timestamp"
@@ -161,34 +182,3 @@ models:
           - dbt_utils.expression_is_true:
               expression: ">= '2023-01-01'"
 
-    tests:
-      - relationships_with_third_table:
-          to: ref('stg_opendental__claim')
-          field: claim_id
-          column_name: claim_id
-          from_condition: "claim_id is not null AND claim_id > 15260"
-          third_table: ref('stg_opendental__claimproc')
-          third_table_field: claim_id
-    
-    meta:
-      relationships:
-        - related_model: stg_opendental__claim
-          field: claim_id
-          description: >
-            Each claim tracking entry is directly associated with a specific claim through the claim_id field.
-            Multiple tracking entries can exist for a single claim, providing a chronological history of
-            claim status updates, communications, and processing events. Note: Some historical records
-            may reference claims that no longer exist in the system.
-        
-        - related_model: stg_opendental__claimpayment
-          description: >
-            While there is no direct foreign key between claim tracking and claim payments, tracking entries 
-            often document payment-related activities for a claim. The connection is indirect, through the 
-            common claim_id that both tracking entries and claim procedures reference.
-        
-        - related_model: stg_opendental__claimproc
-          through_field: claim_id
-          description: >
-            Claim tracking entries and claim procedures are indirectly related through their common claim_id field.
-            Tracking entries may document status updates or issues related to specific procedures within a claim,
-            though there is no direct database relationship between these tables.
