@@ -4,6 +4,7 @@ Unit tests for etl_pipeline.config.settings_v2 (Phase 2 pydantic-settings loader
 
 import os
 from pathlib import Path
+from typing import Optional
 
 import pytest
 
@@ -51,6 +52,36 @@ def _test_env_vars(stage: str, *, include_source: bool = True) -> dict[str, str]
             }
         )
     return env
+
+
+def _seed_local_layout(
+    tmp_path: Path,
+    *,
+    include_source: bool = True,
+    extra_etl_lines: Optional[list[str]] = None,
+) -> Path:
+    """Create etl_pipeline/.env_local + dbt_dental_models/.env_local under tmp_path."""
+    etl_dir = tmp_path / "etl_pipeline"
+    dbt_dir = tmp_path / "dbt_dental_models"
+    etl_dir.mkdir(parents=True, exist_ok=True)
+    dbt_dir.mkdir(parents=True, exist_ok=True)
+
+    etl_lines = [
+        f"{k}={v}"
+        for k, v in _test_env_vars("local", include_source=include_source).items()
+        if k != "ETL_ENVIRONMENT" and not k.startswith("POSTGRES_ANALYTICS_")
+    ]
+    if extra_etl_lines:
+        etl_lines.extend(extra_etl_lines)
+    (etl_dir / ".env_local").write_text("\n".join(etl_lines) + "\n", encoding="utf-8")
+
+    dbt_lines = [
+        f"{k}={v}"
+        for k, v in _test_env_vars("local", include_source=include_source).items()
+        if k.startswith("POSTGRES_ANALYTICS_")
+    ]
+    (dbt_dir / ".env_local").write_text("\n".join(dbt_lines) + "\n", encoding="utf-8")
+    return etl_dir
 
 
 @pytest.fixture
@@ -189,17 +220,19 @@ class TestResolveEtlStage:
     @pytest.mark.provider_pattern
     def test_supplemental_glic_from_file_on_local(self, clean_etl_env, monkeypatch, tmp_path):
         """Local stage picks up GLIC_* vars from file when not in typed models."""
-        env_file = tmp_path / ".env_local"
-        lines = [f"{k}={v}" for k, v in _test_env_vars("local").items() if k != "ETL_ENVIRONMENT"]
-        lines.append("GLIC_OPENDENTAL_SOURCE_HOST=glic.example.com")
-        lines.append("GLIC_OPENDENTAL_SOURCE_DB=glic_db")
-        env_file.write_text("\n".join(lines) + "\n", encoding="utf-8")
+        etl_dir = _seed_local_layout(
+            tmp_path,
+            extra_etl_lines=[
+                "GLIC_OPENDENTAL_SOURCE_HOST=glic.example.com",
+                "GLIC_OPENDENTAL_SOURCE_DB=glic_db",
+            ],
+        )
 
         monkeypatch.setenv("ETL_ENVIRONMENT", "local")
         for key, value in _test_env_vars("local").items():
             monkeypatch.setenv(key, value)
 
-        env_dict = load_etl_env_dict(environment="local", config_dir=tmp_path)
+        env_dict = load_etl_env_dict(environment="local", config_dir=etl_dir)
         assert env_dict["GLIC_OPENDENTAL_SOURCE_HOST"] == "glic.example.com"
         assert env_dict["GLIC_OPENDENTAL_SOURCE_DB"] == "glic_db"
 
@@ -295,15 +328,9 @@ class TestResolveEtlStage:
     @pytest.mark.provider_pattern
     def test_blank_opendental_vars_fall_back_to_file(self, clean_etl_env, monkeypatch, tmp_path):
         """Stale blank OPENDENTAL_* vars after api-init must not block etl local load."""
-        env_file = tmp_path / ".env_local"
-        env_file.write_text(
-            "\n".join(
-                f"{k}={v}"
-                for k, v in _test_env_vars("local").items()
-                if k != "ETL_ENVIRONMENT"
-            )
-            + "\nCLINIC_API_KEY=fake-key-from-failed-api-init\n",
-            encoding="utf-8",
+        etl_dir = _seed_local_layout(
+            tmp_path,
+            extra_etl_lines=["CLINIC_API_KEY=fake-key-from-failed-api-init"],
         )
 
         monkeypatch.setenv("ETL_ENVIRONMENT", "local")
@@ -312,19 +339,32 @@ class TestResolveEtlStage:
             if key.startswith("OPENDENTAL_SOURCE_"):
                 monkeypatch.setenv(key, "")
 
-        env_dict = load_etl_env_dict(environment="local", config_dir=tmp_path)
+        env_dict = load_etl_env_dict(environment="local", config_dir=etl_dir)
         assert env_dict["OPENDENTAL_SOURCE_HOST"] == "source.example.com"
 
     @pytest.mark.unit
     @pytest.mark.provider_pattern
     def test_local_load_profile_without_source(self, clean_etl_env, monkeypatch, tmp_path):
         """Phase 3.5: local load profile validates replication + analytics only."""
-        env_file = tmp_path / ".env_local"
+        etl_dir = tmp_path / "etl_pipeline"
+        dbt_dir = tmp_path / "dbt_dental_models"
+        etl_dir.mkdir()
+        dbt_dir.mkdir()
+        env_file = etl_dir / ".env_local"
         env_file.write_text(
             "\n".join(
                 f"{k}={v}"
                 for k, v in _test_env_vars("local", include_source=False).items()
-                if k != "ETL_ENVIRONMENT"
+                if k != "ETL_ENVIRONMENT" and not k.startswith("POSTGRES_ANALYTICS_")
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (dbt_dir / ".env_local").write_text(
+            "\n".join(
+                f"{k}={v}"
+                for k, v in _test_env_vars("local", include_source=False).items()
+                if k.startswith("POSTGRES_ANALYTICS_")
             )
             + "\n",
             encoding="utf-8",
@@ -336,22 +376,76 @@ class TestResolveEtlStage:
 
         settings = load_etl_connection_settings(
             environment="local",
-            config_dir=tmp_path,
+            config_dir=etl_dir,
             profile="load",
         )
         assert settings.profile == ETLProfile.LOAD
         assert settings.source is None
         assert settings.replication.host == "localhost"
 
-        env_dict = load_etl_env_dict(
-            environment="local",
-            config_dir=tmp_path,
-            profile="load",
-        )
+        env_dict = load_etl_env_dict(environment="local", config_dir=etl_dir, profile="load")
         assert env_dict["ETL_PROFILE"] == "load"
         assert "OPENDENTAL_SOURCE_HOST" not in env_dict
         assert env_dict["MYSQL_REPLICATION_DB"] == "repl_db"
         assert env_dict["POSTGRES_ANALYTICS_DB"] == "analytics_db"
+
+    @pytest.mark.unit
+    @pytest.mark.provider_pattern
+    def test_local_analytics_ignores_shell_rds_exports(
+        self, clean_etl_env, monkeypatch, tmp_path
+    ):
+        """Local stage uses dbt .env_local warehouse — not stale clinic shell exports."""
+        etl_dir = tmp_path / "etl_pipeline"
+        dbt_dir = tmp_path / "dbt_dental_models"
+        etl_dir.mkdir()
+        dbt_dir.mkdir()
+        (etl_dir / ".env_local").write_text(
+            "\n".join(
+                f"{k}={v}"
+                for k, v in _test_env_vars("local", include_source=False).items()
+                if k != "ETL_ENVIRONMENT" and not k.startswith("POSTGRES_ANALYTICS_")
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+        (dbt_dir / ".env_local").write_text(
+            "\n".join(
+                [
+                    "POSTGRES_ANALYTICS_HOST=localhost",
+                    "POSTGRES_ANALYTICS_PORT=5432",
+                    "POSTGRES_ANALYTICS_DB=analytics_db",
+                    "POSTGRES_ANALYTICS_SCHEMA=raw",
+                    "POSTGRES_ANALYTICS_USER=analytics_user",
+                    "POSTGRES_ANALYTICS_PASSWORD=local-warehouse-pass",
+                ]
+            )
+            + "\n",
+            encoding="utf-8",
+        )
+
+        monkeypatch.setenv("ETL_ENVIRONMENT", "local")
+        monkeypatch.setenv(
+            "POSTGRES_ANALYTICS_HOST",
+            "dental-clinic-analytics.c6zwscckihl1.us-east-1.rds.amazonaws.com",
+        )
+        monkeypatch.setenv("POSTGRES_ANALYTICS_PORT", "5432")
+        monkeypatch.setenv("POSTGRES_ANALYTICS_DB", "opendental_analytics")
+        monkeypatch.setenv("POSTGRES_ANALYTICS_USER", "analytics_user")
+        monkeypatch.setenv("POSTGRES_ANALYTICS_PASSWORD", "clinic-rds-secret")
+
+        env_dict = load_etl_env_dict(environment="local", config_dir=etl_dir, profile="load")
+
+        assert env_dict["POSTGRES_ANALYTICS_HOST"] == "localhost"
+        assert env_dict["POSTGRES_ANALYTICS_PASSWORD"] == "local-warehouse-pass"
+        analytics = connection_config_dict(
+            load_etl_connection_settings(
+                environment="local",
+                config_dir=etl_dir,
+                profile="load",
+            ),
+            "analytics",
+        )
+        assert analytics["host"] == "localhost"
 
     @pytest.mark.unit
     def test_resolve_etl_profile_defaults(self):
@@ -365,20 +459,11 @@ class TestResolveEtlStage:
     def test_connection_config_dict_source_missing_on_load_profile(
         self, clean_etl_env, monkeypatch, tmp_path
     ):
-        env_file = tmp_path / ".env_local"
-        env_file.write_text(
-            "\n".join(
-                f"{k}={v}"
-                for k, v in _test_env_vars("local", include_source=False).items()
-                if k != "ETL_ENVIRONMENT"
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        etl_dir = _seed_local_layout(tmp_path, include_source=False)
         monkeypatch.setenv("ETL_ENVIRONMENT", "local")
         settings = load_etl_connection_settings(
             environment="local",
-            config_dir=tmp_path,
+            config_dir=etl_dir,
             profile="load",
         )
 
@@ -391,22 +476,13 @@ class TestResolveEtlStage:
         self, clean_etl_env, monkeypatch, tmp_path
     ):
         """Pipeline runtime (FileConfigProvider) always uses profile=full."""
-        env_file = tmp_path / ".env_local"
-        env_file.write_text(
-            "\n".join(
-                f"{k}={v}"
-                for k, v in _test_env_vars("local", include_source=False).items()
-                if k != "ETL_ENVIRONMENT"
-            )
-            + "\n",
-            encoding="utf-8",
-        )
+        etl_dir = _seed_local_layout(tmp_path, include_source=False)
         monkeypatch.setenv("ETL_ENVIRONMENT", "local")
         for key, value in _test_env_vars("local", include_source=False).items():
             monkeypatch.setenv(key, value)
 
         with pytest.raises(ValueError, match="Invalid ETL configuration"):
-            FileConfigProvider(tmp_path, environment="local")
+            FileConfigProvider(etl_dir, environment="local")
 
 
 @pytest.mark.unit

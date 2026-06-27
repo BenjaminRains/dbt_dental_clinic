@@ -70,6 +70,11 @@ from etl_pipeline.core.connections import ConnectionFactory, create_connection_m
 from ..exceptions.database import DatabaseConnectionError, DatabaseQueryError
 from ..exceptions.data import DataExtractionError
 from ..exceptions.configuration import ConfigurationError
+from etl_pipeline.monitoring.procedurelog_drift import (
+    PROCEDURELOG_TABLE,
+    is_procedurelog_table,
+    mysql_lookback_resync_predicate,
+)
 
 # Import method tracking for usage analysis
 scripts_path = os.path.join(os.path.dirname(__file__), '..', '..', 'scripts')
@@ -491,7 +496,66 @@ class PerformanceOptimizations:
         except Exception as e:
             logger.error(f"Error processing incremental batches for {table_name}: {str(e)}")
             return False, 0
-    
+
+    def _sync_procedurelog_lookback_window(self, batch_size: int) -> Tuple[bool, int]:
+        """
+        Re-copy procedurelog rows in the business-date lookback window (ETL-FND-001).
+
+        Captures in-place updates (e.g. TP → Complete) when DateTStamp did not advance.
+        """
+        table_name = PROCEDURELOG_TABLE
+        lookback_where = mysql_lookback_resync_predicate()
+        primary_column = "ProcNum"
+
+        try:
+            start_time = time.time()
+            total_copied = 0
+            batch_num = 0
+            current_cursor = 0
+
+            logger.info(
+                f"ETL-FND-001: procedurelog lookback re-sync — {lookback_where}"
+            )
+
+            while True:
+                batch_num += 1
+                with self.replicator.source_engine.connect() as source_conn:
+                    result = source_conn.execute(
+                        text(
+                            f"SELECT * FROM `{table_name}` "
+                            f"WHERE ({lookback_where}) AND `{primary_column}` > :current_cursor "
+                            f"ORDER BY `{primary_column}` LIMIT {batch_size}"
+                        ),
+                        {"current_cursor": current_cursor},
+                    )
+                    rows = result.fetchall()
+                    columns = result.keys()
+
+                if not rows:
+                    break
+
+                rows_processed = self._execute_bulk_operation(
+                    table_name, columns, rows, "upsert"
+                )
+                if rows_processed == 0:
+                    break
+
+                total_copied += rows_processed
+                column_index = list(columns).index(primary_column)
+                current_cursor = rows[-1][column_index]
+
+                if len(rows) < batch_size:
+                    break
+
+            duration = time.time() - start_time
+            logger.info(
+                f"procedurelog lookback re-sync complete: {total_copied:,} rows in "
+                f"{duration:.2f}s ({batch_num} batches)"
+            )
+            return True, total_copied
+        except Exception as e:
+            logger.error(f"Error in procedurelog lookback re-sync: {str(e)}")
+            return False, 0
 
 
     def _execute_bulk_operation(self, table_name: str, columns: List[str], 
@@ -1400,15 +1464,35 @@ class SimpleMySQLReplicator:
                     logger.error(f"Failed to create table structure for {table_name}")
                     return False, 0
             
-            if metadata['new_records_count'] == 0:
-                logger.info(f"No new records to copy for {table_name} (source already in sync with replication)")
-                return True, 0
-            
-            logger.info(f"Found {metadata['new_records_count']} new records to copy for {table_name}")
-            
-            # Use unified incremental copy method
-            return self._copy_incremental_records(table_name, incremental_columns, 
-                                                metadata['last_processed_value'], batch_size)
+            rows_copied = 0
+            if metadata["new_records_count"] == 0:
+                logger.info(
+                    f"No watermark-advancing records for {table_name}; "
+                    f"proceeding with lookback re-sync if configured"
+                )
+                success = True
+            else:
+                logger.info(
+                    f"Found {metadata['new_records_count']} new records to copy for {table_name}"
+                )
+                success, rows_copied = self._copy_incremental_records(
+                    table_name,
+                    incremental_columns,
+                    metadata["last_processed_value"],
+                    batch_size,
+                )
+                if not success:
+                    return False, 0
+
+            if is_procedurelog_table(table_name):
+                lookback_ok, lookback_rows = (
+                    self.performance_optimizer._sync_procedurelog_lookback_window(batch_size)
+                )
+                if not lookback_ok:
+                    return False, rows_copied
+                rows_copied += lookback_rows
+
+            return True, rows_copied
             
         except Exception as e:
             logger.error(f"Error in unified incremental copy for {table_name}: {str(e)}")
@@ -2095,19 +2179,32 @@ class SimpleMySQLReplicator:
             logger.info(f"Incremental chunked metadata for {table_name}: last_processed={last_processed}, new_records={new_records_count}, strategy={column_strategy}")
             
             if new_records_count == 0:
-                logger.info(f"No new records to copy for {table_name} (source already in sync with replication)")
-                return True, 0
-            
-            # Use smaller chunk size for chunked processing to ensure no records are missed
-            chunk_size = min(batch_size // 2, 5000)  # Use smaller chunks for better precision
-            logger.info(f"Using chunk size {chunk_size} for incremental chunked processing of {table_name}")
-            
-            # Use the chunked incremental copy method
-            success, rows_copied = self._copy_incremental_records_chunked(
-                table_name, incremental_columns, last_processed, chunk_size, primary_incremental_column
-            )
-            
-            if success:
+                logger.info(
+                    f"No watermark-advancing records for {table_name}; "
+                    f"proceeding with lookback re-sync if configured"
+                )
+                rows_copied = 0
+                success = True
+            else:
+                # Use smaller chunk size for chunked processing to ensure no records are missed
+                chunk_size = min(batch_size // 2, 5000)  # Use smaller chunks for better precision
+                logger.info(f"Using chunk size {chunk_size} for incremental chunked processing of {table_name}")
+
+                # Use the chunked incremental copy method
+                success, rows_copied = self._copy_incremental_records_chunked(
+                    table_name, incremental_columns, last_processed, chunk_size, primary_incremental_column
+                )
+
+            if is_procedurelog_table(table_name):
+                lookback_ok, lookback_rows = (
+                    self.performance_optimizer._sync_procedurelog_lookback_window(batch_size)
+                )
+                if not lookback_ok:
+                    return False, rows_copied
+                rows_copied += lookback_rows
+                success = success and lookback_ok
+
+            if success and new_records_count > 0:
                 # Update copy status with the last processed value
                 if primary_incremental_column:
                     self._update_copy_status(table_name, rows_copied, 'success', 
@@ -2116,7 +2213,7 @@ class SimpleMySQLReplicator:
                     self._update_copy_status(table_name, rows_copied, 'success')
                 
                 logger.info(f"Successfully copied {rows_copied:,} records using incremental chunked strategy for {table_name}")
-            else:
+            elif not success:
                 logger.error(f"Failed to copy incremental chunked data for {table_name}")
             
             return success, rows_copied

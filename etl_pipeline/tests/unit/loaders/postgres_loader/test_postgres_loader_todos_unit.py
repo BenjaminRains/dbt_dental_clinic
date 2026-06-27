@@ -92,6 +92,17 @@ class TestPostgresLoaderStrategySelection:
         prep = _load_prep(estimated_rows=2_000_000, estimated_size_mb=300.0)
         assert postgres_loader._select_strategy(prep) == LoadStrategyType.COPY_CSV
 
+    def test_procedurelog_incremental_uses_streaming_upsert(self, postgres_loader):
+        """ETL-FND-001: lookback loads must upsert, not COPY."""
+        prep = _load_prep(
+            table_name="procedurelog",
+            should_truncate=False,
+            force_full=False,
+            estimated_rows=815_286,
+            estimated_size_mb=376.0,
+        )
+        assert postgres_loader._select_strategy(prep) == LoadStrategyType.STREAMING
+
 
 @pytest.mark.unit
 class TestParallelLoadStrategy:

@@ -48,6 +48,10 @@ from sqlalchemy.engine import Engine
 
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.config.logging import get_logger
+from etl_pipeline.monitoring.procedurelog_drift import (
+    is_procedurelog_table,
+    wrap_mysql_incremental_with_lookback,
+)
 
 logger = get_logger(__name__)
 
@@ -1130,6 +1134,14 @@ class PostgresLoader:
         if rows >= self._get_parallel_min_rows() and self._parallel_loading_enabled():
             return LoadStrategyType.PARALLEL
         
+        # ETL-FND-001: lookback OR can re-fetch existing ProcNum rows — COPY cannot upsert.
+        if is_procedurelog_table(load_prep.table_name) and not load_prep.should_truncate:
+            logger.info(
+                "ETL-FND-001: procedurelog incremental load uses streaming upsert "
+                "(lookback re-sync may update existing rows)"
+            )
+            return LoadStrategyType.STREAMING
+
         # Size-based selection: use copy_csv for large tables (>200MB) for best throughput
         if size_mb > 200:
             return LoadStrategyType.COPY_CSV
@@ -1665,7 +1677,11 @@ class PostgresLoader:
         logger.info(f"Analytics load time: {last_analytics_load}")
         logger.info(f"Last primary value: {last_primary_value}")
         logger.info(f"Where clause: {where_clause}")
-        
+
+        if is_procedurelog_table(table_name):
+            where_clause = wrap_mysql_incremental_with_lookback(where_clause)
+            logger.info(f"ETL-FND-001: procedurelog lookback re-sync enabled — WHERE {where_clause}")
+
         return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
     
     def _get_loaded_at_time(self, table_name: str) -> Optional[Any]:

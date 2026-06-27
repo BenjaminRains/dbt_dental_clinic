@@ -170,6 +170,21 @@ def venv_root_from_python(python: Path) -> Path:
     return python.parent.parent
 
 
+def resolve_component_python_script_cmd(
+    python: Path,
+    args: Sequence[str],
+) -> list[str] | None:
+    """
+    Map ``python scripts/foo.py [args]`` to the component venv interpreter.
+
+    Used by ``mdc etl invoke`` / ``mdc etl exec`` so documented script invocations
+    do not get routed through ``etl_pipeline.cli.main``.
+    """
+    if len(args) >= 2 and args[0] in ("python", "python3") and args[1].endswith(".py"):
+        return [str(python), *args[1:]]
+    return None
+
+
 def require_component_python(component: str) -> Path:
     python = discover_component_python(component)
     if python is None:

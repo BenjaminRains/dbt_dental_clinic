@@ -1017,6 +1017,88 @@ def check_schema_drift(config: Optional[str], environment: Optional[str]) -> Non
     )
 
 
+@click.command("check-procedurelog-drift")
+@click.option(
+    "--lookback-days",
+    default=30,
+    show_default=True,
+    type=int,
+    help="Rolling window for complete-production comparison (DateComplete)",
+)
+@click.option(
+    "--warn-only",
+    is_flag=True,
+    help="Report drift but do not fail (exit 0)",
+)
+@click.option("--environment", type=click.Choice(["local", "test", "clinic"]), default=None)
+def check_procedurelog_drift_cmd(
+    lookback_days: int,
+    warn_only: bool,
+    environment: Optional[str],
+) -> None:
+    """Compare MySQL source vs raw.procedurelog complete-production totals (ETL-FND-001)."""
+    from etl_pipeline.monitoring.procedurelog_drift import check_procedurelog_drift
+
+    if lookback_days < 1:
+        click.echo("❌ --lookback-days must be at least 1")
+        raise click.Abort()
+
+    resolved_env = _resolve_environment(environment)
+    _assert_env_consistency(environment, resolved_env)
+
+    procedurelog_drift_detected = False
+    source_rows = 0
+    raw_rows = 0
+    source_fees = 0.0
+    raw_fees = 0.0
+
+    try:
+        settings = get_settings()
+        source_engine = ConnectionFactory.get_source_connection(settings)
+        analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
+        source_db = settings.get_database_config(DatabaseType.SOURCE).get("database", "opendental")
+
+        result = check_procedurelog_drift(
+            source_engine,
+            analytics_engine,
+            source_database=source_db,
+            lookback_days=lookback_days,
+        )
+        source_engine.dispose()
+        analytics_engine.dispose()
+
+        procedurelog_drift_detected = result.drift_detected
+        source_rows = result.source.complete_rows
+        raw_rows = result.raw.complete_rows
+        source_fees = float(result.source.complete_fees)
+        raw_fees = float(result.raw.complete_fees)
+
+        click.echo(result.message)
+        if result.drift_detected:
+            click.echo("❌ procedurelog replica drift detected")
+            if not warn_only:
+                raise click.Abort()
+        else:
+            click.echo("✅ procedurelog replica in sync")
+    except click.Abort:
+        raise
+    except Exception as e:
+        click.echo(f"⚠️ procedurelog drift check failed: {e}")
+        if not warn_only:
+            raise click.Abort()
+
+    _emit_airflow_result(
+        {
+            "procedurelog_drift_detected": procedurelog_drift_detected,
+            "lookback_days": lookback_days,
+            "source_complete_rows": source_rows,
+            "raw_complete_rows": raw_rows,
+            "source_complete_fees": source_fees,
+            "raw_complete_fees": raw_fees,
+        }
+    )
+
+
 @click.command("verify-loads")
 @click.option("--config", "-c", type=click.Path(exists=True), default=None)
 @click.option(
