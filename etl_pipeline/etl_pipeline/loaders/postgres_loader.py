@@ -48,9 +48,13 @@ from sqlalchemy.engine import Engine
 
 from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as ConfigPostgresSchema
 from etl_pipeline.config.logging import get_logger
-from etl_pipeline.monitoring.procedurelog_drift import (
-    is_procedurelog_table,
-    wrap_mysql_incremental_with_lookback,
+from etl_pipeline.monitoring.replica_sync_config import (
+    build_mysql_loader_where_clause,
+    get_loader_incremental_columns,
+    get_replicator_watermark_column,
+    lookback_resync_enabled,
+    should_use_streaming_upsert,
+    wrap_mysql_incremental_with_lookback_config,
 )
 
 logger = get_logger(__name__)
@@ -1134,11 +1138,11 @@ class PostgresLoader:
         if rows >= self._get_parallel_min_rows() and self._parallel_loading_enabled():
             return LoadStrategyType.PARALLEL
         
-        # ETL-FND-001: lookback OR can re-fetch existing ProcNum rows — COPY cannot upsert.
-        if is_procedurelog_table(load_prep.table_name) and not load_prep.should_truncate:
+        # ETL-FND-001 / Phase 2: mutation tables and lookback need upsert, not COPY.
+        if should_use_streaming_upsert(load_prep.table_config, should_truncate=load_prep.should_truncate):
             logger.info(
-                "ETL-FND-001: procedurelog incremental load uses streaming upsert "
-                "(lookback re-sync may update existing rows)"
+                f"{load_prep.table_name}: incremental load uses streaming upsert "
+                f"(in_place_updates or lookback_resync may update existing rows)"
             )
             return LoadStrategyType.STREAMING
 
@@ -1468,7 +1472,10 @@ class PostgresLoader:
         Returns:
             Column name (e.g., 'MedicationNum') or None if not configured
         """
-        primary_column = table_config.get('primary_incremental_column')
+        primary_column = (
+            table_config.get("replicator_watermark_column")
+            or table_config.get("primary_incremental_column")
+        )
         
         # Check if primary column is valid (not null, 'none', or empty)
         if primary_column and primary_column != 'none' and primary_column.strip():
@@ -1530,12 +1537,13 @@ class PostgresLoader:
 
         # ENHANCED: Respect the incremental_strategy configuration
         # Don't override incremental_columns - use what was passed in
-        table_config = self.get_table_config(table_name)
-        primary_incremental_column = table_config.get('primary_incremental_column') if table_config else None
-        
-        # Validate incremental columns against actual replication table schema
-        # This filters out columns that don't exist (e.g., 'SecDateTEntry' vs actual column names)
-        incremental_columns = self._validate_incremental_columns(table_name, incremental_columns)
+        table_config = self.get_table_config(table_name) or {}
+        primary_incremental_column = get_replicator_watermark_column(table_config)
+        loader_columns = get_loader_incremental_columns(table_config)
+        if loader_columns:
+            incremental_columns = self._validate_incremental_columns(table_name, loader_columns)
+        else:
+            incremental_columns = self._validate_incremental_columns(table_name, incremental_columns)
         
         # Validate incremental columns
         if not incremental_columns:
@@ -1598,89 +1606,22 @@ class PostgresLoader:
             logger.info(f"No previous analytics load found for {table_name}, performing full load")
             return f"SELECT * FROM `{replication_db}`.`{table_name}`"
         
-        # ENHANCED: Implement proper multi-column incremental logic based on strategy
-        if incremental_strategy == 'or_logic':
-            # Use OR logic for multiple columns
-            conditions = []
-            for col in incremental_columns:
-                if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col):
-                    # Handle integer primary key columns
-                    conditions.append(f"`{col}` > {last_primary_value}")
-                elif last_analytics_load:
-                    # Handle timestamp columns only if we have a valid analytics load time
-                    conditions.append(f"(`{col}` > '{last_analytics_load}' AND `{col}` != '0001-01-01 00:00:00')")
-                # If no valid analytics load time, skip timestamp conditions
-            where_clause = " OR ".join(conditions) if conditions else "1=1"  # Default to all records if no conditions
-        elif incremental_strategy == 'and_logic':
-            # Use AND logic for multiple columns
-            conditions = []
-            for col in incremental_columns:
-                if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col):
-                    # Handle integer primary key columns
-                    conditions.append(f"`{col}` > {last_primary_value}")
-                elif last_analytics_load:
-                    # Handle timestamp columns only if we have a valid analytics load time
-                    conditions.append(f"(`{col}` > '{last_analytics_load}' AND `{col}` != '0001-01-01 00:00:00')")
-                # If no valid analytics load time, skip timestamp conditions
-            where_clause = " AND ".join(conditions) if conditions else "1=1"  # Default to all records if no conditions
-        elif incremental_strategy == 'single_column':
-            # Use only the primary incremental column
-            if primary_incremental_column and primary_incremental_column in incremental_columns:
-                # Only use primary key predicate if value is numeric
-                def _is_numeric_value(val: object) -> bool:
-                    try:
-                        float(str(val))
-                        return True
-                    except Exception:
-                        return False
-
-                if last_primary_value and self._is_integer_column(table_name, primary_incremental_column) and _is_numeric_value(last_primary_value):
-                    # Handle integer primary key columns
-                    where_clause = f"`{primary_incremental_column}` > {last_primary_value}"
-                elif last_analytics_load:
-                    # Handle timestamp columns only if we have a valid analytics load time
-                    where_clause = f"`{primary_incremental_column}` > '{last_analytics_load}' AND `{primary_incremental_column}` != '0001-01-01 00:00:00'"
-                else:
-                    # No valid conditions, use full load
-                    where_clause = "1=1"
-            else:
-                # Fallback to first column
-                if last_primary_value and self._is_integer_column(table_name, incremental_columns[0]):
-                    where_clause = f"`{incremental_columns[0]}` > {last_primary_value}"
-                elif last_analytics_load:
-                    where_clause = f"`{incremental_columns[0]}` > '{last_analytics_load}' AND `{incremental_columns[0]}` != '0001-01-01 00:00:00'"
-                else:
-                    # No valid conditions, use full load
-                    where_clause = "1=1"
-        else:
-            # Default to OR logic
-            conditions = []
-            for col in incremental_columns:
-                # Only use primary key predicate if value is numeric
-                def _is_numeric_value(val: object) -> bool:
-                    try:
-                        float(str(val))
-                        return True
-                    except Exception:
-                        return False
-
-                if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col) and _is_numeric_value(last_primary_value):
-                    # Handle integer primary key columns
-                    conditions.append(f"`{col}` > {last_primary_value}")
-                elif last_analytics_load:
-                    # Handle timestamp columns only if we have a valid analytics load time
-                    conditions.append(f"(`{col}` > '{last_analytics_load}' AND `{col}` != '0001-01-01 00:00:00')")
-                # If no valid analytics load time, skip timestamp conditions
-            where_clause = " OR ".join(conditions) if conditions else "1=1"  # Default to all records if no conditions
+        # ENHANCED: Build WHERE from tables.yml sync profile (Phase 2)
+        where_clause = build_mysql_loader_where_clause(
+            table_config,
+            last_analytics_load=last_analytics_load,
+            last_primary_value=last_primary_value,
+            is_integer_column=lambda col: self._is_integer_column(table_name, col),
+        )
 
         logger.info(f"Using {incremental_strategy} strategy for {table_name} with columns: {incremental_columns}")
         logger.info(f"Analytics load time: {last_analytics_load}")
         logger.info(f"Last primary value: {last_primary_value}")
         logger.info(f"Where clause: {where_clause}")
 
-        if is_procedurelog_table(table_name):
-            where_clause = wrap_mysql_incremental_with_lookback(where_clause)
-            logger.info(f"ETL-FND-001: procedurelog lookback re-sync enabled — WHERE {where_clause}")
+        if lookback_resync_enabled(table_config):
+            where_clause = wrap_mysql_incremental_with_lookback_config(where_clause, table_config)
+            logger.info(f"lookback re-sync enabled for {table_name} — WHERE {where_clause}")
 
         return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
     
@@ -2153,91 +2094,41 @@ class PostgresLoader:
                     incremental_columns = table_config.get('incremental_columns', []) if table_config else []
                     
                     # Validate incremental columns against actual replication table schema
-                    incremental_columns = self._validate_incremental_columns(table_name, incremental_columns)
+                    incremental_columns = self._validate_incremental_columns(
+                        table_name,
+                        get_loader_incremental_columns(table_config or {}),
+                    )
                     
                     # ENHANCED: Check for actual new records in replication since last analytics load
-                    # Don't rely on replication copy time comparison - check actual data timestamps
                     if incremental_columns and analytics_load_time:
-                        # Get incremental strategy from table configuration
-                        incremental_strategy = table_config.get('incremental_strategy', 'or_logic')
-                        
-                        # FIXED: Check if there are new records in replication since last analytics load
-                        # The issue is that records with timestamps older than analytics_load_time might still be new
-                        # if they weren't in analytics before. We need to check if replication has more records than analytics.
-                        
-                        # First, check if replication has more records than analytics (this catches all new records regardless of timestamp)
-                        replication_count_query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}`"
-                        replication_count = conn.execute(text(replication_count_query)).scalar()
-                    
-                        if replication_count > analytics_row_count:
-                            # Replication has more rows - this is normal incremental scenario
-                            # Only force full load if table was empty (data loss scenario)
-                            # Otherwise, use incremental load to add new rows
-                            if force_full_load_recommended:
-                                logger.info(f"Replication has {replication_count} rows vs analytics {analytics_row_count} rows for {table_name}, but analytics table is empty with timestamp - forcing full load")
-                            else:
-                                logger.info(f"Replication has {replication_count} rows vs analytics {analytics_row_count} rows for {table_name}, will use incremental load")
-                            return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
-                        
-                        # If row counts are the same, check for records with timestamps newer than analytics load time
-                        # FIXED: Handle integer primary keys correctly
-                        primary_incremental_column = table_config.get('primary_incremental_column')
                         last_primary_value = self._get_last_primary_value(table_name)
 
-                        def _is_numeric_value(val: object) -> bool:
-                            """Only use non-datetime values for integer column comparisons."""
-                            if val is None:
-                                return False
-                            s = str(val).strip()
-                            if not s:
-                                return False
-                            # Reject datetime-like strings (e.g. '2026-01-07 23:31:54')
-                            if '-' in s and (':' in s or len(s) == 10):
-                                return False
-                            try:
-                                float(s)
-                                return True
-                            except ValueError:
-                                return False
+                        where_clause = build_mysql_loader_where_clause(
+                            table_config or {},
+                            last_analytics_load=analytics_load_time,
+                            last_primary_value=last_primary_value,
+                            is_integer_column=lambda col: self._is_integer_column(
+                                table_name, col
+                            ),
+                        )
+                        if lookback_resync_enabled(table_config or {}):
+                            where_clause = wrap_mysql_incremental_with_lookback_config(
+                                where_clause, table_config
+                            )
 
-                        conditions = []
-                        for col in incremental_columns:
-                            if col == primary_incremental_column and last_primary_value and self._is_integer_column(table_name, col) and _is_numeric_value(last_primary_value):
-                                # Handle integer primary key columns - only with numeric values
-                                conditions.append(f"`{col}` > {last_primary_value}")
-                            else:
-                                # Handle timestamp columns
-                                conditions.append(f"(`{col}` > '{analytics_load_time}' AND `{col}` != '0001-01-01 00:00:00')")
-                        
-                        # Use strategy-based logic
-                        if incremental_strategy == 'or_logic':
-                            where_clause = " OR ".join(conditions)
-                        elif incremental_strategy == 'and_logic':
-                            where_clause = " AND ".join(conditions)
-                        elif incremental_strategy == 'single_column':
-                            # Use only the primary incremental column
-                            if primary_incremental_column and primary_incremental_column in incremental_columns:
-                                if last_primary_value and self._is_integer_column(table_name, primary_incremental_column) and _is_numeric_value(last_primary_value):
-                                    where_clause = f"`{primary_incremental_column}` > {last_primary_value}"
-                                else:
-                                    where_clause = f"(`{primary_incremental_column}` > '{analytics_load_time}' AND `{primary_incremental_column}` != '0001-01-01 00:00:00')"
-                            else:
-                                # Fallback to first column
-                                if last_primary_value and self._is_integer_column(table_name, incremental_columns[0]) and _is_numeric_value(last_primary_value):
-                                    where_clause = f"`{incremental_columns[0]}` > {last_primary_value}"
-                                else:
-                                    where_clause = f"(`{incremental_columns[0]}` > '{analytics_load_time}' AND `{incremental_columns[0]}` != '0001-01-01 00:00:00')"
-                        else:
-                            # Default to OR logic
-                            where_clause = " OR ".join(conditions)
-                        
-                        new_records_query = f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}` WHERE {where_clause}"
+                        new_records_query = (
+                            f"SELECT COUNT(*) FROM `{replication_db}`.`{table_name}` "
+                            f"WHERE {where_clause}"
+                        )
                         
                         result = conn.execute(text(new_records_query))
                         new_records_count = result.scalar()
                         
                         if new_records_count > 0:
-                            logger.info(f"Found {new_records_count} new records in replication for {table_name} since last analytics load")
+                            logger.info(
+                                f"Found {new_records_count} new records in replication "
+                                f"for {table_name} since last analytics load"
+                            )
                             return True, str(replication_copy_time), str(analytics_load_time), force_full_load_recommended
                         else:
                             logger.info(

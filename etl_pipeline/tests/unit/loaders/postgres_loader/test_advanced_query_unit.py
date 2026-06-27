@@ -467,19 +467,29 @@ class TestPostgresLoaderAdvancedQuery:
         loader._get_last_primary_value = lambda t: None
         loader._validate_incremental_columns = lambda t, cols: cols
         loader.get_table_config = lambda t: {
+            "sync_profile": "in_place_updates",
             "primary_incremental_column": "DateTStamp",
-            "incremental_strategy": "and_logic",
+            "replicator_watermark_column": "DateTStamp",
+            "incremental_columns": ["ProcNum", "DateTStamp"],
+            "incremental_strategy": "or_logic",
+            "lookback_resync": {
+                "enabled": True,
+                "window_days": 30,
+                "predicate_columns": ["DateComplete", "ProcDate"],
+            },
         }
 
         result = loader._build_enhanced_load_query(
             "procedurelog",
-            ["DateTStamp", "SecDateTEdit"],
+            ["ProcNum", "DateTStamp"],
             primary_column=None,
             force_full=False,
-            incremental_strategy="and_logic",
+            incremental_strategy="or_logic",
         )
 
         assert "procedurelog" in result
-        assert "DateComplete >=" in result
-        assert "ProcDate >=" in result
+        assert "ProcNum" not in result
+        assert "DateTStamp" in result
+        assert "`DateComplete` >=" in result
+        assert "`ProcDate` >=" in result
         assert "INTERVAL 30 DAY" in result

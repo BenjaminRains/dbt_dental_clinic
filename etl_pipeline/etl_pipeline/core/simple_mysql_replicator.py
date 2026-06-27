@@ -70,10 +70,11 @@ from etl_pipeline.core.connections import ConnectionFactory, create_connection_m
 from ..exceptions.database import DatabaseConnectionError, DatabaseQueryError
 from ..exceptions.data import DataExtractionError
 from ..exceptions.configuration import ConfigurationError
-from etl_pipeline.monitoring.procedurelog_drift import (
-    PROCEDURELOG_TABLE,
-    is_procedurelog_table,
-    mysql_lookback_resync_predicate,
+from etl_pipeline.monitoring.replica_sync_config import (
+    build_mysql_lookback_predicate,
+    get_replicator_watermark_column,
+    lookback_resync_enabled,
+    resolve_watermark_cursor,
 )
 
 # Import method tracking for usage analysis
@@ -497,15 +498,22 @@ class PerformanceOptimizations:
             logger.error(f"Error processing incremental batches for {table_name}: {str(e)}")
             return False, 0
 
-    def _sync_procedurelog_lookback_window(self, batch_size: int) -> Tuple[bool, int]:
+    def _sync_lookback_resync_window(
+        self, table_name: str, config: Dict, batch_size: int
+    ) -> Tuple[bool, int]:
         """
-        Re-copy procedurelog rows in the business-date lookback window (ETL-FND-001).
+        Re-copy rows in the configured business-date lookback window.
 
-        Captures in-place updates (e.g. TP → Complete) when DateTStamp did not advance.
+        Captures in-place updates when the timestamp watermark did not advance.
         """
-        table_name = PROCEDURELOG_TABLE
-        lookback_where = mysql_lookback_resync_predicate()
-        primary_column = "ProcNum"
+        lookback_where = build_mysql_lookback_predicate(config)
+        if not lookback_where:
+            return True, 0
+
+        primary_key = config.get("primary_key")
+        if not primary_key:
+            logger.warning(f"lookback_resync skipped for {table_name}: no primary_key in config")
+            return True, 0
 
         try:
             start_time = time.time()
@@ -514,7 +522,7 @@ class PerformanceOptimizations:
             current_cursor = 0
 
             logger.info(
-                f"ETL-FND-001: procedurelog lookback re-sync — {lookback_where}"
+                f"lookback re-sync for {table_name} — {lookback_where}"
             )
 
             while True:
@@ -523,8 +531,8 @@ class PerformanceOptimizations:
                     result = source_conn.execute(
                         text(
                             f"SELECT * FROM `{table_name}` "
-                            f"WHERE ({lookback_where}) AND `{primary_column}` > :current_cursor "
-                            f"ORDER BY `{primary_column}` LIMIT {batch_size}"
+                            f"WHERE ({lookback_where}) AND `{primary_key}` > :current_cursor "
+                            f"ORDER BY `{primary_key}` LIMIT {batch_size}"
                         ),
                         {"current_cursor": current_cursor},
                     )
@@ -541,7 +549,7 @@ class PerformanceOptimizations:
                     break
 
                 total_copied += rows_processed
-                column_index = list(columns).index(primary_column)
+                column_index = list(columns).index(primary_key)
                 current_cursor = rows[-1][column_index]
 
                 if len(rows) < batch_size:
@@ -549,12 +557,12 @@ class PerformanceOptimizations:
 
             duration = time.time() - start_time
             logger.info(
-                f"procedurelog lookback re-sync complete: {total_copied:,} rows in "
+                f"{table_name} lookback re-sync complete: {total_copied:,} rows in "
                 f"{duration:.2f}s ({batch_num} batches)"
             )
             return True, total_copied
         except Exception as e:
-            logger.error(f"Error in procedurelog lookback re-sync: {str(e)}")
+            logger.error(f"Error in {table_name} lookback re-sync: {str(e)}")
             return False, 0
 
 
@@ -1484,9 +1492,11 @@ class SimpleMySQLReplicator:
                 if not success:
                     return False, 0
 
-            if is_procedurelog_table(table_name):
+            if lookback_resync_enabled(config):
                 lookback_ok, lookback_rows = (
-                    self.performance_optimizer._sync_procedurelog_lookback_window(batch_size)
+                    self.performance_optimizer._sync_lookback_resync_window(
+                        table_name, config, batch_size
+                    )
                 )
                 if not lookback_ok:
                     return False, rows_copied
@@ -1527,7 +1537,7 @@ class SimpleMySQLReplicator:
             # Ensure config is a dictionary
             pass
         
-        primary_column = config.get('primary_incremental_column')
+        primary_column = config.get('replicator_watermark_column') or config.get('primary_incremental_column')
         
         # Check if primary column is valid (not null, 'none', or empty)
         if primary_column and primary_column != 'none' and primary_column.strip():
@@ -1671,8 +1681,10 @@ class SimpleMySQLReplicator:
 
 
     
-    def _get_last_copy_primary_value(self, table_name: str) -> Optional[str]:
-        """Get last copy primary column value for incremental loading."""
+    def _get_last_copy_watermark(
+        self, table_name: str, expected_watermark: Optional[str] = None
+    ) -> Optional[str]:
+        """Get last replication watermark, ignoring stale cursor after column migration."""
         try:
             with self.target_engine.connect() as conn:
                 result = conn.execute(text("""
@@ -1683,16 +1695,42 @@ class SimpleMySQLReplicator:
                     ORDER BY last_copied DESC
                     LIMIT 1
                 """), {"table_name": table_name}).fetchone()
-                
-                if result:
-                    last_primary_value, primary_column_name = result
-                    logger.debug(f"Retrieved last copy primary value for {table_name}: {last_primary_value} (column: {primary_column_name})")
-                    return last_primary_value
-                return None
-                
+
+                if not result:
+                    return None
+
+                last_primary_value, primary_column_name = result
+                resolved = resolve_watermark_cursor(
+                    table_name,
+                    last_primary_value,
+                    primary_column_name,
+                    expected_watermark,
+                )
+                if (
+                    last_primary_value
+                    and primary_column_name
+                    and expected_watermark
+                    and primary_column_name != expected_watermark
+                ):
+                    logger.info(
+                        f"{table_name}: watermark column changed "
+                        f"({primary_column_name} → {expected_watermark}), resetting cursor"
+                    )
+                elif resolved:
+                    logger.debug(
+                        f"Retrieved last copy watermark for {table_name}: "
+                        f"{resolved} (column: {primary_column_name})"
+                    )
+                return resolved
         except Exception as e:
-            logger.error(f"Error getting last copy primary value for {table_name}: {str(e)}")
+            logger.error(f"Error getting last copy watermark for {table_name}: {str(e)}")
             return None
+
+    def _get_last_copy_primary_value(self, table_name: str) -> Optional[str]:
+        """Get last copy primary column value for incremental loading."""
+        config = self.table_configs.get(table_name, {})
+        expected = get_replicator_watermark_column(config)
+        return self._get_last_copy_watermark(table_name, expected)
 
     # REMOVED: _get_last_processed_value() - Replaced by unified _get_incremental_metadata()
     # REMOVED: _get_last_processed_value_max() - Replaced by unified _get_incremental_metadata()
@@ -1992,7 +2030,9 @@ class SimpleMySQLReplicator:
             column_strategy = 'single' if len(incremental_columns) == 1 else 'multi'
             
             # Get last processed value from tracking table
-            last_processed = self._get_last_copy_primary_value(table_name)
+            config = self.table_configs.get(table_name, {})
+            expected_watermark = get_replicator_watermark_column(config)
+            last_processed = self._get_last_copy_watermark(table_name, expected_watermark)
             
             # Debug logging
             logger.debug(f"DEBUG: Last processed value for {table_name}: {last_processed}")
@@ -2195,9 +2235,11 @@ class SimpleMySQLReplicator:
                     table_name, incremental_columns, last_processed, chunk_size, primary_incremental_column
                 )
 
-            if is_procedurelog_table(table_name):
+            if lookback_resync_enabled(config):
                 lookback_ok, lookback_rows = (
-                    self.performance_optimizer._sync_procedurelog_lookback_window(batch_size)
+                    self.performance_optimizer._sync_lookback_resync_window(
+                        table_name, config, batch_size
+                    )
                 )
                 if not lookback_ok:
                     return False, rows_copied
