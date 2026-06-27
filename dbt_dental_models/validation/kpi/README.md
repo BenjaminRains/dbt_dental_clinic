@@ -71,6 +71,16 @@ flowchart LR
 | **3. Mart → OD** | `compare_*_collections.sql` + `FIELD_MAP.md` | **End-to-end:** `opendental_analytics.marts.mart_*` matches what the OD report shows the practice. This is the KPI sign-off. |
 | **4. API / frontend** | `compare/compare_daily_collections_api.sql` + optional `api/tests/kpi/verify_daily_collections.py` | Clinic app reads mart via API with **no extra logic**. SQL must match mart; UI must show the same numbers. |
 
+**Automated Layer 0 (Tier A):**
+
+```powershell
+mdc etl invoke --env local -- check-replica-drift --tier A --warn-only
+mdc etl invoke --env local -- check-replica-drift --check L0-PAY-001 --warn-only
+mdc etl invoke --env local -- check-procedurelog-drift --warn-only   # L0-PROC-001 alias
+```
+
+Registry: `etl_pipeline/config/replica_drift_checks.yml` — checks `L0-PROC-001` … `L0-ADJ-001`.
+
 **Platform findings** (pipeline defects affecting multiple KPIs): [docs/findings/](../../../docs/findings/README.md)
 
 

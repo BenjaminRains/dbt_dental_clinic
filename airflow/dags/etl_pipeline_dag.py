@@ -448,6 +448,41 @@ def process_tiny_tables(**context):
 # Task Functions - Verification & Reporting
 # ============================================================================
 
+def run_layer0_replica_checks(**context):
+    """
+    Layer 0: MySQL source vs raw aggregate drift checks (Phase 3 Tier A).
+
+    Runs via mdc etl invoke check-replica-drift --tier A --warn-only during rollout.
+    """
+    logging.info("Running Layer 0 replica drift checks (Tier A)")
+
+    result = run_mdc_etl_invoke(
+        ENVIRONMENT,
+        ['check-replica-drift', '--tier', 'A', '--warn-only'],
+        project_root=PROJECT_ROOT,
+        timeout_seconds=600,
+    )
+
+    ti = context['task_instance']
+    ti.xcom_push(key='replica_drift_detected', value=result.get('replica_drift_detected', False))
+    ti.xcom_push(key='layer0_checks_run', value=result.get('checks_run', 0))
+    ti.xcom_push(key='layer0_checks_failed', value=result.get('checks_failed', 0))
+
+    if result.get('replica_drift_detected'):
+        logging.warning(
+            "⚠️  Layer 0 replica drift detected (%s/%s checks failed)",
+            result.get('checks_failed', 0),
+            result.get('checks_run', 0),
+        )
+    else:
+        logging.info(
+            "✅ Layer 0 replica checks passed (%s check(s))",
+            result.get('checks_run', 0),
+        )
+
+    return True
+
+
 def verify_loads(**context):
     """
     Verify that data was loaded successfully via mdc etl invoke verify-loads.
@@ -814,6 +849,26 @@ with dag:
         large_tables >> medium_tables >> small_tables >> tiny_tables
     
     # =======================================================================
+    # LAYER 0 REPLICA CHECKS (post-ETL, pre-reporting)
+    # =======================================================================
+    
+    with TaskGroup(group_id='layer0_replica_checks', tooltip='MySQL vs raw aggregate drift (Tier A)') as layer0_group:
+        layer0_checks = PythonOperator(
+            task_id='check_replica_drift_tier_a',
+            python_callable=run_layer0_replica_checks,
+            trigger_rule=TriggerRule.ALL_DONE,
+            execution_timeout=timedelta(minutes=15),
+            doc_md="""
+            ### Layer 0 Replica Drift Checks
+            
+            Compares MySQL source vs raw.* aggregate totals over a 30-day window
+            for procedurelog, payment, claimproc, and adjustment.
+            
+            Initial rollout uses `--warn-only`; flip to hard-fail per check after baseline green.
+            """,
+        )
+    
+    # =======================================================================
     # VERIFICATION & REPORTING TASKS
     # =======================================================================
     
@@ -942,7 +997,7 @@ with dag:
     # DAG FLOW
     # =======================================================================
 
-    guard_business_hours_task >> refresh_schema_task >> validation_group >> etl_group >> reporting_group
+    guard_business_hours_task >> refresh_schema_task >> validation_group >> etl_group >> layer0_group >> reporting_group
 
 
 # ============================================================================

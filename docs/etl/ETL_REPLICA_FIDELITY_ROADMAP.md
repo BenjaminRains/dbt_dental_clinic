@@ -14,7 +14,7 @@
 | --- | --- | --- |
 | **1** — Schema analyzer + `tables.yml` v4.1 | **Done** (commit `558e50d7`) | `procedurelog`: `DateTStamp` watermark, `or_logic`, 30-day lookback in config |
 | **2** — Replicator + loader alignment | **Done** (commit `6cc4e6f9`) | Incremental ~10,632 rows (~2s replicate + ~1.2 min load) vs ~815k rows pre-fix; drift check PASS; KPI 2026-06-10 PASS (28 codes, 140 / $15,239) |
-| **3** — Layer 0 checks (payment, claimproc, adjustment) | Not started | — |
+| **3** — Layer 0 checks (payment, claimproc, adjustment, claim, paysplit) | **Done** (local) | Tier A — 6 checks PASS; lookback on claim/paysplit; phantom purge scripts |
 | **4** — Sunday scoped full refresh | Not started | — |
 | **1.5** — Spot-edit timestamp matrix | Not started | Required before trusting config clinic-wide |
 
@@ -164,6 +164,9 @@ Unit test: for each mutation table in fixture `tables.yml`, assert replicator an
 
 ## Phase 3 — Platform Layer 0 checks
 
+**Status:** **In progress** (2026-06-27) — Tier A config + `replica_aggregate_drift.py` +
+`check-replica-drift` CLI + Airflow `layer0_replica_checks` task group (`--warn-only` rollout).
+
 **Purpose:** Catch MySQL → `raw` drift **before** KPI golden compares (see [kpi/README Layer 0](../../dbt_dental_models/validation/kpi/README.md)).
 
 **Effort:** 3–5 days for Tier A + Airflow wiring; Tier B/C incremental
@@ -182,7 +185,9 @@ Unit test: for each mutation table in fixture `tables.yml`, assert replicator an
 | --- | --- | --- | --- |
 | `L0-PROC-001` | `procedurelog` | `ProcStatus=2`, sum fees by `DateComplete` | 30 days — **done** (`check_procedurelog_drift`) |
 | `L0-PAY-001` | `payment` | sum `PayAmt` by `PayDate` | 30 days |
-| `L0-CLM-001` | `claimproc` | ins pay + writeoff totals by `DateCP` | 30 days |
+| `L0-CLM-001` | `claimproc` | ins pay + writeoff totals by `DateCP` | 30 days — **done** (local) |
+| `L0-CLAIM-001` | `claim` | `ClaimFee` + `InsPayAmt` by `DateService` | 30 days — **done** (local) |
+| `L0-PAY-002` | `paysplit` | sum `SplitAmt` by `DatePay` | 30 days — **done** (local) |
 | `L0-ADJ-001` | `adjustment` | sum `AdjAmt` by `AdjDate` | 30 days |
 | `L0-PAT-001` | `patient` | optional: count active patients (low churn metric) | snapshot |
 
@@ -209,9 +214,10 @@ Add task group **`layer0_replica_checks`** in `etl_pipeline_dag.py`:
 
 ### 3.4 Layer 0 registry
 
-Maintain `etl_pipeline/config/replica_drift_checks.yml` (or section in `pipeline.yml`):
+Maintain `etl_pipeline/config/replica_drift_checks.yml`:
 
-- check id, table, mysql query template, postgres query template, tolerance, enabled
+- check id, table, MySQL/Postgres WHERE + amount expressions, tolerance, enabled
+- `L0-PROC-001` delegates to `procedurelog_drift.py` (same query as legacy CLI)
 
 ---
 

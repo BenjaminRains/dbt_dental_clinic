@@ -1,0 +1,132 @@
+# Layer 0 replica aggregate drift checks (Phase 3)
+# MySQL source vs raw.* over a rolling business-date window.
+# Run: mdc etl invoke --env local -- check-replica-drift --tier A
+#
+# Phantom rows (deleted in OpenDental, still in raw): OK to DELETE from raw only — never from source.
+# Broader mitigation: Sunday full refresh (Phase 4) or CDC delete capture (Phase 5).
+
+checks:
+  - id: L0-PROC-001
+    tier: A
+    table: procedurelog
+    enabled: true
+    description: Complete production rows and fees by DateComplete
+    delegate: procedurelog
+    lookback_days: 30
+    amount_tolerance: 0.01
+
+  - id: L0-PAY-001
+    tier: A
+    table: payment
+    enabled: true
+    description: Patient payment rows and PayAmt totals by PayDate (nonzero headers only, matches daily-payments KPI)
+    lookback_days: 30
+    amount_tolerance: 0.01
+    source:
+      where: |
+        PayDate >= DATE_SUB(CURDATE(), INTERVAL :lookback_days DAY)
+        AND PayDate > '0001-01-01'
+        AND PayAmt <> 0
+      amounts:
+        pay_amount: COALESCE(ROUND(SUM(PayAmt), 2), 0)
+    raw:
+      where: |
+        "PayDate"::date >= CURRENT_DATE - make_interval(days => :lookback_days)
+        AND "PayDate"::date > '0001-01-01'::date
+        AND "PayAmt" <> 0
+      amounts:
+        pay_amount: COALESCE(ROUND(SUM("PayAmt")::numeric, 2), 0)
+
+  - id: L0-CLM-001
+    tier: A
+    table: claimproc
+    enabled: true
+    description: Claim procedure rows and insurance pay + writeoff by DateCP (nonzero amounts only for row count)
+    lookback_days: 30
+    amount_tolerance: 0.01
+    source:
+      where: |
+        DateCP >= DATE_SUB(CURDATE(), INTERVAL :lookback_days DAY)
+        AND DateCP > '0001-01-01'
+        AND (InsPayAmt <> 0 OR WriteOff <> 0)
+      amounts:
+        ins_pay_amount: COALESCE(ROUND(SUM(InsPayAmt), 2), 0)
+        writeoff_amount: COALESCE(ROUND(SUM(WriteOff), 2), 0)
+        total_amount: COALESCE(ROUND(SUM(InsPayAmt + WriteOff), 2), 0)
+    raw:
+      where: |
+        "DateCP"::date >= CURRENT_DATE - make_interval(days => :lookback_days)
+        AND "DateCP"::date > '0001-01-01'::date
+        AND ("InsPayAmt" <> 0 OR "WriteOff" <> 0)
+      amounts:
+        ins_pay_amount: COALESCE(ROUND(SUM("InsPayAmt")::numeric, 2), 0)
+        writeoff_amount: COALESCE(ROUND(SUM("WriteOff")::numeric, 2), 0)
+        total_amount: COALESCE(ROUND(SUM("InsPayAmt" + "WriteOff")::numeric, 2), 0)
+
+  - id: L0-ADJ-001
+    tier: A
+    table: adjustment
+    enabled: true
+    description: Adjustment rows and AdjAmt totals by AdjDate
+    lookback_days: 30
+    amount_tolerance: 0.01
+    source:
+      where: |
+        AdjDate >= DATE_SUB(CURDATE(), INTERVAL :lookback_days DAY)
+        AND AdjDate > '0001-01-01'
+      amounts:
+        adj_amount: COALESCE(ROUND(SUM(AdjAmt), 2), 0)
+    raw:
+      where: |
+        "AdjDate"::date >= CURRENT_DATE - make_interval(days => :lookback_days)
+        AND "AdjDate"::date > '0001-01-01'::date
+      amounts:
+        adj_amount: COALESCE(ROUND(SUM("AdjAmt")::numeric, 2), 0)
+
+  - id: L0-CLAIM-001
+    tier: A
+    table: claim
+    enabled: true
+    description: Claim header rows and ClaimFee / InsPayAmt by DateService (nonzero amounts only for row count)
+    lookback_days: 30
+    amount_tolerance: 0.01
+    source:
+      where: |
+        DateService >= DATE_SUB(CURDATE(), INTERVAL :lookback_days DAY)
+        AND DateService > '0001-01-01'
+        AND (ClaimFee <> 0 OR InsPayAmt <> 0 OR WriteOff <> 0)
+      amounts:
+        claim_fee: COALESCE(ROUND(SUM(ClaimFee), 2), 0)
+        ins_pay_amount: COALESCE(ROUND(SUM(InsPayAmt), 2), 0)
+        total_amount: COALESCE(ROUND(SUM(ClaimFee + InsPayAmt + WriteOff), 2), 0)
+    raw:
+      where: |
+        "DateService"::date >= CURRENT_DATE - make_interval(days => :lookback_days)
+        AND "DateService"::date > '0001-01-01'::date
+        AND ("ClaimFee" <> 0 OR "InsPayAmt" <> 0 OR "WriteOff" <> 0)
+      amounts:
+        claim_fee: COALESCE(ROUND(SUM("ClaimFee")::numeric, 2), 0)
+        ins_pay_amount: COALESCE(ROUND(SUM("InsPayAmt")::numeric, 2), 0)
+        total_amount: COALESCE(ROUND(SUM("ClaimFee" + "InsPayAmt" + "WriteOff")::numeric, 2), 0)
+
+  - id: L0-PAY-002
+    tier: A
+    table: paysplit
+    enabled: true
+    description: Payment split rows and SplitAmt totals by DatePay (nonzero splits only)
+    lookback_days: 30
+    amount_tolerance: 0.01
+    source:
+      where: |
+        DatePay >= DATE_SUB(CURDATE(), INTERVAL :lookback_days DAY)
+        AND DatePay > '0001-01-01'
+        AND SplitAmt <> 0
+      amounts:
+        split_amount: COALESCE(ROUND(SUM(SplitAmt), 2), 0)
+    raw:
+      where: |
+        "DatePay"::date >= CURRENT_DATE - make_interval(days => :lookback_days)
+        AND "DatePay"::date > '0001-01-01'::date
+        AND "SplitAmt" <> 0
+      amounts:
+        split_amount: COALESCE(ROUND(SUM("SplitAmt")::numeric, 2), 0)

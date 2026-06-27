@@ -51,7 +51,24 @@ class TestBuildLookbackResyncConfig:
         assert config['predicate_columns'] == ['DateComplete', 'ProcDate']
 
     def test_mutation_table_without_entry_returns_none(self, analyzer):
-        assert analyzer.build_lookback_resync_config('payment', 'in_place_updates') is None
+        assert analyzer.build_lookback_resync_config('patient', 'in_place_updates') is None
+
+    @pytest.mark.parametrize(
+        'table_name, predicate_columns',
+        [
+            ('payment', ['PayDate']),
+            ('claimproc', ['DateCP', 'ProcDate']),
+            ('adjustment', ['AdjDate', 'ProcDate']),
+            ('claim', ['DateService', 'DateSent', 'DateReceived']),
+            ('paysplit', ['DatePay', 'ProcDate']),
+        ],
+    )
+    def test_financial_mutation_tables_get_lookback(self, analyzer, table_name, predicate_columns):
+        config = analyzer.build_lookback_resync_config(table_name, 'in_place_updates')
+        assert config == LOOKBACK_RESYNC_BY_TABLE[table_name]
+        assert config['enabled'] is True
+        assert config['window_days'] == 30
+        assert config['predicate_columns'] == predicate_columns
 
     def test_append_only_profile_returns_none(self, analyzer):
         assert analyzer.build_lookback_resync_config('procedurelog', 'append_only') is None
@@ -178,7 +195,7 @@ class TestDetermineExtractionStrategyWithSyncProfile:
 class TestGenerateConfigurationReplicaFidelityFields:
     @pytest.fixture
     def replica_fidelity_config(self, mock_settings_with_dict_provider, mock_dbt_models, mock_environment_variables):
-        test_tables = ['patient', 'definition', 'procedurelog', 'payment']
+        test_tables = ['patient', 'definition', 'procedurelog', 'payment', 'claimproc', 'adjustment']
 
         with patch('scripts.analyze_opendental_schema.ConnectionFactory') as mock_factory, \
              patch('scripts.analyze_opendental_schema.inspect') as mock_inspect, \
@@ -200,6 +217,8 @@ class TestGenerateConfigurationReplicaFidelityFields:
             pk_by_table = {
                 'procedurelog': 'ProcNum',
                 'payment': 'PayNum',
+                'claimproc': 'ClaimProcNum',
+                'adjustment': 'AdjNum',
                 'patient': 'PatNum',
                 'definition': 'DefNum',
             }
@@ -267,11 +286,20 @@ class TestGenerateConfigurationReplicaFidelityFields:
         assert definition['replicator_watermark_column'] == 'DefNum'
         assert 'lookback_resync' not in definition
 
-    def test_mutation_payment_has_no_lookback_block(self, replica_fidelity_config):
+    def test_mutation_payment_has_lookback_block(self, replica_fidelity_config):
         payment = replica_fidelity_config['tables']['payment']
         assert payment['sync_profile'] == 'in_place_updates'
         assert payment['primary_incremental_column'] == 'DateTStamp'
-        assert 'lookback_resync' not in payment
+        assert payment['lookback_resync']['window_days'] == 30
+        assert payment['lookback_resync']['predicate_columns'] == ['PayDate']
+
+    def test_mutation_claimproc_has_lookback_block(self, replica_fidelity_config):
+        claimproc = replica_fidelity_config['tables']['claimproc']
+        assert claimproc['lookback_resync']['predicate_columns'] == ['DateCP', 'ProcDate']
+
+    def test_mutation_adjustment_has_lookback_block(self, replica_fidelity_config):
+        adjustment = replica_fidelity_config['tables']['adjustment']
+        assert adjustment['lookback_resync']['predicate_columns'] == ['AdjDate', 'ProcDate']
 
     def test_watermark_column_always_matches_primary_incremental_column(self, replica_fidelity_config):
         for table_config in replica_fidelity_config['tables'].values():

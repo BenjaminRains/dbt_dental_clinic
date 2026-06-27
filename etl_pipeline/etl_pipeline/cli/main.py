@@ -19,6 +19,7 @@ from etl_pipeline.cli.commands import (
     run_category,
     check_schema_drift,
     check_procedurelog_drift_cmd,
+    check_replica_drift_cmd,
     verify_loads_cmd,
 )
 
@@ -35,6 +36,7 @@ cli.add_command(update_schema)
 cli.add_command(run_category)
 cli.add_command(check_schema_drift)
 cli.add_command(check_procedurelog_drift_cmd)
+cli.add_command(check_replica_drift_cmd)
 cli.add_command(verify_loads_cmd)
 
 def main():

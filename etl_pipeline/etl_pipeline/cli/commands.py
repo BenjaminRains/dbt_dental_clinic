@@ -1099,6 +1099,133 @@ def check_procedurelog_drift_cmd(
     )
 
 
+@click.command("check-replica-drift")
+@click.option(
+    "--tier",
+    type=click.Choice(["A", "B", "C"], case_sensitive=False),
+    default=None,
+    help="Run all enabled checks in this tier",
+)
+@click.option(
+    "--check",
+    "check_ids",
+    multiple=True,
+    help="Run specific check id(s), e.g. L0-PAY-001 (repeatable)",
+)
+@click.option(
+    "--lookback-days",
+    default=None,
+    type=int,
+    help="Override lookback window for all selected checks",
+)
+@click.option(
+    "--config",
+    type=click.Path(exists=True, dir_okay=False),
+    default=None,
+    help="Path to replica_drift_checks.yml (default: bundled config)",
+)
+@click.option(
+    "--warn-only",
+    is_flag=True,
+    help="Report drift but do not fail (exit 0)",
+)
+@click.option("--environment", type=click.Choice(["local", "test", "clinic"]), default=None)
+def check_replica_drift_cmd(
+    tier: Optional[str],
+    check_ids: tuple[str, ...],
+    lookback_days: Optional[int],
+    config: Optional[str],
+    warn_only: bool,
+    environment: Optional[str],
+) -> None:
+    """Run Layer 0 MySQL vs raw aggregate drift checks (Phase 3)."""
+    from pathlib import Path as PathLib
+
+    from etl_pipeline.monitoring.replica_aggregate_drift import (
+        load_check_definitions,
+        run_replica_drift_checks,
+        summary_to_airflow_payload,
+    )
+
+    if tier is None and not check_ids:
+        click.echo("❌ Specify --tier or at least one --check")
+        raise click.Abort()
+    if lookback_days is not None and lookback_days < 1:
+        click.echo("❌ --lookback-days must be at least 1")
+        raise click.Abort()
+
+    resolved_env = _resolve_environment(environment)
+    _assert_env_consistency(environment, resolved_env)
+
+    config_path = PathLib(config) if config else None
+    selected_ids = list(check_ids) if check_ids else None
+    try:
+        preview = load_check_definitions(
+            config_path,
+            tier=tier,
+            check_ids=selected_ids,
+        )
+    except Exception as exc:
+        click.echo(f"❌ Failed to load replica drift checks: {exc}")
+        raise click.Abort()
+
+    if not preview:
+        click.echo("❌ No matching Layer 0 checks found")
+        raise click.Abort()
+
+    summary_payload: Dict[str, Any] = {
+        "replica_drift_detected": False,
+        "checks_run": 0,
+        "checks_passed": 0,
+        "checks_failed": 0,
+        "checks": [],
+    }
+
+    try:
+        settings = get_settings()
+        source_engine = ConnectionFactory.get_source_connection(settings)
+        analytics_engine = ConnectionFactory.get_analytics_raw_connection(settings)
+        source_db = settings.get_database_config(DatabaseType.SOURCE).get("database", "opendental")
+
+        summary = run_replica_drift_checks(
+            source_engine,
+            analytics_engine,
+            source_database=source_db,
+            config_path=config_path,
+            tier=tier,
+            check_ids=selected_ids,
+            lookback_days=lookback_days,
+        )
+        source_engine.dispose()
+        analytics_engine.dispose()
+        summary_payload = summary_to_airflow_payload(summary)
+
+        click.echo(f"Layer 0 replica drift — {summary.checks_run} check(s)")
+        for result in summary.results:
+            click.echo(result.message)
+            if result.drift_detected:
+                click.echo(f"❌ {result.check_id} ({result.table}) drift detected")
+            else:
+                click.echo(f"✅ {result.check_id} ({result.table}) in sync")
+
+        if summary.any_drift_detected:
+            click.echo(
+                f"❌ Layer 0 summary: {summary.checks_failed}/{summary.checks_run} check(s) failed"
+            )
+            if not warn_only:
+                raise click.Abort()
+        else:
+            click.echo(f"✅ Layer 0 summary: all {summary.checks_run} check(s) passed")
+    except click.Abort:
+        raise
+    except Exception as e:
+        click.echo(f"⚠️ Layer 0 replica drift check failed: {e}")
+        if not warn_only:
+            raise click.Abort()
+
+    _emit_airflow_result(summary_payload)
+
+
 @click.command("verify-loads")
 @click.option("--config", "-c", type=click.Path(exists=True), default=None)
 @click.option(

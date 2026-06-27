@@ -137,6 +137,31 @@ LOOKBACK_RESYNC_BY_TABLE = {
         'window_days': 30,
         'predicate_columns': ['DateComplete', 'ProcDate'],
     },
+    'payment': {
+        'enabled': True,
+        'window_days': 30,
+        'predicate_columns': ['PayDate'],
+    },
+    'claimproc': {
+        'enabled': True,
+        'window_days': 30,
+        'predicate_columns': ['DateCP', 'ProcDate'],
+    },
+    'adjustment': {
+        'enabled': True,
+        'window_days': 30,
+        'predicate_columns': ['AdjDate', 'ProcDate'],
+    },
+    'claim': {
+        'enabled': True,
+        'window_days': 30,
+        'predicate_columns': ['DateService', 'DateSent', 'DateReceived'],
+    },
+    'paysplit': {
+        'enabled': True,
+        'window_days': 30,
+        'predicate_columns': ['DatePay', 'ProcDate'],
+    },
 }
 
 # DBT model patterns for discovery
