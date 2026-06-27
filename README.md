@@ -26,6 +26,7 @@ Data pipeline and analytics for **OpenDental**: ETL from MySQL into PostgreSQL, 
 |-------|--------|--------------|
 | **Ingestion** | [etl_pipeline/](etl_pipeline/) | Replicates OpenDental MySQL → PostgreSQL (`raw` schema). Schema discovery, incremental loading, config in `config/tables.yml`. |
 | **Transformation** | [dbt_dental_models/](dbt_dental_models/) | dbt project: staging (88) → intermediate (50+) → marts (17). Builds the analytics warehouse. |
+| **Validation** | [dbt_dental_models/validation/](dbt_dental_models/validation/) | KPI benchmarking vs OpenDental reports; layer-by-layer compare SQL; staging/mart investigations. |
 | **Orchestration** | [airflow/](airflow/) | Nightly DAGs: schema refresh → ETL → dbt → optional publish. Calls `mdc` for dbt and analytics publish. |
 | **API** | [api/](api/) | FastAPI backend: patients, appointments, revenue, AR, providers, dashboard KPIs. Serves marts to the frontend. |
 | **Visualization** | [frontend/](frontend/) | React dashboard: KPIs, revenue, AR aging, providers, patients, appointments. |
@@ -91,7 +92,7 @@ Root `/.env_local`, `/.env_clinic`, and `/.env_test` are **not used**—each com
 
 **Precedence:** process environment (shell, systemd on EC2) → component env file → safe defaults for optional vars.
 
-**Validate before you run:**
+**Validate before you run** (config — see [Data validation](#data-validation) for KPI benchmarking):
 
 ```powershell
 mdc status
@@ -186,11 +187,42 @@ Same flow in one line:
 
 | Layer | Count | Role |
 |-------|-------|------|
-| Staging | 88 | Standardized source data, metadata columns, validation |
+| Staging | 88 | Standardized source data, metadata columns, dbt tests |
 | Intermediate | 50+ | Fees, insurance, payments, AR, collections, scheduling, patient journey |
-| Marts | 17 | Dimensions (patient, provider, …), facts (appointment, claim, …), KPI summaries |
+| Marts | 17 | Dimensions (patient, provider, …), facts (appointment, claim, …), KPI summaries — benchmarked vs OD reports in `validation/kpi/` |
 
 CLI: `mdc dbt run|test|docs --env <stage>`
+
+---
+
+## Data validation
+
+Validation is layered — config checks, dbt tests, and OpenDental report benchmarking — so KPI gaps are traced to the right layer instead of widening tolerance.
+
+| Layer | Compare | What it proves |
+|-------|---------|----------------|
+| **1. OD → staging** | Golden CSV vs `staging` reconstruction SQL | Warehouse has the same underlying rows OD used (ETL lag, not mart logic). |
+| **2. Staging → mart** | `compare_*_staging.sql` | dbt mart faithfully aggregates staging. |
+| **3. Mart → OD** | `compare_*.sql` + `FIELD_MAP.md` | End-to-end KPI sign-off vs OpenDental report. |
+| **4. API / frontend** | API-equivalent SQL + optional Python verify scripts | Clinic app reads the mart with no extra logic. |
+
+**KPI benchmarking (Layers 1–4):** Each OpenDental standard report maps to a folder under [dbt_dental_models/validation/kpi/](dbt_dental_models/validation/kpi/). Export golden CSVs on spot-check dates, run compare SQL in DBeaver against `opendental_analytics`, record findings per date.
+
+| KPI (OD report) | Mart | Status |
+|-----------------|------|--------|
+| [Daily Payments](dbt_dental_models/validation/kpi/daily-payments/) | `mart_daily_payments` | **Complete** — 3 golden dates, layers 1–4 PASS ([report](dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md)) |
+| [Daily Production by Procedure](dbt_dental_models/validation/kpi/daily-production-by-procedure/) | `fact_procedure` | In progress |
+
+**Config validation (before you run):**
+
+```powershell
+mdc status
+mdc api test-config --env local
+mdc etl validate --env local --profile load
+mdc dbt validate --env local
+```
+
+**Reference:** [validation/kpi/README.md](dbt_dental_models/validation/kpi/README.md) (workflow, tolerance, registry) · [validation/README.md](dbt_dental_models/validation/README.md) (staging/mart investigations)
 
 ## Stack
 
@@ -231,6 +263,7 @@ dbt_dental_clinic/
 │   ├── synthetic_data_generator/   # Synthetic OpenDental-like data (see QUICKSTART.md)
 │   └── scripts/               # Schema analysis, DB setup, helpers
 ├── dbt_dental_models/         # Transformation: staging → intermediate → marts
+│   └── validation/            # KPI benchmarking (kpi/), staging/mart investigations
 ├── airflow/                   # Nightly DAGs (ETL, schema analysis, dbt, publish)
 │   └── dags/                  # etl_pipeline_dag.py, schema_analysis_dag.py
 ├── api/                       # FastAPI (routers, models, services)
@@ -256,6 +289,7 @@ dbt_dental_clinic/
 - [airflow/README.md](airflow/README.md) — DAG overview, native setup, nightly run  
 - [etl_pipeline/README.md](etl_pipeline/README.md) — ETL architecture and run instructions  
 - [dbt_dental_models/README.md](dbt_dental_models/README.md) — dbt layers and development  
+- [dbt_dental_models/validation/kpi/README.md](dbt_dental_models/validation/kpi/README.md) — KPI validation vs OpenDental reports  
 - [api/README.md](api/README.md) — API env, security, deployment  
 - [frontend/README.md](frontend/README.md) — Frontend setup and env vars  
 - [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md) — env file inventory and loading rules  
