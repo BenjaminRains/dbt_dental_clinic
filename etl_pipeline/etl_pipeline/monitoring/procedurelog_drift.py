@@ -36,14 +36,26 @@ class ProcedurelogDriftResult:
     message: str
 
 
+from etl_pipeline.monitoring.replica_sync_config import (
+    build_mysql_lookback_predicate,
+    wrap_mysql_incremental_with_lookback_config,
+)
+
+
 def mysql_lookback_resync_predicate(
     lookback_days: int = PROCEDURELOG_LOOKBACK_DAYS,
 ) -> str:
     """Rows to re-copy on each incremental run (MySQL replication DB syntax)."""
-    return (
-        f"(DateComplete >= DATE_SUB(CURDATE(), INTERVAL {lookback_days} DAY) "
-        f"OR ProcDate >= DATE_SUB(CURDATE(), INTERVAL {lookback_days} DAY))"
+    predicate = build_mysql_lookback_predicate(
+        {
+            "lookback_resync": {
+                "enabled": True,
+                "window_days": lookback_days,
+                "predicate_columns": ["DateComplete", "ProcDate"],
+            }
+        }
     )
+    return predicate or ""
 
 
 def wrap_mysql_incremental_with_lookback(
@@ -51,8 +63,16 @@ def wrap_mysql_incremental_with_lookback(
     lookback_days: int = PROCEDURELOG_LOOKBACK_DAYS,
 ) -> str:
     """Union watermark incremental filter with business-date lookback (ETL-FND-001)."""
-    lookback = mysql_lookback_resync_predicate(lookback_days)
-    return f"({where_clause}) OR ({lookback})"
+    return wrap_mysql_incremental_with_lookback_config(
+        where_clause,
+        {
+            "lookback_resync": {
+                "enabled": True,
+                "window_days": lookback_days,
+                "predicate_columns": ["DateComplete", "ProcDate"],
+            }
+        },
+    )
 
 
 def is_procedurelog_table(table_name: str) -> bool:

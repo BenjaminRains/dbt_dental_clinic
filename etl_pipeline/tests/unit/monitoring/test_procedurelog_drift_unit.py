@@ -20,13 +20,13 @@ class TestProcedurelogLookbackPredicates:
     def test_mysql_lookback_resync_predicate_default(self):
         predicate = mysql_lookback_resync_predicate()
         assert "DATE_SUB(CURDATE(), INTERVAL 30 DAY)" in predicate
-        assert "DateComplete >=" in predicate
-        assert "ProcDate >=" in predicate
+        assert "`DateComplete` >=" in predicate
+        assert "`ProcDate` >=" in predicate
 
     def test_wrap_mysql_incremental_with_lookback(self):
         wrapped = wrap_mysql_incremental_with_lookback("`DateTStamp` > '2026-01-01'")
         assert wrapped.startswith("(`DateTStamp` > '2026-01-01') OR (")
-        assert "DateComplete >=" in wrapped
+        assert "`DateComplete` >=" in wrapped
 
 
 @pytest.mark.unit
