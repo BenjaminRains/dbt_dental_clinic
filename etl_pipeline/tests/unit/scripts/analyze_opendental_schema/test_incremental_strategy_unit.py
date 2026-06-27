@@ -77,43 +77,27 @@ class TestOpenDentalSchemaAnalyzerIncrementalStrategy:
             # Assert: Verify or_logic strategy is correctly determined
             assert strategy == 'or_logic'
 
-    def test_determine_incremental_strategy_and_logic(self, mock_settings_with_dict_provider, mock_schema_data, mock_environment_variables):
-        """
-        Test determine_incremental_strategy method for and_logic strategy.
-        
-        AAA Pattern:
-            Arrange: Set up mock schema data for conservative table
-            Act: Call determine_incremental_strategy() method
-            Assert: Verify and_logic strategy is correctly determined
-            
-        Validates:
-            - and_logic strategy determination for conservative tables
-            - Business logic for conservative table handling
-            - Strategy selection for specific table types
-        """
-        # Arrange: Set up mock schema data for conservative table
-        test_table = 'claimproc'  # Conservative table
-        schema_info = mock_schema_data['patient']  # Use patient schema as template
+    def test_determine_incremental_strategy_in_place_uses_or_logic(
+        self, mock_settings_with_dict_provider, mock_schema_data, mock_environment_variables
+    ):
+        """Mutation tables use or_logic so loader captures in-place timestamp advances."""
+        test_table = 'claimproc'
+        schema_info = mock_schema_data['patient']
         incremental_columns = ['DateTStamp', 'DateModified', 'SecDateTEdit']
-        
+
         with patch('scripts.analyze_opendental_schema.ConnectionFactory') as mock_factory, \
              patch('scripts.analyze_opendental_schema.inspect') as mock_inspect:
-            
-            # Create mock engine
+
             mock_engine = Mock()
             mock_factory.get_source_connection.return_value = mock_engine
-            
-            # Create mock inspector
-            mock_inspector = Mock()
-            mock_inspect.return_value = mock_inspector
-            
+            mock_inspect.return_value = Mock()
+
             analyzer = OpenDentalSchemaAnalyzer()
-            
-            # Act: Call determine_incremental_strategy() method
-            strategy = analyzer.determine_incremental_strategy(test_table, schema_info, incremental_columns)
-            
-            # Assert: Verify and_logic strategy is correctly determined
-            assert strategy == 'and_logic'
+            strategy = analyzer.determine_incremental_strategy(
+                test_table, schema_info, incremental_columns, sync_profile='in_place_updates'
+            )
+
+            assert strategy == 'or_logic'
 
     def test_determine_incremental_strategy_single_column(self, mock_settings_with_dict_provider, mock_schema_data, mock_environment_variables):
         """
@@ -582,10 +566,14 @@ class TestOpenDentalSchemaAnalyzerIncrementalStrategy:
             def mock_get_batch_schema_info(table_names):
                 batch_results = {}
                 for table_name in table_names:
+                    pk = 'ProcNum' if table_name == 'procedurelog' else 'id'
                     batch_results[table_name] = {
                         'table_name': table_name,
-                        'columns': {'id': {'type': 'int'}, 'DateTStamp': {'type': 'datetime'}},
-                        'primary_keys': ['id'],
+                        'columns': {
+                            pk: {'type': 'bigint'},
+                            'DateTStamp': {'type': 'datetime'},
+                        },
+                        'primary_keys': [pk],
                         'foreign_keys': [],
                         'indexes': []
                     }
@@ -605,8 +593,12 @@ class TestOpenDentalSchemaAnalyzerIncrementalStrategy:
             analyzer.get_batch_schema_info = mock_get_batch_schema_info
             analyzer.get_batch_size_info = mock_get_batch_size_info
             
-            # Mock find_incremental_columns to return timestamp columns
-            analyzer.find_incremental_columns = lambda table_name, schema_info: ['DateTStamp', 'SecDateTEdit']
+            # Mock find_incremental_columns to return PK + timestamp columns
+            def mock_find_incremental_columns(table_name, schema_info):
+                pk = schema_info.get('primary_keys', ['id'])[0]
+                return [pk, 'DateTStamp', 'SecDateTEdit']
+
+            analyzer.find_incremental_columns = mock_find_incremental_columns
             
             with tempfile.TemporaryDirectory() as temp_dir:
                 # Act: Call generate_complete_configuration() method
@@ -620,4 +612,12 @@ class TestOpenDentalSchemaAnalyzerIncrementalStrategy:
                 for table_name, table_config in config['tables'].items():
                     assert 'incremental_strategy' in table_config
                     assert isinstance(table_config['incremental_strategy'], str)
-                    assert table_config['incremental_strategy'] in ['or_logic', 'and_logic', 'single_column', 'none'] 
+                    assert table_config['incremental_strategy'] in ['or_logic', 'and_logic', 'single_column', 'none']
+                    assert 'sync_profile' in table_config
+                    assert 'replicator_watermark_column' in table_config
+                    assert table_config['replicator_watermark_column'] == table_config['primary_incremental_column']
+
+                assert config['tables']['procedurelog']['sync_profile'] == 'in_place_updates'
+                assert config['tables']['procedurelog']['primary_incremental_column'] == 'DateTStamp'
+                assert config['tables']['procedurelog']['incremental_strategy'] == 'or_logic'
+                assert config['tables']['procedurelog']['lookback_resync']['window_days'] == 30

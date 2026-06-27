@@ -23,11 +23,14 @@ Performance Optimizations:
 - Adaptive batch sizing, extraction strategy selection, performance monitoring, memory/priority
 
 Usage:
-    mdc etl schema --env clinic          # preferred (runs update-schema with env injection)
-    mdc etl invoke --env clinic -- update-schema   # equivalent
-    python etl_pipeline/scripts/analyze_opendental_schema.py --stage clinic
+    mdc etl schema --env local           # manual refresh from laptop (loads .env_local; source MySQL via VPN)
+    mdc etl invoke --env local -- update-schema   # equivalent
+    python etl_pipeline/scripts/analyze_opendental_schema.py --stage local
+
+    On clinic EC2 / Airflow, use --env clinic (loads .env_clinic on that host).
 
 Requires ETL_ENVIRONMENT or --stage (local|clinic|test). Uses settings_v2 via create_settings().
+Schema analysis needs --profile full (default for mdc etl schema) for OpenDental source access.
 
 Output:
     - etl_pipeline/config/tables.yml (performance-optimized pipeline configuration)
@@ -121,6 +124,21 @@ logger = setup_logging()
 # Constants for filtering tables
 EXCLUDED_PATTERNS = ['tmp_', 'temp_', 'backup_', '#', 'test_']
 
+# Replica fidelity Phase 1: tables that mutate rows in-place (watermark must be timestamp, not PK)
+IN_PLACE_UPDATE_TABLES = frozenset({
+    'procedurelog', 'claimproc', 'payment', 'adjustment', 'claim',
+    'patplan', 'paysplit', 'commlog', 'patient',
+})
+
+# Optional post-incremental lookback resync (Phase 2 replicator will consume)
+LOOKBACK_RESYNC_BY_TABLE = {
+    'procedurelog': {
+        'enabled': True,
+        'window_days': 30,
+        'predicate_columns': ['DateComplete', 'ProcDate'],
+    },
+}
+
 # DBT model patterns for discovery
 DBT_STAGING_PATTERNS = ['stg_opendental__*.sql', 'stg_*.sql']
 DBT_MART_PATTERNS = ['dim_*.sql', 'fact_*.sql', 'mart_*.sql']
@@ -196,9 +214,12 @@ class OpenDentalSchemaAnalyzer:
     
     Data Contract (tables.yml):
     - This script outputs tables.yml which is consumed by SimpleMySQLReplicator
-    - Critical fields: extraction_strategy, batch_size, incremental_columns, primary_incremental_column
-    - All other fields are metadata and can be modified freely
-    - See docs/refactor_schema_analyzer_methods.md for complete contract definition
+    - Critical fields: extraction_strategy, batch_size, incremental_columns,
+      primary_incremental_column, sync_profile, replicator_watermark_column
+    - sync_profile append_only: PK watermark OK for new-row capture
+    - sync_profile in_place_updates: timestamp watermark (DateTStamp / SecDateTEdit), or_logic loader
+    - lookback_resync: optional post-incremental window resync (procedurelog first)
+    - See docs/etl/ETL_REPLICA_FIDELITY_ROADMAP.md Phase 1
     """
     
     # =========================================================================
@@ -487,7 +508,9 @@ class OpenDentalSchemaAnalyzer:
     # Methods that determine how to extract data incrementally:
     # - find_incremental_columns(): Identify timestamp columns
     # - validate_incremental_column_data_quality(): Check column reliability
-    # - select_primary_incremental_column(): Choose best column
+    # - determine_sync_profile(): append_only vs in_place_updates
+    # - build_lookback_resync_config(): optional lookback window metadata
+    # - select_primary_incremental_column(): Choose best column (sync-profile aware)
     # - determine_incremental_strategy(): OR/AND/single column logic
     # - determine_extraction_strategy(): full_table vs incremental vs chunked
     # =========================================================================
@@ -502,44 +525,46 @@ class OpenDentalSchemaAnalyzer:
             return False
         return True
 
-    def determine_incremental_strategy(self, table_name: str, schema_info: Dict, incremental_columns: List[str]) -> str:
+    def determine_sync_profile(self, table_name: str, is_modeled: bool) -> str:
         """
-        Determine the optimal incremental strategy for a table.
-        
-        Strategies:
-        - 'or_logic': Use OR logic for multiple incremental columns (captures more updates)
-        - 'and_logic': Use AND logic for multiple incremental columns (more conservative)
-        - 'single_column': Use only the primary incremental column
-        - 'none': No incremental strategy (fallback to full table)
-        
-        Args:
-            table_name: Name of the table
-            schema_info: Schema information for the table
-            incremental_columns: List of available incremental columns
-            
-        Returns:
-            str: The determined incremental strategy
+        Classify how a table changes over time for replica fidelity.
+
+        append_only: new rows only; PK watermark is sufficient.
+        in_place_updates: rows mutate on existing PK; timestamp watermark required.
+        """
+        if table_name.lower() in IN_PLACE_UPDATE_TABLES or is_modeled:
+            return 'in_place_updates'
+        return 'append_only'
+
+    def build_lookback_resync_config(self, table_name: str, sync_profile: str) -> Optional[Dict]:
+        """Return lookback_resync block when configured for mutation tables."""
+        if sync_profile != 'in_place_updates':
+            return None
+        spec = LOOKBACK_RESYNC_BY_TABLE.get(table_name.lower())
+        return dict(spec) if spec else None
+
+    def determine_incremental_strategy(
+        self,
+        table_name: str,
+        schema_info: Dict,
+        incremental_columns: List[str],
+        sync_profile: str = 'append_only',
+    ) -> str:
+        """
+        Determine the optimal incremental strategy for a table (loader-side OR/AND logic).
+
+        Mutation tables (in_place_updates) use or_logic so timestamp advances capture
+        in-place edits. Replicator uses replicator_watermark_column separately (Phase 2).
         """
         if not incremental_columns:
             return 'none'
-        
-        # If only one column, use single_column strategy
+
         if len(incremental_columns) == 1:
             return 'single_column'
-        
-        # For multiple columns, determine based on data quality and business logic
-        # Use OR logic for most tables to capture more incremental updates
-        # Use AND logic only for tables where we need to be very conservative
-        
-        # Tables that should use AND logic (more conservative)
-        conservative_tables = {
-            'claimproc', 'payment', 'adjustment', 'claim', 'patplan', 'procedurelog'
-        }
-        
-        if table_name.lower() in conservative_tables:
-            return 'and_logic'
-        
-        # Default to OR logic for most tables (captures more updates)
+
+        if sync_profile == 'in_place_updates':
+            return 'or_logic'
+
         return 'or_logic'
     
     def validate_incremental_column_data_quality(self, table_name: str, column_name: str) -> bool:
@@ -683,61 +708,88 @@ class OpenDentalSchemaAnalyzer:
         
         return final_columns
     
-    def select_primary_incremental_column(self, table_name: str, incremental_columns: List[str], schema_info: Dict) -> Optional[str]:
+    def _select_timestamp_incremental_column(
+        self,
+        table_name: str,
+        incremental_columns: List[str],
+        schema_info: Optional[Dict] = None,
+    ) -> Optional[str]:
+        """Pick best timestamp column for mutation-table watermarks."""
+        priority_order = [
+            'DateTStamp',
+            'SecDateTEdit',
+            'SecDateTEntry',
+            'DateTEntry',
+        ]
+        for priority_column in priority_order:
+            if priority_column in incremental_columns:
+                return priority_column
+        if schema_info:
+            primary_keys = set(schema_info.get('primary_keys', []))
+            for col in incremental_columns:
+                if col not in primary_keys:
+                    return col
+        return incremental_columns[0] if incremental_columns else None
+
+    def select_primary_incremental_column(
+        self,
+        table_name: str,
+        incremental_columns: List[str],
+        schema_info: Dict,
+        sync_profile: str = 'append_only',
+    ) -> Optional[str]:
         """
-        Select the primary incremental column from a list based on priority order and table-specific logic.
-        
-        Priority order (highest to lowest):
-        1. Primary key columns (for auto-incrementing tables)
-        2. DateTStamp - Most recent timestamp (when record was last modified)
-        3. SecDateTEdit - Security date edit (when record was last edited)
-        4. SecDateTEntry - Security date entry (when record was created/modified)
-        5. DateTEntry - Date entry
-        6. All others - Any remaining timestamp columns
-        
-        Args:
-            table_name: Name of the table
-            incremental_columns: List of incremental column names
-            schema_info: Schema information for the table
-            
-        Returns:
-            The selected primary incremental column, or None if no columns provided
+        Select the primary incremental column from a list based on sync profile.
+
+        append_only: prefer auto-increment PK for new-row capture.
+        in_place_updates: prefer DateTStamp / SecDateTEdit; never PK when timestamp exists.
         """
         if not incremental_columns:
             return None
-        
-        # Special case: For tables with auto-incrementing primary keys, prefer the primary key
+
         primary_keys = schema_info.get('primary_keys', [])
-        if primary_keys:
-            primary_key = primary_keys[0]
-            # Check if primary key is in incremental columns (should be for auto-incrementing tables)
-            if primary_key in incremental_columns:
-                logger.debug(f"Selected primary key '{primary_key}' as primary incremental column for table {table_name}")
+        primary_key = primary_keys[0] if primary_keys else None
+
+        if sync_profile == 'in_place_updates':
+            timestamp_col = self._select_timestamp_incremental_column(
+                table_name, incremental_columns, schema_info
+            )
+            if timestamp_col:
+                if primary_key and primary_key in incremental_columns and timestamp_col != primary_key:
+                    logger.info(
+                        f"Mutation table {table_name}: watermark {timestamp_col} "
+                        f"(PK {primary_key} not used for incremental sync)"
+                    )
+                return timestamp_col
+            if primary_key and primary_key in incremental_columns:
+                logger.warning(
+                    f"Mutation table {table_name}: no timestamp column; falling back to PK {primary_key}"
+                )
                 return primary_key
-            
-            # Special case for securitylog table - use SecurityLogNum even if not in incremental_columns
-            if table_name.lower() == 'securitylog' and primary_key == 'SecurityLogNum':
-                logger.debug(f"Selected primary key '{primary_key}' as primary incremental column for securitylog table")
-                return primary_key
-        
-        # Priority order for selecting the best incremental column (timestamp-based)
-        priority_order = [
-            'DateTStamp',      # Most recent timestamp - highest priority
-            'SecDateTEdit',    # Security date edit - second priority
-            'SecDateTEntry',   # Security date entry - third priority
-            'DateTEntry'       # Date entry - fourth priority
-        ]
-        
-        # First, try to find a column that matches our priority order
-        for priority_column in priority_order:
-            if priority_column in incremental_columns:
-                logger.debug(f"Selected primary incremental column '{priority_column}' based on priority order")
-                return priority_column
-        
-        # If no priority columns found, return the first column in the list
-        # This ensures we always have a fallback
+            return incremental_columns[0]
+
+        if primary_key and primary_key in incremental_columns:
+            logger.debug(
+                f"Selected primary key '{primary_key}' as primary incremental column for table {table_name}"
+            )
+            return primary_key
+
+        if table_name.lower() == 'securitylog' and primary_key == 'SecurityLogNum':
+            logger.debug(
+                f"Selected primary key '{primary_key}' as primary incremental column for securitylog table"
+            )
+            return primary_key
+
+        timestamp_col = self._select_timestamp_incremental_column(
+            table_name, incremental_columns, schema_info
+        )
+        if timestamp_col:
+            return timestamp_col
+
         selected_column = incremental_columns[0]
-        logger.debug(f"Selected primary incremental column '{selected_column}' as fallback (no priority columns found)")
+        logger.debug(
+            f"Selected primary incremental column '{selected_column}' as fallback for {table_name}"
+        )
         return selected_column
     
     # =========================================================================
@@ -904,7 +956,9 @@ class OpenDentalSchemaAnalyzer:
     
     def determine_extraction_strategy(self, table_name: str, schema_info: Dict,
                                              size_info: Dict, performance_chars: Dict,
-                                             incremental_columns: Optional[List[str]] = None) -> str:
+                                             incremental_columns: Optional[List[str]] = None,
+                                             sync_profile: str = 'append_only',
+                                             primary_incremental_column: Optional[str] = None) -> str:
         """
         Enhanced extraction strategy determination with performance considerations.
         Pass incremental_columns when already computed to avoid duplicate DB work.
@@ -927,7 +981,9 @@ class OpenDentalSchemaAnalyzer:
         else:  # tiny
             # Tiny tables - consider full refresh for simplicity
             # unless they have very reliable incremental columns
-            primary_incremental = self.select_primary_incremental_column(table_name, incremental_columns, schema_info)
+            primary_incremental = primary_incremental_column or self.select_primary_incremental_column(
+                table_name, incremental_columns, schema_info, sync_profile=sync_profile
+            )
             if primary_incremental and primary_incremental in ['DateTStamp', 'SecDateTEdit']:
                 return 'incremental'
             else:
@@ -1250,8 +1306,8 @@ class OpenDentalSchemaAnalyzer:
             '_dbt_model_analysis': dbt_models,  # Cached for Stage 4 to avoid duplicate discovery
             'metadata': {
                 'generated_at': datetime.now().isoformat(),
-                'analyzer_version': '4.0_performance_enhanced',
-                'configuration_version': '4.0',
+                'analyzer_version': '4.1_replica_fidelity',
+                'configuration_version': '4.1',
                 'source_database': self.source_db,
                 'total_tables': len(tables),
                 'schema_hash': schema_hash,
@@ -1262,6 +1318,9 @@ class OpenDentalSchemaAnalyzer:
                     'adaptive_batch_sizing',
                     'intelligent_strategy_selection',  
                     'primary_incremental_column_detection',
+                    'sync_profile_classification',
+                    'replicator_watermark_column',
+                    'lookback_resync_config',
                     'time_gap_analysis',
                     'performance_monitoring_recommendations'
                 ]
@@ -1326,43 +1385,49 @@ class OpenDentalSchemaAnalyzer:
                         
                         # Get incremental columns once (used by strategy and config)
                         incremental_columns = self.find_incremental_columns(table_name, schema_info)
+
+                        # Check if table has dbt models (needed for sync_profile)
+                        is_modeled = False
+                        dbt_model_types = []
+
+                        staging_models = [model for model in dbt_models['staging']
+                                        if f"stg_opendental__{table_name.lower()}" == model.lower()]
+                        if staging_models:
+                            is_modeled = True
+                            dbt_model_types.append('staging')
+
+                        mart_models = [model for model in dbt_models['mart']
+                                     if table_name.lower() in model.lower()]
+                        if mart_models:
+                            is_modeled = True
+                            dbt_model_types.append('mart')
+
+                        intermediate_models = [model for model in dbt_models['intermediate']
+                                            if table_name.lower() in model.lower()]
+                        if intermediate_models:
+                            is_modeled = True
+                            dbt_model_types.append('intermediate')
+
+                        sync_profile = self.determine_sync_profile(table_name, is_modeled)
+                        primary_incremental_column = self.select_primary_incremental_column(
+                            table_name, incremental_columns, schema_info, sync_profile=sync_profile
+                        )
+                        incremental_strategy = self.determine_incremental_strategy(
+                            table_name, schema_info, incremental_columns, sync_profile=sync_profile
+                        )
+                        lookback_resync = self.build_lookback_resync_config(table_name, sync_profile)
+
                         extraction_strategy = self.determine_extraction_strategy(
                             table_name, schema_info, size_info, performance_chars,
-                            incremental_columns=incremental_columns
+                            incremental_columns=incremental_columns,
+                            sync_profile=sync_profile,
+                            primary_incremental_column=primary_incremental_column,
                         )
                         # Validate extraction strategy
                         if not self._validate_extraction_strategy(extraction_strategy):
                             extraction_strategy = 'full_table'
                             logger.warning(f"Using fallback strategy 'full_table' for {table_name}")
-                        
-                        incremental_strategy = self.determine_incremental_strategy(table_name, schema_info, incremental_columns)
-                        primary_incremental_column = self.select_primary_incremental_column(table_name, incremental_columns, schema_info)
-                        
-                        # Check if table has dbt models
-                        is_modeled = False
-                        dbt_model_types = []
-                        
-                        # Check staging models - look for stg_opendental__{table_name} pattern
-                        staging_models = [model for model in dbt_models['staging'] 
-                                        if f"stg_opendental__{table_name.lower()}" == model.lower()]
-                        if staging_models:
-                            is_modeled = True
-                            dbt_model_types.append('staging')
-                        
-                        # Check mart models - look for dim_*, fact_*, mart_* patterns that might reference the table
-                        mart_models = [model for model in dbt_models['mart'] 
-                                     if table_name.lower() in model.lower()]
-                        if mart_models:
-                            is_modeled = True
-                            dbt_model_types.append('mart')
-                        
-                        # Check intermediate models - look for any intermediate models that might reference the table
-                        intermediate_models = [model for model in dbt_models['intermediate'] 
-                                            if table_name.lower() in model.lower()]
-                        if intermediate_models:
-                            is_modeled = True
-                            dbt_model_types.append('intermediate')
-                        
+
                         # Calculate batch size based on performance characteristics
                         batch_size = performance_chars['recommended_batch_size'] # Changed from optimal_batch_size
                         
@@ -1378,6 +1443,8 @@ class OpenDentalSchemaAnalyzer:
                             'incremental_columns': incremental_columns,
                             'incremental_strategy': incremental_strategy,
                             'primary_incremental_column': primary_incremental_column,
+                            'sync_profile': sync_profile,
+                            'replicator_watermark_column': primary_incremental_column,
                             'is_modeled': is_modeled,
                             'dbt_model_types': dbt_model_types,
                             'column_names': column_names,
@@ -1405,7 +1472,10 @@ class OpenDentalSchemaAnalyzer:
                         primary_key = primary_keys[0] if primary_keys else None
                         if primary_key:
                             table_config['primary_key'] = primary_key
-                        
+
+                        if lookback_resync:
+                            table_config['lookback_resync'] = lookback_resync
+
                         config['tables'][table_name] = table_config
                         processed_count += 1
                         

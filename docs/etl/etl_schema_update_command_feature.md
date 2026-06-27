@@ -8,9 +8,10 @@ This document specifies the ETL schema-update feature: automatically refresh `ta
 
 **Shipped entry points:**
 
-- **Manual:** `mdc etl schema --env clinic` or `mdc etl invoke --env clinic -- update-schema`
-- **Nightly:** Airflow `etl_pipeline` DAG → `refresh_schema_configuration` (first step after business-hours guard)
-- **Related:** `mdc etl invoke --env clinic -- check-schema-drift` (table-count sanity check; does not regenerate config)
+- **Manual (laptop):** `mdc etl schema --env local` or `mdc etl invoke --env local -- update-schema` — loads `.env_local`; OpenDental source is still the clinic server (VPN). Requires `--profile full` (default for `mdc etl schema`).
+- **Manual (on clinic EC2):** `mdc etl schema --env clinic` — same command, different env file on that host.
+- **Nightly:** Airflow `etl_pipeline` DAG → `refresh_schema_configuration` (first step after business-hours guard; runs on clinic with `--env clinic`)
+- **Related:** `mdc etl invoke --env clinic -- check-schema-drift` (table-count sanity check on clinic; does not regenerate config)
 ## Problem Statement
 
 The ETL pipeline can experience schema drift when:
@@ -83,13 +84,16 @@ Add an ETL **`update-schema`** command (original name in this doc: `etl-update-s
 ### Command Syntax (shipped)
 
 ```bash
-# Preferred (mdc wrapper)
+# Preferred from laptop (VPN to clinic OpenDental)
+mdc etl schema --env local
+mdc etl schema --env local -- --force
+
+# On clinic EC2
 mdc etl schema --env clinic
-mdc etl schema --env clinic -- --force
 
 # Direct CLI module
 python -m etl_pipeline.cli.main update-schema
-mdc etl invoke --env clinic -- update-schema [--backup] [--force] [--output-dir PATH] [--log-level LEVEL]
+mdc etl invoke --env local -- update-schema [--backup] [--force] [--output-dir PATH] [--log-level LEVEL]
 
 Options:
   --backup          Create backup of current configuration (default: true)
@@ -112,14 +116,15 @@ Options:
 ### Example Usage
 
 ```bash
-# Clinic schema refresh (recommended)
-mdc etl schema --env clinic
+# Laptop dev workflow (loads .env_local; source MySQL via VPN)
+mdc etl test-connections --env local --profile full
+mdc etl schema --env local
 
 # Force re-analysis
-mdc etl invoke --env clinic -- update-schema --force
+mdc etl invoke --env local -- update-schema --force
 
 # Custom output directory (advanced)
-mdc etl invoke --env clinic -- update-schema --output-dir etl_pipeline/config
+mdc etl invoke --env local -- update-schema --output-dir etl_pipeline/config
 ```
 ## Integration Points
 
@@ -213,7 +218,7 @@ Configuration unchanged.
 1. **Scheduling:** ✅ Nightly via Airflow `refresh_schema_configuration` (~7 min for ~446 tables)
 2. **Monitoring:** ⚠️ Changelog markdown from analyzer; no Slack/email alerts
 3. **Documentation:** `etl_pipeline/README.md`, `airflow/NIGHTLY_RUN.md`, [ETL_CDC §3 schema CDC](ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md)
-4. **Training:** Use `mdc etl schema --env clinic` for manual refresh
+4. **Training:** Use `mdc etl schema --env local` for manual refresh from a laptop; use `--env clinic` only when running on the clinic EC2 host.
 ## Testing Strategy
 
 **Status:** Minimal automated coverage today (`tools/mdc_cli/tests/test_phase45.py` asserts `update-schema` in mdc command). Dedicated unit/integration tests for `update_schema` and `_detect_schema_changes` remain **deferred**.
@@ -288,7 +293,7 @@ Configuration unchanged.
 
 ## Conclusion
 
-The **`update-schema`** feature is **in production use**: manual refresh via `mdc etl schema` and automatic refresh before every nightly ETL. It addresses schema drift by regenerating `tables.yml` from live OpenDental with backup + YAML validation.
+The **`update-schema`** feature is **in production use**: manual refresh via `mdc etl schema --env local` (laptop) or nightly on clinic EC2/Airflow. It addresses schema drift by regenerating `tables.yml` from live OpenDental with backup + YAML validation.
 
 Remaining work is **enhancement** (richer diffs, rollback CLI, alerts, tests) — not core functionality.
 

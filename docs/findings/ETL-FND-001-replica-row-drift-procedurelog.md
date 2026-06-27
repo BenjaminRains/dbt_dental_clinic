@@ -1,6 +1,8 @@
 # ETL-FND-001: Replica row drift — `procedurelog`
 
 **Status:** Mitigated (local KPI PASS 2026-06-26) — branch `fix/etl-fnd-001-procedurelog-row-drift` (P0 drift check + P1 lookback re-sync + loader upsert). Clinic RDS deploy + nightly automation pending before close.
+
+**Platform roadmap (pre-CDC):** [ETL_REPLICA_FIDELITY_ROADMAP.md](../ETL_REPLICA_FIDELITY_ROADMAP.md) — schema analyzer fix, Layer 0 checks, Sunday full refresh, CDC sketch.
 **Severity:** High (blocks production KPI validation; affects any metric keyed on complete procedures)  
 **Discovered via:** [daily-production-by-procedure KPI validation](../../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md) (2026-06-10)  
 **Owner:** ETL / data platform  
