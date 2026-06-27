@@ -127,15 +127,15 @@ New method: `_generate_schema_changelog()`
 ### Run schema analysis
 
 ```bash
-# Preferred (mdc + env injection)
-mdc etl schema --env clinic
+# Preferred from laptop (mdc + env injection; OpenDental source via VPN in .env_local)
+mdc etl schema --env local
 
 # Direct CLI
-mdc etl invoke --env clinic -- update-schema
+mdc etl invoke --env local -- update-schema
 
 # Analyzer only (legacy / debugging)
 cd etl_pipeline
-pipenv run python scripts/analyze_opendental_schema.py
+pipenv run python scripts/analyze_opendental_schema.py --stage local
 ```
 
 Nightly: Airflow `etl_pipeline` DAG → `refresh_schema_configuration` (runs the same analyzer). See [etl_schema_update_command_feature.md](etl_schema_update_command_feature.md).
@@ -310,7 +310,7 @@ schema_hash = hashlib.md5(hash_input).hexdigest()
 
 | Trigger | Entry point |
 | --- | --- |
-| Manual | `mdc etl schema --env clinic` → [update-schema feature](etl_schema_update_command_feature.md) |
+| Manual | `mdc etl schema --env local` → [update-schema feature](etl_schema_update_command_feature.md) |
 | Nightly ETL | Airflow `refresh_schema_configuration` |
 | Schema “CDC” context | [ETL_CDC §2](ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md) |
 

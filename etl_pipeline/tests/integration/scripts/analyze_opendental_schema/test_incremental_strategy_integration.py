@@ -238,7 +238,7 @@ class TestIncrementalStrategyIntegration:
         # Test with different table types
         test_cases = [
             ('patient', ['DateTStamp', 'DateModified', 'SecDateTEdit']),  # Multiple columns -> or_logic
-            ('claimproc', ['DateTStamp', 'SecDateTEdit']),  # Conservative table -> and_logic
+            ('claimproc', ['DateTStamp', 'SecDateTEdit']),  # Mutation table -> or_logic
             ('definition', ['DateTStamp']),  # Single column -> single_column
             ('securitylog', [])  # No columns -> none
         ]
@@ -255,16 +255,13 @@ class TestIncrementalStrategyIntegration:
                 
                 # Verify specific business logic
                 if table_name == 'claimproc':
-                    assert strategy == 'and_logic', f"Conservative table {table_name} should use and_logic"
+                    assert strategy == 'or_logic', f"Mutation table {table_name} should use or_logic"
                 elif len(incremental_columns) == 0:
                     assert strategy == 'none', f"Table {table_name} with no columns should use none"
                 elif len(incremental_columns) == 1:
                     assert strategy == 'single_column', f"Table {table_name} with single column should use single_column"
                 elif len(incremental_columns) > 1:
-                    if table_name in ['claimproc', 'payment', 'adjustment']:
-                        assert strategy == 'and_logic', f"Conservative table {table_name} should use and_logic"
-                    else:
-                        assert strategy == 'or_logic', f"Table {table_name} with multiple columns should use or_logic"
+                    assert strategy == 'or_logic', f"Table {table_name} with multiple columns should use or_logic"
 
     def test_clinic_enhanced_find_incremental_columns(self, clinic_settings_with_file_provider):
         """

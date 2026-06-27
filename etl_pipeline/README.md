@@ -477,6 +477,15 @@ python -m etl_pipeline test-connections
 python -m etl_pipeline update-schema
 ```
 
+**Manual refresh from your laptop** (loads `.env_local`; OpenDental source still reaches the clinic server via VPN):
+
+```bash
+mdc etl test-connections --env local --profile full
+mdc etl schema --env local
+```
+
+Use `--env clinic` only when running on the clinic EC2 host (same as the nightly Airflow DAG).
+
 #### **Airflow orchestration commands**
 
 These commands are designed for the `etl_pipeline` DAG. Airflow invokes them through **`mdc etl invoke`** so ETL runs in the Pipenv environment (separate from the Airflow venv):
