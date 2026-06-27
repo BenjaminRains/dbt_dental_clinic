@@ -5,7 +5,7 @@ report definition.
 
 | ID | Title | Type | Status |
 | --- | --- | --- | --- |
-| [ETL-FND-001](./ETL-FND-001-replica-row-drift-procedurelog.md) | Replica row drift — `procedurelog` | Pipeline defect + observability gap | Open |
+| [ETL-FND-001](./ETL-FND-001-replica-row-drift-procedurelog.md) | Replica row drift — `procedurelog` | Pipeline defect + observability gap | Mitigated (local KPI PASS; clinic deploy pending) |
 
 ## Finding types (taxonomy)
 

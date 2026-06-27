@@ -160,6 +160,51 @@ def test_compose_etl_local_uses_dbt_env_local(phase6_layout):
     assert env["MYSQL_REPLICATION_DB"] == "repl"
 
 
+def test_compose_etl_local_ignores_shell_rds_exports(phase6_layout, monkeypatch):
+    """Stale clinic POSTGRES_* in the parent shell must not override local warehouse file."""
+    etl_dir, dbt_dir, _ = phase6_layout
+    (etl_dir / ".env_local").write_text(
+        "\n".join(
+            [
+                "MYSQL_REPLICATION_HOST=localhost",
+                "MYSQL_REPLICATION_PORT=3305",
+                "MYSQL_REPLICATION_DB=repl",
+                "MYSQL_REPLICATION_USER=ru",
+                "MYSQL_REPLICATION_PASSWORD=rp",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    (dbt_dir / ".env_local").write_text(
+        "\n".join(
+            [
+                "POSTGRES_ANALYTICS_HOST=localhost",
+                "POSTGRES_ANALYTICS_PORT=5432",
+                "POSTGRES_ANALYTICS_DB=opendental_analytics",
+                "POSTGRES_ANALYTICS_USER=analytics_user",
+                "POSTGRES_ANALYTICS_PASSWORD=warehouse-pass",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+
+    monkeypatch.setenv(
+        "POSTGRES_ANALYTICS_HOST",
+        "dental-clinic-analytics.c6zwscckihl1.us-east-1.rds.amazonaws.com",
+    )
+    monkeypatch.setenv("POSTGRES_ANALYTICS_PORT", "5432")
+    monkeypatch.setenv("POSTGRES_ANALYTICS_DB", "opendental_analytics")
+    monkeypatch.setenv("POSTGRES_ANALYTICS_USER", "analytics_user")
+    monkeypatch.setenv("POSTGRES_ANALYTICS_PASSWORD", "clinic-rds-secret")
+
+    env = etl_env.compose_etl_env_dict("local", "load")
+
+    assert env["POSTGRES_ANALYTICS_HOST"] == "localhost"
+    assert env["POSTGRES_ANALYTICS_PASSWORD"] == "warehouse-pass"
+
+
 def test_deprecated_etl_analytics_keys(phase6_layout):
     etl_dir, _, _ = phase6_layout
     _write_clinic_etl_file(etl_dir, include_stale_postgres=True)

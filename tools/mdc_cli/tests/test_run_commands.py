@@ -137,3 +137,83 @@ def test_dbt_invoke_passthrough(mock_validate, mock_run):
     )
     assert result.exit_code == 0
     mock_run.assert_called_once_with("clinic", ["deps"], tunnel_db=False, tunnel_port=None)
+
+
+def test_resolve_component_python_script_cmd():
+    from pathlib import Path
+
+    from mdc_cli.run_helper import resolve_component_python_script_cmd
+
+    python = Path("etl/venv/Scripts/python.exe")
+    assert resolve_component_python_script_cmd(
+        python,
+        ["python", "scripts/check_procedurelog_drift.py", "--warn-only"],
+    ) == [
+        str(python),
+        "scripts/check_procedurelog_drift.py",
+        "--warn-only",
+    ]
+    assert resolve_component_python_script_cmd(python, ["check-procedurelog-drift"]) is None
+
+
+@patch("mdc_cli.commands.etl.run_isolated", return_value=0)
+@patch("mdc_cli.commands.etl.require_component_python")
+@patch("mdc_cli.commands.etl.load_env_dict_isolated")
+@patch("mdc_cli.commands.etl.validate_etl_stage", return_value=(True, None))
+def test_etl_invoke_cli_subcommand(
+    mock_validate,
+    mock_load,
+    mock_python,
+    mock_run,
+):
+    from pathlib import Path
+
+    mock_load.return_value = {}
+    mock_python.return_value = Path("etl/venv/Scripts/python.exe")
+    result = runner.invoke(
+        app,
+        ["etl", "invoke", "--env", "local", "--", "check-procedurelog-drift", "--warn-only"],
+    )
+    assert result.exit_code == 0
+    cmd = mock_run.call_args.kwargs["cmd"]
+    assert cmd[-2:] == ["check-procedurelog-drift", "--warn-only"]
+    assert "-m" in cmd
+    assert "etl_pipeline.cli.main" in cmd
+
+
+@patch("mdc_cli.commands.etl.run_isolated", return_value=0)
+@patch("mdc_cli.commands.etl.require_component_python")
+@patch("mdc_cli.commands.etl.load_env_dict_isolated")
+@patch("mdc_cli.commands.etl.validate_etl_stage", return_value=(True, None))
+def test_etl_invoke_python_script(
+    mock_validate,
+    mock_load,
+    mock_python,
+    mock_run,
+):
+    from pathlib import Path
+
+    mock_load.return_value = {}
+    venv_python = Path("etl/venv/Scripts/python.exe")
+    mock_python.return_value = venv_python
+    result = runner.invoke(
+        app,
+        [
+            "etl",
+            "invoke",
+            "--env",
+            "local",
+            "--",
+            "python",
+            "scripts/check_procedurelog_drift.py",
+            "--warn-only",
+        ],
+    )
+    assert result.exit_code == 0
+    cmd = mock_run.call_args.kwargs["cmd"]
+    assert cmd == [
+        str(venv_python),
+        "scripts/check_procedurelog_drift.py",
+        "--warn-only",
+    ]
+    assert "etl_pipeline.cli.main" not in cmd

@@ -1,6 +1,6 @@
 # ETL-FND-001: Replica row drift — `procedurelog`
 
-**Status:** Open  
+**Status:** Mitigated (local KPI PASS 2026-06-26) — branch `fix/etl-fnd-001-procedurelog-row-drift` (P0 drift check + P1 lookback re-sync + loader upsert). Clinic RDS deploy + nightly automation pending before close.
 **Severity:** High (blocks production KPI validation; affects any metric keyed on complete procedures)  
 **Discovered via:** [daily-production-by-procedure KPI validation](../../../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md) (2026-06-10)  
 **Owner:** ETL / data platform  
@@ -149,14 +149,14 @@ Full refresh remains valid as a **one-time backfill** after fixing detection/rec
 
 **Production reconciliation check** (run after each ETL load or nightly):
 
-Compare MySQL vs `raw.procedurelog` for a **rolling business-date window** (e.g. last 14 days):
+Compare MySQL vs `raw.procedurelog` for a **rolling business-date window** (1 month / 30 days):
 
 ```sql
 -- Same predicate on both sides; alert if rows or fees differ beyond tolerance
 SELECT COUNT(*) AS complete_rows, ROUND(SUM(ProcFee), 2) AS complete_fees
 FROM procedurelog
 WHERE ProcStatus = 2
-  AND DateComplete >= CURRENT_DATE - INTERVAL 14 DAY;
+  AND DateComplete >= CURRENT_DATE - INTERVAL 30 DAY;
 ```
 
 PostgreSQL equivalent on `raw.procedurelog`. Extend to **per-code** or **per-ProcNum sample** for
@@ -182,15 +182,15 @@ Augment incremental load for `procedurelog`:
 incremental_batch = (
   rows WHERE DateTStamp > watermark
   UNION
-  rows WHERE DateComplete >= today - 14 days   -- or ProcDate in lookback window
+  rows WHERE DateComplete >= today - 30 days   -- 1-month lookback; or ProcDate in same window
 )
 ```
 
 Always re-copy recent business dates so TP → Complete updates reach replica even when
 `DateTStamp` is stale. Upsert on `ProcNum` applies new `ProcStatus`.
 
-Tune window to clinic volume (14–30 days). **This is the primary durable mitigation** short of
-log-based CDC.
+Default **1 month (30 days)**; tune to clinic volume if needed. **This is the primary durable
+mitigation** short of log-based CDC.
 
 ### 3. Incremental config review (required)
 
@@ -227,25 +227,27 @@ drift for all mutation types. Higher operational cost.
 
 ## Immediate remediation (2026-06-10 validation)
 
-One-time backfill — does not replace § durable fixes:
+**Local validation (2026-06-26):** PASS — Query 8 and KPI compare 140 / $15,239 on golden date
+[2026-06-10](../../../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md).
 
 ```bash
-mdc etl run --env clinic --profile full   # or procedurelog-targeted full refresh
-dbt run --full-refresh --select stg_opendental__procedurelog+
+mdc etl run --env local --profile full -- --tables procedurelog
+mdc dbt run --env local -- --select stg_opendental__procedurelog+
 ```
 
-Re-run KPI Query 8; expect raw complete ≈ 140 / $15,239.
+**Clinic RDS (pending):** repeat ETL on `--env clinic`, then `mdc dbt run --env local` + publish or
+EC2 dbt per [CLINIC_ANALYTICS_WORKFLOW.md](../../CLINIC_ANALYTICS_WORKFLOW.md).
 
 ---
 
 ## Acceptance criteria (close this finding)
 
-| # | Criterion |
-| --- | --- |
-| 1 | Automated drift check runs post-ETL and alerts on MySQL vs raw mismatch for `procedurelog` |
-| 2 | 2026-06-10 KPI compare PASS after backfill |
-| 3 | Lookback re-sync **or** verified `DateTStamp` behavior + config fix deployed |
-| 4 | Documented in KPI validation workflow as Layer 0 (replica fidelity before golden compare) |
+| # | Criterion | Status |
+| --- | --- | --- |
+| 1 | Automated drift check runs post-ETL and alerts on MySQL vs raw mismatch for `procedurelog` | **Done** — `mdc etl invoke -- check-procedurelog-drift` |
+| 2 | 2026-06-10 KPI compare PASS after backfill | **Done** (local, 2026-06-26) |
+| 3 | Lookback re-sync **or** verified `DateTStamp` behavior + config fix deployed | **Done** (30-day lookback + loader upsert); clinic deploy pending |
+| 4 | Documented in KPI validation workflow as Layer 0 (replica fidelity before golden compare) | **Done** — [kpi/README.md](../../../dbt_dental_models/validation/kpi/README.md) |
 
 ---
 
@@ -265,4 +267,4 @@ Re-run KPI Query 8; expect raw complete ≈ 140 / $15,239.
 | ID | Scope |
 | --- | --- |
 | **ETL-FND-001** | Platform — replica row drift on `procedurelog` (this document) |
-| **DPBP-2026-06-10-001** | KPI instance — daily production by procedure blocked on 2026-06-10 |
+| **DPBP-2026-06-10-001** | KPI instance — daily production by procedure **PASS** on 2026-06-10 (local, 2026-06-26) |

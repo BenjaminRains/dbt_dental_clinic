@@ -212,6 +212,72 @@ def _env_path(config_dir: Path, stage: ETLStage) -> Path:
     return config_dir / f".env_{stage.value}"
 
 
+def _dbt_env_local_path(config_dir: Path) -> Path:
+    """Phase 6 local warehouse authority (same path mdc_cli uses)."""
+    return config_dir.parent / "dbt_dental_models" / ".env_local"
+
+
+def _read_dotenv_file(path: Path) -> dict[str, str]:
+    try:
+        from dotenv import dotenv_values
+
+        raw = dotenv_values(path) or {}
+    except Exception:
+        return {}
+    return {
+        str(key): str(value).strip().strip('"').strip("'")
+        for key, value in raw.items()
+        if key and value is not None and str(value).strip()
+    }
+
+
+def _load_local_warehouse_env(config_dir: Path) -> dict[str, str]:
+    """
+    Local Postgres warehouse from dbt_dental_models/.env_local.
+
+    Ignores shell POSTGRES_ANALYTICS_* exports so stale clinic RDS vars cannot
+    override localhost when ETL_ENVIRONMENT=local.
+    """
+    path = _dbt_env_local_path(config_dir)
+    if not path.exists():
+        raise ValueError(
+            f"No local warehouse env found. Create {path} "
+            f"(see dbt_dental_models/.env_local.template)."
+        )
+    file_vals = _read_dotenv_file(path)
+    prefix = STAGE_PREFIXES["local"]["analytics"]
+    warehouse = {
+        key: value for key, value in file_vals.items() if key.startswith(prefix)
+    }
+    required = [f"{prefix}{suffix}" for suffix in ("HOST", "DB", "USER", "PASSWORD")]
+    missing = [key for key in required if not (warehouse.get(key) or "").strip()]
+    if missing:
+        sample = ", ".join(missing[:4])
+        suffix = "..." if len(missing) > 4 else ""
+        raise ValueError(
+            f"Missing required vars ({sample}{suffix}) from {path}."
+        )
+    warehouse.setdefault(f"{prefix}SCHEMA", file_vals.get(f"{prefix}SCHEMA", "raw"))
+    return warehouse
+
+
+def _apply_local_warehouse_authority(
+    env: dict[str, str],
+    stage: ETLStage,
+    config_dir: Path,
+) -> dict[str, str]:
+    if stage != ETLStage.LOCAL:
+        return env
+    warehouse = _load_local_warehouse_env(config_dir)
+    cleaned = {
+        key: value
+        for key, value in env.items()
+        if not key.startswith(STAGE_PREFIXES["local"]["analytics"])
+    }
+    cleaned.update(warehouse)
+    return cleaned
+
+
 def resolve_etl_profile(
     stage: ETLStage,
     explicit: Optional[str] = None,
@@ -288,9 +354,23 @@ def _env_file_for_pydantic(config_dir: Path, stage: ETLStage) -> Optional[Path]:
     """
     Return the stage .env file for pydantic-settings, or None when OS env is authoritative.
 
-    When the analytics host var is already in the process environment, do not pass the
-    on-disk file as a second authority (Phase 0 — same rule as api/settings.py).
+    Local stage always prefers etl_pipeline/.env_local when present; analytics Postgres
+    creds for local come from dbt_dental_models/.env_local (see _load_local_warehouse_env).
     """
+    env_path = _env_path(config_dir, stage)
+
+    if stage == ETLStage.LOCAL:
+        if env_path.exists():
+            logger.info(
+                "Loading ETL environment variables from: %s (local stage; "
+                "Postgres warehouse from dbt_dental_models/.env_local)",
+                env_path,
+            )
+            return env_path
+        logger.warning("ETL environment file not found: %s", env_path)
+        logger.info("Using environment variables from system/os.environ")
+        return None
+
     host_key = HOST_ENV_KEYS[stage.value]
     prefix = STAGE_PREFIXES[stage.value]["analytics"]
     if _analytics_env_complete_in_os(host_key, prefix):
@@ -302,7 +382,6 @@ def _env_file_for_pydantic(config_dir: Path, stage: ETLStage) -> Optional[Path]:
         )
         return None
 
-    env_path = _env_path(config_dir, stage)
     if env_path.exists():
         logger.info(
             "Loading ETL environment variables from: %s (OS env wins over file per field)",
@@ -408,8 +487,14 @@ def _supplement_env_dict(
             file_vals = {}
 
     candidate_keys = set(os.environ.keys()) | set(file_vals.keys())
+    analytics_prefix = STAGE_PREFIXES[stage]["analytics"]
     for key in candidate_keys:
         if not any(key.startswith(p) for p in prefixes):
+            continue
+        # Local warehouse Postgres comes from dbt .env_local via typed settings — not shell.
+        if stage == "local" and key.startswith(analytics_prefix):
+            if key not in env_dict and file_vals.get(key):
+                env_dict[key] = str(file_vals[key])
             continue
         os_val = os.environ.get(key)
         if os_val:
@@ -462,45 +547,59 @@ def _load_connection_settings_models(
     resolved_profile: ETLProfile,
     env_file: Optional[Path],
     env_path_hint: Optional[Path] = None,
+    config_dir: Optional[Path] = None,
 ) -> ETLConnectionSettings:
     """Build validated connection models from pydantic env sources."""
+    resolved_config_dir = config_dir or (
+        env_path_hint.parent if env_path_hint is not None else Path(__file__).parent.parent.parent
+    )
     prefixes = STAGE_PREFIXES[stage.value]
     source_required = resolved_profile == ETLProfile.FULL
-    try:
-        source = _try_load_source(
-            env_file,
-            prefixes["source"],
-            required=source_required,
-        )
-        replication = MySQLConnSettings(
-            _env_file=env_file,
-            _env_prefix=prefixes["replication"],
-        )
-        analytics = PostgresAnalyticsSettings(
-            _env_file=env_file,
-            _env_prefix=prefixes["analytics"],
-        )
-    except ValidationError as exc:
-        hint = ""
-        if env_path_hint is not None:
-            hint = _missing_env_hint(stage, env_path_hint, prefixes, resolved_profile)
-        raise ValueError(
-            f"Invalid ETL configuration for {stage.value} environment "
-            f"(profile={resolved_profile.value}): {exc}{hint}"
-        ) from exc
+    warehouse_overlay: Optional[dict[str, str]] = None
+    if stage == ETLStage.LOCAL:
+        warehouse_overlay = _load_local_warehouse_env(resolved_config_dir)
 
-    if source is None and resolved_profile == ETLProfile.LOAD:
-        logger.info(
-            "ETL profile 'load': OPENDENTAL_SOURCE_* not configured (optional for this profile)"
+    def _build() -> ETLConnectionSettings:
+        try:
+            source = _try_load_source(
+                env_file,
+                prefixes["source"],
+                required=source_required,
+            )
+            replication = MySQLConnSettings(
+                _env_file=env_file,
+                _env_prefix=prefixes["replication"],
+            )
+            analytics = PostgresAnalyticsSettings(
+                _env_file=env_file,
+                _env_prefix=prefixes["analytics"],
+            )
+        except ValidationError as exc:
+            hint = ""
+            if env_path_hint is not None:
+                hint = _missing_env_hint(stage, env_path_hint, prefixes, resolved_profile)
+            raise ValueError(
+                f"Invalid ETL configuration for {stage.value} environment "
+                f"(profile={resolved_profile.value}): {exc}{hint}"
+            ) from exc
+
+        if source is None and resolved_profile == ETLProfile.LOAD:
+            logger.info(
+                "ETL profile 'load': OPENDENTAL_SOURCE_* not configured (optional for this profile)"
+            )
+
+        return ETLConnectionSettings(
+            stage,
+            source,
+            replication,
+            analytics,
+            profile=resolved_profile,
         )
 
-    return ETLConnectionSettings(
-        stage,
-        source,
-        replication,
-        analytics,
-        profile=resolved_profile,
-    )
+    if warehouse_overlay is not None:
+        with _overlay_os_environ(warehouse_overlay):
+            return _build()
+    return _build()
 
 
 def load_etl_connection_settings_from_env(
@@ -508,13 +607,16 @@ def load_etl_connection_settings_from_env(
     *,
     environment: Optional[str] = None,
     profile: Optional[str] = None,
+    config_dir: Optional[Path] = None,
 ) -> ETLConnectionSettings:
     """Load and validate typed ETL connection settings from an injected env dict."""
     stage = _detect_stage(env.get("ETL_ENVIRONMENT") or environment)
     resolved_profile = resolve_etl_profile(stage, env.get("ETL_PROFILE") or profile)
+    resolved_config_dir = config_dir or Path(__file__).parent.parent.parent
     merged = dict(env)
     merged.setdefault("ETL_ENVIRONMENT", stage.value)
     merged.setdefault("ETL_PROFILE", resolved_profile.value)
+    merged = _apply_local_warehouse_authority(merged, stage, resolved_config_dir)
 
     logger.info(
         "Validating injected ETL environment: %s (profile=%s)",
@@ -526,6 +628,7 @@ def load_etl_connection_settings_from_env(
             stage=stage,
             resolved_profile=resolved_profile,
             env_file=None,
+            config_dir=resolved_config_dir,
         )
     logger.info("ETL environment validation passed")
     return settings
@@ -560,6 +663,7 @@ def load_etl_connection_settings(
         resolved_profile=resolved_profile,
         env_file=env_file,
         env_path_hint=env_path,
+        config_dir=config_dir,
     )
     logger.info("ETL environment validation passed")
     return settings

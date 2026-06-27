@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import Optional
 
-from mdc_cli.paths import ETL_DIR, default_etl_profile, etl_env_file
+from mdc_cli import paths
 from mdc_cli.postgres_env import (
     POSTGRES_ANALYTICS_PREFIX,
     apply_postgres_ssl_env,
@@ -22,7 +22,7 @@ TEST_POSTGRES_PREFIX = "TEST_POSTGRES_ANALYTICS_"
 
 
 def _read_etl_stage_file(stage: str) -> dict[str, str]:
-    return read_env_file(etl_env_file(stage))
+    return read_env_file(paths.etl_env_file(stage))
 
 
 def _overlay_analytics_authority(
@@ -75,7 +75,7 @@ def compose_etl_env_dict(
         supplement_env_dict,
     )
 
-    resolved_profile = profile or default_etl_profile(stage)
+    resolved_profile = profile or paths.default_etl_profile(stage)
     file_vals = _read_etl_stage_file(stage)
 
     if stage in ("clinic", "local"):
@@ -86,7 +86,7 @@ def compose_etl_env_dict(
                 "(clinic: deployment_credentials.json + Secrets Manager; "
                 "local: dbt_dental_models/.env_local).",
                 ", ".join(sorted(stale)[:3]) + ("..." if len(stale) > 3 else ""),
-                etl_env_file(stage).name,
+                paths.etl_env_file(stage).name,
             )
 
     merged = dict(file_vals)
@@ -104,9 +104,11 @@ def compose_etl_env_dict(
         merged,
         environment=stage,
         profile=resolved_profile,
+        config_dir=paths.ETL_DIR,
     )
     env_dict = etl_settings_to_env_dict(settings)
-    path_for_supplement = etl_env_file(stage) if etl_env_file(stage).exists() else None
+    stage_env_path = paths.etl_env_file(stage)
+    path_for_supplement = stage_env_path if stage_env_path.exists() else None
     env_dict = supplement_env_dict(stage, env_dict, path_for_supplement)
 
     for ssl_key in ("POSTGRES_ANALYTICS_SSLMODE", "PGSSLMODE"):
