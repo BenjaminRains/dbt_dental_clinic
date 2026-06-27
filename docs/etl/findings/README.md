@@ -6,7 +6,7 @@ report definition.
 | ID | Title | Type | Status |
 | --- | --- | --- | --- |
 | [ETL-FND-001](./ETL-FND-001-replica-row-drift-procedurelog.md) | Replica row drift — `procedurelog` | Pipeline defect + observability gap | Mitigated (local KPI PASS; clinic deploy pending) |
-| [ETL replica fidelity roadmap](../ETL_REPLICA_FIDELITY_ROADMAP.md) | Platform plan (pre-CDC) | Schema analyzer, Layer 0, Sunday full refresh | Active |
+| [ETL replica fidelity roadmap](../ETL_REPLICA_FIDELITY_ROADMAP.md) | Platform plan (pre-CDC) | Schema analyzer, replicator/loader (Phase 1–2 done), Layer 0, Sunday full refresh | Active |
 
 ## Finding types (taxonomy)
 

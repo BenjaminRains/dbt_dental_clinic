@@ -8,6 +8,20 @@
 
 ---
 
+## Implementation status (branch `fix/etl-fnd-001-procedurelog-row-drift`)
+
+| Phase | Status | Local verification |
+| --- | --- | --- |
+| **1** — Schema analyzer + `tables.yml` v4.1 | **Done** (commit `558e50d7`) | `procedurelog`: `DateTStamp` watermark, `or_logic`, 30-day lookback in config |
+| **2** — Replicator + loader alignment | **Done** (commit `6cc4e6f9`) | Incremental ~10,632 rows (~2s replicate + ~1.2 min load) vs ~815k rows pre-fix; drift check PASS; KPI 2026-06-10 PASS (28 codes, 140 / $15,239) |
+| **3** — Layer 0 checks (payment, claimproc, adjustment) | Not started | — |
+| **4** — Sunday scoped full refresh | Not started | — |
+| **1.5** — Spot-edit timestamp matrix | Not started | Required before trusting config clinic-wide |
+
+**Next:** clinic RDS deploy + re-validate; 2+ additional golden dates; Phase 3 Layer 0.
+
+---
+
 ## Problem summary
 
 | Assumption (design) | Reality (code + OD) |
@@ -29,6 +43,8 @@
 ---
 
 ## Phase 1 — Fix config generation (`analyze_opendental_schema.py`)
+
+**Status:** **Done** (2026-06-26, local) — analyzer v4.1 emits `sync_profile`, `replicator_watermark_column`, `lookback_resync`; `tables.yml` regenerated on laptop via `mdc etl schema --env local`.
 
 **Owner:** schema analyzer + `tables.yml` contract  
 **Effort:** 1–2 days code + regen `tables.yml` + spot validation  
@@ -106,6 +122,8 @@ Record results in this doc or ETL-FND-001. If timestamp **never** moves → time
 ---
 
 ## Phase 2 — Replicator vs loader consistency
+
+**Status:** **Done** (2026-06-27, local) — shared `replica_sync_config.py`; replicator uses `replicator_watermark_column`; loader timestamp-only WHERE for `in_place_updates`; config-driven lookback; streaming upsert for mutation tables.
 
 **Effort:** 2–3 days  
 **Depends on:** Phase 1 fields in `tables.yml`
@@ -299,9 +317,9 @@ flowchart LR
 | Step | Work | Outcome |
 | ---: | --- | --- |
 | 1 | Spot-edit timestamp matrix (§1.5) | Know if timestamp watermark is viable |
-| 2 | Phase 1 schema analyzer + regen `tables.yml` | Config matches mutation vs append semantics |
-| 3 | Phase 2 replicator watermark fix | MySQL → replication catches timestamp advances |
-| 4 | Generalize lookback + loader upsert (procedurelog → config-driven) | MySQL → raw for business-window edits |
+| 2 | Phase 1 schema analyzer + regen `tables.yml` | **Done** — config matches mutation vs append semantics |
+| 3 | Phase 2 replicator watermark fix | **Done** — MySQL → replication catches timestamp advances |
+| 4 | Generalize lookback + loader upsert (procedurelog → config-driven) | **Done** — MySQL → raw for business-window edits |
 | 5 | Layer 0 Tier A: payment, claimproc, adjustment | Detect drift before KPIs |
 | 6 | Sunday full refresh DAG (Option B, scoped list) | Weekly reset safety net |
 | 7 | Merge ETL-FND-001 branch; clinic ETL + publish | Production path validated |
@@ -322,4 +340,4 @@ flowchart LR
 
 ---
 
-*Document version: 1.0 (2026-06-26). Pre-CDC platform plan; update after Phase 1 regen and spot-edit matrix.*
+*Document version: 1.1 (2026-06-27). Phase 1–2 implemented locally; clinic deploy and Phase 3–4 pending.*
