@@ -196,12 +196,24 @@ mitigation** short of log-based CDC.
 
 ### 3. Incremental config review (required)
 
-On clinic `tables.yml` for `procedurelog`:
+**Do not edit `tables.yml` directly** — it is a generated artifact from
+`etl_pipeline/scripts/analyze_opendental_schema.py` (Phase 1, metadata v4.1). Change analyzer
+rules or the mutation seed list, then regenerate:
 
-- Confirm `primary_incremental_column` = **`DateTStamp`** (not `ProcDate` — business date never
-  changes on status complete).
-- Re-evaluate **`and_logic`** vs **`or_logic`** for incremental columns.
-- Document decision in `tables.yml` comments.
+```powershell
+mdc etl schema --env local   # laptop + VPN; nightly clinic DAG uses --env clinic
+```
+
+After regen, verify the generated `procedurelog` entry (diff review, not hand-edits):
+
+- `replicator_watermark_column` / `primary_incremental_column` = **`DateTStamp`** (not `ProcNum` or
+  `ProcDate` — business date does not advance on TP → Complete).
+- `incremental_strategy` = **`or_logic`** on mutation tables (not `and_logic`).
+- `lookback_resync`: enabled, 30-day window on `DateComplete` / `ProcDate`.
+- `sync_profile`: `in_place_updates`.
+
+Document analyzer decisions in `analyze_opendental_schema.py` and
+[ETL_REPLICA_FIDELITY_ROADMAP.md](../ETL_REPLICA_FIDELITY_ROADMAP.md), not in the YAML file.
 
 ### 4. Extend loader stale-state detection (code)
 

@@ -66,6 +66,16 @@ flowchart LR
 | Step | Compare | What it proves |
 | --- | --- | --- |
 | **0. Source → raw** | MySQL vs `raw.*` reconciliation (row counts, or complete-production totals by day) | **Replica fidelity** — catches [replica row drift](../../../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md) before blaming staging or mart. Required for tables with in-place updates (`procedurelog` ProcStatus, etc.). |
+
+**Automated Layer 0 (Tier A):**
+
+```powershell
+mdc etl invoke --env local -- check-replica-drift --tier A --warn-only
+mdc etl invoke --env local -- check-replica-drift --check L0-PAY-001 --warn-only
+mdc etl invoke --env local -- check-procedurelog-drift --warn-only   # L0-PROC-001 alias
+```
+
+Registry: `etl_pipeline/config/replica_drift_checks.yml` — checks `L0-PROC-001` … `L0-ADJ-001`.
 | **1. OD → staging** | Golden CSV section totals vs `staging` reconstruction SQL | Warehouse has the same underlying rows OD used. Catches **ETL lag** (late inserts) before blaming the mart. |
 | **2. Staging → mart** | `compare_*_staging.sql` | dbt mart is a faithful aggregation of staging — no dropped insurance, wrong PayType filter, etc. |
 | **3. Mart → OD** | `compare_*_collections.sql` + `FIELD_MAP.md` | **End-to-end:** `opendental_analytics.marts.mart_*` matches what the OD report shows the practice. This is the KPI sign-off. |
