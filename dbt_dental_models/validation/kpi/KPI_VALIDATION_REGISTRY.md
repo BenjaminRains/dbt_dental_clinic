@@ -34,7 +34,7 @@ is the check that implemented logic produces the same result as OD on golden dat
 
 | within_tolerance | [daily-payments](./daily-payments/) | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Payments | Reports → Standard → Daily → Payments | ±0.5% or ±$10 | **Complete (2026-06-26):** 3 golden dates; layers 1–4 PASS; [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md). ETL before same-day validate; income transfers net to $0. |
 
-| compare_sql_draft | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `fact_procedure` | `sum(actual_fee)` by `date_complete` | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **1/3 golden dates PASS (2026-06-26):** [2026-06-10](./daily-production-by-procedure/findings/2026-06-10.md) — layers 0–3 PASS local after [ETL-FND-001](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) fix. Need 2+ more spot-check dates for `within_tolerance`. |
+| compare_sql_draft | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `fact_procedure` | `sum(actual_fee)` by `date_complete` | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **1/3 golden dates PASS (2026-06-27):** [2026-06-10](./daily-production-by-procedure/findings/2026-06-10.md) — layers 0–3 PASS local after [ETL-FND-001](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) Phase 1–2. Need 2+ more spot-check dates for `within_tolerance`. |
 
 | not_started | [aging-of-a-r](./aging-of-a-r/) | AR total | `mart_ar_summary` | `total_ar_balance` | Aging of A/R | Reports → Standard → Monthly → Aging of A/R | ±$50 or ±0.5% | Simplified DSO in exposures |
 
@@ -130,7 +130,7 @@ Golden path: `daily-payments/golden/`
 
 | --- | --- | --- | --- |
 
-| daily_2026-06-10 | 2026-06-10 | 2026-06-10 | **PASS** (local, 2026-06-26) — 140 / $15,239; layers 0–3 — [findings/2026-06-10.md](./daily-production-by-procedure/findings/2026-06-10.md) |
+| daily_2026-06-10 | 2026-06-10 | 2026-06-10 | **PASS** (local, 2026-06-27 re-check) — 140 / $15,239; layers 0–3; 28 codes — [findings/2026-06-10.md](./daily-production-by-procedure/findings/2026-06-10.md) |
 
 
 

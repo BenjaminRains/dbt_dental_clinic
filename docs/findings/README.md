@@ -10,6 +10,8 @@ report definition. KPI-specific validation instances live under
 | --- | --- | --- | --- |
 | [ETL-FND-001](./ETL-FND-001-replica-row-drift-procedurelog.md) | Replica row drift — `procedurelog` | Pipeline defect + observability gap | Mitigated (local KPI PASS; clinic deploy pending) |
 
+See also: [ETL replica fidelity roadmap](../etl/ETL_REPLICA_FIDELITY_ROADMAP.md) (schema analyzer, Layer 0, Sunday full refresh).
+
 ## dbt findings
 
 | ID | Title | Type | Status |

@@ -1,6 +1,6 @@
 # ETL-FND-001: Replica row drift — `procedurelog`
 
-**Status:** Mitigated (local KPI PASS 2026-06-26) — branch `fix/etl-fnd-001-procedurelog-row-drift` (P0 drift check + P1 lookback re-sync + loader upsert). Clinic RDS deploy + nightly automation pending before close.
+**Status:** Mitigated (local KPI PASS 2026-06-26, Phase 2 re-validated 2026-06-27) — branch `fix/etl-fnd-001-procedurelog-row-drift` (P0 drift check + P1 lookback re-sync + Phase 2 replicator/loader alignment). Clinic RDS deploy + nightly automation pending before close.
 
 **Platform roadmap (pre-CDC):** [ETL_REPLICA_FIDELITY_ROADMAP.md](../ETL_REPLICA_FIDELITY_ROADMAP.md) — schema analyzer fix, Layer 0 checks, Sunday full refresh, CDC sketch.
 **Severity:** High (blocks production KPI validation; affects any metric keyed on complete procedures)  
@@ -232,8 +232,13 @@ drift for all mutation types. Higher operational cost.
 **Local validation (2026-06-26):** PASS — Query 8 and KPI compare 140 / $15,239 on golden date
 [2026-06-10](../../../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md).
 
+**Phase 2 re-validation (2026-06-27):** After replicator/loader alignment (`replica_sync_config.py`),
+incremental ETL copies ~10,632 lookback rows (~2s replicate + ~1.2 min load) instead of ~815k
+full-table scans. Drift check PASS; KPI totals + 28 procedure codes PASS unchanged.
+
 ```bash
 mdc etl run --env local --profile full -- --tables procedurelog
+mdc etl invoke --env local -- check-procedurelog-drift --warn-only
 mdc dbt run --env local -- --select stg_opendental__procedurelog+
 ```
 
@@ -248,7 +253,7 @@ EC2 dbt per [CLINIC_ANALYTICS_WORKFLOW.md](../../CLINIC_ANALYTICS_WORKFLOW.md).
 | --- | --- | --- |
 | 1 | Automated drift check runs post-ETL and alerts on MySQL vs raw mismatch for `procedurelog` | **Done** — `mdc etl invoke -- check-procedurelog-drift` |
 | 2 | 2026-06-10 KPI compare PASS after backfill | **Done** (local, 2026-06-26) |
-| 3 | Lookback re-sync **or** verified `DateTStamp` behavior + config fix deployed | **Done** (30-day lookback + loader upsert); clinic deploy pending |
+| 3 | Lookback re-sync **or** verified `DateTStamp` behavior + config fix deployed | **Done** (30-day lookback + Phase 2 replicator/loader alignment); clinic deploy pending |
 | 4 | Documented in KPI validation workflow as Layer 0 (replica fidelity before golden compare) | **Done** — [kpi/README.md](../../../dbt_dental_models/validation/kpi/README.md) |
 
 ---
