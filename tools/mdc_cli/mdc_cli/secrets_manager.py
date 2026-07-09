@@ -583,6 +583,13 @@ def sync_clinic_env_from_secrets(
     if secret.username:
         api_changed |= update_dotenv_key(api_env_file, "POSTGRES_ANALYTICS_USER", secret.username)
     api_changed |= update_dotenv_key(api_env_file, "POSTGRES_ANALYTICS_SSLMODE", "require")
+    if rds_master_secret_id:
+        api_changed |= update_dotenv_key(
+            api_env_file, "CLINIC_RDS_MASTER_SECRET_ARN", rds_master_secret_id
+        )
+    api_changed |= update_dotenv_key(
+        api_env_file, "CLINIC_RDS_INSTANCE_ID", clinic_rds_instance_identifier()
+    )
 
     raw_after = _read_dotenv_value_raw(api_env_file, "POSTGRES_ANALYTICS_PASSWORD")
     if clinic_password_value_is_json_blob(raw_after):

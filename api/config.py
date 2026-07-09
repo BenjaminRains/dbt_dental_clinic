@@ -86,12 +86,21 @@ class APIConfig:
         if db_type != DatabaseType.ANALYTICS:
             raise ValueError(f"Unsupported database type: {db_type}")
         db = self._settings.analytics
+        password = db.password.get_secret_value()
+        # Clinic EC2: prefer live Secrets Manager password so 7-day RDS rotation
+        # does not require redeploying api/.env. Local/demo/test keep file/env password.
+        if self.environment == Environment.CLINIC.value:
+            from clinic_rds_secret import resolve_clinic_analytics_password
+
+            password, source = resolve_clinic_analytics_password(password)
+            if source != "env_file":
+                logger.info("Clinic analytics password source: %s", source)
         return {
             "host": db.host,
             "port": db.port,
             "database": db.db,
             "user": db.user,
-            "password": db.password.get_secret_value(),
+            "password": password,
         }
 
     def get_database_url(self, db_type: DatabaseType = DatabaseType.ANALYTICS) -> str:

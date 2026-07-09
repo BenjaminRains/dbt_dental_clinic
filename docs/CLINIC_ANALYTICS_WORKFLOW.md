@@ -110,11 +110,30 @@ Clinic RDS has **one** authoritative credential in Secrets Manager:
 
 The legacy secret **`dental-clinic/database`** was a duplicate copy (never rotated with RDS). CloudTrail audit (Jun 2025) showed no production callers — **delete it** in the AWS console and do not recreate it.
 
-**Runtime on EC2:** the clinic API reads **`/opt/dbt_dental_clinic/api/.env`** (deployed from `api/.env_api_clinic`). It does **not** call Secrets Manager at runtime.
+**Runtime on EC2 (rotation-safe):**
 
-**Developer laptop:** `mdc publish analytics`, `mdc status --env clinic --tunnel-db`, and `mdc secrets pull clinic` fetch the **live** password via `GetSecretValue` on `rds!db-...`.
+| Consumer | Password source |
+|----------|-----------------|
+| Clinic API | Live `GetSecretValue` via `api/clinic_rds_secret.py` (TTL cache ~5 min; falls back to `api/.env`) |
+| EC2 dbt (`run_dbt_on_ec2.ps1`) | `scripts/ec2/load_api_env.sh` → `overlay_live_clinic_rds_password` (AWS CLI + python3) |
 
-**Sync local deploy file + EC2 after rotation or password change:**
+Host/user/db still come from `api/.env` (deployed from `api/.env_api_clinic`). The **password** is fetched live so weekly rotation does not require a redeploy.
+
+**Disable live fetch** (tests / offline): `API_CLINIC_RDS_LIVE_PASSWORD=0`.
+
+**Optional env on EC2:**
+
+| Variable | Purpose |
+|----------|---------|
+| `CLINIC_RDS_MASTER_SECRET_ARN` | Skip `DescribeDBInstances` and use this secret ARN directly (written by `mdc secrets pull clinic`) |
+| `CLINIC_RDS_INSTANCE_ID` | Default `dental-clinic-analytics` (also written by `mdc secrets pull clinic`) |
+| `API_CLINIC_RDS_PASSWORD_TTL_SECONDS` | Cache TTL (default 300) |
+
+**IAM (clinic EC2 instance role):** `secretsmanager:GetSecretValue` on `rds!db-*` plus `rds:DescribeDBInstances` (unless `CLINIC_RDS_MASTER_SECRET_ARN` is set).
+
+**Developer laptop:** `mdc publish analytics`, `mdc status --env clinic --tunnel-db`, and `mdc secrets pull clinic` already fetch the live password via `GetSecretValue` on `rds!db-...`.
+
+**Sync local deploy file + EC2 after rotation** (optional now — only needed if live fetch is disabled or IAM is missing):
 
 ```powershell
 mdc secrets pull clinic      # writes api/.env_api_clinic from rds!db-...
@@ -130,9 +149,9 @@ aws rds describe-db-instances --db-instance-identifier dental-clinic-analytics `
   --query 'DBInstances[0].MasterUserSecret.SecretArn' --output text
 ```
 
-**Force stale file password** (debug only): `--use-env-file` on `mdc publish` / `mdc status`.
+**Force stale file password** (debug only): `--use-env-file` on `mdc publish` / `mdc status`, or `API_CLINIC_RDS_LIVE_PASSWORD=0` on EC2.
 
-After rotation (~7 days), if the **clinic API on EC2** fails `/health/db`, run `mdc secrets pull clinic` then `mdc deploy api --env clinic`.
+After rotation (~7 days), clinic API and EC2 dbt should keep working without redeploy. If `/health/db` still fails, check instance-role IAM, then fall back to `mdc secrets pull clinic` + `mdc deploy api --env clinic`.
 
 #### Delete legacy `dental-clinic/database` (one-time)
 
@@ -197,7 +216,7 @@ EC2 has direct network access to RDS. Use this after raw/ETL loads on clinic or 
 
 | Symptom | Likely cause | Fix |
 |--------|----------------|-----|
-| `password authentication failed` for `analytics_user` | Stale password in `api/.env_api_clinic` or EC2 `api/.env` vs rotated RDS master | `mdc secrets pull clinic` then `mdc deploy api --env clinic` |
+| `password authentication failed` for `analytics_user` | Stale password in `api/.env` **and** live Secrets Manager fetch failed/disabled | Confirm EC2 instance role can `GetSecretValue` on `rds!db-*`; or `mdc secrets pull clinic` then `mdc deploy api --env clinic` |
 | `AccessDeniedException` on `GetSecretValue` (rds!db-...) | IAM user cannot read RDS master secret | Grant `secretsmanager:GetSecretValue` on `rds!db-*` and `rds:DescribeDBInstances` |
 | `Tunnel not reachable on 127.0.0.1:5433` | Tunnel not running | Start `mdc tunnel clinic-db` in another terminal first |
 | `ModuleNotFoundError: No module named 'mdc_cli'` | `mdc` not installed in that shell | `pip install -e tools/mdc_cli` from repo root |

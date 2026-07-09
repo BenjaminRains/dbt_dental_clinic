@@ -10,7 +10,7 @@ $deployScript = Join-Path $repoRoot "scripts\deployment\deploy_api_file.ps1"
 Push-Location $repoRoot
 try {
 $files = @(
-    "api\main.py", "api\config.py", "api\settings.py", "api\database.py", "api\deps.py", "api\cors_runtime.py",
+    "api\main.py", "api\config.py", "api\settings.py", "api\database.py", "api\clinic_rds_secret.py", "api\deps.py", "api\cors_runtime.py",
     "api\api_types.py",
     "api\models\__init__.py", "api\models\patient.py", "api\models\provider.py", "api\models\appointment.py",
     "api\models\ar.py", "api\models\revenue.py", "api\models\hygiene.py", "api\models\treatment_acceptance.py",
