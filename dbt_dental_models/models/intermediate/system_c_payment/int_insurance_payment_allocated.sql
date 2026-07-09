@@ -27,6 +27,11 @@
 */
 
 WITH
+    {% if is_incremental() %}
+    max_loaded AS (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff FROM {{ this }}
+    ),
+    {% endif %}
 -- Get payment definitions with materialization
 payment_definitions AS MATERIALIZED (
     SELECT DISTINCT
@@ -217,8 +222,12 @@ SELECT DISTINCT
         ELSE FALSE
     END AS include_in_ar,
     
-    -- Standardized metadata from primary source (claim procedures)
-    {{ standardize_intermediate_metadata(primary_source_alias='cp') }},
+    -- Standardized metadata: watermark advances when claimproc OR payment changes
+    GREATEST(cp._loaded_at, ip.payment_loaded_at) AS _loaded_at,
+    {{ standardize_intermediate_metadata(
+        primary_source_alias='cp',
+        source_metadata_fields=['_created_at', '_updated_at', '_created_by']
+    ) }},
     
     -- Secondary source metadata (insurance payments - may be NULL)
     ip.payment_loaded_at,
@@ -234,4 +243,8 @@ LEFT JOIN payment_definitions pd
 LEFT JOIN bluebook_info bb
     ON cp.procedure_id = bb.procedure_id
     AND cp.claim_id = bb.claim_id
-    AND cp.plan_id = bb.plan_id 
+    AND cp.plan_id = bb.plan_id
+{% if is_incremental() %}
+WHERE cp._loaded_at > (SELECT cutoff FROM max_loaded)
+   OR ip.payment_loaded_at > (SELECT cutoff FROM max_loaded)
+{% endif %}

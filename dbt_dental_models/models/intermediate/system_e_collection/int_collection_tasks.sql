@@ -26,7 +26,13 @@
     4. Enables follow-up tracking
 */
 
-WITH collection_tasks AS (
+WITH
+    {% if is_incremental() %}
+    max_loaded AS (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff FROM {{ this }}
+    ),
+    {% endif %}
+collection_tasks AS (
     -- Join tasks with campaign and patient information
     SELECT
         -- Create a stable numeric ID based on the source task_id
@@ -218,6 +224,9 @@ WITH collection_tasks AS (
         CASE WHEN t.description ~ '(f/u|follow up|follow-up)' THEN true ELSE false END AS has_follow_up,
         CASE WHEN t.description ~ 'paid|received|promised|will pay' THEN true ELSE false END AS has_outcome,
         
+        -- Pipeline metadata from primary staging source
+        t._loaded_at,
+
         -- Metadata
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
@@ -264,11 +273,7 @@ WITH collection_tasks AS (
         )
         
     {% if is_incremental() %}
-        -- If this is an incremental run, only process new or changed tasks
-        AND t.entry_timestamp > (
-            SELECT COALESCE(MAX(model_created_at), '1900-01-01'::timestamp) 
-            FROM {{ this }}
-        )
+        AND t._loaded_at > (SELECT cutoff FROM max_loaded)
     {% endif %}
 )
 

@@ -25,7 +25,13 @@
 */
 
 -- First, identify problematic transfers to exclude them
-WITH problematic_transfers AS (
+WITH
+    {% if is_incremental() %}
+    max_loaded AS (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff FROM {{ this }}
+    ),
+    {% endif %}
+problematic_transfers AS (
     SELECT DISTINCT
         p.payment_id
     FROM {{ ref('stg_opendental__payment') }} p
@@ -182,7 +188,7 @@ patient_payments AS MATERIALIZED (
         ps.discount_type,
         ps.unearned_type,
         -- Metadata fields for standardize_intermediate_metadata macro
-        p._loaded_at,
+        GREATEST(p._loaded_at, ps._loaded_at) AS _loaded_at,
         p._transformed_at,
         p._created_at,
         p._updated_at,
@@ -212,6 +218,12 @@ patient_payments AS MATERIALIZED (
     AND NOT (p.payment_type_id = 72 AND p.is_cc_completed = true)
     -- Validate recurring payments
     AND NOT (p.is_cc_completed = true AND p.recurring_charge_date IS NULL)
+    {% if is_incremental() %}
+    AND (
+        p._loaded_at > (SELECT cutoff FROM max_loaded)
+        OR ps._loaded_at > (SELECT cutoff FROM max_loaded)
+    )
+    {% endif %}
 )
 
 -- Final select with patient payment allocations

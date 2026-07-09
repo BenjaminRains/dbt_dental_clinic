@@ -23,7 +23,13 @@
     6. Implements transfer payment rules
 */
 
-WITH split_definitions AS (
+WITH
+    {% if is_incremental() %}
+    max_loaded AS (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff FROM {{ this }}
+    ),
+    {% endif %}
+split_definitions AS (
     SELECT DISTINCT
         definition_id,
         item_name,
@@ -117,8 +123,8 @@ base_splits AS (
         ps.discount_type,
         ps.unearned_type,
         
-        -- Metadata fields for standardize_intermediate_metadata macro
-        ps._loaded_at,
+        -- Metadata: advance watermark from either payment or split changes
+        GREATEST(ps._loaded_at, p._loaded_at) AS _loaded_at,
         ps._created_at,
         ps._updated_at,
         ps._created_by,
@@ -170,6 +176,12 @@ base_splits AS (
     LEFT JOIN split_counts sc
         ON ps.payment_id = sc.payment_id
     WHERE p.payment_date >= '2023-01-01'
+    {% if is_incremental() %}
+    AND (
+        ps._loaded_at > (SELECT cutoff FROM max_loaded)
+        OR p._loaded_at > (SELECT cutoff FROM max_loaded)
+    )
+    {% endif %}
 ),
 
 split_categorization AS (

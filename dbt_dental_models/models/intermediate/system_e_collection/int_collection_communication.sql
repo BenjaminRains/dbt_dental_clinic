@@ -26,7 +26,13 @@
     4. Enables follow-up tracking
 */
 
-WITH collection_communications AS (
+WITH
+    {% if is_incremental() %}
+    max_loaded AS (
+        SELECT COALESCE(MAX(_loaded_at), '1900-01-01'::timestamp) AS cutoff FROM {{ this }}
+    ),
+    {% endif %}
+collection_communications AS (
     -- Get communications that are related to collections
     SELECT
         -- Create a stable numeric ID based on the source commlog_id
@@ -105,6 +111,8 @@ WITH collection_communications AS (
         NULL::integer AS follow_up_task_id, -- Would be linked to follow-up task
         
         cl.note AS notes,
+        -- Pipeline metadata from primary staging source
+        cl._loaded_at,
         CURRENT_TIMESTAMP AS model_created_at,
         CURRENT_TIMESTAMP AS model_updated_at
     FROM {{ ref('stg_opendental__commlog') }} cl
@@ -129,8 +137,7 @@ WITH collection_communications AS (
         AND cl.communication_datetime >= '2023-01-01' -- Match historical data timeframe
         
     {% if is_incremental() %}
-        -- If this is an incremental run, only process new communications
-        AND cl.communication_datetime > (SELECT MAX(model_created_at) FROM {{ this }})
+        AND cl._loaded_at > (SELECT cutoff FROM max_loaded)
     {% endif %}
 )
 

@@ -6,6 +6,11 @@
 with source_data as (
     select * from {{ source('opendental', 'timeadjust') }}
     where {{ clean_opendental_date('"TimeEntry"') }} >= '2023-01-01'
+    {% if is_incremental() %}
+        and {{ clean_opendental_date('"TimeEntry"') }} > (
+            select coalesce(max(_loaded_at), '1900-01-01'::timestamp) from {{ this }}
+        )
+    {% endif %}
 ),
 
 renamed_columns as (

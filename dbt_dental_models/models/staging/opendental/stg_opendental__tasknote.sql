@@ -5,6 +5,11 @@
 
 with source_data as (
     select * from {{ source('opendental', 'tasknote') }}
+    {% if is_incremental() %}
+    where {{ clean_opendental_date('"DateTimeNote"') }} > (
+        select coalesce(max(_loaded_at), '1900-01-01'::timestamp) from {{ this }}
+    )
+    {% endif %}
 ),
 
 renamed_columns as (

@@ -87,6 +87,8 @@ models:
         description: ID of the follow-up task (if any)
       - name: notes
         description: Additional notes about the task
+      - name: _loaded_at
+        description: Upstream staging load timestamp used as the incremental watermark
       - name: model_created_at
         description: Timestamp when this record was last created in the dbt model
       - name: model_updated_at
