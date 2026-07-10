@@ -155,11 +155,13 @@ models:
           Business Rules:
           - Used as primary display name for provider identification
           - Consistent with provider preference settings
+          - Often blank in OpenDental — not_null warn
           
           Note: This column does not exist in the demo environment (PII removed).
         tests:
           - not_null:
               config:
+                severity: warn
                 enabled: "{{ target.name != 'demo' }}"
       
       - name: provider_first_name
@@ -169,11 +171,13 @@ models:
           Business Rules:
           - Used for formal reporting and documentation
           - Maintains consistency with HR records
+          - Sparse nulls in OD — not_null warn
           
           Note: This column does not exist in the demo environment (PII removed).
         tests:
           - not_null:
               config:
+                severity: warn
                 enabled: "{{ target.name != 'demo' }}"
       
       - name: provider_last_name
@@ -202,7 +206,8 @@ models:
       
       - name: provider_status
         description: >
-          Provider's current status code (Active, Inactive, etc.)
+          Provider's current status code from dim_provider (0=Active, 1=Inactive).
+          Use provider_status_description / provider_status_category for labels.
           
           Business Rules:
           - Determines if provider is currently active in practice
@@ -210,7 +215,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ["Active", "Inactive", "Suspended", "Terminated"]
+              values: [0, 1]
       
       # Date Information
       - name: production_date

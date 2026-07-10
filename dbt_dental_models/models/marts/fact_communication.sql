@@ -212,10 +212,10 @@ communication_calculated as (
             else false
         end as is_system_generated,
 
-        -- Metadata (int_patient_communications_base exposes created_at, not _created_at)
+        -- Metadata from int_patient_communications_base (created_at alias, not _created_at)
         {{ standardize_mart_metadata(
             primary_source_alias='sc',
-            source_metadata_fields=['created_at', 'updated_at']
+            source_metadata_fields=['_loaded_at', 'created_at', 'updated_at']
         ) }}
 
     from source_communication sc

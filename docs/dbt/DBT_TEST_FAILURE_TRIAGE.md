@@ -319,12 +319,21 @@ Breakdown: **11 ERROR** (missing columns / bad accepted_values SQL) · **19 FAIL
 | **1** | `communication_mode` accepted_values | Expand |
 | **1** | `click_count_email_mode_check` | Soft / investigate |
 
-### Batch 10 (proposed)
+### Batch 10
 
-| Batch | Scope |
-| --- | --- |
-| **10a** | Schema ERROR: restore provider names + metadata on `mart_provider_performance`; `_loaded_at` on `fact_communication`; model timestamps on `int_communication_metrics` |
-| **10b** | Softs: specialty / templates created_at / collection_efficiency / productive_hours |
-| **10c** | Comm category + campaign accepted_values; AR analysis amount ceilings (holdovers) |
+| Batch | Scope | Status |
+| --- | --- | --- |
+| **10a** | Schema ERROR: restore provider names + metadata on `mart_provider_performance`; `_loaded_at` on `fact_communication`; model timestamps on `int_communication_metrics` | **Done 2026-07-10** |
+| **10b** | Softs: specialty / templates created_at / collection_efficiency / productive_hours | Next |
+| **10c** | Comm category + campaign accepted_values; AR analysis amount ceilings (holdovers) | Pending |
+
+#### Batch 10a applied
+
+- `mart_provider_performance`: restore `provider_*_name` from `dim_provider`; metadata via `standardize_mart_metadata(prov)`; `provider_status` accepted_values → `[0, 1]`; soft preferred/first name `not_null` to warn
+- `fact_communication`: include `_loaded_at` in mart metadata fields (source uses `created_at` alias)
+- `int_communication_metrics`: add `model_created_at` / `model_updated_at`
+
+**Selective verify:** former 10a schema tests `PASS=12` · `WARN=2` · `ERROR=0` (preferred/first name warn).  
+**Model build residual FAILs (→ 10b/10c):** specialty 2562, collection_efficiency 192, productive_hours 136, comm category 571+1.
 
 Open findings: DBT-FND-001, DBT-FND-002. Fixed this session: FND-003, FND-004, FND-005.

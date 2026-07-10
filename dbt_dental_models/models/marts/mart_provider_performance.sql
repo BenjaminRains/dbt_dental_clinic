@@ -230,7 +230,10 @@ final as (
         pp.production_date::date as production_date,
         pp.provider_id,
         
-        -- Provider Information
+        -- Provider Information (PII kept in dbt; demo API gates)
+        prov.preferred_name as provider_preferred_name,
+        prov.first_name as provider_first_name,
+        prov.last_name as provider_last_name,
         prov.specialty_description,
         prov.provider_status,
         prov.provider_status_description,
@@ -307,8 +310,11 @@ final as (
         rank() over (partition by dd.date_day, prov.specialty_description order by pp.total_production desc) as production_rank_specialty,
         rank() over (partition by dd.date_day order by pp.total_production desc) as production_rank_overall,
         
-        -- Metadata
-        {{ standardize_mart_metadata() }}
+        -- Metadata from dim_provider (lineage timestamps)
+        {{ standardize_mart_metadata(
+            primary_source_alias='prov',
+            source_metadata_fields=['_loaded_at', '_created_at', '_updated_at']
+        ) }}
         
     from provider_enhanced pp
     inner join date_dimension dd
