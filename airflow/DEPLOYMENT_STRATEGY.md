@@ -57,7 +57,7 @@ docker-compose --profile init run --rm airflow-init
 docker-compose up -d postgres mysql airflow-webserver airflow-scheduler
 ```
 
-Root `/.env` supplies Airflow metadata DB credentials and Fernet key for Compose only. ETL/dbt vars are **not** injected into Airflow containers. See [`docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md) §4.4.
+Root `/.env` supplies Airflow metadata DB credentials and Fernet key for Compose only. ETL/dbt vars are **not** injected into Airflow containers. See [`docs/deployment/ENVIRONMENT_FILES.md`](../docs/deployment/ENVIRONMENT_FILES.md) §4.4.
 
 Set Variables: `etl_environment=test`, `dbt_target=local`, `project_root=/opt/airflow/dbt_dental_clinic`.
 
@@ -76,7 +76,7 @@ The ETL pipeline reads **`etl_pipeline/.env_<stage>`** (`FileConfigProvider` / `
 | Airflow Variables | `etl_environment`, `dbt_target`, `project_root`, `publish_environment` | Same pattern; `test` / `local` |
 | Root `/.env` | **Not used** for clinic ETL | Compose substitution only |
 
-See [`docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md) §4.4.
+See [`docs/deployment/ENVIRONMENT_FILES.md`](../docs/deployment/ENVIRONMENT_FILES.md) §4.4.
 
 ---
 

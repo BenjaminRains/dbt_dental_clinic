@@ -12,7 +12,7 @@
 #   - api/.env_api_clinic (RDS credentials; tunnel uses 127.0.0.1:TunnelPort)
 #
 # Usage (from repo root):
-#   See docs/CLINIC_ANALYTICS_WORKFLOW.md
+#   See docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md
 #   mdc tunnel clinic-db                    # separate terminal, keep open
 #   mdc publish analytics --env clinic      # wrapper (after pip install -e tools/mdc_cli)
 #
@@ -154,7 +154,7 @@ Wait for: Port $TunnelPort opened ... Waiting for connections...
 Then rerun:
   mdc publish analytics --env clinic
 
-Full workflow: docs/CLINIC_ANALYTICS_WORKFLOW.md
+Full workflow: docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md
 "@
     }
 }

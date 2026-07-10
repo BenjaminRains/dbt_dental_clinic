@@ -46,7 +46,7 @@ mdc api run --env local
 mdc api run --env clinic --tunnel-db   # with mdc tunnel clinic-db
 mdc etl run --env clinic --profile full
 mdc dbt run --env local
-mdc tunnel clinic-db                  # separate terminal; see docs/CLINIC_ANALYTICS_WORKFLOW.md
+mdc tunnel clinic-db                  # separate terminal; see docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md
 mdc publish analytics --env clinic
 ssm-connect-clinic-api
 ```
@@ -66,7 +66,7 @@ Aliases: `consult-audio-validate`, `consult-audio-run`.
 
 ### Publish local marts to clinic RDS
 
-See **[docs/CLINIC_ANALYTICS_WORKFLOW.md](../docs/CLINIC_ANALYTICS_WORKFLOW.md)** for the full local dbt → tunnel → RDS workflow.
+See **[docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md](../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md)** for the full local dbt → tunnel → RDS workflow.
 
 ```powershell
 mdc dbt run --env local
@@ -97,7 +97,7 @@ dbt-docs-deploy
 mdc deploy api --env clinic
 ```
 
-See `docs/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
+See `docs/deployment/ENVIRONMENT_FILES.md` §4.8 for naming (EC2 Name tag vs systemd unit).
 
 ### Deploy other assets to clinic EC2
 

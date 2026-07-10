@@ -76,7 +76,7 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
 
 3. **Run** — Scheduled at 9 PM Central or trigger manually from the UI (outside business hours).
 
-See [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md) and [`docs/CLINIC_ANALYTICS_WORKFLOW.md`](../docs/CLINIC_ANALYTICS_WORKFLOW.md).
+See [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md) and [`docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md`](../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md).
 
 ## Local (localhost) – Docker Compose (optional sandbox only)
 

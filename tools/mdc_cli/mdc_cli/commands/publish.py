@@ -15,7 +15,7 @@ from mdc_cli.stages import require_api_stage
 
 publish_app = typer.Typer(help="Publish local marts schema to clinic RDS")
 
-WORKFLOW_DOC = "docs/CLINIC_ANALYTICS_WORKFLOW.md"
+WORKFLOW_DOC = "docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md"
 
 
 def _echo_tunnel_missing(tunnel_port: int) -> None:

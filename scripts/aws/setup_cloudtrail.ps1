@@ -47,7 +47,7 @@ Write-Host "  Caller:   $($caller.Arn)"
 if ($caller.Arn -match ":user/Corbin22$") {
     Write-Host "`nThis script needs admin CloudTrail + S3 permissions." -ForegroundColor Red
     Write-Host "Sign in as root or an IAM admin, then rerun." -ForegroundColor Yellow
-    Write-Host "Console walkthrough: docs/CLOUDTRAIL_SETUP.md" -ForegroundColor Yellow
+    Write-Host "Console walkthrough: docs/deployment/CLOUDTRAIL_SETUP.md" -ForegroundColor Yellow
     exit 1
 }
 

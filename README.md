@@ -101,7 +101,7 @@ mdc etl validate --env local --profile load
 mdc dbt validate --env local
 ```
 
-**Reference:** [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md) (full inventory and loaders), [tools/mdc_cli/README.md](tools/mdc_cli/README.md) (commands and aliases). Run `.\scripts\utils\list_env_files.ps1` to see which env files exist on disk.
+**Reference:** [docs/deployment/ENVIRONMENT_FILES.md](docs/deployment/ENVIRONMENT_FILES.md) (full inventory and loaders), [tools/mdc_cli/README.md](tools/mdc_cli/README.md) (commands and aliases). Run `.\scripts\utils\list_env_files.ps1` to see which env files exist on disk.
 
 ---
 
@@ -292,7 +292,7 @@ dbt_dental_clinic/
 - [dbt_dental_models/validation/kpi/README.md](dbt_dental_models/validation/kpi/README.md) — KPI validation vs OpenDental reports  
 - [api/README.md](api/README.md) — API env, security, deployment  
 - [frontend/README.md](frontend/README.md) — Frontend setup and env vars  
-- [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md) — env file inventory and loading rules  
+- [docs/deployment/ENVIRONMENT_FILES.md](docs/deployment/ENVIRONMENT_FILES.md) — env file inventory and loading rules  
 
 ## Synthetic data
 
@@ -306,5 +306,5 @@ Deployment is optional; the app can run locally against a PostgreSQL warehouse.
 
 **Backend (EC2 + ALB):** API can be run on EC2 behind an ALB with RDS PostgreSQL; see `docs/DEPLOYMENT_WORKFLOW.md` and deployment scripts in [`scripts/deployment/`](scripts/deployment/) (see [`scripts/README.md`](scripts/README.md)). Hosted sample API: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com); frontend: [https://dbtdentalclinic.com](https://dbtdentalclinic.com). Demo uses synthetic data only; no production OpenDental connection.
 
-**Environment:** Use `mdc … --env <stage>` for API, ETL, and dbt; see [Environment configuration](#environment-configuration) and [docs/ENVIRONMENT_FILES.md](docs/ENVIRONMENT_FILES.md). On EC2, `mdc deploy api --env clinic` copies `api/.env_api_clinic` to the instance as `api/.env` for systemd.
+**Environment:** Use `mdc … --env <stage>` for API, ETL, and dbt; see [Environment configuration](#environment-configuration) and [docs/deployment/ENVIRONMENT_FILES.md](docs/deployment/ENVIRONMENT_FILES.md). On EC2, `mdc deploy api --env clinic` copies `api/.env_api_clinic` to the instance as `api/.env` for systemd.
 

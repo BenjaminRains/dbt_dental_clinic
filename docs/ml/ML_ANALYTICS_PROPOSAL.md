@@ -9,7 +9,7 @@
 - [ML_SERVING_ARCHITECTURE.md](ML_SERVING_ARCHITECTURE.md) — serving design (outline; fill in at implementation)
 - [../dbt/marts_models_plan.md](../dbt/marts_models_plan.md) — planned marts with ML-adjacent metrics
 - [../streaming/EVENT_DRIVEN_ANALYTICS_PROPOSAL.md](../streaming/EVENT_DRIVEN_ANALYTICS_PROPOSAL.md) — optional near-real-time feature path
-- [../databricks_lakehouse_proposal.md](../databricks_lakehouse_proposal.md) — lakehouse / Spark ML at scale (parallel track)
+- [databricks_lakehouse_proposal.md](databricks_lakehouse_proposal.md) — lakehouse / Spark ML at scale (parallel track)
 
 ---
 
@@ -189,7 +189,7 @@ Kafka replay from marts can refresh features between nightly runs; not required 
 
 ### Optional: lakehouse scale (parallel track)
 
-See [databricks_lakehouse_proposal.md](../databricks_lakehouse_proposal.md) for Spark/Delta
+See [databricks_lakehouse_proposal.md](databricks_lakehouse_proposal.md) for Spark/Delta
 if multi-clinic volume or feature complexity outgrows Postgres batch scoring.
 
 ---

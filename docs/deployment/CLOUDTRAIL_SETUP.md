@@ -74,4 +74,4 @@ Replace the secret name with your instance’s `MasterUserSecret` from `aws rds 
 ## Related
 
 - Clinic RDS secrets: [CLINIC_ANALYTICS_WORKFLOW.md](CLINIC_ANALYTICS_WORKFLOW.md) — **`rds!db-...` only**; legacy `dental-clinic/database` removed after CloudTrail audit
-- IAM scripts: [scripts/iam/](../scripts/iam/)
+- IAM scripts: [scripts/iam/](../../scripts/iam/)

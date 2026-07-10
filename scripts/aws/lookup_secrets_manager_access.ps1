@@ -28,7 +28,7 @@ $eventsJson = aws cloudtrail lookup-events `
 if ($LASTEXITCODE -ne 0) {
     Write-Host $eventsJson -ForegroundColor Red
     Write-Host "`nIf AccessDenied: ask admin to attach scripts/iam/cloudtrail_lookup_readonly_policy.json" -ForegroundColor Yellow
-    Write-Host "If trail missing: run scripts/aws/setup_cloudtrail.ps1 as admin (see docs/CLOUDTRAIL_SETUP.md)" -ForegroundColor Yellow
+    Write-Host "If trail missing: run scripts/aws/setup_cloudtrail.ps1 as admin (see docs/deployment/CLOUDTRAIL_SETUP.md)" -ForegroundColor Yellow
     exit 1
 }
 

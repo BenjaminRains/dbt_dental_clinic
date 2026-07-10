@@ -5,7 +5,7 @@
 **Driver:** Dependabot alerts #215, #217, #218, #224, #227 on `requirements-airflow-native.txt`  
 **Target:** **Apache Airflow 2.11.1** (last 2.x security line; Python 3.11 supported)
 
-Related: [`docs/DEPENDENCY_ALERTS.md`](../docs/DEPENDENCY_ALERTS.md) (full alert matrix), [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md), [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md).
+Related: [`docs/deployment/DEPENDENCY_ALERTS.md`](../docs/deployment/DEPENDENCY_ALERTS.md) (full alert matrix), [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md), [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md).
 
 ---
 
@@ -193,4 +193,4 @@ Defer until 2.11.1 is stable in clinic nightly. Airflow 3 removes/changes FAB UI
 | `scripts/airflow/init-airflow-native.ps1` | Version strings in messages |
 | `scripts/airflow/start-airflow-native.ps1` | Retest after upgrade |
 | `airflow/ORCHESTRATION_ROADMAP.md` | Mark security upgrade complete |
-| `docs/DEPENDENCY_ALERTS.md` | Update Airflow row status |
+| `docs/deployment/DEPENDENCY_ALERTS.md` | Update Airflow row status |

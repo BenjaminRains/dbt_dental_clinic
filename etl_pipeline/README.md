@@ -313,7 +313,7 @@ cp .env_clinic.template .env_clinic
 cp .env_test.template .env_test
 ```
 
-For **clinic nightly (Airflow Option A)**, `etl_pipeline/.env_clinic` holds OpenDental source + local MySQL replication only. Clinic RDS Postgres credentials (`POSTGRES_ANALYTICS_*`) are composed by `mdc` from `deployment_credentials.json` + Secrets Manager — do not duplicate them in `.env_clinic`. See [`../docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md).
+For **clinic nightly (Airflow Option A)**, `etl_pipeline/.env_clinic` holds OpenDental source + local MySQL replication only. Clinic RDS Postgres credentials (`POSTGRES_ANALYTICS_*`) are composed by `mdc` from `deployment_credentials.json` + Secrets Manager — do not duplicate them in `.env_clinic`. See [`../docs/deployment/ENVIRONMENT_FILES.md`](../docs/deployment/ENVIRONMENT_FILES.md).
 
 Required environment variables:
 ```bash
@@ -646,7 +646,7 @@ Keep manual CLI commands for debugging, single-table reruns, and when Airflow is
 - [`../airflow/NIGHTLY_RUN.md`](../airflow/NIGHTLY_RUN.md) — run semantics, failure handling, schedule
 - [`../airflow/DAGS_STATUS.md`](../airflow/DAGS_STATUS.md) — implementation status
 - [`../airflow/ORCHESTRATION_ROADMAP.md`](../airflow/ORCHESTRATION_ROADMAP.md) — deployment roadmap
-- [`../docs/CLINIC_ANALYTICS_WORKFLOW.md`](../docs/CLINIC_ANALYTICS_WORKFLOW.md) — clinic RDS publish workflow
+- [`../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md`](../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md) — clinic RDS publish workflow
 
 ## Monitoring and Observability
 

@@ -218,7 +218,7 @@ mdc etl exec --env clinic --tunnel-db -- pipenv run python scripts/initialize_et
 | Global env set (local, demo, clinic, test, prod) | Doc only | §2.2; components to declare “unsupported” instead of new names. |
 | Commit sanitized templates for API + frontend | **Partial** | **Done:** `api/.env_api_local.template`, `api/.env_api_clinic.template`, `dbt_dental_models/.env_local.template`. **Todo:** `api/.env_api_demo.template`, `frontend/.env.template`. |
 | Config module: load once, log source, validate required | **Done (Phase 2–4)** | `api/settings.py`, ETL `settings_v2.py`; `mdc status` / `mdc * validate` |
-| Track `docs/ENVIRONMENT_FILES.md` in git | **Done (Phase 1)** | Whitelisted in `.gitignore`; README link resolves. |
+| Track `docs/deployment/ENVIRONMENT_FILES.md` in git | **Done (Phase 1)** | Whitelisted in `.gitignore`; README link resolves. |
 | `dbt_dental_models/profiles.yml.template` | **Done** | Uses `env_var()`; copy to local `profiles.yml`. |
 
 ---
@@ -320,7 +320,7 @@ Development for clinic infra is often done locally before deploy, so **`.env_loc
 
 ### 4.4 Docker / Airflow
 
-**Option A (clinic nightly):** Native Airflow on the host — **no root `.env` ETL contract**. ETL reads `etl_pipeline/.env_<stage>`; dbt via `mdc dbt` or `dbt_dental_models/.env_local`. See [`airflow/ORCHESTRATION_ROADMAP.md`](../airflow/ORCHESTRATION_ROADMAP.md) § Environment contract.
+**Option A (clinic nightly):** Native Airflow on the host — **no root `.env` ETL contract**. ETL reads `etl_pipeline/.env_<stage>`; dbt via `mdc dbt` or `dbt_dental_models/.env_local`. See [`airflow/ORCHESTRATION_ROADMAP.md`](../../airflow/ORCHESTRATION_ROADMAP.md) § Environment contract.
 
 **Optional Docker sandbox:** `docker-compose.yml` runs Airflow in containers for experiments. Root `.env` supplies Airflow metadata DB credentials and Fernet key only. ETL/dbt vars are **not** injected into Airflow containers (avoids overriding stage files).
 
@@ -432,10 +432,10 @@ This lists known env file paths and reports Present / Missing. See script header
 
 ## 8. Related docs
 
-- **Daily CLI:** [tools/mdc_cli/README.md](../tools/mdc_cli/README.md), [scripts/README.md](../scripts/README.md)
+- **Daily CLI:** [tools/mdc_cli/README.md](../../tools/mdc_cli/README.md), [scripts/README.md](../../scripts/README.md)
 - **Environment modernization (phase history):** [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md)
-- **API env in detail:** [docs/api/API_ENV_FILE_EXPLANATION.md](api/API_ENV_FILE_EXPLANATION.md)
-- **EC2 env file rename/setup:** [docs/deployment/EC2_ENV_FILE_RENAME_GUIDE.md](deployment/EC2_ENV_FILE_RENAME_GUIDE.md), [docs/deployment/EC2_ENV_FILE_RENAME_COMMANDS.md](deployment/EC2_ENV_FILE_RENAME_COMMANDS.md)
+- **API env in detail:** [docs/api/API_ENV_FILE_EXPLANATION.md](../api/API_ENV_FILE_EXPLANATION.md)
+- **EC2 env file rename/setup:** [EC2_ENV_FILE_RENAME_GUIDE.md](EC2_ENV_FILE_RENAME_GUIDE.md), [EC2_ENV_FILE_RENAME_COMMANDS.md](EC2_ENV_FILE_RENAME_COMMANDS.md)
 - **Deployment credentials (env file refs):** `deployment_credentials.json.template`
 - **Frontend env:** `frontend/README.md`
 - **ETL setup:** `etl_pipeline/scripts/setup_environments.py`, `etl_pipeline/README.md`

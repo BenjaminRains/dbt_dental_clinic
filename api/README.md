@@ -564,7 +564,7 @@ API_CORS_ORIGINS=https://clinic.dbtdentalclinic.com
 CLINIC_API_KEY=<CLINIC_API_KEY>  # Clinic API key (IP-restricted)
 ```
 
-**Note:** Local dev uses `api/.env_api_*` by stage. On EC2, both demo and clinic APIs use `api/.env` (systemd `EnvironmentFile`); source files are `api/.env_api_demo` or `api/.env_api_clinic` at deploy time. See [docs/ENVIRONMENT_HANDLING_REVIEW.md](../docs/ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0).
+**Note:** Local dev uses `api/.env_api_*` by stage. On EC2, both demo and clinic APIs use `api/.env` (systemd `EnvironmentFile`); source files are `api/.env_api_demo` or `api/.env_api_clinic` at deploy time. See [docs/deployment/ENVIRONMENT_HANDLING_REVIEW.md](../docs/deployment/ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0).
 
 **Security Notes:**
 - Database passwords are retrieved from AWS Secrets Manager at startup

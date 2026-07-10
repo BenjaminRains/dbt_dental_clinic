@@ -241,5 +241,5 @@ mdc api run --env clinic --tunnel-db
 ## Related docs
 
 - [ENVIRONMENT_FILES.md](ENVIRONMENT_FILES.md) — env file locations and `mdc` stages
-- [scripts/README.md](../scripts/README.md) — EC2 dbt and deployment scripts
-- [tools/mdc_cli/README.md](../tools/mdc_cli/README.md) — full `mdc` command reference
+- [scripts/README.md](../../scripts/README.md) — EC2 dbt and deployment scripts
+- [tools/mdc_cli/README.md](../../tools/mdc_cli/README.md) — full `mdc` command reference

@@ -3,7 +3,7 @@
 Monorepo developer CLI for API, ETL, and dbt workflows. Configuration is loaded only
 via existing pydantic loaders in `api/settings.py` and `etl_pipeline/.../settings_v2.py`.
 
-**Env file inventory:** [docs/ENVIRONMENT_FILES.md](../../docs/ENVIRONMENT_FILES.md)
+**Env file inventory:** [docs/deployment/ENVIRONMENT_FILES.md](../../docs/deployment/ENVIRONMENT_FILES.md)
 
 ## Install (editable)
 
@@ -40,8 +40,8 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 - `mdc etl run|status|test-connections|exec --env <stage> [--profile full] [--tunnel-db] -- [args]`
 - `mdc dbt run|test|docs --env <stage> [--tunnel-db] [--tunnel-port 5433] -- [args]`
 - `mdc dbt invoke --env <stage> -- deps` — arbitrary dbt subcommands
-- `mdc publish analytics --env clinic` — local marts → clinic RDS (live Secrets Manager password; see [docs/CLINIC_ANALYTICS_WORKFLOW.md](../../docs/CLINIC_ANALYTICS_WORKFLOW.md))
-- `mdc secrets pull clinic` — read RDS master secret (`rds!db-...`), sync password into `api/.env_api_clinic` (see [CLINIC_ANALYTICS_WORKFLOW.md](../../docs/CLINIC_ANALYTICS_WORKFLOW.md))
+- `mdc publish analytics --env clinic` — local marts → clinic RDS (live Secrets Manager password; see [docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md](../../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md))
+- `mdc secrets pull clinic` — read RDS master secret (`rds!db-...`), sync password into `api/.env_api_clinic` (see [CLINIC_ANALYTICS_WORKFLOW.md](../../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md))
 
 ### Frontend (Phase 5.3)
 

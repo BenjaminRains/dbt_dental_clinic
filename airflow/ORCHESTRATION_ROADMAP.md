@@ -37,7 +37,7 @@ Planning lives primarily under `airflow/`. There is **no separate Airflow plan u
 | [`DAGS_STATUS.md`](DAGS_STATUS.md) | Quick status reference |
 | [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md) | **Future** dbt enhancements (selectors, Cosmos) — initial dbt is already in `etl_pipeline` |
 | [`AIRFLOW_UPGRADE_PLAN.md`](AIRFLOW_UPGRADE_PLAN.md) | Security-driven upgrade 2.7.3 → 2.11.1 (Dependabot Airflow CVEs) |
-| [`docs/ENVIRONMENT_FILES.md`](../docs/ENVIRONMENT_FILES.md) §4.4 | Native Airflow vs optional Compose sandbox |
+| [`docs/deployment/ENVIRONMENT_FILES.md`](../docs/deployment/ENVIRONMENT_FILES.md) §4.4 | Native Airflow vs optional Compose sandbox |
 
 ---
 

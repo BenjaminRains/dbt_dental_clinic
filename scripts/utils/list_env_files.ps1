@@ -96,7 +96,7 @@ foreach ($e in $expected) {
 }
 
 Write-Host "`nTotal: $present present, $missing missing, $deprecatedAbsent deprecated absent (OK), $deprecatedPresent deprecated present (remove)." -ForegroundColor Cyan
-Write-Host "See docs/ENVIRONMENT_FILES.md for usage details." -ForegroundColor Gray
+Write-Host "See docs/deployment/ENVIRONMENT_FILES.md for usage details." -ForegroundColor Gray
 Write-Host ""
 
 Pop-Location

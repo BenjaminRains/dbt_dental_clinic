@@ -19,7 +19,7 @@ existing analytics warehouse.
 | dbt mart definitions and business logic | `docs/dbt/`, `dbt_dental_models/models/marts/` | Source of truth for features and rule-based scores |
 | BI / dashboard consumption of scores | `docs/analytics/` | Power BI, Looker, exposures — read scored marts or API |
 | Near-real-time feature refresh | `docs/streaming/EVENT_DRIVEN_ANALYTICS_PROPOSAL.md` | Optional streaming path; not required for batch ML |
-| Lakehouse / Spark ML at scale | `docs/databricks_lakehouse_proposal.md` | Parallel portfolio path |
+| Lakehouse / Spark ML at scale | [databricks_lakehouse_proposal.md](databricks_lakehouse_proposal.md) | Parallel portfolio path |
 | Consultation audio NLP (Whisper + Claude) | `consult_audio_pipe/README.md` | Separate pipeline; not warehouse-integrated today |
 | Synthetic training sandbox | `etl_pipeline/synthetic_data_generator/` | HIPAA-safe demo data for public experiments |
 
