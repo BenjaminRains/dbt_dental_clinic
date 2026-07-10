@@ -125,7 +125,10 @@ def publish_analytics(**context):
 
     tunnel_port = Variable.get('publish_tunnel_port', default_var='5433')
     cmd = ['publish', 'analytics', '--env', stage, '--tunnel-port', str(tunnel_port)]
-    if Variable.get('publish_skip_tunnel_check', default_var='').lower() in ('1', 'true', 'yes'):
+    ensure_tunnel = Variable.get('publish_ensure_tunnel', default_var='true').lower()
+    if ensure_tunnel in ('1', 'true', 'yes'):
+        cmd.append('--ensure-tunnel')
+    elif Variable.get('publish_skip_tunnel_check', default_var='').lower() in ('1', 'true', 'yes'):
         cmd.append('--skip-tunnel-check')
 
     _run_mdc_cmd(cmd, timeout_seconds=3600)
@@ -971,7 +974,8 @@ with dag:
         ### Publish analytics to RDS
 
         Runs `mdc publish analytics --env {PUBLISH_ENVIRONMENT or 'clinic'}` after dbt.
-        Requires SSM tunnel (`mdc tunnel clinic-db`) on localhost:5433 unless skipped.
+        Starts SSM tunnel automatically when `publish_ensure_tunnel` is true (default).
+        Manual tunnel still works: `mdc tunnel clinic-db` before the run.
         """,
     )
     dbt_build >> short_circuit_publish >> publish_analytics_task
@@ -1062,7 +1066,7 @@ Clinic RDS (marts on api-clinic)
 
 ### 6. Publish (only when ETL succeeded and publish_environment set)
 - `mdc publish analytics --env {publish_environment}` (default `clinic`)
-- Requires SSM tunnel on localhost:5433 (`mdc tunnel clinic-db`) before the run
+- Auto-starts SSM tunnel when `publish_ensure_tunnel=true` (default); or run `mdc tunnel clinic-db` manually
 
 ### 7. Notification
 - Summary after report and publish (Slack optional)
@@ -1101,7 +1105,8 @@ Override when triggering manually:
 | `dbt_target` | `local` | `local` |
 | `publish_environment` | `clinic` | *(unset — skips publish)* |
 | `publish_tunnel_port` | `5433` (optional) | optional |
-| `slack_webhook_url` | recommended | optional |
+| `publish_ensure_tunnel` | `true` (default) | `true` — auto-start SSM tunnel for publish |
+| `slack_webhook_url` | recommended | recommended |
 
 Leave `publish_environment` unset to skip RDS publish (smoke tests). Do **not** set `dbt_target=clinic` until dbt can build safely against RDS directly.
 

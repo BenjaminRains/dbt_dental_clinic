@@ -4,7 +4,7 @@
 
 **Goal:** Close the **implementation gap** between `tables.yml` intent and replicator/loader behavior, add **Layer 0** observability, and use **Sunday full refresh** as a cheap safety net — **before** committing to binlog/CDC.
 
-**Tracking:** [TODO.md — ETL-FND-001](../../TODO.md#etl-fnd-001--replica-row-drift-procedurelog)
+**Tracking:** [TODO.md](../../TODO.md#etl-fnd-001--replica-row-drift-procedurelog), [ETL-FND-002](findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
 
 ---
 
@@ -13,12 +13,14 @@
 | Phase | Status | Local verification |
 | --- | --- | --- |
 | **1** — Schema analyzer + `tables.yml` v4.1 | **Done** (commit `558e50d7`) | `procedurelog`: `DateTStamp` watermark, `or_logic`, 30-day lookback in config |
+| **1.6** — PK-only `in_place_updates` fix | **Code done, uncommitted** (2026-06-29) | `has_mutation_timestamp_watermark()`; 43 tables → `append_only` after regen; see [ETL-FND-002](findings/ETL-FND-002-sync-profile-pk-only-misclassification.md) |
 | **2** — Replicator + loader alignment | **Done** (commit `6cc4e6f9`) | Incremental ~10,632 rows (~2s replicate + ~1.2 min load) vs ~815k rows pre-fix; drift check PASS; KPI 2026-06-10 PASS (28 codes, 140 / $15,239) |
+| **2.1** — Loader guard (integer PK watermark) | **Not started** | Belt-and-suspenders in `replica_sync_config.py` |
 | **3** — Layer 0 checks (payment, claimproc, adjustment, claim, paysplit) | **Done** (local) | Tier A — 6 checks PASS; lookback on claim/paysplit; phantom purge scripts |
 | **4** — Sunday scoped full refresh | Not started | — |
 | **1.5** — Spot-edit timestamp matrix | Not started | Required before trusting config clinic-wide |
 
-**Next:** clinic RDS deploy + re-validate; 2+ additional golden dates; Phase 3 Layer 0.
+**Next:** Regen `tables.yml` (ETL-FND-002) → after-hours verify `sheetfield`/`procnote` loads → loader guard → clinic RDS deploy + re-validate KPI #2 golden dates.
 
 ---
 
@@ -68,8 +70,10 @@ lookback_resync:                              # optional; procedurelog pattern
 
 | Profile | When | `replicator_watermark_column` | `primary_incremental_column` (legacy) |
 | --- | --- | --- | --- |
-| `append_only` | Log-style tables, new PK per event | PK OK for **new row** capture | PK |
-| `in_place_updates` | Conservative list + modeled marts + known mutation tables | **`DateTStamp` or `SecDateTEdit`** (first that passes quality) | Same as watermark (deprecate PK-as-watermark) |
+| `append_only` | Log-style tables, new PK per event; **modeled tables without non-PK timestamp** | PK OK for **new row** capture | PK |
+| `in_place_updates` | Mutation seed list **and** non-PK timestamp in `incremental_columns` | **`DateTStamp` or `SecDateTEdit`** (first that passes quality) | Same as watermark (deprecate PK-as-watermark) |
+
+**Note (2026-06-29, ETL-FND-002):** `is_modeled: true` alone does **not** imply `in_place_updates`. Modeled tables with PK-only incremental columns (e.g. `sheetfield`) use `append_only`; dbt or Sunday full refresh covers in-place edits.
 
 **Conservative / mutation seed list** (extend over time):
 
@@ -119,6 +123,32 @@ Before trusting new config clinic-wide:
 
 Record results in this doc or ETL-FND-001. If timestamp **never** moves → timestamp watermark alone is insufficient; rely on lookback + Sunday full refresh until CDC.
 
+### 1.6 PK-only `in_place_updates` fix (ETL-FND-002)
+
+**Status:** Analyzer code **done locally, uncommitted** (2026-06-29). `tables.yml` on disk **still pre-fix**.
+
+**Bug:** v4.1 set `in_place_updates` for all `is_modeled: true` tables. When only PK was in
+`incremental_columns`, loader used datetime WHERE on integer watermark → effective full reload
+(`sheetfield`: 0 extract / 1.65M load / 73 min on 2026-06-29).
+
+**Fix:** `has_mutation_timestamp_watermark()` — `in_place_updates` only when a **non-PK** timestamp
+is in `incremental_columns`.
+
+**Remaining:**
+
+```powershell
+mdc etl schema --env local --profile full   # safe during business hours
+# Review diff: ~43 tables in_place_updates → append_only
+```
+
+- [ ] Commit analyzer + tests
+- [ ] Regen + commit `tables.yml`
+- [ ] Loader guard in `replica_sync_config.py`
+- [ ] Reset `raw.etl_load_status` for large PK-only tables
+- [ ] After-hours ETL spot-check `sheetfield`, `procnote`
+
+**Finding:** [ETL-FND-002](findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
+
 ---
 
 ## Phase 2 — Replicator vs loader consistency
@@ -155,6 +185,7 @@ Plus optional lookback OR union (procedurelog pattern).
 | Builds `and_logic` from `incremental_columns` | Build from **`tables.yml` loader strategy** + same watermark column as replication |
 | Lookback hard-coded for `procedurelog` | Generic `lookback_resync` block |
 | `copy_csv` on large tables breaks upsert | Keep **streaming upsert** when lookback enabled or `sync_profile == in_place_updates` |
+| Integer PK used as datetime watermark (ETL-FND-002) | **Pending:** loader guard — only datetime branch when watermark is non-PK timestamp; regen `tables.yml` via Phase 1.6 |
 
 ### 2.3 Consistency test (automated)
 

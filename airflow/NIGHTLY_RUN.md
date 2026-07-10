@@ -35,8 +35,9 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
    - **Not yet wired:** `dbt source freshness` (late-data checks on `raw._loaded_at` are defined in source YAML but not executed nightly — see [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md) § Wire dbt source freshness).
 
 5. **Publish** – Only when ETL succeeded and `publish_environment` is set (e.g. `clinic`)
-   - `mdc publish analytics --env clinic` via SSM tunnel on **127.0.0.1:5433**
-   - **You start the tunnel manually** before the run: `mdc tunnel clinic-db` (separate terminal; wait for port 5433).
+   - `mdc publish analytics --env clinic --ensure-tunnel` (default in DAG via `publish_ensure_tunnel=true`)
+   - Auto-starts background SSM tunnel to **127.0.0.1:5433** when the port is closed
+   - Manual tunnel still works: `mdc tunnel clinic-db` in a separate terminal (reused if already open)
 
 6. **Notification** – After report and publish (when configured).
 
@@ -45,7 +46,7 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
 - **Validation**: Fails fast; no ETL if config or connections are bad.
 - **ETL**: Runs by category; per-table retries; non-large failures don’t stop the run; report/notify still run (trigger rule `ALL_DONE`).
 - **dbt**: Runs only when `pipeline_success` is True (ShortCircuit after report).
-- **Publish**: Runs only when `publish_environment` is set and ETL succeeded; requires **manual** `mdc tunnel clinic-db` (port 5433) before the run.
+- **Publish**: Runs only when `publish_environment` is set and ETL succeeded; DAG passes `--ensure-tunnel` by default (auto SSM tunnel).
 
 ## Schedule
 

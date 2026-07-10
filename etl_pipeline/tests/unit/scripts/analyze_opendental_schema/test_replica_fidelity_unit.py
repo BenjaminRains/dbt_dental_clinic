@@ -32,14 +32,85 @@ def analyzer():
 
 class TestDetermineSyncProfile:
     @pytest.mark.parametrize('table_name', sorted(IN_PLACE_UPDATE_TABLES))
-    def test_mutation_seed_tables_are_in_place(self, analyzer, table_name):
-        assert analyzer.determine_sync_profile(table_name, is_modeled=False) == 'in_place_updates'
+    def test_mutation_seed_tables_are_in_place_with_timestamp(
+        self, analyzer, table_name
+    ):
+        schema_info = {
+            'primary_keys': ['RowNum'],
+            'columns': {'RowNum': {'type': 'bigint'}, 'DateTStamp': {'type': 'datetime'}},
+        }
+        assert analyzer.determine_sync_profile(
+            table_name,
+            is_modeled=False,
+            incremental_columns=['RowNum', 'DateTStamp'],
+            schema_info=schema_info,
+        ) == 'in_place_updates'
 
-    def test_modeled_table_is_in_place_when_not_in_seed_list(self, analyzer):
-        assert analyzer.determine_sync_profile('definition', is_modeled=True) == 'in_place_updates'
+    def test_modeled_table_with_timestamp_watermark_is_in_place(self, analyzer):
+        schema_info = {
+            'primary_keys': ['DefNum'],
+            'columns': {'DefNum': {'type': 'bigint'}, 'DateTStamp': {'type': 'datetime'}},
+        }
+        assert analyzer.determine_sync_profile(
+            'definition',
+            is_modeled=True,
+            incremental_columns=['DefNum', 'DateTStamp'],
+            schema_info=schema_info,
+        ) == 'in_place_updates'
+
+    def test_modeled_pk_only_table_is_append_only(self, analyzer):
+        """sheetfield-like: modeled child table with no edit timestamp column."""
+        schema_info = {
+            'primary_keys': ['SheetFieldNum'],
+            'columns': {
+                'SheetFieldNum': {'type': 'bigint'},
+                'DateTimeSig': {'type': 'datetime'},
+            },
+        }
+        assert analyzer.determine_sync_profile(
+            'sheetfield',
+            is_modeled=True,
+            incremental_columns=['SheetFieldNum'],
+            schema_info=schema_info,
+        ) == 'append_only'
+
+    def test_mutation_seed_without_timestamp_watermark_is_append_only(self, analyzer):
+        schema_info = {
+            'primary_keys': ['PayNum'],
+            'columns': {'PayNum': {'type': 'bigint'}},
+        }
+        assert analyzer.determine_sync_profile(
+            'payment',
+            is_modeled=False,
+            incremental_columns=['PayNum'],
+            schema_info=schema_info,
+        ) == 'append_only'
 
     def test_unmodeled_non_seed_table_is_append_only(self, analyzer):
         assert analyzer.determine_sync_profile('definition', is_modeled=False) == 'append_only'
+
+
+class TestHasMutationTimestampWatermark:
+    def test_pk_only_incremental_columns_returns_false(self, analyzer):
+        schema_info = {
+            'primary_keys': ['SheetFieldNum'],
+            'columns': {'SheetFieldNum': {'type': 'bigint'}},
+        }
+        assert not analyzer.has_mutation_timestamp_watermark(
+            'sheetfield', ['SheetFieldNum'], schema_info
+        )
+
+    def test_datetstamp_with_pk_returns_true(self, analyzer):
+        schema_info = {
+            'primary_keys': ['ProcNum'],
+            'columns': {
+                'ProcNum': {'type': 'bigint'},
+                'DateTStamp': {'type': 'datetime'},
+            },
+        }
+        assert analyzer.has_mutation_timestamp_watermark(
+            'procedurelog', ['ProcNum', 'DateTStamp'], schema_info
+        )
 
 
 class TestBuildLookbackResyncConfig:

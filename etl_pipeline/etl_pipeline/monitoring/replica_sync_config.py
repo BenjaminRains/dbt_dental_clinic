@@ -26,6 +26,25 @@ def get_replicator_watermark_column(table_config: Dict) -> Optional[str]:
     return None
 
 
+def is_timestamp_watermark_column(column: Optional[str]) -> bool:
+    """True when the watermark is a known OpenDental mutation timestamp."""
+    return bool(column and column in TIMESTAMP_WATERMARK_NAMES)
+
+
+def uses_in_place_timestamp_watermark(table_config: Dict) -> bool:
+    """
+    True only for real in-place mutation sync (non-PK timestamp watermark).
+
+    Guard against ETL-FND-002: sync_profile=in_place_updates with an integer PK
+    watermark must not take the datetime loader path (SheetFieldNum > '2026-…').
+    """
+    watermark = get_replicator_watermark_column(table_config)
+    return (
+        table_config.get("sync_profile") == "in_place_updates"
+        and is_timestamp_watermark_column(watermark)
+    )
+
+
 def get_loader_incremental_columns(table_config: Dict) -> List[str]:
     """
     Columns used for loader incremental WHERE.
@@ -33,7 +52,7 @@ def get_loader_incremental_columns(table_config: Dict) -> List[str]:
     Mutation tables use timestamp watermark only (not PK in or_logic).
     """
     watermark = get_replicator_watermark_column(table_config)
-    if table_config.get("sync_profile") == "in_place_updates" and watermark:
+    if uses_in_place_timestamp_watermark(table_config) and watermark:
         return [watermark]
     return list(table_config.get("incremental_columns") or [])
 
@@ -71,7 +90,7 @@ def should_use_streaming_upsert(table_config: Dict, *, should_truncate: bool) ->
     if should_truncate:
         return False
     return (
-        table_config.get("sync_profile") == "in_place_updates"
+        uses_in_place_timestamp_watermark(table_config)
         or lookback_resync_enabled(table_config)
     )
 
@@ -131,9 +150,9 @@ def build_mysql_loader_where_clause(
         return "1=1"
 
     watermark = get_replicator_watermark_column(table_config)
-    sync_profile = table_config.get("sync_profile", "append_only")
 
-    if sync_profile == "in_place_updates" and watermark:
+    # Datetime path only when watermark is a real mutation timestamp (ETL-FND-002).
+    if uses_in_place_timestamp_watermark(table_config) and watermark:
         threshold = None
         if last_primary_value and is_datetime_like(last_primary_value):
             threshold = last_primary_value
@@ -151,7 +170,21 @@ def build_mysql_loader_where_clause(
     conditions: List[str] = []
 
     for col in cols:
-        is_int_col = is_integer_column(col) if is_integer_column else False
+        # Prefer explicit callback; fall back to PK-shaped watermark names when
+        # misclassified in_place_updates still points at an integer PK.
+        if is_integer_column:
+            is_int_col = is_integer_column(col)
+        else:
+            is_int_col = bool(
+                col == primary_incremental
+                and col
+                and not is_timestamp_watermark_column(col)
+                and (
+                    col.endswith("Num")
+                    or col.endswith("ID")
+                    or col.endswith("Id")
+                )
+            )
         if (
             col == primary_incremental
             and last_primary_value
@@ -159,11 +192,25 @@ def build_mysql_loader_where_clause(
             and is_numeric_value(last_primary_value)
         ):
             conditions.append(f"`{col}` > {last_primary_value}")
-        elif last_analytics_load:
+        elif (
+            col == primary_incremental
+            and last_primary_value
+            and is_int_col
+            and is_datetime_like(last_primary_value)
+        ):
+            # Stale tracking stored a timestamp against an integer PK — ignore
+            # and force a safe no-op until etl_load_status is reset.
+            continue
+        elif last_analytics_load and not (
+            is_int_col and col == primary_incremental
+        ):
             conditions.append(
                 f"(`{col}` > '{last_analytics_load}' "
                 f"AND `{col}` != '0001-01-01 00:00:00')"
             )
+        elif last_analytics_load and is_int_col and col == primary_incremental:
+            # Do not compare integer PK to last_analytics_load datetime string.
+            continue
 
     if not conditions:
         return "1=1"

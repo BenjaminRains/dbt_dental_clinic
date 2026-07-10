@@ -242,7 +242,8 @@ class OpenDentalSchemaAnalyzer:
     - Critical fields: extraction_strategy, batch_size, incremental_columns,
       primary_incremental_column, sync_profile, replicator_watermark_column
     - sync_profile append_only: PK watermark OK for new-row capture
-    - sync_profile in_place_updates: timestamp watermark (DateTStamp / SecDateTEdit), or_logic loader
+    - sync_profile in_place_updates: non-PK timestamp watermark (DateTStamp / SecDateTEdit);
+      modeled or mutation-seed tables without a timestamp fall back to append_only
     - lookback_resync: optional post-incremental window resync (procedurelog first)
     - See docs/etl/ETL_REPLICA_FIDELITY_ROADMAP.md Phase 1
     """
@@ -550,14 +551,59 @@ class OpenDentalSchemaAnalyzer:
             return False
         return True
 
-    def determine_sync_profile(self, table_name: str, is_modeled: bool) -> str:
+    def has_mutation_timestamp_watermark(
+        self,
+        table_name: str,
+        incremental_columns: List[str],
+        schema_info: Dict,
+    ) -> bool:
+        """
+        True when incremental_columns include a non-PK timestamp suitable for in-place edits.
+
+        Tables like sheetfield may mutate FieldValue on a stable PK but lack DateTStamp;
+        PK-only watermarks must use append_only so the loader does not apply datetime
+        predicates to integer columns (see replica_sync_config.build_mysql_loader_where_clause).
+        """
+        if not incremental_columns:
+            return False
+        primary_keys = set(schema_info.get('primary_keys', []))
+        watermark = self._select_timestamp_incremental_column(
+            table_name, incremental_columns, schema_info
+        )
+        return bool(watermark and watermark not in primary_keys)
+
+    def determine_sync_profile(
+        self,
+        table_name: str,
+        is_modeled: bool,
+        incremental_columns: Optional[List[str]] = None,
+        schema_info: Optional[Dict] = None,
+    ) -> str:
         """
         Classify how a table changes over time for replica fidelity.
 
         append_only: new rows only; PK watermark is sufficient.
-        in_place_updates: rows mutate on existing PK; timestamp watermark required.
+        in_place_updates: rows mutate on existing PK; non-PK timestamp watermark required.
         """
-        if table_name.lower() in IN_PLACE_UPDATE_TABLES or is_modeled:
+        mutation_candidate = (
+            table_name.lower() in IN_PLACE_UPDATE_TABLES or is_modeled
+        )
+        if not mutation_candidate:
+            return 'append_only'
+
+        if incremental_columns is not None and schema_info is not None:
+            if self.has_mutation_timestamp_watermark(
+                table_name, incremental_columns, schema_info
+            ):
+                return 'in_place_updates'
+            logger.info(
+                f"Table {table_name}: mutation candidate but no non-PK timestamp "
+                f"watermark; using append_only (PK capture only)"
+            )
+            return 'append_only'
+
+        # Legacy callers without column/schema context (unit tests)
+        if table_name.lower() in IN_PLACE_UPDATE_TABLES:
             return 'in_place_updates'
         return 'append_only'
 
@@ -1433,7 +1479,12 @@ class OpenDentalSchemaAnalyzer:
                             is_modeled = True
                             dbt_model_types.append('intermediate')
 
-                        sync_profile = self.determine_sync_profile(table_name, is_modeled)
+                        sync_profile = self.determine_sync_profile(
+                            table_name,
+                            is_modeled,
+                            incremental_columns=incremental_columns,
+                            schema_info=schema_info,
+                        )
                         primary_incremental_column = self.select_primary_incremental_column(
                             table_name, incremental_columns, schema_info, sync_profile=sync_profile
                         )

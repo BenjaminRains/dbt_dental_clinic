@@ -11,6 +11,7 @@ from mdc_cli.secrets_manager import (
     CLINIC_RDS_PASSWORD_ENV,
     resolve_clinic_rds_password,
 )
+from mdc_cli.ssm import ClinicDbTunnelError, managed_clinic_db_tunnel
 from mdc_cli.stages import require_api_stage
 
 publish_app = typer.Typer(help="Publish local marts schema to clinic RDS")
@@ -50,6 +51,11 @@ def publish_analytics(
         "--skip-tunnel-check",
         help="Skip localhost tunnel preflight (script still checks before restore)",
     ),
+    ensure_tunnel: bool = typer.Option(
+        False,
+        "--ensure-tunnel",
+        help="Start background SSM tunnel if localhost port is closed (for Airflow / unattended publish)",
+    ),
     use_env_file: bool = typer.Option(
         False,
         "--use-env-file",
@@ -72,7 +78,9 @@ def publish_analytics(
         typer.echo("  Mode: direct RDS endpoint from api/.env_api_clinic")
     else:
         typer.echo(f"  Mode: local tunnel 127.0.0.1:{tunnel_port} (mdc tunnel clinic-db)")
-        if not skip_tunnel_check:
+        if ensure_tunnel:
+            typer.echo("  Tunnel: --ensure-tunnel (start background SSM session if port closed)")
+        elif not skip_tunnel_check:
             if is_local_tcp_port_open("127.0.0.1", tunnel_port):
                 typer.echo(f"  Tunnel OK: 127.0.0.1:{tunnel_port}")
             else:
@@ -101,5 +109,27 @@ def publish_analytics(
     if use_direct_rds:
         args.append("-UseDirectRds")
 
-    code = invoke_ps_script_file(script, args, extra_env=extra_env)
-    raise typer.Exit(code=code)
+    def _run_publish() -> int:
+        return invoke_ps_script_file(script, args, extra_env=extra_env)
+
+    if use_direct_rds or skip_tunnel_check:
+        raise typer.Exit(code=_run_publish())
+
+    if ensure_tunnel:
+        try:
+            with managed_clinic_db_tunnel(
+                local_port=str(tunnel_port),
+                wait_timeout_seconds=120.0,
+            ) as source:
+                typer.echo(f"  Tunnel ready ({source}) on 127.0.0.1:{tunnel_port}")
+                raise typer.Exit(code=_run_publish())
+        except ClinicDbTunnelError as exc:
+            typer.echo(f"Failed to start clinic RDS tunnel: {exc}", err=True)
+            typer.echo(
+                "\nManual fallback: open a terminal and run  mdc tunnel clinic-db  "
+                "(keep it open), then rerun publish.",
+                err=True,
+            )
+            raise typer.Exit(code=1) from exc
+
+    raise typer.Exit(code=_run_publish())
