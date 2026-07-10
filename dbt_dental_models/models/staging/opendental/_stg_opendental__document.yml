@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__document
+    config:
+      materialized: incremental
+      unique_key: document_id
+      tags: ['staging', 'opendental', 'document']
+
     description: >
       Staging model for dental documents including images, files, and attachments associated with patient records.
       

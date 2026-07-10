@@ -1,7 +1,3 @@
-{{ config(
-    materialized='view'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'patplan') }}
     where {{ clean_opendental_date('"SecDateTEdit"') }} >= '2023-01-01'  -- Following pattern from other staging models

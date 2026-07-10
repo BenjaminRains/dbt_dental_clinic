@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__treatplanattach
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'treatplanattach']
+
     description: >
       Staging model for treatment plan attachments, which connect procedures to treatment plans.
       Each record represents a procedure that has been assigned to a treatment plan with a specific priority.

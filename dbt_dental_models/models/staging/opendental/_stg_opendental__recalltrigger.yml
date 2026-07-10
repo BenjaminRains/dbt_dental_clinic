@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__recalltrigger
+    config:
+      materialized: incremental
+      unique_key: recall_trigger_id
+      tags: ['staging', 'opendental', 'daily']
+
     description: >
       Staging model for dental recall triggers that define the relationship between recall types 
       and procedure codes. Recall triggers specify which procedure codes should automatically 
@@ -38,8 +43,6 @@ models:
         When analyzing recall triggers, consider that inactive or discontinued procedure codes 
         may still have associated triggers that need cleanup.
     
-    config:
-      tags: ['staging', 'opendental', 'daily']
     
     tests:
       - dbt_utils.expression_is_true:

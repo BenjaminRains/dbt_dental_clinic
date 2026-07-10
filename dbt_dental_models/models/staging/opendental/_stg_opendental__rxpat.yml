@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__rxpat
+    config:
+      materialized: incremental
+      unique_key: rx_id
+      tags: ['staging', 'opendental', 'rxpat']
+
     description: >
       Staging model for prescription records from OpenDental. Contains information about prescriptions written for patients.
       

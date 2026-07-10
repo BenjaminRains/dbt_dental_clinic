@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__procmultivisit
+    config:
+      materialized: incremental
+      unique_key: procmultivisit_id
+      tags: ['staging', 'opendental', 'procmultivisit']
+
     description: >
       Staging model for OpenDental procedure multi-visit records. Tracks procedures that require 
       multiple visits or appointments to complete, including complex treatment plans where 

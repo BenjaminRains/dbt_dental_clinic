@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__treatplan
+    config:
+      materialized: incremental
+      unique_key: treatment_plan_id
+
     description: >
       Staging model for treatment plans from OpenDental. Tracks dental treatment plans including
       procedures, costs, and patient signatures. This model supports treatment planning, financial
@@ -40,9 +44,6 @@ models:
         - Responsible party is often the patient themselves, but may be a parent/guardian for minors
         - No treatment plan attachments found for recent treatment plans
     
-    config:
-      materialized: incremental
-      unique_key: treatment_plan_id
     
     columns:
       # Primary Key

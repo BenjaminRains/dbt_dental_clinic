@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='periomeasure_id'
-) }}
-
 with source_data as (
     select m.* 
     from {{ source('opendental', 'periomeasure') }} m

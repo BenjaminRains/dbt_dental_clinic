@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__insverifyhist
+    config:
+      materialized: view
+      tags: ['staging', 'insurance', 'daily']
+
     description: >
       Staging model for insurance verification history records. This model tracks the 
       chronological history of insurance verification activities, providing an audit trail 
@@ -275,5 +279,3 @@ models:
             description: >
               Validates verification type consistency between history and verification records.
 
-    config:
-      tags: ['staging', 'insurance', 'daily']

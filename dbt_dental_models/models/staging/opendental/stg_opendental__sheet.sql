@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='sheet_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'sheet') }}
     where "DateTimeSheet" >= '2023-01-01'

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__claimform
+    config:
+      materialized: view
+      tags: ['opendental', 'staging', 'claimform', 'reference', 'billing']
+
     description: >
       Staging model for claim form templates from OpenDental. Contains claim form 
       definitions and layout specifications used for insurance billing and claim 
@@ -17,8 +21,6 @@ models:
       controlled via is_hidden flag. Form templates are typically created once and
       used repeatedly for claim generation across different insurance carriers.
     
-    config:
-      tags: ['opendental', 'staging', 'claimform', 'reference', 'billing']
     
     meta:
       record_count: "~14 claim form templates"

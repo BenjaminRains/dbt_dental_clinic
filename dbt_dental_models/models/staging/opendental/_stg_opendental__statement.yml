@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__statement
+    config:
+      materialized: incremental
+      unique_key: statement_id
+      tags: ['staging', 'opendental', 'statement']
+
     description: >
       Staging model for patient statements from OpenDental. Contains information about patient statements, including their content, status, and delivery details.
       

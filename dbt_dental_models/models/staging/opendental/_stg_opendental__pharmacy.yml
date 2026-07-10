@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__pharmacy
+    config:
+      materialized: table
+      tags: ['staging', 'opendental', 'pharmacy', 'reference']
+
     description: >
       Staging model for pharmacy data from OpenDental. Contains information about pharmacies 
       including their contact details, locations, and identifiers used for prescription management 
@@ -73,8 +77,6 @@ models:
             severity: warn
             description: "Contact information validation: Each pharmacy must have either phone number or address information to enable prescription coordination and patient referrals."
     
-    config:
-      tags: ['staging', 'opendental', 'pharmacy', 'reference']
 
     columns:
       - name: pharmacy_id

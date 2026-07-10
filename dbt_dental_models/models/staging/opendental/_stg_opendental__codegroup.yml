@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__codegroup
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'codegroup']
+
     description: >
       Staging model for OpenDental code groups that define collections of dental procedure codes for organizational and reporting purposes.
       

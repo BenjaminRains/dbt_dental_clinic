@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__rxnorm
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'rxnorm']
+
     description: >
       Staging model for RxNorm data from OpenDental.
       

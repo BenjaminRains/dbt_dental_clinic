@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='document_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'document') }}
     {% if is_incremental() %}

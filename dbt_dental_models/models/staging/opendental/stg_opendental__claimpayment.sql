@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='claim_payment_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'claimpayment') }}
     where {{ clean_opendental_date('"CheckDate"') }} >= '2023-01-01'

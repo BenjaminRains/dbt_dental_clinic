@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__labcase
+    config:
+      materialized: incremental
+      unique_key: lab_case_id
+      tags: ['opendental', 'staging', 'labcase', 'clinical', 'laboratory']
+
     description: >
       Staging model for OpenDental lab cases representing laboratory work orders and their lifecycle.
       
@@ -15,8 +20,6 @@ models:
       updates based on creation timestamp. Foreign key relationships connect to patients, 
       providers, laboratories, and appointments for comprehensive analysis.
     
-    config:
-      tags: ['opendental', 'staging', 'labcase', 'clinical', 'laboratory']
     
     meta:
       # Data quality and business context

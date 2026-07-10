@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__tasksubscription
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'tasksubscription']
+
     description: >
       Staging model for task subscriptions from OpenDental. Contains information about which
       users are subscribed to receive notifications for specific tasks or task lists.

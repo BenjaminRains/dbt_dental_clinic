@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__proctp
+    config:
+      materialized: incremental
+      unique_key: proctp_id
+      tags: ['staging', 'opendental', 'proctp']
+
     description: >
       Staging model for OpenDental treatment planned procedures (proctp table). Represents procedures that are 
       part of a treatment plan but have not necessarily been completed yet. This model contains comprehensive 

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__patientnote
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'patientnote']
+
     description: >
       Standardized patient notes containing clinical and administrative information from OpenDental.
       

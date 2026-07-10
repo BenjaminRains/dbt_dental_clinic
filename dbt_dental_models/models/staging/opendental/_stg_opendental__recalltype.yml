@@ -2,6 +2,12 @@ version: 2
 
 models:
   - name: stg_opendental__recalltype
+    config:
+      materialized: incremental
+      unique_key: recall_type_id
+      schema: staging
+      tags: ['staging', 'opendental', 'daily']
+
     description: >
       Staging model for dental recall types that define the different categories of patient 
       recalls used in automated scheduling systems. Recall types establish the business rules 
@@ -70,11 +76,6 @@ models:
         broken in the source application until this is resolved. This model should be considered 
         READ-ONLY for documenting the extent of source system data quality issues.
     
-    config:
-      materialized: incremental
-      unique_key: recall_type_id
-      schema: staging
-      tags: ['staging', 'opendental', 'daily']
     
     tests:
       - dbt_utils.expression_is_true:

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__apptview
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'apptview']
+
     description: >
       Staging model for appointment views that defines different views of the appointment schedule.
       

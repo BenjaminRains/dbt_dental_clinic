@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__procgroupitem
+    config:
+      materialized: incremental
+      unique_key: procgroup_item_id
+      tags: ['staging', 'opendental', 'procgroupitem']
+
     description: >
       Staging model for procedure group items that link individual procedures to procedure groups in OpenDental.
       

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__insbluebook
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'insbluebook']
+
     description: >
       Staging model for insurance bluebook entries from OpenDental. Contains insurance payment 
       information, allowed fee overrides, and procedure-specific insurance data used for claims 

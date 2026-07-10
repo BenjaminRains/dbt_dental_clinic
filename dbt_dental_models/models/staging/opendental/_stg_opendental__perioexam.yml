@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__perioexam
+    config:
+      materialized: incremental
+      unique_key: perioexam_id
+      tags: ['staging', 'opendental', 'periodontal', 'clinical']
+
     description: >
       Staging model for periodontal examinations from OpenDental. Each periodontal examination 
       represents a comprehensive assessment of a patient's gum health and periodontal conditions, 
@@ -117,5 +122,3 @@ models:
         tests:
           - not_null
       
-    config:
-      tags: ['staging', 'opendental', 'periodontal', 'clinical']

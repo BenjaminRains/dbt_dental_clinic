@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__employer
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'employer']
+
     description: >
       Staging model for employer data from OpenDental. Contains information about 
       employers including their contact details and addresses. This data is used

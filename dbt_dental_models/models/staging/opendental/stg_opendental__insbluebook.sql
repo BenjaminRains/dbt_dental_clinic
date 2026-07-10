@@ -1,7 +1,3 @@
-{{ config(
-    materialized='view'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'insbluebook') }}
     where "DateTEntry" >= '2023-01-01'  -- Following pattern from benefit

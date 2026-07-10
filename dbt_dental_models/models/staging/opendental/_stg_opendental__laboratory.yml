@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__laboratory
+    config:
+      materialized: view
+      tags: ['opendental', 'staging', 'laboratory', 'procedures', 'vendors']
+
     description: >
       Staging model for OpenDental laboratory information from external dental labs.
       
@@ -15,8 +19,6 @@ models:
       contact information and operational settings. Used for lab case workflow 
       management and vendor performance analysis.
     
-    config:
-      tags: ['opendental', 'staging', 'laboratory', 'procedures', 'vendors']
     
     meta:
       # Data quality and business context

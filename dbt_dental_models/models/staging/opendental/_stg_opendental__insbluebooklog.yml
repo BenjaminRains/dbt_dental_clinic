@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__insbluebooklog
+    config:
+      materialized: incremental
+      unique_key: insbluebooklog_id
+      tags: ['staging', 'opendental', 'insbluebooklog']
+
     description: >
       Staging model for insurance bluebook log entries that track historical changes to allowed fees 
       for claim procedures. This table serves as an audit trail for fee adjustments and contains two 

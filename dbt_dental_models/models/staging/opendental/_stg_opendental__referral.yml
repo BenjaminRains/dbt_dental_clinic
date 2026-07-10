@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__referral
+    config:
+      materialized: incremental
+      unique_key: referral_id
+      tags: ['staging', 'opendental', 'referral']
+
     description: >
       Staging model for referrals from OpenDental. This model captures information about both internal and external referral sources, including other dental practices, specialists, and non-medical sources.
       

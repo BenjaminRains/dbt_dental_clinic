@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__sheetdef
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'sheetdef']
+
     description: >
       Staging model for sheet definition records from OpenDental. Contains template information for forms, documents, and other sheet-based records.
       

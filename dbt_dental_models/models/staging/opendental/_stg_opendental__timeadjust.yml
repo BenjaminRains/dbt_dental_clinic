@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__timeadjust
+    config:
+      materialized: incremental
+      unique_key: time_adjust_id
+      tags: ['staging', 'opendental', 'timeadjust']
+
     description: >
       Staging model for time adjustments from OpenDental. Tracks employee time entries including
       regular hours, overtime, and PTO. This model supports time tracking, payroll processing,

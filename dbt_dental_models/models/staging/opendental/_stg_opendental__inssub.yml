@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__inssub
+    config:
+      materialized: view
+      tags: ['staging', 'insurance', 'daily']
+
     description: >
       Staging model for insurance subscribers. This table contains information about insurance subscribers 
       and their relationship to insurance plans, tracking benefit assignments, release authorizations, 
@@ -285,5 +289,3 @@ models:
               config:
                 severity: warn
 
-    config:
-      tags: ['staging', 'insurance', 'daily']

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__diseasedef
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'diseasedef']
+
     description: >
       Staging model for OpenDental disease definitions. Contains information about various diseases 
       including their ICD9, ICD10, and SNOMED codes used for clinical documentation and billing.

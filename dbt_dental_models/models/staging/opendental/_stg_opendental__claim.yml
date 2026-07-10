@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__claim
+    config:
+      materialized: incremental
+      unique_key: claim_id
+      tags: ['staging', 'opendental', 'claim']
+
     description: >
       Standardized view of dental insurance claims from the OpenDental system.
       Contains information about claim status, payments, providers, and related details for tracking

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__procedurecode
+    config:
+      materialized: incremental
+      unique_key: procedure_code_id
+
     description: >
       Standardized staging model for procedure codes from the OpenDental system.
       This table contains dental procedure codes, descriptions, and related attributes
@@ -123,9 +127,6 @@ models:
         - Fee variations across schedules are expected and normal business practice
         - D0-D9 prefixes indicate procedure groups when present (diagnostic, preventive, etc.)
     
-    config:
-      materialized: incremental
-      unique_key: procedure_code_id
     
       tags: ['staging', 'opendental', 'procedure']
     tests:

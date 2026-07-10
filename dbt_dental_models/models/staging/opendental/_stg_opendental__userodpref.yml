@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__userodpref
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'userodpref']
+
     description: >
       Staging model for user preferences in OpenDental. This model captures various user-specific settings and preferences
       that control application behavior, UI elements, and feature access. Each preference is identified by a combination of

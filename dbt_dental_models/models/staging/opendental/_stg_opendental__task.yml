@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__task
+    config:
+      materialized: incremental
+      unique_key: task_id
+      tags: ['staging', 'opendental', 'task']
+
     description: >
       Staging model for task records from OpenDental. Contains information about tasks, reminders, and to-do items
       associated with patients, procedures, and other entities in the system.

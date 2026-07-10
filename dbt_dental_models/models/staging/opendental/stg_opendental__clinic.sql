@@ -62,10 +62,6 @@
     3. Update documentation with actual data examples
 #}
 
-{{ config(
-    materialized='view'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'clinic') }}
 ),

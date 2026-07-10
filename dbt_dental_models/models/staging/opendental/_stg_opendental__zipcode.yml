@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__zipcode
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'zipcode']
+
     description: >
       Staging model for zipcode data in OpenDental. Contains postal code information
       including city and state mappings, with a flag for frequently used zipcodes.

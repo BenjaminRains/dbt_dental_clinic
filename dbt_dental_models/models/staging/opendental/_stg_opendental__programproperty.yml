@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__programproperty
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'programproperty']
+
     description: >
       Staging model for program properties from OpenDental. Contains configuration and property settings 
       for various programs (third-party integrations, features, modules) with associated clinic and 

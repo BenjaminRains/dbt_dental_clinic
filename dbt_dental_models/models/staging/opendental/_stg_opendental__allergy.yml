@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__allergy
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'allergy']
+
     description: >
       Staging model for patient allergies. Contains patient-specific allergy information 
       including reactions, status, and clinical codes.

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__benefit
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'benefit']
+
     description: >
       Staging model for insurance benefits containing specific coverage details, limitations, and rules for insurance plans and patient plan assignments.
       

@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='task_list_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'tasklist') }}
     where {{ clean_opendental_date('"DateTimeEntry"') }} >= '2023-01-01'

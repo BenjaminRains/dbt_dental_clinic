@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__procedurelog
+    config:
+      materialized: incremental
+      unique_key: procedure_id
+
     description: >
       Staging model for OpenDental procedure log data. Contains detailed information 
       about dental procedures performed on patients, serving as a core clinical and 
@@ -19,9 +23,6 @@ models:
       Data includes both completed procedures and treatment plans across all statuses,
       with comprehensive fee, diagnosis, and clinical detail information.
     
-    config:
-      materialized: incremental
-      unique_key: procedure_id
     
     meta:
       # Data quality and business context

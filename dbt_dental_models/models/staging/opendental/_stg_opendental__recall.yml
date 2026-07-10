@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__recall
+    config:
+      materialized: incremental
+      unique_key: recall_id
+      schema: staging
+
     description: >
       Staging model for dental practice recall appointments and follow-up schedules
       from the OpenDental system. Contains information about when patients are due
@@ -49,10 +54,6 @@ models:
         is_disabled recalls should be excluded from active scheduling workflows.
         The recall_interval is typically in months (3, 6, 12) but can be customized.
     
-    config:
-      materialized: incremental
-      unique_key: recall_id
-      schema: staging
     
     tests:
       - dbt_expectations.expect_table_row_count_to_be_between:

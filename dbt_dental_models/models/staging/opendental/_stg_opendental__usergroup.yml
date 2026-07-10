@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__usergroup
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'usergroup']
+
     description: >
       Staging model for user groups in OpenDental. Contains information about different
       user groups and their associated permissions and settings.

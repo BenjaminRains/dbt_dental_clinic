@@ -1,9 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='provider_id',
-    on_schema_change='sync_all_columns'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'provider') }}
     {% if is_incremental() %}

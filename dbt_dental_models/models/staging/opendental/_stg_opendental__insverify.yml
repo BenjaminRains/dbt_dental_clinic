@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__insverify
+    config:
+      materialized: view
+      tags: ['staging', 'insurance', 'daily']
+
     description: >
       Staging model for insurance verification records. This table tracks verification activities 
       for insurance-related entities, documenting when insurance coverage has been verified and by whom.
@@ -159,5 +163,3 @@ models:
               Note: System-generated records (user_id = 0) may not have history records immediately upon creation.
               See known_issues section for detailed analysis of orphaned verification records.
 
-    config:
-      tags: ['staging', 'insurance', 'daily']

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__program
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'program']
+
     description: >
       Staging model for OpenDental program configurations and integrated software settings. 
       Contains configuration information for external programs, plugins, and tools that integrate 

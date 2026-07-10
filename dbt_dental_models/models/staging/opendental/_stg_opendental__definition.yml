@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__definition
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'definition']
+
     description: >
       Staging model for OpenDental definitions table. Contains system configuration definitions 
       that define categories, display options, colors, and other configurable elements used 

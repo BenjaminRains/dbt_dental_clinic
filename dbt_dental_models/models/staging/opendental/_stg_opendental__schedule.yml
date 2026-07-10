@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__schedule
+    config:
+      materialized: incremental
+      unique_key: schedule_id
+
     description: >
       Staging model for schedule records from OpenDental. Contains information about appointments, blockouts, and other scheduled events.
       
@@ -66,9 +70,6 @@ models:
         - Clinic ID is not used (all records have clinic_id = 0)
         - Operatory assignments vary by schedule type
     
-    config:
-      materialized: incremental
-      unique_key: schedule_id
     
     columns:
       - name: schedule_id

@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__taskhist
+    config:
+      materialized: incremental
+      unique_key: task_hist_id
+      tags: ['staging', 'opendental', 'taskhist']
+
     description: >
       Staging model for task history records from OpenDental. Contains historical snapshots of task changes,
       including modifications to task details, status updates, and assignment changes.

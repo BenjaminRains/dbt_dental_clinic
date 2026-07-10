@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__appointmenttype
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'appointmenttype']
+
     description: >
       Staging model for appointment types from OpenDental system.
       Contains information about different types of appointments, their display properties,

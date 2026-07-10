@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__sheetfield
+    config:
+      materialized: incremental
+      unique_key: sheet_field_id
+      tags: ['staging', 'opendental', 'incremental']
+
     description: |
       Staging model for sheet field records from OpenDental. Contains information about individual fields within sheets, including their properties, values, and layout.
       
@@ -55,8 +60,6 @@ models:
         - Be aware of known data quality issues when joining to related tables
         - Electronic signature fields require special handling for compliance
     
-    config:
-      tags: ['staging', 'opendental', 'incremental']
     
     columns:
       - name: sheet_field_id

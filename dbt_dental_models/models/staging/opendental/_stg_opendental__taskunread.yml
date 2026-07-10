@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__taskunread
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'taskunread']
+
     description: >
       Staging model for task unread status from OpenDental. Tracks which users have not yet
       read specific tasks, supporting the task notification and alert system.

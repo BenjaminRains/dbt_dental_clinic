@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__claimpayment
+    config:
+      materialized: incremental
+      unique_key: claim_payment_id
+      tags: ['staging', 'opendental', 'claimpayment']
+
     description: >
       Standardized staging model for insurance claim payments from OpenDental. 
       This model represents payments received from insurance companies for submitted claims,

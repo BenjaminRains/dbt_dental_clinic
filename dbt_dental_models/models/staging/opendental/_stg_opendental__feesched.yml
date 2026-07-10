@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__feesched
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'feesched']
+
     description: >
       Fee schedule data from OpenDental dental practice management system.
       Contains fee schedule configurations that define pricing structures for dental procedures.

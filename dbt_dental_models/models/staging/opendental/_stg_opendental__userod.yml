@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__userod
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'userod']
+
     description: >
       Staging model for user/operator data from OpenDental. Contains comprehensive
       information about system users, including their authentication details, security

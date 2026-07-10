@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='perioexam_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'perioexam') }}
     where "ExamDate" >= '2023-01-01'

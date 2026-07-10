@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__payment
+    config:
+      materialized: incremental
+      unique_key: payment_id
+      tags: ['staging', 'opendental', 'finance']
+
     description: >
       Staged payment data from OpenDental system containing all financial payment transactions.
       
@@ -9,10 +14,6 @@ models:
       processed through the OpenDental practice management system. Includes comprehensive payment details,
       processing status, and merchant information for financial reporting and analysis.
     
-    config:
-      materialized: incremental
-      unique_key: payment_id
-      tags: ['staging', 'opendental', 'finance']
 
     meta:
       # Owner and PII information

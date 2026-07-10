@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__toothinitial
+    config:
+      materialized: incremental
+      unique_key: tooth_initial_id
+      tags: ['staging', 'opendental', 'toothinitial']
+
     description: >
       Staging model for tooth initial data from OpenDental. Tracks initial conditions and
       movements of teeth, including their type, movement patterns, and visual representations.

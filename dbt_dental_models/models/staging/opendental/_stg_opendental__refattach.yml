@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__refattach
+    config:
+      materialized: incremental
+      unique_key: ref_attach_id
+      schema: staging
+
     description: >
       Staging model for referral attachments. 
       
@@ -28,11 +33,6 @@ models:
         - Not all referral attachments are linked to procedures or providers; see business rules and known issues.
         - Analysts should use referral_type and referral_to_status to filter for specific referral workflows.
         - Data is filtered to records with RefDate >= 2023-01-01.
-
-    config:
-      materialized: incremental
-      unique_key: ref_attach_id
-      schema: staging
 
     columns:
       - name: ref_attach_id

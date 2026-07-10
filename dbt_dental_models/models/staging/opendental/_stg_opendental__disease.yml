@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__disease
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'disease']
+
     description: >
       Staging model for OpenDental disease records containing patient disease history and health conditions.
       

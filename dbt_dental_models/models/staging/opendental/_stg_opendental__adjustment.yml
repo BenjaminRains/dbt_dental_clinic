@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__adjustment
+    config:
+      materialized: incremental
+      unique_key: adjustment_id
+      tags: ['staging', 'opendental', 'finance']
+
     description: >
       Staged adjustment data from OpenDental system providing foundational data for accounts receivable analysis.
       This staging model contains both procedure-specific and general account adjustments, supporting financial 
@@ -20,10 +25,6 @@ models:
       - Both active and historical adjustments are included
       - Links to procedures, providers, clinics, and billing statements where applicable
     
-    config:
-      materialized: incremental
-      unique_key: adjustment_id
-      tags: ['staging', 'opendental', 'finance']
 
     meta:
       record_count: "~4,500 adjustments"

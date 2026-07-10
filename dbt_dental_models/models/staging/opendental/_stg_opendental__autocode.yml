@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__autocode
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'autocode']
+
     description: >
       Staging model for OpenDental autocodes - a reference lookup table containing dental procedure 
       autocodes and their attributes. Autocodes are used in OpenDental to define automated 

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__usergroupattach
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'usergroupattach']
+
     description: >
       Staging model for user group attachments in OpenDental. Contains information about
       which users belong to which security groups, enabling role-based access control.

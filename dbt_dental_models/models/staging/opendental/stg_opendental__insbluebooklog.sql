@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='insbluebooklog_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'insbluebooklog') }}
     where "DateTEntry" >= '2023-01-01'

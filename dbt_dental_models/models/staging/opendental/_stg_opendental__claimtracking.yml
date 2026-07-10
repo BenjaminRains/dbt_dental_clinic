@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__claimtracking
+    config:
+      materialized: incremental
+      unique_key: claim_tracking_id
+      tags: ['staging', 'opendental', 'claimtracking']
+
     description: >
       Standardized staging model for claim tracking events from OpenDental.
       This model represents the audit trail of events and status changes for insurance claims,

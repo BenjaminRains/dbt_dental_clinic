@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__rxdef
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'rxdef']
+
     description: >
       Staging model for prescription definitions from OpenDental.
       

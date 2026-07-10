@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__sheetfielddef
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'sheetfielddef']
+
     description: >
       Staging model for OpenDental sheet field definitions. These definitions serve as templates for sheet fields, defining their default properties and behaviors.
       

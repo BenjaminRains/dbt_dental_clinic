@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__statementprod
+    config:
+      materialized: incremental
+      unique_key: statement_prod_id
+      tags: ['staging', 'opendental', 'statementprod']
+
     description: >
       Staging model for OpenDental statement product records. Contains line items and products associated with patient statements.
       

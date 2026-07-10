@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__medication
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'medication']
+
     description: >
       Staging model for medications from OpenDental. Contains information about medications, including 
       their names, generic equivalents, and RxNorm codes for clinical and pharmacy integration.

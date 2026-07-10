@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__treatplanparam
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'treatplanparam']
+
     description: >
       Staging model for treatment plan display parameters and settings from OpenDental.
       Each record contains configuration options for how a treatment plan should be displayed

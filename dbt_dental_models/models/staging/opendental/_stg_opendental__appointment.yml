@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__appointment
+    config:
+      materialized: incremental
+      unique_key: appointment_id
+      tags: ['staging', 'opendental', 'scheduling']
+
     description: >
       Staging model for appointments from the OpenDental system. Contains normalized and cleaned 
       appointment data with standardized naming conventions for dental practice scheduling and workflow management.
@@ -21,10 +26,6 @@ models:
       - Links to patients, providers, operatories, appointment types, and insurance plans
       - Historical changes tracked separately in histappointment table
     
-    config:
-      materialized: incremental
-      unique_key: appointment_id
-      tags: ['staging', 'opendental', 'scheduling']
 
     meta:
       record_count: "~20,400 appointment records"

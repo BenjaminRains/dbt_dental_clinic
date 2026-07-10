@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__sheet
+    config:
+      materialized: incremental
+      unique_key: sheet_id
+      tags: ['staging', 'opendental', 'sheet']
+
     description: >
       Staging model for sheet records from OpenDental. Contains information about forms, documents, and other sheet-based records in the system.
       

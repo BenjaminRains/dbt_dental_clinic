@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__allergydef
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'allergydef']
+
     description: >
       Staging model for allergy definitions. Contains standardized allergy definitions and their associated codes
       for use in patient allergy tracking. This model provides the reference catalog of available allergens

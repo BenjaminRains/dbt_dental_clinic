@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__commlog
+    config:
+      materialized: incremental
+      unique_key: commlog_id
+      tags: ['staging', 'opendental', 'commlog']
+
     description: >
       Staging model for communication logs from OpenDental system, capturing all patient communications 
       including appointments, clinical notes, billing notifications, and system-generated messages.

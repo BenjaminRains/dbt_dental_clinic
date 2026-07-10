@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__carrier
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'carrier']
+
     description: >
       Staging model for insurance carriers. Contains comprehensive information about insurance 
       companies and their configurations for claim processing and patient coverage.

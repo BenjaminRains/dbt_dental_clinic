@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__operatory
+    config:
+      materialized: view
+      tags: ['opendental', 'staging', 'operatory', 'scheduling', 'resources']
+
     description: >
       Staging model for OpenDental operatory (dental chair/room) configuration data.
       
@@ -15,8 +19,6 @@ models:
       configuration settings. Foreign key relationships connect to providers, 
       clinics, and operatory types for comprehensive analysis.
     
-    config:
-      tags: ['opendental', 'staging', 'operatory', 'scheduling', 'resources']
     
     meta:
       # Data quality and business context

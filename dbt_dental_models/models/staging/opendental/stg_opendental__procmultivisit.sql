@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='procmultivisit_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'procmultivisit') }}
     where "SecDateTEntry" >= '2023-01-01'

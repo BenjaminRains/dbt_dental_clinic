@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='time_adjust_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'timeadjust') }}
     where {{ clean_opendental_date('"TimeEntry"') }} >= '2023-01-01'

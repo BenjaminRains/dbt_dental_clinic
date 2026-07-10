@@ -1,7 +1,3 @@
-{{ config(
-    materialized='view'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'patientnote') }}
     where {{ clean_opendental_date('"SecDateTEntry"') }} >= '2023-01-01' -- Filter to include only notes from 2023 onwards

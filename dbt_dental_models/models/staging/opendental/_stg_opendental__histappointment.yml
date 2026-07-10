@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__histappointment
+    config:
+      materialized: incremental
+      unique_key: hist_appointment_id
+      tags: ['staging', 'opendental', 'histappointment']
+
     description: >
       Staging model for historical appointment data from OpenDental.
       Tracks all changes made to appointments over time as a series of snapshots.

@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='sheet_field_id'
-) }}
-
 with source_data as (
     select sf.*, s."DateTimeSheet", s."DateTSheetEdited"
     from {{ source('opendental', 'sheetfield') }} sf

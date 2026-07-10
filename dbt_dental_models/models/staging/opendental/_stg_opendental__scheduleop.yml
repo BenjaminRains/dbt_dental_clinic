@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__scheduleop
+    config:
+      materialized: incremental
+      unique_key: schedule_op_id
+
     description: >
       Staging model for the OpenDental scheduleop data. This table creates a link between
       the schedule entries and operatories (dental chairs/rooms), allowing a schedule to be
@@ -46,9 +50,6 @@ models:
         - Be aware of orphaned schedule records in the 150,000-160,000 ID range
         - Note that stg_opendental__schedule has a related issue where 5 provider schedules are missing operatory assignments
     
-    config:
-      materialized: incremental
-      unique_key: schedule_op_id
     
     columns:
       - name: schedule_op_id

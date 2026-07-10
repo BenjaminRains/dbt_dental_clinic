@@ -1,7 +1,3 @@
-{{ config(
-    materialized='view'
-) }}
-
 with source_data as (
     select tu.*
     from {{ source('opendental', 'taskunread') }} tu

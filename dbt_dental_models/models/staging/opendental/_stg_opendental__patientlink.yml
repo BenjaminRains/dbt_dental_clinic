@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__patientlink
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'patientlink']
+
     description: >
       Standardized patient link records from OpenDental, tracking relationships and merges between patient records.
       

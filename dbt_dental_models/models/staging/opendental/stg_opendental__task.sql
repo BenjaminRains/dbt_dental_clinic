@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='task_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'task') }}
     where "DateTimeOriginal" >= '2023-01-01'

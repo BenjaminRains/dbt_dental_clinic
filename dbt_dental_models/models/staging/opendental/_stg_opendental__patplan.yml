@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__patplan
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'patplan']
+
     description: >
       Staging model for patient insurance plan assignments that links patients to their insurance subscriptions.
       This table manages the relationship between patients and their insurance plans, including plan priority 

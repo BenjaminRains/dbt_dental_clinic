@@ -1,9 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='claim_tracking_id',
-    
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'claimtracking') }}
     where "DateTimeEntry" >= '2023-01-01'

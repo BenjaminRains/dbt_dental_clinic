@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__userodapptview
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'userodapptview']
+
     description: >
       Staging model for user appointment view preferences in OpenDental. Contains information about
       how users prefer to view their appointment schedules, including view type and clinic assignments.

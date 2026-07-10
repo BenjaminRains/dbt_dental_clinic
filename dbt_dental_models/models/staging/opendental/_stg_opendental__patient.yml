@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__patient
+    config:
+      materialized: table
+      tags: ['staging', 'opendental', 'patient']
+
     description: >
       Standardized patient information from OpenDental dental practice management system.
       
@@ -10,9 +14,6 @@ models:
       reporting and analysis across clinical, financial, and operational use cases. Each record represents
       a unique patient in the dental practice, including active patients, inactive patients, and archived records.
     
-    config:
-      materialized: table
-      tags: ['staging', 'opendental', 'patient']
 
     meta:
       # Data quality and business context

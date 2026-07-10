@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__claimproc
+    config:
+      materialized: incremental
+      unique_key: claim_procedure_id
+      tags: ['staging', 'opendental', 'claims']
+
     description: >
       Standardized staging model for insurance claim procedures from OpenDental.
       This model represents individual procedures that are included in insurance claims,
@@ -11,10 +16,6 @@ models:
       deductibles, and write-offs. This is a critical model for understanding insurance
       processing, financial reconciliation, and revenue cycle management.
     
-    config:
-      materialized: incremental
-      unique_key: claim_procedure_id
-      tags: ['staging', 'opendental', 'claims']
 
     meta:
       record_count: ~2.8M

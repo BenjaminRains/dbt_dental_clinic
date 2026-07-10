@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__eobattach
+    config:
+      materialized: incremental
+      unique_key: eob_attach_id
+      tags: ['staging', 'opendental', 'eobattach']
+
     description: >-
       Staging model for EOB (Explanation of Benefits) attachments from OpenDental.
       Contains file attachments associated with insurance claim payments including

@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__insplan
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'insplan']
+
     description: >
       Staging model for insurance plans from OpenDental. Contains comprehensive insurance plan 
       information including fee schedules, plan details, settings, and relationships to carriers 

@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__fee
+    config:
+      materialized: incremental
+      unique_key: fee_id
+      tags: ['staging', 'opendental', 'fee']
+
     description: >
       Staging model for OpenDental fee data. Contains standardized fee information including 
       procedure costs, fee schedules, and provider-specific fees for dental procedures.

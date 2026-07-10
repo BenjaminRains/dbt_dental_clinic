@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='lab_case_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'labcase') }}
     where "DateTimeCreated" >= '2023-01-01'

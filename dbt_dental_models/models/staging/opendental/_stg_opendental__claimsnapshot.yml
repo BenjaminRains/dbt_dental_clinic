@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__claimsnapshot
+    config:
+      materialized: incremental
+      unique_key: claim_snapshot_id
+      tags: ['staging', 'opendental', 'claimsnapshot']
+
     description: >
       Standardized staging model for claim snapshots from OpenDental.
       This model represents point-in-time snapshots of claim data, capturing

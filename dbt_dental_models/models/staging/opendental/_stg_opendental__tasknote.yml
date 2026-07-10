@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__tasknote
+    config:
+      materialized: incremental
+      unique_key: task_note_id
+      tags: ['staging', 'opendental', 'tasknote']
+
     description: >
       Staging model for task notes from OpenDental. Contains detailed notes and comments associated with tasks, including user attribution and timestamps.
       

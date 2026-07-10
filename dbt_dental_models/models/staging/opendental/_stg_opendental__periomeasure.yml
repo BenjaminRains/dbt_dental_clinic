@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__periomeasure
+    config:
+      materialized: incremental
+      unique_key: periomeasure_id
+      tags: ['staging', 'opendental', 'periodontal', 'clinical']
+
     description: >
       Staging model for periodontal measurements from OpenDental. Contains detailed measurements 
       for teeth examined during periodontal exams, capturing pocket depths and other periodontal 
@@ -218,5 +223,3 @@ models:
         tests:
           - not_null
 
-    config:
-      tags: ['staging', 'opendental', 'periodontal', 'clinical']

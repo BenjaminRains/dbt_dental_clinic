@@ -2,6 +2,11 @@ version: 2
 
 models:
   - name: stg_opendental__paysplit
+    config:
+      materialized: incremental
+      unique_key: paysplit_id
+      tags: ['staging', 'opendental', 'finance']
+
     description: >
       Staging model for OpenDental payment splits. Payment splits represent individual allocations
       of payments to specific procedures, adjustments, or payment plans. This model includes
@@ -68,10 +73,6 @@ models:
       - Automatically transfer to visible splits when procedures complete
       - Generate income transfers when moved between hidden/visible status
     
-    config:
-      materialized: incremental
-      unique_key: paysplit_id
-      tags: ['staging', 'opendental', 'finance']
 
     meta:
       record_count: "~850K records"

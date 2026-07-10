@@ -1,7 +1,3 @@
-{{ config(
-    materialized='view'
-) }}
-
 /*
     Staging model for appointment views.
     Defines different views of the appointment schedule that users can access.

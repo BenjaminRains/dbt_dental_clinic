@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__employee
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'employee']
+
     description: >
       Staging model for employee data from OpenDental system, containing comprehensive 
       employee information including personal details, contact information, reporting 

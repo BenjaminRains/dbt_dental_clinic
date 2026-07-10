@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__entrylog
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'entrylog']
+
     description: >
       Staging model for system entry logs from OpenDental. Contains audit trail information about 
       user actions and system events, tracking who performed what action and when. This is a 

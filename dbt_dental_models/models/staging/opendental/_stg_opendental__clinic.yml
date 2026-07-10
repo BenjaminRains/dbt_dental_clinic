@@ -2,6 +2,10 @@ version: 2
 
 models:
   - name: stg_opendental__clinic
+    config:
+      materialized: view
+      tags: ['staging', 'opendental', 'clinic']
+
     description: >
       Standardized staging model for clinic/location information from OpenDental.
       This model provides location and operational details for dental clinic facilities,
