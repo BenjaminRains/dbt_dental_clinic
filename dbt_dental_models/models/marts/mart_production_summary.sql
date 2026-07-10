@@ -195,7 +195,7 @@ production_aggregated as (
         
         -- Time Utilization
         sum(pb.appointment_length_minutes) as total_scheduled_minutes,
-        sum(case when pb.is_completed then pb.appointment_length_minutes else 0 end) as productive_minutes,
+        sum(case when pb.is_completed then coalesce(pb.appointment_length_minutes, 0) else 0 end) as productive_minutes,
         avg(pb.appointment_length_minutes) as avg_appointment_length,
         
         -- Production Metrics

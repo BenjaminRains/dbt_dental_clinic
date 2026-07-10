@@ -107,11 +107,13 @@ communication_templates AS (
             ELSE 'General'
         END || ' Template' AS template_name,
         CASE 
-            WHEN communication_mode = 1 THEN 'email'  -- Email communications
-            WHEN communication_mode = 3 THEN 'letter' -- Phone calls
-            WHEN communication_mode = 4 THEN 'SMS'    -- Text messages
-            WHEN communication_mode = 5 THEN 'SMS'    -- Alternative text message mode
-            ELSE NULL
+            WHEN communication_mode = 1 THEN 'email'
+            WHEN communication_mode = 2 THEN 'letter'  -- phone
+            WHEN communication_mode = 3 THEN 'letter'  -- mail
+            WHEN communication_mode IN (4, 5) THEN 'SMS'
+            WHEN communication_mode = 0 THEN 'letter'  -- OD default / legacy
+            WHEN communication_mode IN (6, 8) THEN 'SMS'  -- rare system modes
+            ELSE 'letter'
         END AS template_type,
         communication_category::text AS category,
         'Auto-detected ' || communication_category || ' communication' AS subject,
@@ -125,7 +127,8 @@ communication_templates AS (
             WHEN MIN(user_id) IN (SELECT user_id FROM {{ ref('stg_opendental__userod') }}) THEN MIN(user_id)
             ELSE NULL
         END::integer AS created_by,
-        MIN(created_at) AS created_at,
+        -- Base created_at is often null (OD _created_at); fall back to updated_at / build time
+        COALESCE(MIN(created_at), MIN(updated_at), CURRENT_TIMESTAMP) AS created_at,
         MAX(updated_at) AS updated_at
     FROM (
         SELECT

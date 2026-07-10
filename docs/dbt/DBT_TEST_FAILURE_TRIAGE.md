@@ -324,8 +324,8 @@ Breakdown: **11 ERROR** (missing columns / bad accepted_values SQL) · **19 FAIL
 | Batch | Scope | Status |
 | --- | --- | --- |
 | **10a** | Schema ERROR: restore provider names + metadata on `mart_provider_performance`; `_loaded_at` on `fact_communication`; model timestamps on `int_communication_metrics` | **Done 2026-07-10** |
-| **10b** | Softs: specialty / templates created_at / collection_efficiency / productive_hours | Next |
-| **10c** | Comm category + campaign accepted_values; AR analysis amount ceilings (holdovers) | Pending |
+| **10b** | Softs + model fixes: specialty / collection_efficiency / productive_hours / templates created_at | **Done 2026-07-10** |
+| **10c** | Comm category + campaign accepted_values; AR analysis amount ceilings (holdovers) | Next |
 
 #### Batch 10a applied
 
@@ -333,7 +333,16 @@ Breakdown: **11 ERROR** (missing columns / bad accepted_values SQL) · **19 FAIL
 - `fact_communication`: include `_loaded_at` in mart metadata fields (source uses `created_at` alias)
 - `int_communication_metrics`: add `model_created_at` / `model_updated_at`
 
-**Selective verify:** former 10a schema tests `PASS=12` · `WARN=2` · `ERROR=0` (preferred/first name warn).  
-**Model build residual FAILs (→ 10b/10c):** specialty 2562, collection_efficiency 192, productive_hours 136, comm category 571+1.
+**Selective verify:** former 10a schema tests `PASS=12` · `WARN=2` · `ERROR=0` (preferred/first name warn).
+
+#### Batch 10b applied
+
+- Dropped `specialty_description` not_null (OD specialty often unset)
+- Softed model-level `collection_efficiency` 0–100 → warn (same-day payment timing; max ~32k%)
+- `fact_appointment`: ignore midnight checkout sentinel; fall back to `actual_length` / scheduled `appointment_length`
+- `mart_production_summary`: `coalesce(appointment_length_minutes, 0)` in productive minutes sum → null hours cleared
+- `int_communication_templates`: `COALESCE(created_at, updated_at, now())`; map modes 0/2/6/8 so `template_type` never null
+
+**Verify:** null hours=0, null template created_at/type=0; collection_efficiency WARN 192; category accepted_values still FAIL → 10c.
 
 Open findings: DBT-FND-001, DBT-FND-002. Fixed this session: FND-003, FND-004, FND-005.

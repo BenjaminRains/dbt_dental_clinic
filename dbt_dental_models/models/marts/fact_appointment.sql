@@ -91,11 +91,15 @@ appointment_calculated as (
         date(ab.appointment_datetime) as appointment_date,
         ab.appointment_datetime,
         '' as time_pattern,  -- pattern not available in intermediate
-        case 
-            when ab.check_out_time is not null and ab.appointment_datetime is not null
-            and ab.check_out_time >= ab.appointment_datetime  -- Ensure logical sequence
-            then extract(epoch from (ab.check_out_time - ab.appointment_datetime))/60
-            else ab.actual_length  -- Use pre-calculated length from intermediate
+        -- Length: ignore OD midnight checkout sentinel (00:00:00); fall back to
+        -- actual_length then scheduled appointment_type pattern length.
+        case
+            when ab.check_out_time is not null
+                and ab.appointment_datetime is not null
+                and ab.check_out_time::time <> time '00:00:00'
+                and ab.check_out_time >= ab.appointment_datetime
+            then extract(epoch from (ab.check_out_time - ab.appointment_datetime)) / 60
+            else coalesce(ab.actual_length, ab.appointment_length)
         end as appointment_length_minutes,
         extract(hour from ab.appointment_datetime) as appointment_hour,
         extract(dow from date(ab.appointment_datetime)) as day_of_week,

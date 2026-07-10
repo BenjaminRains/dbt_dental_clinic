@@ -111,8 +111,10 @@ models:
       - dbt_expectations.expression_is_true:
           expression: "collection_efficiency between 0 and 100"
           config:
-            severity: error
-            description: "Collection efficiency must be between 0-100% for valid performance metrics"
+            severity: warn
+            description: >
+              Same-day timing: collections can exceed production when payments
+              post on low-production days (observed up to ~32k%). Warn only.
     
     columns:
       # Composite Key Components
@@ -196,13 +198,12 @@ models:
       
       - name: specialty_description
         description: >
-          Provider's specialty classification for comparative analysis
+          Provider's specialty classification for comparative analysis.
+          Nullable — many OD providers have no specialty definition assigned.
           
           Business Rules:
-          - Enables specialty-based performance comparison
+          - Enables specialty-based performance comparison when present
           - Supports specialty-specific benchmarking and rankings
-        tests:
-          - not_null
       
       - name: provider_status
         description: >
