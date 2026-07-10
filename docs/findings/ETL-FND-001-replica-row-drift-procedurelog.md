@@ -2,9 +2,9 @@
 
 **Status:** Open  
 **Severity:** High (blocks production KPI validation; affects any metric keyed on complete procedures)  
-**Discovered via:** [daily-production-by-procedure KPI validation](../../../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md) (2026-06-10)  
+**Discovered via:** [daily-production-by-procedure KPI validation](../../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md) (2026-06-10)  
 **Owner:** ETL / data platform  
-**Tracking:** [TODO.md — ETL-FND-001](../../../TODO.md#etl-fnd-001--replica-row-drift-procedurelog)  
+**Tracking:** [TODO.md — ETL-FND-001](../../TODO.md#etl-fnd-001--replica-row-drift-procedurelog)  
 
 ## Classification
 
@@ -253,9 +253,9 @@ Re-run KPI Query 8; expect raw complete ≈ 140 / $15,239.
 
 | Document | Role |
 | --- | --- |
-| [ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md](../ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md) | Current incremental design |
-| [daily-production-by-procedure/findings/2026-06-10.md](../../../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md) | KPI instance that discovered this |
-| [audit_table_row_counts.py](../../../etl_pipeline/scripts/audit_table_row_counts.py) | Row-count audit (extend toward drift) |
+| [ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md](../etl/ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md) | Current incremental design |
+| [daily-production-by-procedure/findings/2026-06-10.md](../../dbt_dental_models/validation/kpi/daily-production-by-procedure/findings/2026-06-10.md) | KPI instance that discovered this |
+| [audit_table_row_counts.py](../../etl_pipeline/scripts/audit_table_row_counts.py) | Row-count audit (extend toward drift) |
 | `postgres_loader.py` `_prepare_load`, `_check_analytics_needs_updating` | Stale-state hooks |
 
 ---

@@ -280,7 +280,7 @@ This section records validation outcomes and active follow-up. The implementatio
 
 ### Confirmed in production validation
 
-- **In-place updates can be missed** (§4.1): [ETL-FND-001](findings/ETL-FND-001-replica-row-drift-procedurelog.md) — `procedurelog` rows copied once with stale `ProcStatus` (e.g. TP in analytics, Complete in MySQL). Same PK, different attributes; not “ETL didn’t run” and not a dbt bug.
+- **In-place updates can be missed** (§4.1): [ETL-FND-001](../findings/ETL-FND-001-replica-row-drift-procedurelog.md) — `procedurelog` rows copied once with stale `ProcStatus` (e.g. TP in analytics, Complete in MySQL). Same PK, different attributes; not “ETL didn’t run” and not a dbt bug.
 - **KPI evidence (2026-06-10):** MySQL complete production 140 / $15,239; `raw` and staging both 48 / $3,719 — gap is MySQL → `raw`, not staging → mart.
 - **Deletes still not propagated** (§4): unchanged; phantom rows in analytics if source hard-deletes remain possible.
 - **Staging `_loaded_at` ≠ ETL load time:** dbt sets `_loaded_at` at build; use `raw.etl_load_status` for pipeline freshness (see archived [INCREMENTAL_MODEL_ANALYSIS_EXPLANATION.md](archive/INCREMENTAL_MODEL_ANALYSIS_EXPLANATION.md)).
@@ -289,7 +289,7 @@ This section records validation outcomes and active follow-up. The implementatio
 
 | Item | Tracks | Notes |
 | --- | --- | --- |
-| Lookback re-sync for `procedurelog` | [ETL-FND-001](findings/ETL-FND-001-replica-row-drift-procedurelog.md) P1 | Union watermark incremental with recent `DateComplete` / `ProcDate` window |
+| Lookback re-sync for `procedurelog` | [ETL-FND-001](../findings/ETL-FND-001-replica-row-drift-procedurelog.md) P1 | Union watermark incremental with recent `DateComplete` / `ProcDate` window |
 | Post-ETL drift detection | ETL-FND-001 P0 | MySQL vs `raw` reconciliation (e.g. complete-production totals by day) |
 | `tables.yml` review | ETL-FND-001 P1 | Confirm `DateTStamp` as primary incremental; re-evaluate `and_logic` |
 

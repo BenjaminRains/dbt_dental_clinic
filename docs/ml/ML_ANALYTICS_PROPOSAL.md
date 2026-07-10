@@ -143,7 +143,7 @@ Any ML model should be evaluated against these rules before replacing them in pr
 
 | Target | Blocker | Notes |
 | --- | --- | --- |
-| **Patient LTV projection** | `mart_patient_lifetime_value` planned, not built | See `docs/dbt/marts_models_plan.md` |
+| **Patient LTV projection** | `mart_patient_lifetime_value` planned, not built | See `docs/dbt/archive/marts_models_plan.md` |
 | **Clinical perio risk** | Perio data staged only | Build `int_perio_*` first |
 | **Implant conversion** | Small positive class | Start from `mart_untapped_implant_revenue` candidates |
 | **Revenue recovery** | Opportunity-level labels sparse | Propensity to recover from `mart_revenue_lost` |
