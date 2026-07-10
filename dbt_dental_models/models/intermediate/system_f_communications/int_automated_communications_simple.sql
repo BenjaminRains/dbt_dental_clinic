@@ -90,10 +90,12 @@ automated_comms AS (
         base.program_id,
         
         -- Patient context
+        base.patient_name,
         base.patient_status,
         base.birth_date,
         
         -- User context
+        base.user_name,
         base.provider_id,
         
         -- Automation flags and metrics
@@ -118,7 +120,9 @@ automated_comms AS (
             primary_source_alias='base',
             preserve_source_metadata=true,
             source_metadata_fields=['created_at', 'updated_at']
-        ) }}
+        ) }},
+        CURRENT_TIMESTAMP AS model_created_at,
+        CURRENT_TIMESTAMP AS model_updated_at
     FROM {{ ref('int_automated_communication_flags_simple') }} flags
     INNER JOIN {{ ref('int_patient_communications_base') }} base
         ON flags.communication_id = base.communication_id
@@ -149,8 +153,10 @@ SELECT
     communication_category,
     outcome,
     program_id,
+    patient_name,
     patient_status,
     birth_date,
+    user_name,
     provider_id,
     trigger_type,
     status,
@@ -166,5 +172,7 @@ SELECT
     _loaded_at,
     created_at,
     updated_at,
-    _transformed_at
+    _transformed_at,
+    model_created_at,
+    model_updated_at
 FROM automated_comms

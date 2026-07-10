@@ -163,9 +163,11 @@ collection_flag AS (
             WHEN pa.payment_amount_30days > 0 THEN TRUE
             ELSE FALSE
         END AS resulted_in_payment,
+        -- Require positive 30d payment before full/partial; zero pay on zero balance is no_payment
         CASE
-            WHEN pa.payment_amount_30days >= s.balance_total * 0.9 THEN 'full_payment'
-            WHEN pa.payment_amount_30days > 0 THEN 'partial_payment'
+            WHEN COALESCE(pa.payment_amount_30days, 0) > 0
+                 AND pa.payment_amount_30days >= s.balance_total * 0.9 THEN 'full_payment'
+            WHEN COALESCE(pa.payment_amount_30days, 0) > 0 THEN 'partial_payment'
             ELSE 'no_payment'
         END AS payment_result
     FROM statement_base s

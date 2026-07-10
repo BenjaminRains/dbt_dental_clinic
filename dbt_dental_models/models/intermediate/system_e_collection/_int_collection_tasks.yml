@@ -39,6 +39,7 @@ models:
       - Follow-up tasks are tracked and linked to original tasks
       - All historical collection tasks are included (no date restrictions)
       - Tasks are categorized by communication method for tracking effectiveness
+      - Orphan tasks (null patient key / no AR match) are filtered out of this model
     columns:
       - name: collection_task_id
         description: Unique identifier for the collection task
@@ -50,7 +51,9 @@ models:
       - name: task_id
         description: Foreign key to stg_opendental__task
       - name: patient_id
-        description: Foreign key to stg_opendental__patient
+        description: >
+          Foreign key to stg_opendental__patient.
+          Always populated — orphan OD tasks with null KeyID and no AR match are excluded upstream.
       - name: assigned_user_id
         description: ID of the user assigned to this task
       - name: task_type

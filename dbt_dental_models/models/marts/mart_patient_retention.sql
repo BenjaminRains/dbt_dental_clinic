@@ -211,6 +211,7 @@ final as (
         pt.has_insurance_flag,
         
         -- Provider Information
+        trim(both ' ' from concat_ws(' ', nullif(prov.first_name, ''), nullif(prov.last_name, ''))) as primary_provider_name,
         prov.provider_type_category as primary_provider_type,
         prov.provider_specialty_category as primary_provider_specialty,
         

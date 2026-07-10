@@ -113,7 +113,10 @@ models:
       - name: resulted_in_payment
         description: Flag indicating if statement resulted in a payment
       - name: payment_result
-        description: Outcome of statement (full_payment, partial_payment, no_payment)
+        description: >
+          Outcome of statement (full_payment, partial_payment, no_payment).
+          full_payment / partial_payment require payment_amount_30days > 0;
+          zero-balance statements with no payment are no_payment.
       - name: model_created_at
         description: Timestamp when this record was created in the dbt model
       - name: model_updated_at

@@ -71,7 +71,7 @@ models:
       # Validates template category values
       - dbt_utils.expression_is_true:
           name: category_validation
-          expression: "category IN ('appointment', 'billing', 'clinical', 'recall', 'forms', 'general')"
+          expression: "category IN ('appointment', 'billing', 'clinical', 'recall', 'forms', 'general', 'insurance', 'follow_up')"
           config:
             severity: error
             description: "Category must be one of the accepted values"
@@ -131,11 +131,11 @@ models:
               values: ['email', 'SMS', 'letter']
       
       - name: category
-        description: Category of the template (appointment, billing, clinical, etc.)
+        description: Category of the template (appointment, billing, clinical, insurance, follow_up, etc.)
         tests:
           - not_null
           - accepted_values:
-              values: ['appointment', 'billing', 'clinical', 'recall', 'forms', 'general']
+              values: ['appointment', 'billing', 'clinical', 'recall', 'forms', 'general', 'insurance', 'follow_up']
       
       - name: subject
         description: Subject line for the template (required for email templates)

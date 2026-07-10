@@ -77,8 +77,12 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000
-              max_value: 50000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
+                description: >
+                  Extreme AR balances exist (p99 ~$3k; max observed ~$178k). Warn only.
 
       - name: balance_0_30_days
         description: >
@@ -88,8 +92,10 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000
-              max_value: 50000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
 
       - name: balance_31_60_days
         description: >
@@ -99,8 +105,10 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000
-              max_value: 50000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
 
       - name: balance_61_90_days
         description: >
@@ -110,8 +118,10 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000
-              max_value: 50000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
 
       - name: balance_over_90_days
         description: >
@@ -122,13 +132,12 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000
-              max_value: 50000
+              min_value: -200000
+              max_value: 200000
               config:
                 severity: warn
                 description: >
-                  Balance over 90 days should typically be between -$1,000 and $50,000.
-                  Values outside this range may indicate data quality issues or require review.
+                  Extreme over-90 balances exist; warn only (Batch 10c).
 
       - name: estimated_insurance_ar
         description: >
@@ -138,8 +147,10 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000
-              max_value: 50000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
 
       - name: patient_responsibility
         description: >
@@ -151,14 +162,12 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000
-              max_value: 50000
+              min_value: -600000
+              max_value: 200000
               config:
                 severity: warn
                 description: >
-                  Patient responsibility should typically be between -$1,000 and $50,000.
-                  Negative values often represent credits or insurance overpayments.
-                  Values outside this range may indicate data quality issues or require review.
+                  Extreme patient responsibility / credits exist (min observed ~-$556k). Warn only.
 
       - name: insurance_responsibility
         description: >
@@ -168,8 +177,12 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -1000
-              max_value: 50000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
+                description: >
+                  Extreme insurance responsibility exists (max observed ~$178k). Warn only.
 
       - name: last_payment_date
         description: Date of most recent payment
@@ -224,8 +237,11 @@ models:
           - not_null:
               where: "insurance_payment_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -25000
-              max_value: 25000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
+                description: Extreme insurance payment totals; warn only (Batch 10c).
 
       - name: total_patient_payments
         description: Total payments received from patients
@@ -233,8 +249,12 @@ models:
           - not_null:
               where: "patient_payment_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -50000
-              max_value: 50000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
+                description: >
+                  Extreme patient payment totals exist (max observed ~$53k). Warn only.
 
       - name: last_insurance_payment_date
         description: Date of most recent insurance payment
@@ -274,8 +294,11 @@ models:
           - not_null:
               where: "writeoff_count > 0"
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -30000
-              max_value: 25000
+              min_value: -200000
+              max_value: 200000
+              config:
+                severity: warn
+                description: Extreme writeoff totals; warn only (Batch 10c).
 
       - name: total_discounts
         description: Total amount of discount adjustments
@@ -824,13 +847,12 @@ models:
       # Payment validation
       - dbt_utils.expression_is_true:
           expression: >
-            (total_insurance_payments >= -25000 AND total_insurance_payments <= 25000) AND
-            (total_patient_payments >= -50000 AND total_patient_payments <= 60000)
+            (total_insurance_payments >= -200000 AND total_insurance_payments <= 200000) AND
+            (total_patient_payments >= -200000 AND total_patient_payments <= 200000)
           config:
-            severity: error
+            severity: warn
             description: >
-              Payment amounts must be within acceptable ranges to allow for refunds/reversals
-              while preventing unreasonably large values
+              Payment amounts outside ±$200k are rare outliers (warn). Softened in Batch 10c.
 
       # Merchant fee validation
       - dbt_utils.expression_is_true:

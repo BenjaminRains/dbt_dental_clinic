@@ -188,18 +188,19 @@ simple_flags AS (
             ELSE 'sent'
         END AS status,
         
-        -- Enhanced engagement metrics with reply tracking
+        -- Engagement metrics: only meaningful for email mode (1).
+        -- Naive LIKE '%clicked%' false-positives on phone notes (e.g. "clicked our number").
         CASE
-            WHEN comm.content LIKE '%opened%' THEN 1
+            WHEN comm.communication_mode = 1 AND comm.content LIKE '%opened%' THEN 1
             ELSE 0
         END AS open_count,
         CASE
-            WHEN comm.content LIKE '%clicked%' THEN 1
+            WHEN comm.communication_mode = 1 AND comm.content LIKE '%clicked%' THEN 1
             ELSE 0
         END AS click_count,
         COALESCE(reply.has_reply, 0) AS reply_count,
         CASE
-            WHEN comm.content LIKE '%bounce%' THEN 1
+            WHEN comm.communication_mode = 1 AND comm.content LIKE '%bounce%' THEN 1
             ELSE 0
         END AS bounce_count,
         

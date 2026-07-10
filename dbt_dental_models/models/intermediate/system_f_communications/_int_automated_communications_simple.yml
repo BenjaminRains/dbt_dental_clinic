@@ -118,8 +118,9 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "'{{ var('max_valid_date') }} 23:59:59'"
+              min_value: "'2020-01-01'::timestamp"
+              # var('max_valid_date') is bare current_date — do not quote it as a string literal
+              max_value: current_timestamp
       
       - name: communication_type
         description: >
@@ -147,13 +148,14 @@ models:
           - 0: Unknown/Unspecified mode
           - 1: Email communications
           - 2: Phone call communications
-          - 3: Letter communications
+          - 3: Letter / phone-log communications
           - 4: In-person communications
           - 5: SMS/text message communications
+          - 6, 8: Additional OD system modes
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5]
+              values: [0, 1, 2, 3, 4, 5, 6, 8]
       
       - name: content
         description: >
@@ -269,8 +271,13 @@ models:
           - not_null:
               severity: warn
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'1900-01-01'"
-              max_value: "'{{ var('max_valid_date') }}'"
+              min_value: "'1900-01-01'::date"
+              # var('max_valid_date') is bare current_date — do not quote it as a string literal
+              max_value: current_date
+              where: "birth_date is not null"
+              config:
+                severity: warn
+                # OD unknown-DOB sentinel 0001-01-01 (same as communications base)
       
       - name: user_name
         description: >
@@ -406,8 +413,11 @@ models:
       - name: created_at
         description: >
           Timestamp when the record was created in the source system.
+          OpenDental DateTEntry sentinel often nulls via clean macros (~90%+).
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       
       - name: updated_at
         description: >

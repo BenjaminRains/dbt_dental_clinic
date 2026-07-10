@@ -100,14 +100,19 @@ models:
       - name: campaign_type
         description: >
           Type of campaign that generated this communication.
-          Examples: appointment_reminders, accounts_receivable, crown_instructions,
-          form_invite, unscheduled_treatment.
-          Determined through content pattern matching.
+          Derived from content / program_id pattern matching in the model.
         tests:
           - accepted_values:
-              values: ['appointment_reminders', 'accounts_receivable', 'crown_instructions',
-                      'form_invite', 'unscheduled_treatment', null]
-      
+              values:
+                - appointment_campaign
+                - financial_campaign
+                - review_campaign
+                - form_campaign
+                - clinical_campaign
+                - program_campaign
+                - general_campaign
+                - null
+
       - name: status
         description: >
           Current status of the automated communication.
@@ -174,13 +179,14 @@ models:
           - 0: Unknown/Unspecified mode
           - 1: Email communications
           - 2: Phone call communications
-          - 3: Letter communications
+          - 3: Letter / phone-log communications
           - 4: In-person communications
           - 5: SMS/text message communications
+          - 6, 8: Additional OD system modes
         tests:
           - not_null
           - accepted_values:
-              values: [0, 1, 2, 3, 4, 5]
+              values: [0, 1, 2, 3, 4, 5, 6, 8]
       
       - name: model_created_at
         description: >

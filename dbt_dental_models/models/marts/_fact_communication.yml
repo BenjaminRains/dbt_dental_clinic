@@ -33,7 +33,7 @@ models:
       - Insurance: Communications about insurance verification, claims, and coverage
       - Clinical: Communications related to treatment plans, clinical notes, and medical information
       - Referral: Communications for patient referrals and specialist coordination
-      - Treatment Plan: Communications about treatment planning and case management
+      - Follow Up: Callback / consult follow-up communications
       - General: All other communication types not specifically categorized
       
       Data Quality Notes:
@@ -653,6 +653,7 @@ models:
           - 'Clinical': Communications related to treatment plans and clinical information
           - 'Referral': Communications for patient referrals and specialist coordination
           - 'Treatment Plan': Communications about treatment planning and case management
+          - 'Follow Up': Callback / consult follow-up communications
           - 'General': All other communication types not specifically categorized
           
           Business Context:
@@ -662,7 +663,7 @@ models:
         tests:
           - not_null
           - accepted_values:
-              values: ['Appointment', 'Financial', 'Insurance', 'Clinical', 'Referral', 'Treatment Plan', 'General']
+              values: ['Appointment', 'Financial', 'Insurance', 'Clinical', 'Referral', 'Treatment Plan', 'Follow Up', 'General']
               config:
                 description: "Communication category must be valid business category"
       
@@ -1033,12 +1034,12 @@ models:
               Enforcement: This test ensures business logic integrity
       
       - dbt_expectations.expression_is_true:
-          expression: "communication_category in ('Appointment', 'Financial', 'Insurance', 'Clinical', 'Referral', 'Treatment Plan', 'General')"
+          expression: "communication_category in ('Appointment', 'Financial', 'Insurance', 'Clinical', 'Referral', 'Treatment Plan', 'Follow Up', 'General')"
           config:
             severity: error
             description: >
               Business Rule: Communication category must be valid business category
-              
+
               Requirement: Category must be one of the defined business categories
               Impact: Invalid categories indicate business logic calculation errors
               Enforcement: This test ensures business logic integrity

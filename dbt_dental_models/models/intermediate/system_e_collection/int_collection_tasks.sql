@@ -271,6 +271,8 @@ collection_tasks AS (
                 51   -- Scheduling related to collections
             )
         )
+        -- Exclude non-patient-keyed OD tasks (null KeyID and no AR match)
+        AND COALESCE(t.key_id, ar.patient_id) IS NOT NULL
         
     {% if is_incremental() %}
         AND t._loaded_at > (SELECT cutoff FROM max_loaded)
