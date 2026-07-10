@@ -78,14 +78,16 @@ models:
           - unique
           - not_null
       - name: task_list_id
-        description: ID of the task list this task belongs to
+        description: >
+          ID of the task list this task belongs to. 0 = no assigned list; null rare.
         tests:
-          - not_null
+          # not_null removed — unassigned tasks use 0; rare nulls are valid
           - relationships:
               to: ref('stg_opendental__tasklist')
               field: task_list_id
               config:
                 severity: warn
+                where: "task_list_id is not null and task_list_id != 0"
       - name: key_id
         description: Reference ID for the associated entity (e.g., appointment_id)
       - name: from_id
@@ -212,16 +214,25 @@ models:
       - name: unread_user_ids
         description: Array of user IDs who haven't read this task
       
-      # Metadata
-      - name: model_created_at
-        description: Timestamp when this record was created in the dbt model
+      # Metadata from standardize_intermediate_metadata (not model_created_at/updated_at)
+      - name: _loaded_at
+        description: ETL load timestamp from primary staging source
+      - name: _created_at
+        description: Source created timestamp from primary staging source
         tests:
-          - not_null
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
+          - not_null:
+              config:
+                severity: warn
+      - name: _updated_at
+        description: Source last-updated timestamp from primary staging source
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
           - dbt_utils.expression_is_true:
-              expression: ">= model_created_at"
-              column_name: model_updated_at
-              name: model_updated_at_after_created 
+              expression: ">= _created_at OR _created_at IS NULL"
+              name: updated_at_after_created
+              config:
+                severity: warn
+      - name: _transformed_at
+        description: dbt intermediate build timestamp 

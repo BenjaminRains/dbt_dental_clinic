@@ -10,7 +10,7 @@
             and not (payment_type_id = 0 and payment_amount = 0))  -- Allow zero amounts for type 0
         
         -- Payment type validation
-        or payment_type_id not in (0, 69, 70, 71, 72, 391, 412, 417, 574, 634)
+        or payment_type_id not in (0, 69, 70, 71, 72, 391, 412, 417, 574, 634, 676, 681)
         
         -- Date validation
         or payment_date > {{ current_date() }}

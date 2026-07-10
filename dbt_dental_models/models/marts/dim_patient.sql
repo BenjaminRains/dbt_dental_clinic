@@ -122,7 +122,7 @@ patient_enhanced as (
         0.00 as insurance_estimate,  -- Not available in intermediate, default to 0
         0.00 as payment_plan_due,  -- Not available in intermediate, default to 0
         s.has_insurance_flag,  -- Boolean flag for insurance status
-        0 as billing_cycle_day,  -- Not available in intermediate, default to 0
+        s.billing_cycle_day,  -- Day of month for billing (from staging BillingCycleDay)
         
         -- Balance status for business analysis
         case 

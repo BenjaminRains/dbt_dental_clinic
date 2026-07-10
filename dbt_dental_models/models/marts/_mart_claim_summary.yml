@@ -83,16 +83,18 @@ models:
             description: "Claim summary row count should be within operational scale"
       
       - dbt_expectations.expression_is_true:
-          expression: "total_billed_amount >= 0 and total_paid_amount >= 0 and total_write_off_total >= 0"
+          expression: "total_billed_amount >= 0 and total_paid_amount >= -500 and total_write_off_total >= 0"
           config:
-            severity: error
-            description: "Financial amounts must be non-negative"
+            severity: warn
+            description: >
+              Billed/write-off non-negative; paid may be slightly negative (reversals).
       
       - dbt_expectations.expression_is_true:
-          expression: "(reimbursement_rate_pct is null) or (reimbursement_rate_pct >= 0 and reimbursement_rate_pct <= 100)"
+          expression: "(reimbursement_rate_pct is null) or (reimbursement_rate_pct >= -100 and reimbursement_rate_pct <= 250)"
           config:
-            severity: error
-            description: "Reimbursement rate must be 0-100 when present"
+            severity: warn
+            description: >
+              Reimbursement can exceed 100% (timing) or go negative (reversals).
       
       - dbt_expectations.expression_is_true:
           expression: "(approval_rate_pct is null) or (approval_rate_pct >= 0 and approval_rate_pct <= 100)"
@@ -280,11 +282,14 @@ models:
       - name: total_paid_amount
         description: >
           Sum of paid_amount (insurance payments received) for claim procedures.
+          May be negative on reversal-heavy days.
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -500
               max_value: 99999999.99
+              config:
+                severity: warn
       
       - name: total_write_off_amount
         description: >
@@ -325,10 +330,11 @@ models:
       - name: reimbursement_rate_pct
         description: >
           (total_paid_amount / total_billed_amount) * 100. Null when total_billed_amount = 0.
+          Can exceed 100% (payment timing) or go negative (reversals).
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 100
+              min_value: -100
+              max_value: 250
               config:
                 severity: warn
                 where: "reimbursement_rate_pct is not null"

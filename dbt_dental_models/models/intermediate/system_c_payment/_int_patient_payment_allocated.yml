@@ -188,11 +188,14 @@ models:
               max_value: "current_date"
 
       - name: procedure_date
-        description: Date of the associated procedure, sourced from stg_opendental__paysplit
+        description: >
+          Date of the associated procedure, sourced from stg_opendental__paysplit.
+          OpenDental sentinel 0001-01-01 means "no procedure date" (~97k rows) — excluded from range test.
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::date"
               max_value: "current_date"
+              row_condition: "procedure_date > '1900-01-01'::date"
 
       - name: payment_type_id
         description: |
@@ -275,9 +278,10 @@ models:
               max_value: "current_timestamp"
 
       - name: deposit_id
-        description: Foreign key to the deposit record
-        tests:
-          - not_null
+        description: >
+          Foreign key to the deposit record. Null until payment is deposited (common for
+          undeposited / in-drawer payments).
+        # not_null removed — ~97k undeposited payments are valid OD state
 
       - name: external_id
         description: External system reference ID for the payment
@@ -322,7 +326,7 @@ models:
           - Very High Value (type 574): avg $26,071
           - Special Case (type 417): avg $2,967
         tests:
-          - not_null
+          # not_null removed — unmapped payment types leave description null
           - accepted_values:
               values: [
                 'Standard Payment', 'Administrative', 'High Value Payment',

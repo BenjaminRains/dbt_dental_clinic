@@ -95,8 +95,7 @@ models:
           Business Context:
           - Official procedure description for clinical and billing purposes
           - Used in treatment plans, insurance claims, and patient communication
-        tests:
-          - not_null
+          - Nullable for some codes (custom/legacy) without a description in OD
 
       - name: abbreviated_description
         description: >
@@ -143,8 +142,7 @@ models:
           - Lookup from definition table (category_id = 5)
           - Provides user-friendly description of treatment area
           - Used in reports and patient communication
-        tests:
-          - not_null
+          - Nullable when treatment_area has no matching definition row
 
       - name: procedure_category
         description: >

@@ -33,7 +33,7 @@ is the check that implemented logic produces the same result as OD on golden dat
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 | within_tolerance | [daily-payments](./daily-payments/) | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Payments | Reports → Standard → Daily → Payments | ±0.5% or ±$10 | **Complete (2026-06-26):** 3 golden dates; layers 1–4 PASS; [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md). ETL before same-day validate; income transfers net to $0. |
-| golden_exported | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `fact_procedure` | `sum(actual_fee)` by `date_complete` | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **Blocked:** [ETL-FND-001](../../../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md) — instance [2026-06-10](./daily-production-by-procedure/findings/2026-06-10.md) |
+| golden_exported | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `fact_procedure` | `sum(actual_fee)` by `date_complete` | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **Blocked:** [ETL-FND-001](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) — instance [2026-06-10](./daily-production-by-procedure/findings/2026-06-10.md) |
 
 | not_started | [aging-of-a-r](./aging-of-a-r/) | AR total | `mart_ar_summary` | `total_ar_balance` | Aging of A/R | Reports → Standard → Monthly → Aging of A/R | ±$50 or ±0.5% | Simplified DSO in exposures |
 
@@ -129,7 +129,7 @@ Golden path: `daily-payments/golden/`
 
 | --- | --- | --- | --- |
 
-| daily_2026-06-10 | 2026-06-10 | 2026-06-10 | Blocked on [ETL-FND-001](../../../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md) — [findings/2026-06-10.md](./daily-production-by-procedure/findings/2026-06-10.md) |
+| daily_2026-06-10 | 2026-06-10 | 2026-06-10 | Blocked on [ETL-FND-001](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) — [findings/2026-06-10.md](./daily-production-by-procedure/findings/2026-06-10.md) |
 
 
 

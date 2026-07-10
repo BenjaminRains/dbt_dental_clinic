@@ -259,20 +259,72 @@ Selective verify (9a schema tests): **ERROR=0** (WARN on blank preferred/middle/
 
 #### 9b — large soft / investigate
 
-| Failures | Test | Likely disposition |
-| ---: | --- | --- |
-| **251,959** | `int_patient_communications_base.created_at` not_null | Soft warn / alias metadata (7a touched this model) |
-| **34,063** | `int_ar_analysis` claim-payment reconcile | **Done** — [DBT-FND-004](../findings/DBT-FND-004-ar-analysis-claim-payment-distinct-collapse.md): drop DISTINCT collapse; sum claimproc lines. Selective verify: all 3 reconcile `expression_is_true` **PASS**. Side effect: `total_claim_payments` band **2** fail (ceiling $25k — raise/warn next) |
-| **27,694** | `int_ar_analysis._created_at` not_null | Soft warn (metadata gap) — DBeaver pending |
-| **2,200** | `int_ar_analysis.birth_date` range | Soft / sentinel — DBeaver pending |
-| **459** | communications `birth_date` range | Soft / sentinel — DBeaver pending |
+| Failures | Test | Status | Fix |
+| ---: | --- | --- | --- |
+| **251,959** | `int_patient_communications_base.created_at` not_null | Done | severity **warn** (OD DateTEntry sentinel → null; ~94%) |
+| **34,063** | `int_ar_analysis` claim-payment reconcile | Done | [DBT-FND-004](../findings/DBT-FND-004-ar-analysis-claim-payment-distinct-collapse.md); reconcile tests PASS |
+| **27,694** | `int_ar_analysis._created_at` not_null | Done | severity **warn** (OD SecDateEntry gap; use `_loaded_at`) |
+| **2,200** | `int_ar_analysis.birth_date` range | Done | severity **warn** (`0001-01-01` unknown DOB) |
+| **459** | communications `birth_date` range | Done | severity **warn** (same sentinel) |
+| **2** | `total_claim_payments` band | Done | min **-200** / max **60k** warn — fails were float `-0` (2 pts), not >$25k |
 
 #### 9c — mart / aging ceilings (smaller)
 
-| Area | Failures | Notes |
+| Area | Failures | Status | Fix |
+| --- | ---: | --- | --- |
+| `mart_production_summary` collection_rate | 192×2 | Done | warn; max **1000** (same-day timing) |
+| `mart_ar_summary` balance % sum | 150 | Done | [DBT-FND-005](../findings/DBT-FND-005-ar-summary-orphan-balance-no-aging.md): orphan → over-90 |
+| `int_ar_aging_snapshot` amount bands | ~7+ | Done | ceilings **200k** warn (incl. 0-30/31-60/resp/change) |
+| `int_ar_aging_snapshot` collection efficiency | 13/6/3 | Done | model + column `valid_collection_efficiency` → **warn** |
+| `mart_claim_summary` paid / reimbursement | 6+6+9 | Done | paid min **-500**; reimb **[-100, 250]** warn |
+| `int_appointment_metrics` 90-day window | 2 | N/A | Currently clean (`n_older_than_90=0`) |
+
+---
+
+## Full build after Batch 9 (2026-07-09 late)
+
+**Summary:** `PASS=4307` · `WARN=453` · `ERROR=30` · `SKIP=201` · `NO-OP=7` → **30** fail+error  
+(was 40 after Batch 8; −10 net).
+
+Breakdown: **11 ERROR** (missing columns / bad accepted_values SQL) · **19 FAIL**.
+
+### Inventory (30)
+
+#### Schema / compile ERROR (11) — Batch 10a candidates
+
+| Model | Tests | Issue |
 | --- | ---: | --- |
-| `mart_production_summary` collection_rate | 192×2 | Band / formula |
-| `mart_ar_summary` balance % expressions | 150×2 | Soft or fix |
-| `int_ar_aging_snapshot` amount bands + collection efficiency | ~53 + 13/6/3 | Raise ceilings / warn |
-| `mart_claim_summary` paid / reimbursement | 6+6+9 | Soft |
-| `int_appointment_metrics` 90-day window | 2 | Known var=30 vs 90 |
+| `mart_provider_performance` | 7 | Missing `_created_at` / `_loaded_at` / `_updated_at`; missing `provider_first_name` / `last_name` / `preferred_name`; `provider_status` accepted_values invalid input |
+| `fact_communication` | 2 | Missing `_loaded_at` |
+| `int_communication_metrics` | 2 | Missing `model_created_at` / `model_updated_at` |
+
+#### Large FAIL (19)
+
+| Failures | Test | Likely disposition |
+| ---: | --- | --- |
+| **2,562** | `mart_provider_performance.specialty_description` not_null | Soft warn / restore join (with 10a) |
+| **1,242** | `int_communication_templates.created_at` not_null | Soft warn (OD sentinel, same as 9b) |
+| **571** | `fact_communication.communication_category` expression | Expand accepted set / soft |
+| **192** | `mart_provider_performance.collection_efficiency` 0–100 | Soft warn (same-day timing like 9c-A) |
+| **136** | `mart_provider_performance.total_productive_hours` not_null | Soft / formula |
+| **23** | `int_communication_templates.template_type` not_null | Soft warn |
+| **20** | `int_ar_analysis.insurance_responsibility` band | Raise ceiling / warn (holdover) |
+| **15** | `int_ar_analysis.total_ar_balance` band | Raise ceiling / warn (holdover) |
+| **6** | `int_automated_communication_flags_simple.campaign_type` accepted | Expand values |
+| **6** | `category_validation` (singular) | Investigate |
+| **2** | `int_communication_templates.category` accepted | Expand values |
+| **2** | `int_ar_analysis.total_patient_payments` band | Raise / warn |
+| **1×5** | AR analysis amount bands + payment expression | Raise / warn |
+| **1** | `fact_communication.communication_category` accepted_values | Same as 571 |
+| **1** | `communication_mode` accepted_values | Expand |
+| **1** | `click_count_email_mode_check` | Soft / investigate |
+
+### Batch 10 (proposed)
+
+| Batch | Scope |
+| --- | --- |
+| **10a** | Schema ERROR: restore provider names + metadata on `mart_provider_performance`; `_loaded_at` on `fact_communication`; model timestamps on `int_communication_metrics` |
+| **10b** | Softs: specialty / templates created_at / collection_efficiency / productive_hours |
+| **10c** | Comm category + campaign accepted_values; AR analysis amount ceilings (holdovers) |
+
+Open findings: DBT-FND-001, DBT-FND-002. Fixed this session: FND-003, FND-004, FND-005.

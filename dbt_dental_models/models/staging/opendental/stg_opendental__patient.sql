@@ -18,10 +18,12 @@ renamed_columns as (
             {'source': '"FeeSched"', 'target': 'fee_schedule_id'}
         ]) }},
         
-        -- Demographics
+        -- Demographics (PII kept in dbt; demo API gates exposure)
         "Gender" as gender,
         nullif(trim("FName"), '') as first_name,
         nullif(trim("LName"), '') as last_name,
+        nullif(trim("MiddleI"), '') as middle_initial,
+        nullif(trim("Preferred"), '') as preferred_name,
         "Language" as language,
         
         -- Status and Classification

@@ -107,16 +107,9 @@ validation_failures as (
         (procedure_id = 0 and is_procedure_adjustment = false)
     )
 
-    UNION ALL
-
-    -- Test 2: adjustment_amount validation
-    select
-        adjustment_id,
-        'Invalid adjustment amount for procedure adjustment' as failure_reason
-    from staging_data
-    where adjustment_amount = 0
-        and is_procedure_adjustment = true
-        and procedure_id > 0
+    -- Removed: zero amount on procedure adjustment (~76 rows).
+    -- OpenDental routinely posts $0 procedure-linked adjustments (types 185–188,
+    -- 616, etc.) with direction=zero; not a data-quality error.
 
     UNION ALL
 

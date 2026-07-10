@@ -71,12 +71,14 @@ models:
       - name: value_string
         description: Preference value stored as string
       - name: clinic_id
-        description: ID of the clinic
+        description: >
+          ID of the clinic. Nullable for single-tenant MDC/GLIC deployments
+          (tenants are separate DBs; clinic_id is unused / always null today).
         tests:
-          - not_null
           - relationships:
               to: ref('stg_opendental__clinic')
               field: clinic_id
+              where: "clinic_id is not null"
       - name: created_at
         description: When the preference was created
         tests:

@@ -79,6 +79,8 @@ patient_notes_lookup as (
         treatment,
         pronoun,
         consent,
+        ice_name as emergency_contact_name,
+        ice_phone as emergency_contact_phone,
         _created_at as notes_created_at,
         _updated_at as notes_updated_at
     from {{ ref('stg_opendental__patientnote') }}
@@ -160,6 +162,7 @@ patient_demographics_enhanced as (
         estimated_balance,
         total_balance,
         has_insurance_flag,
+        billing_cycle_day,
         
         -- Important dates
         first_visit_date,
@@ -208,6 +211,7 @@ patient_integrated as (
         pde.estimated_balance,
         pde.total_balance,
         pde.has_insurance_flag,
+        pde.billing_cycle_day,
         
         -- Important dates
         pde.first_visit_date,
@@ -218,7 +222,9 @@ patient_integrated as (
         pfl.latest_family_link_date,
         pfl.total_family_links,
         
-        -- Emergency contacts and notes
+        -- Emergency contacts and notes (PII kept for clinic; demo API gates exposure)
+        pnl.emergency_contact_name,
+        pnl.emergency_contact_phone,
         pnl.medical as medical_notes,
         pnl.treatment as treatment_notes,
         pnl.pronoun,

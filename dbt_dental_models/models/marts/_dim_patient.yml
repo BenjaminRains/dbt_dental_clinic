@@ -897,19 +897,8 @@ models:
           config:
             description: "Billing cycle day must be between 1 and 31 for valid billing schedule"
 
-      - dbt_utils.expression_is_true:
-          expression: "array_length(linked_patient_ids, 1) >= 0"
-          severity: error
-          name: check_linked_patient_ids_array_valid
-          config:
-            description: "Linked patient IDs array must be valid for family relationship management"
-
-      - dbt_utils.expression_is_true:
-          expression: "array_length(link_types, 1) >= 0"
-          severity: error
-          name: check_link_types_array_valid
-          config:
-            description: "Link types array must be valid for relationship type management"
+      # Removed array_length checks on linked_patient_ids / link_types — dim_patient
+      # stores those as comma-separated text (array_to_string), not Postgres arrays.
 
       - dbt_utils.expression_is_true:
           expression: "disease_count >= 0"

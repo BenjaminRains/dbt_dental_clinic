@@ -155,11 +155,11 @@ models:
         description: |
           Foreign key to the clinic.
           Inherits from procedure/adjustment if attached, otherwise from payment preferences.
-        tests:
-          - not_null
-          - relationships:
-              to: ref('stg_opendental__clinic')
-              field: clinic_id
+
+          Single-entity practices: OpenDental ClinicNum=0 is nulled in staging on both
+          paysplit and payment, and stg_opendental__clinic may be empty — clinic_id is
+          expected to be NULL. Multi-clinic practices can re-enable not_null / FK later.
+        # not_null + clinic FK removed (7b): 100% NULL at this clinic; clinic dim empty
 
       - name: provider_id
         description: |
@@ -238,13 +238,17 @@ models:
                 description: "Payment date must be between 2023-01-01 and current_date"
 
       - name: procedure_date
-        description: Date of the associated procedure
+        description: |
+          Date of the associated procedure (paysplit ProcDate).
+          OpenDental often stores 0001-01-01 when unused even if procedure_id is set.
         tests:
           - dbt_utils.expression_is_true:
               expression: "between '2023-01-01'::date and current_date"
+              # Exclude OD empty-date sentinel (7b: ~85k rows at 0001-01-01)
+              where: "procedure_date > '1900-01-01'"
               config:
                 severity: error
-                description: "Procedure date must be between 2023-01-01 and current_date"
+                description: "Non-sentinel procedure_date must be between 2023-01-01 and current_date"
 
       - name: is_discount
         description: |

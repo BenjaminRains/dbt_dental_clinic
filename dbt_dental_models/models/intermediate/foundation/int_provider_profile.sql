@@ -118,10 +118,17 @@ provider_enhanced as (
         provider_id,
         display_order,
         
-        -- Provider name fields
+        -- Provider name fields (PII kept in dbt; demo API gates)
         custom_id,
+        first_name,
+        last_name,
+        middle_initial,
+        preferred_name,
         
-        -- Professional identifiers (non-PII only)
+        -- Professional identifiers (kept in dbt; demo API gates exposure)
+        state_license_number,
+        dea_number,
+        national_provider_id,
         state_where_licensed,
         taxonomy_code_override,
         
@@ -184,11 +191,9 @@ provider_enhanced as (
             else false
         end as is_terminated_provider,
         
-        -- PII fields removed - cannot determine from available data
-        NULL::boolean as can_prescribe_controlled_substances,
-        
-        -- PII fields removed - cannot determine from available data  
-        NULL::boolean as has_state_license,
+        -- Derived from restored staging license fields (PII kept in dbt; demo API gates)
+        (dea_number is not null and trim(dea_number) <> '') as can_prescribe_controlled_substances,
+        (state_license_number is not null and trim(state_license_number) <> '') as has_state_license,
         
         -- Metadata (preserved from source staging model)
         _loaded_at,
@@ -227,10 +232,17 @@ provider_integrated as (
         pc.provider_id,
         pc.display_order,
         
-        -- Provider name fields
+        -- Provider name fields (PII kept in dbt; demo API gates)
         pc.custom_id,
+        pc.first_name,
+        pc.last_name,
+        pc.middle_initial,
+        pc.preferred_name,
         
-        -- Professional identifiers  
+        -- Professional identifiers (kept in dbt; demo API gates exposure)
+        pc.state_license_number,
+        pc.dea_number,
+        pc.national_provider_id,
         pc.state_where_licensed,
         pc.taxonomy_code_override,
         

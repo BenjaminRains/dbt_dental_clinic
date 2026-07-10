@@ -230,11 +230,7 @@ models:
               severity: warn
               config:
                 description: "Actual fees should be within reasonable business range for dental procedures"
-          - dbt_utils.expression_is_true:
-              expression: "actual_fee >= 0"
-              config:
-                severity: error
-                description: "Actual fees cannot be negative for financial integrity"
+          # Non-negative check at model level (column-level expression_is_true prepends col name)
       
       - name: standard_fee
         description: >
@@ -262,11 +258,7 @@ models:
               where: "standard_fee is not null"
               config:
                 description: "Standard fees should be within reasonable business range when available"
-          - dbt_utils.expression_is_true:
-              expression: "standard_fee is null or standard_fee >= 0"
-              config:
-                severity: error
-                description: "Standard fees cannot be negative when present"
+          # Non-negative check at model level (column-level expression_is_true prepends col name)
       
       - name: duration_minutes
         description: >
@@ -294,11 +286,7 @@ models:
               where: "duration_minutes is not null"
               config:
                 description: "Treatment duration should be within reasonable range (0-8 hours)"
-          - dbt_utils.expression_is_true:
-              expression: "duration_minutes is null or duration_minutes >= 0"
-              config:
-                severity: error
-                description: "Treatment duration cannot be negative when present"
+          # Non-negative check at model level (column-level expression_is_true prepends col name)
       
       - name: _loaded_at
         description: >

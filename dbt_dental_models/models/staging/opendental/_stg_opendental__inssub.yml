@@ -100,7 +100,10 @@ models:
       - dbt_utils.expression_is_true:
           expression: "(effective_date IS NULL OR effective_date <= current_date)"
           config:
-            severity: error
+            severity: warn
+            description: >
+              Future effective dates occur for upcoming coverage (e.g. inssub 16621 starts 2026-09-16).
+              Severity warn — valid pre-enrollment, not a data error.
       - dbt_utils.expression_is_true:
           expression: "(termination_date IS NULL OR effective_date IS NULL OR termination_date >= effective_date)"
           config:

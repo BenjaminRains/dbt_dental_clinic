@@ -48,6 +48,14 @@ Performance Considerations:
 
 Dependencies:
 - int_payment_split: Intermediate model with payment split categorization, validation, and payment header fields
+- stg_opendental__definition: PayType labels (DefCat / category_id = 10)
+
+PayType note:
+- payment_type_id is OpenDental DefNum (category 10), not a 0-5 enum.
+- Clinic patient-side types: 69 Check, 70 Cash, 71 Credit Card, 72 Patient Refund,
+  391 Care Credit, 412 Stripe, 417 Lending Club, 574 ProceedFinance, 634 Cherry,
+  676 Insurance Interest, 681 Sunbit. Type 0 has no definition row (Administrative).
+- Insurance claim payments are on claimpayment, not payment.PayType=1.
 */
 
 -- 1. Source data retrieval from intermediate layer
@@ -55,7 +63,16 @@ with source_payment_splits as (
     select * from {{ ref('int_payment_split') }}
 ),
 
--- 2. Payment splits aggregation from intermediate
+-- 2. Payment type definitions (OD DefCat 10 = payment types)
+payment_type_defs as (
+    select
+        definition_id,
+        item_name
+    from {{ ref('stg_opendental__definition') }}
+    where category_id = 10
+),
+
+-- 3. Payment splits aggregation from intermediate
 payment_splits as (
     select 
         payment_id,
@@ -129,18 +146,17 @@ payment_calculated as (
         extract(quarter from ps.payment_date) as payment_quarter,
         extract(dow from ps.payment_date) as payment_day_of_week,
 
-        -- Payment details
-        case ps.payment_type_id
-            when 0 then 'Patient'
-            when 1 then 'Insurance'
-            when 2 then 'Partial'
-            when 3 then 'PrePayment'
-            when 4 then 'Adjustment'
-            when 5 then 'Refund'
-            else 'Unknown'
-        end as payment_type,
+        -- Payment details (OD DefCat 10 ItemName)
+        coalesce(
+            ptd.item_name,
+            case when ps.payment_type_id = 0 then 'Administrative' else 'Unknown' end
+        ) as payment_type,
 
-        'Unknown' as payment_method,  -- Payment method not available in source
+        -- Method mirrors type name for clinic DefCat 10 (Check/Cash/Card/…); Unknown when no def
+        coalesce(
+            ptd.item_name,
+            case when ps.payment_type_id = 0 then 'Administrative' else 'Unknown' end
+        ) as payment_method,
 
         ps.payment_amount,
         ps.payment_notes as payment_note,
@@ -191,11 +207,16 @@ payment_calculated as (
             when ps.payment_date > ps.payment_entry_date then 'Future Dated'
         end as payment_timing,
 
-        -- Boolean flags
-        case when ps.payment_type_id = 1 then true else false end as is_insurance_payment,
-        case when ps.payment_type_id = 0 then true else false end as is_patient_payment,
-        case when ps.payment_type_id = 4 then true else false end as is_adjustment,
-        case when ps.payment_type_id = 5 then true else false end as is_refund,
+        -- Boolean flags (PayType DefNums — not fake 0-5 enum)
+        -- Insurance collections live on claimpayment; payment.PayType here is patient/practice methods
+        false as is_insurance_payment,
+        case
+            when ps.payment_type_id in (69, 70, 71, 391, 412, 417, 574, 634, 676, 681)
+            then true
+            else false
+        end as is_patient_payment,
+        false as is_adjustment,
+        case when ps.payment_type_id = 72 then true else false end as is_refund,
         case when ps.payment_amount = 0 then true else false end as is_zero_payment,
         case when ps.is_recurring_cc then true else false end as is_recurring_payment,
 
@@ -206,6 +227,8 @@ payment_calculated as (
         ) }}
 
     from payment_splits ps
+    left join payment_type_defs ptd
+        on ps.payment_type_id = ptd.definition_id
 ),
 
 -- 4. Final validation

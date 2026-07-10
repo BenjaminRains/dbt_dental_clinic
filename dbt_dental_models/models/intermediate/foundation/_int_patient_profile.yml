@@ -260,23 +260,15 @@ models:
                 severity: error
                 description: "Insurance flag must be boolean"
 
+      - name: billing_cycle_day
+        description: >
+          Day of the month for patient billing cycle (1-31), from OpenDental BillingCycleDay.
+          Range check is at model level (column-level expression_is_true prepends col name).
+
       - name: emergency_contact_name
         description: >
-          Name of the patient's emergency contact
-          
-          Business Rules:
-          - Recommended for active patients (status = 0)
-          - Used for emergency situations
-          - Must be a valid name (not empty or just spaces)
-          
-          Data Quality:
-          - Currently only ~16.5% of active patients have emergency contact info
-          - When present, should be properly formatted
-          - May be null for non-active patients
-          
-          Known Data Gap:
-          - Emergency contact information is not consistently collected
-          - Consider implementing a data quality improvement initiative
+          Name of the patient's emergency contact (from patientnote ICEName).
+          PII kept in dbt; demo API gates exposure.
         tests:
           - not_null:
               where: "patient_status = 0"
@@ -286,21 +278,8 @@ models:
 
       - name: emergency_contact_phone
         description: >
-          Phone number of the patient's emergency contact
-          
-          Business Rules:
-          - Recommended for active patients (status = 0)
-          - Used for emergency situations
-          - Must be a valid phone number format
-          
-          Data Quality:
-          - Currently only ~16.5% of active patients have emergency contact info
-          - When present, should be properly formatted
-          - May be null for non-active patients
-          
-          Known Data Gap:
-          - Emergency contact information is not consistently collected
-          - Consider implementing a data quality improvement initiative
+          Phone number of the patient's emergency contact (from patientnote ICEPhone).
+          PII kept in dbt; demo API gates exposure.
         tests:
           - not_null:
               where: "patient_status = 0"
@@ -462,7 +441,12 @@ models:
           - Represents: When the record was originally created in OpenDental
           - Usage: Business timeline analysis and record lifecycle tracking
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                description: >
+                  OpenDental DateEntry can be null/sentinel for older patients (~27k).
+                  Severity warn — do not fail build.
 
       - name: _updated_at
         description: >
@@ -531,17 +515,21 @@ models:
               Impact: Required for clinical care coordination and scheduling
               Enforcement: Ensures proper clinical workflow and provider assignment
       
+      # Emergency-contact completeness (warn) — columns restored from patientnote ICE*
       - dbt_expectations.expression_is_true:
-          expression: "count(case when patient_status = 0 and (emergency_contact_name is null or emergency_contact_phone is null) then 1 end) / count(case when patient_status = 0 then 1 end) < 0.5"
+          expression: "count(case when patient_status = 0 and (emergency_contact_name is null or emergency_contact_phone is null) then 1 end) / nullif(count(case when patient_status = 0 then 1 end), 0) < 0.5"
           config:
             severity: warn
             description: >
               Data Quality Monitor: Emergency Contact Completeness
-              
-              Expectation: At least 50% of active patients should have emergency contact information
-              Tolerance: Current rate is ~16.5%, target is 50%+ for patient safety
-              Action Required: Implement data collection improvement initiative
-      
+              Expectation: At least 50% of active patients should have emergency contact information.
+
+      - dbt_utils.expression_is_true:
+          expression: "billing_cycle_day >= 1 and billing_cycle_day <= 31"
+          config:
+            severity: warn
+            description: "Billing cycle day should be a valid day of month when present"
+
       - dbt_expectations.expression_is_true:
           expression: "count(case when patient_status = 0 and has_insurance_flag = false then 1 end) / count(case when patient_status = 0 then 1 end) < 0.3"
           config:

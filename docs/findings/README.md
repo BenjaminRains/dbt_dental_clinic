@@ -18,6 +18,7 @@ report definition. KPI-specific validation instances live under
 | [DBT-FND-002](./DBT-FND-002-ar-shared-calcs-metadata-status-filter.md) | AR shared_calcs metadata null — blank ProcStatus labels | Mart / dbt defect | Partially fixed |
 | [DBT-FND-003](./DBT-FND-003-claim-snapshot-claimproc-fanout.md) | `int_claim_snapshot` fan-out on claim+procedure joins | Mart / dbt defect | Fixed |
 | [DBT-FND-004](./DBT-FND-004-ar-analysis-claim-payment-distinct-collapse.md) | `int_ar_analysis` DISTINCT collapses same-dollar claimproc pays | Mart / dbt defect | Fixed |
+| [DBT-FND-005](./DBT-FND-005-ar-summary-orphan-balance-no-aging.md) | `mart_ar_summary` dim balance with zero aging buckets | Mart / dbt defect | Fixed |
 
 ## Finding types (taxonomy)
 

@@ -70,7 +70,7 @@ models:
                'Child Cleaning (Existing Patient)', 'Adult Cleaning (New Patient)',
                 'Child Cleaning (New Patient)', '30 Minute Appt', 'Emergency Pain',
                  'Crown Prep', 'WebSched New Patient Default', 'Implant Consult',
-                  'Prophy Child New', 'None']
+                  'Prophy Child New', 'None', 'Adult Recare', 'Comp, FMX, 4BWX']
       
       - name: appointment_type_color
         description: >

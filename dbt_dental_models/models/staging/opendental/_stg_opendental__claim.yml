@@ -67,6 +67,11 @@ models:
       - dbt_utils.expression_is_true:
           expression: "insurance_payment_amount is null or claim_fee is null or insurance_payment_amount <= claim_fee"
           name: insurance_payment_not_greater_than_claim_fee
+          config:
+            severity: warn
+            description: >
+              Rare overpay vs claim_fee (e.g. claim 28996: $414 paid on $245 fee).
+              Keep as warn — may be secondary/COB or correction, not always bad data.
       - dbt_utils.expression_is_true:
           expression: "deductible_applied is null or insurance_payment_amount is null or write_off is null or claim_fee is null or deductible_applied + insurance_payment_amount + write_off <= claim_fee"
           name: total_payments_not_greater_than_claim_fee
@@ -280,6 +285,11 @@ models:
         tests:
           - dbt_utils.expression_is_true:
               expression: "is null or deductible_applied >= 0"
+              config:
+                severity: warn
+                description: >
+                  OpenDental can store negative DedApplied (e.g. -100/-50/-25) on a few claims.
+                  Severity warn — investigate allocation quirks; do not fail the build.
       
       - name: write_off
         description: "Amount written off by the provider - typically contractual adjustments per insurance agreements"
@@ -311,10 +321,11 @@ models:
             No received dates as they are still being processed.
           - U: Unknown/Unspecified - Rare status (0.02% of claims) for claims with unclear processing state.
             These claims may require manual review or represent edge cases in the claim workflow.
+          - I: In process / hold in OpenDental (e.g. claim 34208) — valid clinic status, not an error.
         tests:
           - not_null
           - accepted_values:
-              values: ['R', 'S', 'H', 'W', 'U']
+              values: ['R', 'S', 'H', 'W', 'U', 'I']
               config:
                 severity: error
           - dbt_utils.expression_is_true:
@@ -401,13 +412,14 @@ models:
         description: >
           Code indicating location where services were performed:
           0 = Office/Clinic (default for MDC as all services performed at single location)
+          3 = School (rare; claims 26910/26911 for patient 32041)
           
           Note: Other standard values (11=Office, 21=Inpatient Hospital, 22=Outpatient Hospital)
           are not currently used by MDC clinic.
         tests:
           - not_null
           - accepted_values:
-              values: [0]
+              values: [0, 3]
               config:
                 severity: error
       

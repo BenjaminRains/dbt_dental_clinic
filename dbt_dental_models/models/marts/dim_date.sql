@@ -37,7 +37,8 @@
     - Rolling period analysis for trend identification
     
     Data Quality Notes:
-    - Date range: 2020-01-01 through 2030-12-31 (11 years)
+    - Date range: 1980-01-01 through 2030-12-31 (covers legacy procedure dates
+      before the prior 2020 start; fact_procedure date_id join needs pre-2020 days)
     - Holiday calendar includes major US federal holidays
     - Business day logic excludes weekends and holidays
     
@@ -53,7 +54,7 @@
 with source_date as (
     select date_day::date as date_day
     from generate_series(
-        '2020-01-01'::date,
+        '1980-01-01'::date,
         '2030-12-31'::date,
         '1 day'::interval
     ) as date_day

@@ -41,7 +41,7 @@ validation_errors as (
                      balance_61_90_days < 0 or balance_over_90_days < 0 then 'Negative aging balance'
                 
                 -- Contact preference validations
-                when preferred_confirmation_method not in (0, 2, 3, 4, 8) then 'Invalid confirmation method'
+                when preferred_confirmation_method not in (0, 2, 3, 4, 6, 8) then 'Invalid confirmation method'
                 when preferred_contact_method not in (0, 2, 3, 4, 5, 6, 8) then 'Invalid contact method'
                 when preferred_recall_method not in (0, 2, 4, 8) then 'Invalid recall method'
                 

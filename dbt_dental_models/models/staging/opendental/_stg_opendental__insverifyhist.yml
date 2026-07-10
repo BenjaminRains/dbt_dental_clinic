@@ -124,9 +124,13 @@ models:
                   System-generated records with null user_id are excluded from this test.
 
       - name: verify_user_id
-        description: "Foreign key to the user who verified the record (maps to VerifyUserNum in OpenDental, with 0 converted to null)"
+        description: >
+          Foreign key to the user who verified the record (maps to VerifyUserNum in OpenDental, with 0 converted to null).
+          Nulls observed in history (e.g. verify_type=2 batches); investigate whether system/auto verify or DQ (see TODO).
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: foreign_key_id
         description: >

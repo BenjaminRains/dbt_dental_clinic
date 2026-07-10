@@ -230,7 +230,8 @@ appointment_calculated as (
         ab.pattern_secondary,
         ab.color_override,
 
-        -- Metadata (using intermediate model metadata)
+        -- Metadata (int_appointment_details exposes created_at; mart standard is _created_at)
+        ab.created_at as _created_at,
         {{ standardize_mart_metadata(
             primary_source_alias='ab',
             source_metadata_fields=['_loaded_at', '_updated_at', '_created_by']

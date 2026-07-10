@@ -1,7 +1,10 @@
+{{ config(severity = 'warn') }}
+
 -- Test for broken/missed appointments without procedure descriptions
 -- Note: username field removed for PII compliance - use patient_id for identification
 -- Updated: Only test appointments that have linked procedures (excludes consultation-type appointments)
 -- See: validation/staging/appointment/BROKEN_APPOINTMENTS_FINDINGS.md for investigation details
+-- Severity warn: rare edge case (blank ProcDescript with linked procedurelog rows).
 select 
     a.appointment_id,
     a.patient_id,

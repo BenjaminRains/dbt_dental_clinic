@@ -31,7 +31,7 @@ models:
       
       Business rules:
       - One record per system activity (entry_log_id)
-      - System-generated entries (user_id = 0) have null user_name
+      - System-generated entries (user_id = 0) have null username
       - All timestamps must be after 2020-01-01
       - User group information required for non-system entries
       - Entry timestamps must not be in the future
@@ -106,7 +106,7 @@ models:
           - not_null
           - accepted_values:
               values: [0]
-              quote: false
+              # quote must not sit beside values — dbt 1.10 treated `quote: false` as a value
       
       - name: foreign_key
         description: >
@@ -129,7 +129,6 @@ models:
           - not_null
           - accepted_values:
               values: [0, 7, 16, 19]
-              quote: false
       
       - name: entry_datetime
         description: "Timestamp when the log entry was created"
@@ -141,11 +140,15 @@ models:
               expression: "<= current_timestamp"
       
       - name: username
-        description: "Username of the user who performed the action"
+        description: >
+          Username of the user who performed the action (from userod).
+          PII kept in dbt; demo API gates exposure. Null for system entries (user_id = 0).
         tests:
           - not_null:
               where: "user_id != 0"
-      
+              config:
+                severity: warn
+
       - name: user_group_id
         description: >
           Foreign key to stg_opendental__usergroup, represents the user's security group.
@@ -183,9 +186,9 @@ models:
           expression: "user_id != 0 OR (user_id = 0 AND username IS NULL)"
           name: system_entries_have_null_user_name
           config:
-            severity: error
+            severity: warn
             description: "System-generated entries must have null username"
-      
+
       - dbt_utils.expression_is_true:
           expression: "entry_datetime >= '2020-01-01'"
           name: logs_after_2020

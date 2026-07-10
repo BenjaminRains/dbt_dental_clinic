@@ -23,11 +23,20 @@ renamed_columns as (
             {'source': 'NULLIF("EmailAddressNum", 0)', 'target': 'email_address_id'}
         ]) }},
         
-        -- Provider identifiers and names
+        -- Provider identifiers and names (PII kept in dbt; demo API gates exposure)
         "ItemOrder" as display_order,
+        nullif(trim("Abbr"), '') as provider_abbreviation,
+        "LName" as last_name,
+        nullif(trim("FName"), '') as first_name,
+        nullif(trim("MI"), '') as middle_initial,
+        nullif(trim("Suffix"), '') as name_suffix,
+        nullif(trim("PreferredName"), '') as preferred_name,
         "CustomID" as custom_id,
         
-        -- Professional identifiers
+        -- Professional identifiers (kept in dbt; demo API gates exposure)
+        nullif(trim("StateLicense"), '') as state_license_number,
+        nullif(trim("DEANum"), '') as dea_number,
+        nullif(trim("NationalProvID"), '') as national_provider_id,
         "StateWhereLicensed" as state_where_licensed,
         "TaxonomyCodeOverride" as taxonomy_code_override,
         

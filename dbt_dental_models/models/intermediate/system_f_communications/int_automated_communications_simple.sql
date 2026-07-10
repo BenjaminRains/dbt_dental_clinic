@@ -112,11 +112,12 @@ automated_comms AS (
         tmpl.template_subject,
         
         -- Metadata using standardize_intermediate_metadata macro
+        -- int_patient_communications_base exposes created_at (not _created_at)
         base._loaded_at,
         {{ standardize_intermediate_metadata(
             primary_source_alias='base',
             preserve_source_metadata=true,
-            source_metadata_fields=['_created_at', 'updated_at']
+            source_metadata_fields=['created_at', 'updated_at']
         ) }}
     FROM {{ ref('int_automated_communication_flags_simple') }} flags
     INNER JOIN {{ ref('int_patient_communications_base') }} base
@@ -163,7 +164,7 @@ SELECT
     template_category,
     template_subject,
     _loaded_at,
-    _created_at,
+    created_at,
     updated_at,
     _transformed_at
 FROM automated_comms

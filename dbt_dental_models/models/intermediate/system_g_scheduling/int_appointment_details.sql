@@ -137,6 +137,7 @@ appointment_types AS (
 provider_info AS (
     SELECT
         p.provider_id,
+        COALESCE(nullif(trim(p.provider_abbreviation), ''), p.last_name) as provider_name,
         p.provider_color,
         p.is_hidden,
         p.specialty_id as specialty
@@ -146,6 +147,7 @@ provider_info AS (
 patient_info AS (
     SELECT
         pt.patient_id,
+        trim(both ' ' from concat_ws(' ', pt.first_name, pt.last_name)) as patient_name,
         pt.patient_status,
         pt.first_visit_date
     FROM {{ ref('stg_opendental__patient') }} pt
@@ -158,20 +160,20 @@ historical_appointments AS (
         appointment_status,
         history_action as action_type,
         CASE
-            WHEN history_action = 1 THEN 'Rescheduled'
-            WHEN history_action = 2 THEN 'Confirmed'
-            WHEN history_action = 3 THEN 'Failed Appointment'
-            WHEN history_action = 4 THEN 'Cancelled'
-            WHEN history_action = 5 THEN 'ASAP'
-            WHEN history_action = 6 THEN 'Complete'
+            -- HistApptAction (stg YAML): 0=Unknown, 1=snapshot, 2=Modified, 3=Deleted, 4=special mod
+            WHEN history_action = 0 THEN 'Unknown'
+            WHEN history_action = 1 THEN 'History snapshot'
+            WHEN history_action = 2 THEN 'Modified'
+            WHEN history_action = 3 THEN 'Deleted'
+            WHEN history_action = 4 THEN 'Special modification'
             ELSE 'Unknown'
         END AS action_description,
         note as action_note,
-        CASE
-            WHEN history_action = 4 AND note IS NOT NULL
-            THEN note
-            ELSE NULL
-        END AS cancellation_reason,
+        -- cancellation_reason: OpenDental does not store a dedicated cancel reason.
+        -- HistApptAction 4 = "special modification" (NOT cancelled); prior logic
+        -- incorrectly copied hist note into cancellation_reason. Keep NULL until
+        -- a real cancel-reason source exists.
+        CAST(NULL AS text) AS cancellation_reason,
         CASE
             WHEN history_action = 1 AND note LIKE '%new appt:#%'
             THEN REGEXP_REPLACE(
@@ -235,11 +237,13 @@ SELECT
     ha.cancellation_reason,
     ha.rescheduled_appointment_id,
     
-    -- Provider information
+    -- Provider information (PII kept for clinic; demo API gates exposure)
+    pi.provider_name,
     pi.specialty AS provider_specialty,
     pi.provider_color,
     
-    -- Patient information
+    -- Patient information (PII kept for clinic; demo API gates exposure)
+    pat.patient_name,
     pat.patient_status,
     pat.first_visit_date,
     

@@ -253,7 +253,9 @@ ar_aggregated as (
         pb.total_balance as total_balance_from_dim_patient,
         -- Calculate sum of buckets from int_ar_balance
         (pb.balance_0_30_days + pb.balance_31_60_days + pb.balance_61_90_days + pb.balance_over_90_days) as total_balance_from_buckets,
-        -- Scale buckets proportionally to match dim_patient.total_balance if different
+        -- Scale buckets proportionally to match dim_patient.total_balance if different.
+        -- DBT-FND-005: when dim has balance but int_ar_balance has no aging rows, assign
+        -- the full amount to over-90 (conservative) so pct_* sum to 100.
         case 
             when (pb.balance_0_30_days + pb.balance_31_60_days + pb.balance_61_90_days + pb.balance_over_90_days) > 0
             then pb.total_balance * (pb.balance_0_30_days / nullif(pb.balance_0_30_days + pb.balance_31_60_days + pb.balance_61_90_days + pb.balance_over_90_days, 0))
@@ -272,6 +274,8 @@ ar_aggregated as (
         case 
             when (pb.balance_0_30_days + pb.balance_31_60_days + pb.balance_61_90_days + pb.balance_over_90_days) > 0
             then pb.total_balance * (pb.balance_over_90_days / nullif(pb.balance_0_30_days + pb.balance_31_60_days + pb.balance_61_90_days + pb.balance_over_90_days, 0))
+            when pb.total_balance > 0
+            then pb.total_balance
             else 0.00
         end as balance_over_90_days,
         pb.total_balance as total_balance,  -- Use dim_patient total as source of truth

@@ -76,6 +76,11 @@ provider_enhanced as (
         
         -- Provider identifiers
         p.custom_id as provider_custom_id,
+        p.first_name,
+        p.last_name,
+        p.middle_initial,
+        p.preferred_name,
+        trim(both ' ' from concat_ws(' ', nullif(p.first_name, ''), nullif(p.last_name, ''))) as provider_name,
         
         -- Provider classifications
         p.fee_schedule_id,

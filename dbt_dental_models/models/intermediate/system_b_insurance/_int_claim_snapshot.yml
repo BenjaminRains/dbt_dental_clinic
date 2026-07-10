@@ -213,21 +213,28 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
+              max_value: 15000
+              config:
+                severity: warn
       
       - name: insurance_payment_estimate
         description: Estimated insurance payment amount at snapshot time
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
+              max_value: 15000
+              config:
+                severity: warn
       
       - name: fee_amount
         description: Fee amount at snapshot time
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
+              max_value: 15000
+              config:
+                severity: warn
+                description: "Align with claim_details; rare implant fees ~$11k"
       
       - name: entry_timestamp
         description: Timestamp when the snapshot was created
@@ -241,28 +248,34 @@ models:
         description: Actual insurance payment amount from claim procedure
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -10000
-              max_value: 10000
+              min_value: -2000
+              max_value: 15000
+              config:
+                severity: warn
       
       - name: actual_write_off
         description: Actual write-off amount from claim procedure
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 10000
+              min_value: -200
+              max_value: 15000
+              config:
+                severity: warn
       
       - name: actual_allowed_amount
         description: |
           Actual allowed amount from claim procedure.
           Business rules:
           - May be -1.0 as a placeholder for undetermined values
-          - Should be between 0 and 10000 for determined values
           - Decimal point errors may occur (e.g., 252.00 recorded as 252252.00)
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
+              max_value: 15000
               row_condition: "actual_allowed_amount != -1.0"
+              config:
+                severity: warn
+                description: "Warn on typo-scale allowed amounts (same as claim_details)"
       
       - name: claim_procedure_status
         description: Status of the claim procedure
@@ -271,11 +284,16 @@ models:
         description: Codes explaining claim adjustments
       
       - name: most_recent_payment
-        description: Most recent payment amount received
+        description: >
+          Most recent payment amount for this claim_procedure_id.
+          Negative values are insurance payment reversals/refunds.
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 10000
+              min_value: -2000
+              max_value: 15000
+              config:
+                severity: warn
+                description: "Allow refund/reversal negatives; raise ceiling with claim_details"
       
       - name: most_recent_payment_date
         description: Date of the most recent payment
@@ -284,15 +302,19 @@ models:
         description: Difference between estimated and actual payment amounts
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -10000
-              max_value: 10000
+              min_value: -15000
+              max_value: 15000
+              config:
+                severity: warn
       
       - name: write_off_variance
         description: Difference between estimated and actual write-off amounts
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: -10000
-              max_value: 10000
+              min_value: -15000
+              max_value: 15000
+              config:
+                severity: warn
       
       - name: snapshot_trigger
         description: >

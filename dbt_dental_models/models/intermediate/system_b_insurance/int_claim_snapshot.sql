@@ -76,6 +76,7 @@ source_claim_tracking as (
 source_claim_details as (
     select
         claim_id,
+        claim_procedure_id,
         patient_id,
         procedure_id,
         procedure_code,
@@ -89,6 +90,7 @@ source_claim_details as (
 source_claim_payments as (
     select
         claim_id,
+        claim_procedure_id,
         procedure_id,
         paid_amount,
         check_date,
@@ -111,16 +113,20 @@ claim_tracking_ranked as (
     from source_claim_tracking
 ),
 
+-- Rank by claim_procedure_id (not claim+proc) — same procedure can have
+-- multiple claimprocs (resubmits/supplementals) and claim+proc fan-out
+-- duplicated snapshot rows (Batch 8c / DBT-FND-003).
 claim_payments_ranked as (
     select
         claim_id,
+        claim_procedure_id,
         procedure_id,
         paid_amount,
         check_date,
         write_off_amount,
         row_number() over(
-            partition by claim_id, procedure_id 
-            order by check_date desc
+            partition by claim_procedure_id
+            order by check_date desc nulls last
         ) as payment_rank
     from source_claim_payments
 ),
@@ -128,6 +134,7 @@ claim_payments_ranked as (
 most_recent_payments as (
     select
         claim_id,
+        claim_procedure_id,
         procedure_id,
         paid_amount,
         check_date,
@@ -238,11 +245,9 @@ snapshot_integration as (
         and date_trunc('day', vs.entry_timestamp) = date_trunc('day', ct.entry_timestamp)
         and ct.tracking_rank = 1
     left join source_claim_details cd
-        on vs.claim_id = cd.claim_id
-        and vs.procedure_id = cd.procedure_id
+        on vs.claim_procedure_id = cd.claim_procedure_id
     left join most_recent_payments mrp
-        on vs.claim_id = mrp.claim_id
-        and vs.procedure_id = mrp.procedure_id
+        on vs.claim_procedure_id = mrp.claim_procedure_id
 ),
 
 -- 5. Final filtering/validation

@@ -314,17 +314,9 @@ models:
               Alert Threshold: Investigate if outside expected range
               Action Required: Verify data pipeline if count anomalies detected
       
-      - dbt_expectations.expression_is_true:
-          expression: "count(case when provider_id = 0 then 1 end) = 1"
-          config:
-            severity: error
-            description: >
-              Business Rule: System Provider Existence
-              
-              Requirement: Exactly one system provider (ID=0) must exist
-              Impact: System provider required for automated processes
-              Enforcement: Ensures system integrity and process functionality
-      
+      # Removed: require exactly one provider_id = 0 — this clinic has none in staging.
+      # is_system_provider flag remains for if/when ProvNum 0 appears.
+
       - dbt_expectations.expression_is_true:
           expression: "count(case when is_active_provider = true and can_treat_patients = false then 1 end) = 0"
           config:

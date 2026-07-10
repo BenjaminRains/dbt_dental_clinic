@@ -30,7 +30,7 @@ models:
       
       Business rules:
       - One record per provider per day (guaranteed by date spine)
-      - Schedule window is 90 days from current date
+      - Schedule window controlled by var schedule_window_days (project default 30)
       - Every provider has a record for every day in the window
       - Days without appointments show zero counts
       - Days without availability are marked as day off
@@ -49,7 +49,7 @@ models:
       - One record per provider per day (enforced by date spine)
       - Daily aggregation of appointment data
       - Provider-level schedule metrics
-      - 90-day rolling window
+      - Rolling window via schedule_window_days (incremental may retain older rows)
       - Complete date coverage with no gaps
       
     config:
@@ -64,11 +64,12 @@ models:
           - unique
           - not_null
       - name: schedule_date
-        description: Date of the schedule, generated from date spine to ensure complete coverage
+        description: >
+          Date of the schedule, generated from date spine.
+          Window is a model load filter (schedule_window_days); incremental may retain older rows —
+          do not assert a hardcoded lookback here.
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: ">= (CURRENT_DATE - INTERVAL '90 days')"
       - name: provider_id
         description: ID of the provider
         tests:
@@ -77,9 +78,11 @@ models:
               to: ref('stg_opendental__provider')
               field: provider_id
       - name: provider_name
-        description: Name of the provider
+        description: Provider abbreviation or last name (PII kept in dbt; demo API gates exposure)
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       - name: total_appointments
         description: Total number of appointments scheduled for the day (0 if none)
         tests:
@@ -152,11 +155,8 @@ models:
         description: Number of working days (non-day-off) in the schedule window for this provider
         tests:
           - not_null
-      - name: model_created_at
-        description: Timestamp when this record was created in the dbt model
-        tests:
-          - not_null
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
-        tests:
-          - not_null
+      # Metadata: model uses preserve_source_metadata=false → _loaded_at + _transformed_at only
+      - name: _loaded_at
+        description: ETL load timestamp used for incremental filtering
+      - name: _transformed_at
+        description: dbt intermediate build timestamp

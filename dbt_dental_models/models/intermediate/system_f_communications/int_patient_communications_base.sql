@@ -152,6 +152,7 @@ last_completed_visit AS (
 patient_info AS (
     SELECT
         p.patient_id,
+        trim(both ' ' from concat_ws(' ', p.first_name, p.last_name)) AS patient_name,
         p.patient_status,
         p.birth_date,
         p.first_visit_date,
@@ -163,6 +164,7 @@ patient_info AS (
 user_info AS (
     SELECT
         u.user_id,
+        u.username AS user_name,
         u.is_hidden,
         u.provider_id
     FROM {{ ref('stg_opendental__userod') }} u
@@ -198,15 +200,17 @@ SELECT
     cb.follow_up_task_id,
     cb.program_id,
     
-    -- Additional context fields
+    -- Additional context fields (PII retained in dbt; demo gating is API-only)
+    pi.patient_name,
     pi.patient_status,
     pi.birth_date,
     pi.first_visit_date,
     pi.last_visit_date,
+    ui.user_name,
     ui.provider_id,
     
     -- Metadata fields
-    cb._created_at,
+    cb._created_at AS created_at,
     cb._loaded_at,
     cb.updated_at,
     CURRENT_TIMESTAMP AS model_created_at,

@@ -83,11 +83,38 @@ models:
             severity: error
             description: "Payment dates are required for financial reporting and audit compliance"
       
+      # Model-level (column-level expression_is_true prepends the column name → bad SQL)
       - dbt_utils.expression_is_true:
-          expression: "payment_type in ('Patient', 'Insurance', 'Partial', 'PrePayment', 'Adjustment', 'Refund', 'Unknown')"
+          expression: "provider_id is null"
+          config:
+            severity: warn
+            description: "Provider ID should be null as providers are not directly associated with payments"
+      - dbt_utils.expression_is_true:
+          expression: "splits_match_payment is true"
+          config:
+            severity: warn
+            description: "Payment splits should reconcile with total payment amount for financial integrity"
+      - dbt_utils.expression_is_true:
+          expression: "is_insurance_payment = false"
           config:
             severity: error
-            description: "Payment types must conform to business classification standards"
+            description: "payment.PayType is patient/practice methods; insurance collections are on claimpayment"
+      - dbt_utils.expression_is_true:
+          expression: >
+            is_patient_payment = (payment_type_id in (69, 70, 71, 391, 412, 417, 574, 634, 676, 681))
+          config:
+            severity: error
+            description: "Patient payment flag must match clinic DefCat 10 patient PayType DefNums"
+      - dbt_utils.expression_is_true:
+          expression: "is_refund = (payment_type_id = 72)"
+          config:
+            severity: error
+            description: "Refund flag must match Patient Refund DefNum (72)"
+      - dbt_utils.expression_is_true:
+          expression: "is_zero_payment = (payment_amount = 0)"
+          config:
+            severity: error
+            description: "Zero payment flag must correctly reflect payment amount for business logic"
     
     meta:
       owner: "finance_operations_team"
@@ -171,12 +198,7 @@ models:
           Data Quality Considerations:
           - Always null per business design - this is expected and correct
           - Provider relationships are tracked through split_payment records instead
-        tests:
-          - dbt_utils.expression_is_true:
-              expression: "provider_id is null"
-              config:
-                severity: warn
-                description: "Provider ID should be null as providers are not directly associated with payments"
+          - Consistency check is at model level (column-level expression_is_true prepends col name)
       
       - name: clinic_id
         description: >
@@ -200,24 +222,26 @@ models:
       
       - name: payment_type_id
         description: >
-          Payment type identifier from OpenDental (maps from "PayType" in OpenDental)
+          OpenDental PayType DefNum (definition category 10), not a 0–5 enum.
           
           Source Transformation:
-          - OpenDental source: "PayType" (CamelCase as stored)
-          - Transformed to: payment_type_id (snake_case per naming conventions)
+          - OpenDental source: "PayType"
+          - Transformed to: payment_type_id
           
           Business Context:
-          - Raw payment type code used for payment classification logic
-          - Maps to payment_type field for business-friendly categorization
-          - Essential for payment processing and financial categorization rules
+          - Joins stg_opendental__definition (category_id = 10) for ItemName → payment_type
+          - Clinic patient-side examples: 69 Check, 70 Cash, 71 Credit Card, 72 Patient Refund,
+            391 Care Credit, 412 Stripe, 417 Lending Club, 574 ProceedFinance, 634 Cherry,
+            676 Insurance Interest, 681 Sunbit. Type 0 = Administrative (no definition row).
+          - Insurance claim payments are not encoded as PayType=1 on payment
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 5
+              max_value: 10000
               config:
-                severity: error
-                description: "Payment type ID must be valid OpenDental payment type code"
+                severity: warn
+                description: "PayType should be a non-negative DefNum in the clinic definition space"
       
       - name: payment_date
         description: >
@@ -297,32 +321,37 @@ models:
       
       - name: payment_type
         description: >
-          Business-friendly payment type classification
+          PayType label from OpenDental definition category 10 (ItemName).
           
-          Valid Values:
-          - 'Patient': Direct patient payment for services rendered
-          - 'Insurance': Insurance company payment for covered services
-          - 'Partial': Partial payment toward total balance
-          - 'PrePayment': Advance payment for future services
-          - 'Adjustment': Financial adjustment to account balance
-          - 'Refund': Payment refund to patient or insurance
-          - 'Unknown': Payment type not recognized or classified
+          Typical clinic values:
+          - Check, Cash, Credit Card, Care Credit, Stripe, Patient Refund, Cherry,
+            Lending Club, ProceedFinance, Insurance Interest, Sunbit, etc.
+          - Administrative: PayType 0 with no definition row
+          - Unknown: DefNum with no matching definition
           
           Business Rules:
-          - Derived from payment_type_id using standardized mapping
-          - Used for payment categorization and financial reporting
-          - Essential for revenue analysis and payment trend identification
-          
-          Operational Impact:
-          - Determines payment processing workflow and approval requirements
-          - Affects financial reporting categorization and revenue recognition
-          - Used for payment method analysis and operational efficiency tracking
+          - coalesce(definition.item_name, Administrative if type=0 else Unknown)
+          - Used for payment method mix and financial reporting
         tests:
           - not_null
           - accepted_values:
-              values: ['Patient', 'Insurance', 'Partial', 'PrePayment', 'Adjustment', 'Refund', 'Unknown']
+              values:
+                - 'Check'
+                - 'Cash'
+                - 'Credit Card'
+                - 'Care Credit'
+                - 'Stripe'
+                - 'Patient Refund'
+                - 'Cherry'
+                - 'Lending Club'
+                - 'ProceedFinance'
+                - 'Insurance Interest'
+                - 'Sunbit'
+                - 'Administrative'
+                - 'Unknown'
               config:
-                description: "Payment types must conform to business classification standards"
+                severity: warn
+                description: "Warn on new DefCat 10 ItemNames so builds do not fail on clinic config changes"
       
       - name: payment_direction
         description: >
@@ -420,51 +449,22 @@ models:
           - Used for identifying and resolving payment allocation issues
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "splits_match_payment is true"
-              config:
-                severity: warn
-                description: "Payment splits should reconcile with total payment amount for financial integrity"
+          # Consistency check at model level (column-level expression_is_true prepends col name)
       
       - name: is_insurance_payment
         description: >
-          Boolean flag indicating if payment is from insurance company
-          
-          Business Context:
-          - True: Payment from insurance company (payment_type_id = 1)
-          - False: Payment from other sources (patient, adjustments, etc.)
-          
-          Operational Impact:
-          - Used for insurance payment tracking and reconciliation
-          - Essential for revenue cycle management and insurance billing analysis
-          - Helps identify insurance payment patterns and trends
+          Always false on fact_payment. Insurance collections are on claimpayment;
+          payment.PayType is DefCat 10 patient/practice payment methods (not PayType=1).
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "is_insurance_payment = (payment_type_id = 1)"
-              config:
-                severity: error
-                description: "Insurance payment flag must correctly reflect payment type for business logic"
       
       - name: is_patient_payment
         description: >
-          Boolean flag indicating if payment is from patient
-          
-          Business Context:
-          - True: Payment from patient (payment_type_id = 0)
-          - False: Payment from other sources (insurance, adjustments, etc.)
-          
-          Operational Impact:
-          - Used for patient payment tracking and financial analysis
-          - Essential for patient billing and payment trend analysis
-          - Helps identify patient payment patterns and collection efficiency
+          True when payment_type_id is a clinic patient-side PayType DefNum
+          (69, 70, 71, 391, 412, 417, 574, 634, 676, 681). False for Administrative (0),
+          Patient Refund (72), and other non-listed types.
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "is_patient_payment = (payment_type_id = 0)"
-              config:
-                severity: error
-                description: "Patient payment flag must correctly reflect payment type for business logic"
       
       - name: is_zero_payment
         description: >
@@ -480,11 +480,7 @@ models:
           - Essential for payment trend analysis and operational insights
         tests:
           - not_null
-          - dbt_utils.expression_is_true:
-              expression: "is_zero_payment = (payment_amount = 0)"
-              config:
-                severity: error
-                description: "Zero payment flag must correctly reflect payment amount for business logic"
+          # Consistency check at model level (column-level expression_is_true prepends col name)
       
       - name: _loaded_at
         description: >

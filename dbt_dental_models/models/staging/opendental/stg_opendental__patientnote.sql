@@ -22,6 +22,8 @@ renamed_columns as (
         "Service" as service,
         "MedicalComp" as medical_comp,
         "Treatment" as treatment,
+        nullif(trim("ICEName"), '') as ice_name,
+        nullif(trim("ICEPhone"), '') as ice_phone,
         "Consent" as consent,
         "Pronoun" as pronoun,
         

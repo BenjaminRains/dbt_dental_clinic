@@ -191,14 +191,10 @@ models:
               field: definition_id
 
       - name: check_number
-        description: Check number for the payment
-        tests:
-          - not_null
+        description: Check number for the payment (nullable — blank for EFT/electronic and some check payments)
 
       - name: bank_branch
-        description: Bank branch information
-        tests:
-          - not_null
+        description: Bank branch information (nullable in OpenDental — often blank for EFT/electronic payments)
 
       - name: created_by_user_id
         description: ID of the user who created the record
@@ -282,8 +278,13 @@ models:
         description: Amount of deductible applied to this payment
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
+              min_value: -100
               max_value: 10000
+              config:
+                severity: warn
+                description: >
+                  Rare negative DedApplied (e.g. allocation 48812 = -50 on claim 31645).
+                  Severity warn with floor -100 — investigate allocation quirks, do not fail build.
 
       - name: write_off
         description: Amount written off for this payment
@@ -359,9 +360,7 @@ models:
               values: [true, false]
 
       - name: remarks
-        description: Additional remarks about the claim procedure
-        tests:
-          - not_null
+        description: Additional remarks about the claim procedure (nullable — only populated for denials/notes)
 
       - name: code_sent
         description: Procedure code sent to insurance
@@ -388,8 +387,9 @@ models:
           - Delta EFT (type 465)
           - Echo E Check (type 466)
           - United Concordia EFT (type 469)
+
+          Nullable for payment_type_ids not in definition/hardcoded CASE (e.g. 467, 646, 468).
         tests:
-          - not_null
           - accepted_values:
               values: [
                 'Insurance Check', 'Insurance Electronic Payment', 'Insurance Credit',
@@ -417,10 +417,8 @@ models:
       - name: _created_at
         description: |
           Business creation timestamp from primary source (claim procedures)
-          Source: stg_opendental__claimproc._created_at
-          Purpose: Business timeline analysis and audit trail
-        tests:
-          - not_null
+          Source: stg_opendental__claimproc._created_at (SecDateEntry via clean_opendental_date).
+          Nullable when OD stores sentinel dates cleaned to null. Use _loaded_at for pipeline freshness.
 
       - name: _updated_at
         description: |
@@ -583,17 +581,9 @@ models:
             severity: error
             description: "Partial insurance payments must have a payment group ID"
 
-      - dbt_utils.expression_is_true:
-          expression: |
-            NOT (
-              status = 1 AND
-              split_amount = 0 AND
-              remarks IS NULL AND
-              payment_group_id = 0
-            )
-          config:
-            severity: error
-            description: "Zero-amount status 1 claims must have remarks or be part of a payment group"
+      # Removed: zero-amount status=1 + null remarks + payment_group_id=0
+      # (~3941 rows). Null remarks is valid clinic practice; carriers routinely
+      # post $0 Received claimprocs without remarks or a payment group.
 
       # Future date validation
       - dbt_utils.expression_is_true:

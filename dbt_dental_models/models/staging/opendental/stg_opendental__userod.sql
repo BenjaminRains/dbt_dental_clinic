@@ -19,6 +19,9 @@ renamed_columns as (
             {'source': 'NULLIF("UserNumCEMT", 0)', 'target': 'cemt_user_id'}
         ]) }},
         
+        -- User Information (username restored for clinic; password stays out of analytics)
+        {{ clean_opendental_string('"UserName"') }} as username,
+
         -- Boolean Flags (mixed types: IsHidden is already boolean, others are smallint)
         "IsHidden"::boolean as is_hidden,  -- Already boolean in PostgreSQL
         {{ convert_opendental_boolean('"PasswordIsStrong"') }} as has_strong_password,

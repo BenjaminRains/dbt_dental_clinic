@@ -174,6 +174,7 @@ final as (
         np.clinic_id,
         
         -- Provider Information
+        trim(both ' ' from concat_ws(' ', nullif(prov.first_name, ''), nullif(prov.last_name, ''))) as primary_provider_name,
         prov.provider_type_category as primary_provider_type,
         prov.specialty_description as primary_provider_specialty,
         

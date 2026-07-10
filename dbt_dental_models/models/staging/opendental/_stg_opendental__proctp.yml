@@ -415,11 +415,11 @@ models:
         description: >
           Timestamp when the record was created in the source system (OpenDental). Maps to SecDateEntry 
           with fallback to SecDateTEdit if creation date is invalid. Used for data quality monitoring 
-          and audit purposes.
+          and audit purposes. Materialized as date (not timestamptz) via clean_opendental_date.
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_of_type:
-              column_type: timestamp with time zone
+              column_type: date
 
       - name: _updated_at
         description: >
@@ -435,6 +435,7 @@ models:
         description: >
           ID of the user who created this record in the source system (OpenDental). Maps to SecUserNumEntry 
           with zero values converted to NULL. Used for audit trails and user activity analysis.
+          Materialized as integer in Postgres.
         tests:
           - dbt_expectations.expect_column_values_to_be_of_type:
-              column_type: bigint
+              column_type: integer

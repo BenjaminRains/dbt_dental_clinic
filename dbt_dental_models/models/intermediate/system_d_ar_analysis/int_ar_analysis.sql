@@ -224,30 +224,20 @@ ClaimActivity AS (
         GROUP BY cd.patient_id
     ),
     
-    -- Get unique combinations that match the exact structure expected by the test
-    UniquePaymentCombinations AS (
-        SELECT DISTINCT
-            icd.patient_id,
-            cp.claim_payment_id,
-            cp.paid_amount
-        FROM {{ ref('int_claim_payments') }} cp
-        JOIN {{ ref('int_claim_details') }} icd
-            ON cp.claim_id = icd.claim_id
-            AND cp.procedure_id = icd.procedure_id
-        WHERE cp.claim_payment_id IS NOT NULL
-    ),
-    
-    -- Aggregate to patient level
+    -- Patient-level claim payments from claimproc-grain int_claim_payments.
+    -- Do NOT DISTINCT on (claim_payment_id, paid_amount): InsPayAmt is line-level and
+    -- same-dollar lines on one check must all count (DBT-FND-004).
     PatientPayments AS (
         SELECT
             patient_id,
             COUNT(DISTINCT claim_payment_id) AS claim_payment_count,
             SUM(paid_amount) AS total_claim_payments
-        FROM UniquePaymentCombinations
+        FROM {{ ref('int_claim_payments') }}
+        WHERE claim_payment_id IS NOT NULL
         GROUP BY patient_id
     ),
     
-    -- Calculate payment type metrics
+    -- Line-level payment type metrics (same grain as PatientPayments)
     PaymentTypeMetrics AS (
         SELECT
             patient_id,
@@ -256,7 +246,8 @@ ClaimActivity AS (
             SUM(CASE WHEN paid_amount < 0 THEN 1 ELSE 0 END) AS reversal_count,
             SUM(CASE WHEN paid_amount > 0 THEN paid_amount ELSE 0 END) AS normal_payment_amount,
             SUM(CASE WHEN paid_amount < 0 THEN paid_amount ELSE 0 END) AS reversal_amount
-        FROM UniquePaymentCombinations
+        FROM {{ ref('int_claim_payments') }}
+        WHERE claim_payment_id IS NOT NULL
         GROUP BY patient_id
     )
     
@@ -298,6 +289,8 @@ BasePatientInfo AS (
         p.patient_status,
         p.position_code,
         p.birth_date,
+        p.preferred_name,
+        p.middle_initial,
         -- Use the source system first_visit_date
         p.first_visit_date,
         -- Calculate last_visit_date as the latest of appointment or procedure dates
@@ -336,7 +329,8 @@ BasePatientInfo AS (
         ON p.patient_id = pl.patient_id
     WHERE p.patient_status IN (0, 1, 2, 3)  -- Only include active patients
     GROUP BY p.patient_id, p.patient_status, p.position_code,
-     p.birth_date, p.has_insurance_flag, p.first_visit_date
+     p.birth_date, p.preferred_name, p.middle_initial,
+     p.has_insurance_flag, p.first_visit_date
 ),
 
 -- Insurance coverage information
@@ -381,6 +375,8 @@ PatientInfo AS (
         bpi.patient_status,
         bpi.position_code,
         bpi.birth_date,
+        bpi.preferred_name,
+        bpi.middle_initial,
         -- Ensure first_visit_date is never after last_visit_date
         CASE
             WHEN bpi.first_visit_date > bpi.last_visit_date THEN bpi.last_visit_date
@@ -470,6 +466,8 @@ SELECT
     pi.position_code,
     pi.patient_category,
     pi.birth_date,
+    pi.preferred_name,
+    pi.middle_initial,
     pi.first_visit_date,
     pi.last_visit_date,
     pi.has_insurance_flag,

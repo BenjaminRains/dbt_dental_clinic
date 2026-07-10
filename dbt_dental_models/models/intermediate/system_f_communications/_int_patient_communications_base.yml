@@ -112,8 +112,9 @@ models:
           for phone calls or multi-message conversations.
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2020-01-01'"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'"
+              min_value: "'2020-01-01'::timestamp"
+              # var('max_valid_date') is bare current_date — do not quote it as a string literal
+              max_value: current_timestamp
               where: "communication_end_datetime > '0001-01-01'"
       
       - name: communication_type
@@ -290,9 +291,13 @@ models:
                 and not (communication_type = 603)
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'1900-01-01'::date"
-              max_value: "'{{ var('max_valid_date', 'current_date') }}'::date"
+              # var('max_valid_date') is bare current_date — do not quote it as a string literal
+              max_value: current_date
               where: "birth_date is not null"
-      
+              config:
+                severity: warn
+                # OD unknown-DOB sentinel 0001-01-01 (~459 rows)
+
       - name: first_visit_date
         description: >
           Date of patient's first visit to the practice, joined from int_patient_profile.
@@ -329,10 +334,14 @@ models:
       
       - name: created_at
         description: >
-          Timestamp when the record was created in the source system.
+          Timestamp when the record was created in the source system
+          (commlog DateTEntry). ~94% null after OD 0001-01-01 sentinel cleanup;
+          use _loaded_at / communication_datetime for freshness.
         tests:
-          - not_null
-      
+          - not_null:
+              config:
+                severity: warn
+
       - name: updated_at
         description: >
           Timestamp when the record was last updated in the source system.

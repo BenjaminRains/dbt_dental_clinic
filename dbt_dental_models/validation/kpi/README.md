@@ -65,13 +65,13 @@ flowchart LR
 
 | Step | Compare | What it proves |
 | --- | --- | --- |
-| **0. Source → raw** | MySQL vs `raw.*` reconciliation (row counts, or complete-production totals by day) | **Replica fidelity** — catches [replica row drift](../../../docs/etl/findings/ETL-FND-001-replica-row-drift-procedurelog.md) before blaming staging or mart. Required for tables with in-place updates (`procedurelog` ProcStatus, etc.). |
+| **0. Source → raw** | MySQL vs `raw.*` reconciliation (row counts, or complete-production totals by day) | **Replica fidelity** — catches [replica row drift](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) before blaming staging or mart. Required for tables with in-place updates (`procedurelog` ProcStatus, etc.). |
 | **1. OD → staging** | Golden CSV section totals vs `staging` reconstruction SQL | Warehouse has the same underlying rows OD used. Catches **ETL lag** (late inserts) before blaming the mart. |
 | **2. Staging → mart** | `compare_*_staging.sql` | dbt mart is a faithful aggregation of staging — no dropped insurance, wrong PayType filter, etc. |
 | **3. Mart → OD** | `compare_*_collections.sql` + `FIELD_MAP.md` | **End-to-end:** `opendental_analytics.marts.mart_*` matches what the OD report shows the practice. This is the KPI sign-off. |
 | **4. API / frontend** | `compare/compare_daily_collections_api.sql` + optional `api/tests/kpi/verify_daily_collections.py` | Clinic app reads mart via API with **no extra logic**. SQL must match mart; UI must show the same numbers. |
 
-**Platform findings** (pipeline defects affecting multiple KPIs): [docs/etl/findings/](../../../docs/etl/findings/README.md)
+**Platform findings** (pipeline defects affecting multiple KPIs): [docs/findings/](../../../docs/findings/README.md)
 
 
 

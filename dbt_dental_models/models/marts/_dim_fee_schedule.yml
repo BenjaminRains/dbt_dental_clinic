@@ -259,8 +259,7 @@ models:
           - OpenDental source: "DateEntry" (CamelCase as stored)
           - Represents: When the record was originally created in OpenDental
           - Usage: Business timeline analysis and record lifecycle tracking
-        tests:
-          - not_null
+          - Nullable when OD DateEntry is missing/sentinel (cleaned to null); use _loaded_at for pipeline freshness
 
       - name: _updated_at
         description: >

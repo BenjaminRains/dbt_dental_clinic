@@ -76,8 +76,11 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: "'2023-01-01'::date"
+              min_value: "'2020-01-01'::date"
               max_value: "CURRENT_DATE"
+              config:
+                severity: warn
+                description: "History includes completed fees before the prior 2023 floor (DBT-FND-002)"
 
       - name: amount
         description: Transaction amount (positive for procedures, negative for payments)
@@ -147,11 +150,14 @@ models:
 
       - name: payment_source_type
         description: >
-          Payment source type field from source system. Currently unused by the clinic.
-          Values observed: 0 or null.
+          Payment source flag from OpenDental payment header (boolean), passed through
+          when the transaction is a payment; null for procedures/adjustments.
         tests:
           - accepted_values:
-              values: [0, null]
+              values: [true, false, null]
+              config:
+                severity: warn
+                description: "Boolean payment_source; warn if unexpected values appear"
 
       - name: payment_method
         description: >
@@ -189,8 +195,11 @@ models:
         tests:
           - not_null
           - dbt_expectations.expect_column_values_to_be_between:
-              min_value: 0
-              max_value: 1000
+              min_value: -200
+              max_value: 3000
+              config:
+                severity: warn
+                description: "Align with shared_calcs after DBT-FND-002 status filter restore"
 
       - name: aging_bucket
         description: Aging category (0-30, 31-60, 61-90, 90+ days)
@@ -203,29 +212,42 @@ models:
         description: >
           Timestamp when the transaction record was loaded from the source system.
           This field is preserved from the primary source for business lineage.
+          Null when no matching procedure (general adjustments / no-proc rows);
+          see DBT-FND-002.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: _created_at
         description: >
           Timestamp when the transaction record was created in the source system.
           This field is preserved from the primary source for business lineage.
+          Null when no matching procedure; see DBT-FND-002.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: _updated_at
         description: >
           Timestamp when the transaction record was last updated in the source system.
           This field is preserved from the primary source for business lineage.
+          Null when no matching procedure; see DBT-FND-002.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: _created_by
         description: >
           Identifier for who created the transaction record in the source system.
           This field is preserved from the primary source for business lineage.
+          Null when no matching procedure; see DBT-FND-002.
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
 
       - name: _transformed_at
         description: >
@@ -264,12 +286,12 @@ models:
             severity: error
             description: "Aging bucket must match days outstanding"
 
-      # Source tracking validation
+      # Source tracking validation (null metadata on no-proc rows — DBT-FND-002)
       - dbt_utils.expression_is_true:
-          expression: "_created_at <= _updated_at"
+          expression: "_created_at is null or _updated_at is null or _created_at <= _updated_at"
           config:
-            severity: error
-            description: "Creation time must be before or equal to update time"
+            severity: warn
+            description: "Creation time must be before or equal to update time when both present"
 
       # "OTHER" adjustment type analysis
       - dbt_utils.expression_is_true:

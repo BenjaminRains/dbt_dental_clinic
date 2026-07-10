@@ -65,8 +65,8 @@ models:
         tests:
           - not_null
           
-      - name: trigger_procedure_codes
-        description: Array of procedure codes that trigger this recall type
+      - name: trigger_procedure_code_ids
+        description: Array of procedure code IDs that trigger this recall type
         tests:
           - not_null
           

@@ -16,7 +16,7 @@ models:
       - Business Categorization: Fiscal periods, business days, and time intelligence flags
       
       Data Sources:
-      - PostgreSQL generate_series: Self-contained date generation (2020-2030)
+      - PostgreSQL generate_series: Self-contained date generation (1980-2030)
       - US Federal Holiday Calendar: Major holidays for business day calculations
       
       Business Logic Features:
@@ -31,7 +31,7 @@ models:
       - Business Context: Links to appointment, financial, and operational fact tables
       
       Data Quality Notes:
-      - Date Range: Comprehensive 11-year coverage (2020-2030) for historical and future analysis
+      - Date Range: 1980-2030 coverage for legacy procedure dates and future analysis
       - Holiday Calendar: Includes all major US federal holidays with accurate date calculations
       - Business Day Logic: Consistent weekday and holiday exclusion for operational metrics
       - Performance Optimization: Pre-calculated flags minimize runtime calculations
@@ -265,7 +265,7 @@ models:
             - day
       
       - dbt_expectations.expression_is_true:
-          expression: "fiscal_year >= 2020 and fiscal_year <= 2031"
+          expression: "fiscal_year >= 1980 and fiscal_year <= 2031"
           config:
             severity: error
             description: >

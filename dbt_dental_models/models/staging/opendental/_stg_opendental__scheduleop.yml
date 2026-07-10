@@ -94,16 +94,10 @@ models:
         description: >
           Timestamp when the record was created in the source system (OpenDental).
           Inherited from the related schedule record's DateTStamp.
-          May be null for records where the schedule record is missing.
-        tests:
-          - not_null:
-              where: "schedule_id NOT IN (151625, 156106, 156118, 157603, 156091, 158274, 156105, 157608, 151473, 159138, 203245, 192498, 176105)"
+          Nullable when the schedule join misses or DateTStamp is sentinel/cleaned to null.
 
       - name: _updated_at
         description: >
           Timestamp when the record was last updated in the source system (OpenDental).
           Inherited from the related schedule record's DateTStamp.
-          May be null for records where the schedule record is missing.
-        tests:
-          - not_null:
-              where: "schedule_id NOT IN (151625, 156106, 156118, 157603, 156091, 158274, 156105, 157608, 151473, 159138, 203245, 192498, 176105)"
+          Nullable when the schedule join misses or DateTStamp is sentinel/cleaned to null.

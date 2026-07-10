@@ -143,8 +143,10 @@ models:
               to: ref('stg_opendental__claim')
               field: claim_id
               config:
-                severity: error
+                severity: warn
                 where: "claim_id IS NOT NULL AND claim_id != 0 AND status != 2"
+                # ~11 supplemental (status=4) claimprocs reference missing claims
+                # (e.g. 33061/33124/33137) — likely deleted/unsynced claim headers.
       
       - name: patient_id
         description: >

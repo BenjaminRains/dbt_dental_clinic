@@ -141,41 +141,47 @@ models:
       - name: waiting_time
         description: Time patient spent waiting (in minutes)
       - name: cancellation_reason
-        description: Reason for cancellation (if applicable)
+        description: >
+          Reserved for a true cancellation reason. Currently always null — OpenDental
+          does not store dedicated cancel reasons, and histappointment notes were
+          previously mislabeled as cancellations (HistApptAction 4 = special modification).
       - name: rescheduled_appointment_id
         description: ID of the rescheduled appointment (if applicable)
+      # Provider / patient display names (PII kept in dbt; demo API gates exposure)
       - name: provider_name
-        description: Abbreviated name of the provider
+        description: Provider abbreviation or last name for schedule display
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       - name: provider_specialty
         description: Specialty of the provider
       - name: provider_color
         description: Color code for the provider
       - name: patient_name
-        description: Preferred name of the patient
+        description: Patient first + last name for clinic scheduling views
         tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
       - name: patient_status
         description: Status of the patient
       - name: first_visit_date
         description: Date of patient's first visit
       - name: created_at
-        description: Timestamp when this appointment was created
+        description: Timestamp when this appointment was created (source business timestamp)
         tests:
-          - not_null
-      - name: updated_at
-        description: Timestamp when this appointment was last updated
-        tests:
-          - not_null
-      - name: model_created_at
-        description: Timestamp when this record was created in the dbt model
-        tests:
-          - not_null
-      - name: model_updated_at
-        description: Timestamp when this record was last updated in the dbt model
-        tests:
-          - not_null
+          - not_null:
+              config:
+                severity: warn
+                description: "Some appointments lack SecDateEntry (~39); severity warn"
+      # Pipeline metadata from standardize_intermediate_metadata (not model_created_at/updated_at)
+      - name: _loaded_at
+        description: ETL load timestamp from primary staging source
+      - name: _updated_at
+        description: Source last-updated timestamp from primary staging source
+      - name: _transformed_at
+        description: dbt intermediate build timestamp
 
     tests:
       - dbt_utils.unique_combination_of_columns:
@@ -194,9 +200,7 @@ models:
       # Test for waiting_time >= 0
       - dbt_utils.expression_is_true:
           expression: "waiting_time IS NULL OR waiting_time >= 0"
-      # Test for cancellation_reason only present for cancelled appointments
-      - dbt_utils.expression_is_true:
-          expression: "cancellation_reason IS NULL OR appointment_status = 5"
+      # cancellation_reason is always null (no OD cancel-reason field); test removed.
       # Test for rescheduled_appointment_id != appointment_id
       - dbt_utils.expression_is_true:
           expression: "rescheduled_appointment_id IS NULL OR rescheduled_appointment_id != appointment_id"

@@ -108,6 +108,7 @@ BaseProcedures AS (
         procedure_fee,
         procedure_code,
         procedure_description,
+        procedure_status,
         procedure_status_desc,
         -- Metadata fields (preserved from primary source)
         _loaded_at,
@@ -115,7 +116,9 @@ BaseProcedures AS (
         _updated_at,
         _created_by
     FROM {{ ref('int_procedure_complete') }}
-    WHERE procedure_status_desc IN ('Complete', 'Existing Current')
+    -- OD ProcStatus: 2=Complete, 3=ExistingCurrent. Do not filter on
+    -- procedure_status_desc — DefCat label join is blank (DBT-FND-002).
+    WHERE procedure_status IN (2, 3)
 ),
 
 -- Make sure transactions are unique before union

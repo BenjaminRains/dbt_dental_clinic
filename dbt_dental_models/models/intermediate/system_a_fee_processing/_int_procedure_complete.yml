@@ -165,17 +165,22 @@ models:
               field: procedure_code_id
 
       - name: procedure_date
-        description: Date when procedure was performed or planned
+        description: >
+          Date when procedure was performed or planned (from procedurelog.ProcDate).
+          NULL allowed for procedure_status 4 (Existing Prior) and 6 (Ordered/Planned) —
+          same rule as stg_opendental__procedurelog; OD often has no ProcDate for those.
         tests:
-          - not_null
+          - not_null:
+              config:
+                where: "procedure_status not in (4, 6)"
+                severity: error
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2022-11-01'"
               max_value: "'2030-12-31'"  # Static future date that's far enough ahead
-              row_condition: "procedure_date >= '2022-11-01'"  # Only test records from Nov 2022 onwards
+              row_condition: "procedure_date is not null and procedure_date >= '2022-11-01'"
         notes: >
-          The model filters for procedures from November 2022 onwards, but older procedures may still exist in the source data.
-          The test only validates dates for records that should be included in the model.
-          The max date is set to 2030 to accommodate future procedures while maintaining test stability.
+          Aligns with staging: null ProcDate is expected for Existing Prior (4) and Ordered/Planned (6).
+          Date-range expectation only applies when procedure_date is present.
 
       - name: procedure_status
         description: Raw status code from source system
@@ -187,12 +192,20 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
-              row_condition: "procedure_status = 2 AND procedure_code NOT IN ('D6114', 'D6115', 'MISC')"  # Standard threshold for non-implant procedures
+              max_value: 60000
+              row_condition: "procedure_status = 2 AND procedure_code NOT IN ('D6114', 'D6115')"
+              config:
+                severity: warn
+                description: >
+                  Completed fees — warn above $60k. Observed 00000/D0350/D2919 ~$11k;
+                  MISC can reach $51k (same pattern as int_fee_model).
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 30000
-              row_condition: "procedure_status = 2 AND procedure_code IN ('D6114', 'D6115')"  # Higher threshold for implant procedures
+              row_condition: "procedure_status = 2 AND procedure_code IN ('D6114', 'D6115')"
+              config:
+                severity: warn
+                description: "Implant procedure fee range (D6114/D6115)"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
               max_value: 1000
@@ -205,6 +218,7 @@ models:
           - Implant procedures (D6114, D6115) typically range $10,324 - $25,500
           - Some MISC Quickpick Button procedures show unusually high fees ($51,000)
           - Zero-base fees are common for certain procedures (e.g., D2919, D5109)
+          - Placeholder codes 00000 and imaging D0350 have appeared above $10k
 
       - name: tooth_number
         description: Tooth number for the procedure (dental notation)
@@ -300,21 +314,30 @@ models:
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
+              max_value: 30000
+              config:
+                severity: warn
+                description: "Fee-schedule min; AOX ~$25.5k observed"
 
       - name: max_available_fee
         description: Maximum fee amount available for this procedure code
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
+              max_value: 30000
+              config:
+                severity: warn
+                description: "Fee-schedule max; AOX $25.5k, D0180 max ~$11.6k"
 
       - name: avg_fee_amount
         description: Average fee amount for this procedure code
         tests:
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: 0
-              max_value: 10000
+              max_value: 30000
+              config:
+                severity: warn
+                description: "Fee-schedule average; aligned with min/max ceilings"
 
       - name: has_standard_fee
         description: Flag indicating if a standard fee was found for this procedure
