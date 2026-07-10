@@ -68,6 +68,11 @@ models:
       - Automatically transfer to visible splits when procedures complete
       - Generate income transfers when moved between hidden/visible status
     
+    config:
+      materialized: incremental
+      unique_key: paysplit_id
+      tags: ['staging', 'opendental', 'finance']
+
     meta:
       record_count: "~850K records"
       data_scope: "Payment splits from 2023-01-01 onwards"

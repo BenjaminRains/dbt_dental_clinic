@@ -11,6 +11,11 @@ models:
       for clinical documentation, continuity of care, and regulatory compliance. The model includes both
       text notes and digital signature data when electronic signature pads are used.
     
+    config:
+      materialized: incremental
+      unique_key: procnote_id
+      tags: ['staging', 'opendental', 'clinical']
+
     meta:
       # Data quality and business context
       record_count: "~15,000 procedure notes"

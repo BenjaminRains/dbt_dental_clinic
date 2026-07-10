@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='appointment_id' 
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'appointment') }}
     where "AptDateTime" >= '2023-01-01'::timestamp  -- Only include appointments from 2023 onwards

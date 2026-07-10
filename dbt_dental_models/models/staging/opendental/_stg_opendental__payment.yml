@@ -9,6 +9,11 @@ models:
       processed through the OpenDental practice management system. Includes comprehensive payment details,
       processing status, and merchant information for financial reporting and analysis.
     
+    config:
+      materialized: incremental
+      unique_key: payment_id
+      tags: ['staging', 'opendental', 'finance']
+
     meta:
       # Owner and PII information
       owner: "finance@mdc-analytics.com"

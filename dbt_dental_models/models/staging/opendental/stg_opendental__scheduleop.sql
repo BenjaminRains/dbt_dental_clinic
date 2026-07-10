@@ -1,8 +1,4 @@
 -- depends_on: {{ ref('stg_opendental__schedule') }}
-{{ config(
-    materialized='incremental',
-    unique_key='schedule_op_id'
-) }}
 
 with source_data as (
     select * from {{ source('opendental', 'scheduleop') }}

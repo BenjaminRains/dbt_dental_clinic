@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='ref_attach_id'
-) }}
-
 with source_data as (
     select * 
     from {{ source('opendental', 'refattach') }}

@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='procedure_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'procedurelog') }}
     where "ProcDate" >= '2023-01-01'

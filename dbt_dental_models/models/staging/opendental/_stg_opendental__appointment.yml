@@ -21,6 +21,11 @@ models:
       - Links to patients, providers, operatories, appointment types, and insurance plans
       - Historical changes tracked separately in histappointment table
     
+    config:
+      materialized: incremental
+      unique_key: appointment_id
+      tags: ['staging', 'opendental', 'scheduling']
+
     meta:
       record_count: "~20,400 appointment records"
       data_scope: "All appointments from 2023-01-01 onwards with incremental updates"

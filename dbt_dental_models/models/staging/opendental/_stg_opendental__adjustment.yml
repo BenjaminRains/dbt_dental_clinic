@@ -20,6 +20,11 @@ models:
       - Both active and historical adjustments are included
       - Links to procedures, providers, clinics, and billing statements where applicable
     
+    config:
+      materialized: incremental
+      unique_key: adjustment_id
+      tags: ['staging', 'opendental', 'finance']
+
     meta:
       record_count: "~4,500 adjustments"
       data_scope: "2023-01-01 onwards, incremental updates"

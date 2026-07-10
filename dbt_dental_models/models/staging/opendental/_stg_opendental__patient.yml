@@ -10,6 +10,10 @@ models:
       reporting and analysis across clinical, financial, and operational use cases. Each record represents
       a unique patient in the dental practice, including active patients, inactive patients, and archived records.
     
+    config:
+      materialized: table
+      tags: ['staging', 'opendental', 'patient']
+
     meta:
       # Data quality and business context
       record_count: "~32,000 patients"

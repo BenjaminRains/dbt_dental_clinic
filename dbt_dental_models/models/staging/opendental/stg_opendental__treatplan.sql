@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='treatment_plan_id'
-) }}
-
 with source_data as (
     select * 
     from {{ source('opendental', 'treatplan') }}

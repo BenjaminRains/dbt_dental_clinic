@@ -1,8 +1,3 @@
-{{ config(
-    materialized='incremental',
-    unique_key='schedule_id'
-) }}
-
 with source_data as (
     select * from {{ source('opendental', 'schedule') }}
     where {{ clean_opendental_date('"SchedDate"') }} >= '2023-01-01'
