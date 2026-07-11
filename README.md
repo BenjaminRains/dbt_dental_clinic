@@ -298,13 +298,27 @@ dbt_dental_clinic/
 
 The `etl_pipeline/synthetic_data_generator/` creates synthetic OpenDental-like data (Faker-based, no real PHI) for development and testing. Configurable patient count; maintains referential integrity and basic dental workflow (appointments, procedures, claims, payments). See [etl_pipeline/synthetic_data_generator/QUICKSTART.md](etl_pipeline/synthetic_data_generator/QUICKSTART.md).
 
-## Deployment (optional)
+## Deployment
 
-Deployment is optional; the app can run locally against a PostgreSQL warehouse.
+The stack runs fully locally against PostgreSQL. AWS hosts **two separate targets**—demo (public portfolio) and clinic (PHI)—so synthetic and real data never share a frontend, API, or database.
 
-**Frontend (S3 + CloudFront):** `mdc deploy frontend --target demo|clinic` or alias `demo-frontend-deploy`. `mdc frontend dev` for local Vite. `mdc deploy dbt-docs` for portfolio dbt docs site.
+| Target | Frontend | API | Database | Access |
+|--------|----------|-----|----------|--------|
+| **Demo** | [dbtdentalclinic.com](https://dbtdentalclinic.com) | [api.dbtdentalclinic.com](https://api.dbtdentalclinic.com) | RDS `opendental_demo` (synthetic) | Public |
+| **Clinic** | [clinic.dbtdentalclinic.com](https://clinic.dbtdentalclinic.com) | [api-clinic.dbtdentalclinic.com](https://api-clinic.dbtdentalclinic.com) | RDS `opendental_analytics` (PHI) | WAF IP allowlist + portal login |
 
-**Backend (EC2 + ALB):** API can be run on EC2 behind an ALB with RDS PostgreSQL; see `docs/DEPLOYMENT_WORKFLOW.md` and deployment scripts in [`scripts/deployment/`](scripts/deployment/) (see [`scripts/README.md`](scripts/README.md)). Hosted sample API: [https://api.dbtdentalclinic.com](https://api.dbtdentalclinic.com); frontend: [https://dbtdentalclinic.com](https://dbtdentalclinic.com). Demo uses synthetic data only; no production OpenDental connection.
+**Infra (shared pattern, separate resources):** Frontends on S3 + CloudFront (clinic WAF IP sets). APIs on EC2 behind one ALB (host-based routing to demo vs clinic target groups / systemd units). RDS in a private subnet; clinic password from the RDS master secret (`mdc secrets pull clinic`).
 
-**Environment:** Use `mdc … --env <stage>` for API, ETL, and dbt; see [Environment configuration](#environment-configuration) and [docs/deployment/ENVIRONMENT_FILES.md](docs/deployment/ENVIRONMENT_FILES.md). On EC2, `mdc deploy api --env clinic` copies `api/.env_api_clinic` to the instance as `api/.env` for systemd.
+**Deploy with `mdc`:**
+
+| What | Command |
+|------|---------|
+| Frontend | `mdc deploy frontend --target demo` or `--target clinic` |
+| Clinic API env → EC2 | `mdc deploy api --env clinic` (copies `api/.env_api_clinic` → instance `api/.env`, restarts `dental-clinic-api-clinic`) |
+| dbt docs (portfolio) | `mdc deploy dbt-docs` |
+| Local marts → clinic RDS | `mdc tunnel clinic-db` then `mdc publish analytics --env clinic` |
+
+Extra clinic EC2 assets (code sync, portal auth, SPA CloudFront): [`scripts/deployment/`](scripts/deployment/) — see [`scripts/README.md`](scripts/README.md). Clinic allowlist inventory: [docs/deployment-connections/README.md](docs/deployment-connections/README.md). Publish workflow: [docs/CLINIC_ANALYTICS_WORKFLOW.md](docs/CLINIC_ANALYTICS_WORKFLOW.md). Env files: [docs/deployment/ENVIRONMENT_FILES.md](docs/deployment/ENVIRONMENT_FILES.md).
+
+**Nightly clinic path:** native Airflow on the laptop (VPN to OpenDental) runs ETL → dbt → optional publish; see [airflow/README.md](airflow/README.md).
 
