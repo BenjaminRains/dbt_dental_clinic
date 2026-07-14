@@ -123,14 +123,13 @@ scripts/ec2/run_dbt_ssm.ps1
 scripts/ec2/run_dbt_debug_ssm.sh
 scripts/deployment/
 
-# Deployment scripts (contain hardcoded credentials and sensitive info)
-deployment/scripts/*.sh
-deployment/scripts/*.ps1
-deployment/scripts/*.json
-deployment/scripts/*.py
-deployment/scripts/*.md
-
-!deployment/scripts/README_ENVIRONMENT_SETUP.md
+# Deployment ops helpers (local scripts may reference credentials — only README tracked)
+deployment/**/*.sh
+deployment/**/*.ps1
+deployment/**/*.json
+deployment/**/*.py
+deployment/logs/
+!deployment/README.md
 
 # Documentation with sensitive business info.
 docs/
