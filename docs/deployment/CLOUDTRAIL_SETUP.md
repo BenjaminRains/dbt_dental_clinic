@@ -13,7 +13,7 @@ CloudTrail records AWS API calls (who did what, when). Use it to audit Secrets M
 1. Sign in as **root** or admin → region **us-east-1**.
 2. Search **CloudTrail** → **Trails** → **Create trail**.
 3. **Trail name:** `dental-clinic-trail`
-4. **Storage location:** Create new S3 bucket (e.g. `dental-clinic-cloudtrail-412475545187`).
+4. **Storage location:** Create new S3 bucket (e.g. `dental-clinic-cloudtrail-<AWS_ACCOUNT_ID>`).
 5. **Log events:**
    - **Management events:** **Read** and **Write** (Read is required for `GetSecretValue` audit).
    - Multi-region trail: **On**

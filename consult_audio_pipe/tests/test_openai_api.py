@@ -19,7 +19,6 @@ def test_openai_api():
         return False
     
     print("🔑 Found OPENAI_API_KEY in .env file")
-    print(f"🔑 API Key (first 10 chars): {api_key[:10]}...")
     print(f"🤖 Model: {model}")
     
     headers = {

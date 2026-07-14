@@ -299,12 +299,11 @@ def load_test_environment_file():
         # override=True intentional: tests must load .env_test even if os.environ is polluted.
         load_dotenv(env_test_path, override=True)
         print(f"Loaded environment variables from: {env_test_path}")
-        # Debug print for replication variables
-        print("DEBUG: TEST_MYSQL_REPLICATION_HOST =", os.environ.get("TEST_MYSQL_REPLICATION_HOST"))
-        print("DEBUG: TEST_MYSQL_REPLICATION_PORT =", os.environ.get("TEST_MYSQL_REPLICATION_PORT"))
-        print("DEBUG: TEST_MYSQL_REPLICATION_DB =", os.environ.get("TEST_MYSQL_REPLICATION_DB"))
-        print("DEBUG: TEST_MYSQL_REPLICATION_USER =", os.environ.get("TEST_MYSQL_REPLICATION_USER"))
-        print("DEBUG: TEST_MYSQL_REPLICATION_PASSWORD =", os.environ.get("TEST_MYSQL_REPLICATION_PASSWORD"))
+        print(
+            "DEBUG: TEST_MYSQL_REPLICATION configured =",
+            bool(os.environ.get("TEST_MYSQL_REPLICATION_HOST"))
+            and bool(os.environ.get("TEST_MYSQL_REPLICATION_PASSWORD")),
+        )
         # Verify that ETL_ENVIRONMENT is set to 'test'
         if os.environ.get('ETL_ENVIRONMENT') != 'test':
             os.environ['ETL_ENVIRONMENT'] = 'test'
@@ -338,12 +337,11 @@ def load_clinic_environment_file():
         # override=True intentional: tests must load .env_clinic even if os.environ is polluted.
         load_dotenv(env_clinic_path, override=True)
         print(f"Loaded clinic environment variables from: {env_clinic_path}")
-        # Debug print for clinic variables
-        print("DEBUG: OPENDENTAL_SOURCE_HOST =", os.environ.get("OPENDENTAL_SOURCE_HOST"))
-        print("DEBUG: OPENDENTAL_SOURCE_PORT =", os.environ.get("OPENDENTAL_SOURCE_PORT"))
-        print("DEBUG: OPENDENTAL_SOURCE_DB =", os.environ.get("OPENDENTAL_SOURCE_DB"))
-        print("DEBUG: OPENDENTAL_SOURCE_USER =", os.environ.get("OPENDENTAL_SOURCE_USER"))
-        print("DEBUG: OPENDENTAL_SOURCE_PASSWORD =", os.environ.get("OPENDENTAL_SOURCE_PASSWORD"))
+        print(
+            "DEBUG: OPENDENTAL_SOURCE configured =",
+            bool(os.environ.get("OPENDENTAL_SOURCE_HOST"))
+            and bool(os.environ.get("OPENDENTAL_SOURCE_PASSWORD")),
+        )
         # Verify that ETL_ENVIRONMENT is set to 'clinic'
         if os.environ.get('ETL_ENVIRONMENT') != 'clinic':
             os.environ['ETL_ENVIRONMENT'] = 'clinic'

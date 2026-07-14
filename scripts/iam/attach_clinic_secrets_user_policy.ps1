@@ -78,12 +78,18 @@ try {
 Write-Host "`nApplying inline policy..." -ForegroundColor Cyan
 $tempPolicy = Join-Path $env:TEMP "mdc-clinic-secrets-policy-$([Guid]::NewGuid().ToString('N')).json"
 try {
-    Copy-Item -LiteralPath $PolicyFile -Destination $tempPolicy -Force
+    $accountId = $caller.Account
+    if ([string]::IsNullOrWhiteSpace($accountId)) {
+        Write-Host "Could not resolve AWS account ID from caller identity." -ForegroundColor Red
+        exit 1
+    }
+    $policyBody = (Get-Content -LiteralPath $PolicyFile -Raw -Encoding UTF8) -replace '<AWS_ACCOUNT_ID>', $accountId
+    Set-Content -LiteralPath $tempPolicy -Value $policyBody -Encoding UTF8 -NoNewline
     $fileUri = ConvertTo-AwsCliFileUri -Path $tempPolicy
     aws iam put-user-policy --user-name $UserName --policy-name $PolicyName --policy-document $fileUri
     if ($LASTEXITCODE -ne 0) {
         Write-Host "Failed. Caller needs iam:PutUserPolicy on user $UserName." -ForegroundColor Red
-        Write-Host "Console: IAM → Users → $UserName → Permissions → Add inline policy → JSON → paste $PolicyFile" -ForegroundColor Yellow
+        Write-Host "Console: IAM → Users → $UserName → Permissions → Add inline policy → JSON → paste $PolicyFile (replace <AWS_ACCOUNT_ID>)" -ForegroundColor Yellow
         exit 1
     }
 } finally {

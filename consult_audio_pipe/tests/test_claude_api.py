@@ -18,7 +18,6 @@ def test_claude_api():
         return False
     
     print("🔑 Found ANTHROPIC_API_KEY in .env file")
-    print(f"🔑 API Key (first 10 chars): {api_key[:10]}...")
     
     headers = {
         "x-api-key": api_key,

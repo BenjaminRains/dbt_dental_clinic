@@ -192,7 +192,7 @@ def main() -> int:
         print("  See api/tests/verify_api_local_authentication.py")
         return 1
 
-    print(f"Using API key: {api_key[:20]}...")
+    print(f"Using API key: {'(set)' if api_key else '(missing)'}")
     print(f"Base URL: {BASE_URL}")
 
     if args.dates:

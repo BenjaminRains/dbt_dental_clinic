@@ -33,6 +33,10 @@ airflow/webserver_config.py
 airflow/.env.native
 airflow/logs/
 airflow/*.db
+airflow/*.db*
+airflow/*.bak
+airflow/*.db-shm
+airflow/*.db-wal
 airflow/*.db-journal
 .env
 

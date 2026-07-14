@@ -80,7 +80,7 @@ def test_endpoint_detailed(endpoint: str, api_key: str = None):
     log_print(f"URL: {url}")
     # Don't expose full API key in output
     if api_key and "X-API-Key" in headers:
-        safe_headers = {k: (v[:20] + "..." if k == "X-API-Key" else v) for k, v in headers.items()}
+        safe_headers = {k: ("(set)" if k == "X-API-Key" else v) for k, v in headers.items()}
         log_print(f"Headers: {safe_headers}")
     else:
         log_print(f"Headers: {headers}")
@@ -154,7 +154,7 @@ def main():
         log_print("   Ensure .ssh/dbt-dental-clinic-api-key.pem file exists in project root")
         sys.exit(1)
     
-    log_print(f"\n🔑 Using API Key: {api_key[:30]}... (truncated)")
+    log_print(f"\n🔑 Using API Key: {'(set)' if api_key else '(missing)'}")
     
     # Test endpoints
     problem_endpoints = [

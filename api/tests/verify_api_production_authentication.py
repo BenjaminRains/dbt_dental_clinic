@@ -215,7 +215,7 @@ def verify_business_endpoints_with_key():
     print("\n" + "=" * 70)
     print("TEST 2: Business Endpoints WITH Valid API Key (Should return 200)")
     print("=" * 70)
-    print(f"Using API Key: {API_KEY[:20]}...")
+    print(f"Using API Key: {'(set)' if API_KEY else '(missing)'}")
     
     # First, test one endpoint to see if the key works
     test_endpoint_url = BUSINESS_ENDPOINTS[0]
@@ -232,7 +232,7 @@ def verify_business_endpoints_with_key():
         print(f"   1. Verify the API key in deployment_credentials.json matches demo API key")
         print(f"   2. Check demo API logs or EC2 .env file for DEMO_API_KEY")
         print(f"   3. Update deployment_credentials.json if needed")
-        print(f"\n   Current test key: {API_KEY[:30]}...")
+        print(f"\n   Current test key: {'(set)' if API_KEY else '(missing)'}")
         print(f"   This test will likely fail - fix the API key first!")
         print()
     
@@ -397,7 +397,7 @@ def main():
         print("   The test cannot proceed without an API key.")
         sys.exit(1)
     
-    print(f"\n🔑 Using DEMO API Key: {API_KEY[:20]}...")
+    print(f"\n🔑 Using DEMO API Key: {'(set)' if API_KEY else '(missing)'}")
     print("   ✅ API key loaded from deployment_credentials.json")
     
     # Run all tests

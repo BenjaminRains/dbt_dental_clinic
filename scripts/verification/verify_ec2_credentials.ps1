@@ -41,7 +41,7 @@ try {
     Write-Host "   POSTGRES_ANALYTICS_PORT: $port" -ForegroundColor Gray
     Write-Host "   POSTGRES_ANALYTICS_DB: $dbname" -ForegroundColor Gray
     Write-Host "   POSTGRES_ANALYTICS_USER: $username" -ForegroundColor Gray
-    Write-Host "   POSTGRES_ANALYTICS_PASSWORD: $($password.Substring(0, [Math]::Min(10, $password.Length)))..." -ForegroundColor Gray
+    Write-Host "   POSTGRES_ANALYTICS_PASSWORD: $(if ([string]::IsNullOrEmpty($password)) { '(empty)' } else { '(set)' })" -ForegroundColor Gray
     Write-Host "   AWS_DEFAULT_REGION: $region" -ForegroundColor Gray
     
     # Validate all required fields are present

@@ -78,8 +78,9 @@ if ($Local) {
     } elseif ($demo.ec2 -and $demo.ec2.private_ip) {
         $demoHost = $demo.ec2.private_ip
     } else {
-        # Fallback to hardcoded value from scripts/ec2/run_dbt_ssm.ps1
-        $demoHost = "172.31.25.7"
+        Write-Host "ERROR: Demo host not found in deployment_credentials.json" -ForegroundColor Red
+        Write-Host "Set demo.database_connection.host, demo.postgresql.host, or demo.ec2.private_ip" -ForegroundColor Yellow
+        exit 1
     }
     
     $demoPort = "5432"

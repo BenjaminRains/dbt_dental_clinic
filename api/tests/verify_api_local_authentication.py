@@ -219,7 +219,7 @@ def verify_business_endpoints_with_key():
     print("\n" + "=" * 70)
     print("TEST 2: Business Endpoints WITH Valid API Key (Should return 200)")
     print("=" * 70)
-    print(f"Using API Key: {API_KEY[:20]}...")
+    print(f"Using API Key: {'(set)' if API_KEY else '(missing)'}")
     
     # First, test one endpoint to see if the key works
     test_endpoint_url = BUSINESS_ENDPOINTS[0]
@@ -240,7 +240,7 @@ def verify_business_endpoints_with_key():
         print(f"   2. Set the same key for the test:")
         print(f"      $env:API_KEY = 'your-actual-api-key'")
         print(f"   3. Or set it in api/.env file")
-        print(f"\n   Current test key: {API_KEY[:30]}...")
+        print(f"\n   Current test key: {'(set)' if API_KEY else '(missing)'}")
         print(f"   This test will likely fail - fix the API key first!")
         print()
     
@@ -399,7 +399,7 @@ def main():
         print("   The test cannot proceed without an API key.")
         sys.exit(1)
     
-    print(f"\n🔑 Using LOCAL API Key: {API_KEY[:20]}...")
+    print(f"\n🔑 Using LOCAL API Key: {'(set)' if API_KEY else '(missing)'}")
     print("   ✅ API key loaded from .ssh/dbt-dental-clinic-api-key.pem file")
     
     # Run all tests

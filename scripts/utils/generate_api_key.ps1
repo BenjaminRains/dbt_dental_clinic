@@ -69,8 +69,7 @@ if ($Demo) {
         }
     }
     Write-Host "✅ DEMO_API_KEY written to: $envFile" -ForegroundColor Green
-    $preview = $apiKey.Substring(0, 8) + "..." + $apiKey.Substring($apiKey.Length - 8)
-    Write-Host "   Key preview: $preview" -ForegroundColor Gray
+    Write-Host "   Key written (value not printed)" -ForegroundColor Gray
     Write-Host "`n📝 Next Steps:" -ForegroundColor Yellow
     Write-Host "   1. Set same DEMO_API_KEY on EC2 API .env for portfolio host" -ForegroundColor Gray
     Write-Host ""
@@ -114,8 +113,7 @@ if ($Clinic) {
         Write-Host "❌ Failed to write $envFile : $_" -ForegroundColor Red
         exit 1
     }
-    $preview = $apiKey.Substring(0, 8) + "..." + $apiKey.Substring($apiKey.Length - 8)
-    Write-Host "   Key preview: $preview" -ForegroundColor Gray
+    Write-Host "   Key written (value not printed)" -ForegroundColor Gray
     Write-Host "`n📝 Next Steps:" -ForegroundColor Yellow
     Write-Host "   1. Run clinic-frontend-deploy (loads CLINIC_API_KEY from api\.env_api_clinic)" -ForegroundColor Gray
     Write-Host "   2. Phase 2: set same CLINIC_API_KEY on EC2 API .env for clinic host" -ForegroundColor Gray
@@ -167,9 +165,8 @@ try {
     exit 1
 }
 
-$preview = $apiKey.Substring(0, 8) + "..." + $apiKey.Substring($apiKey.Length - 8)
-Write-Host "`n📋 API Key Preview: $preview" -ForegroundColor Cyan
-Write-Host "   (Full key stored in: $apiKeyFile)" -ForegroundColor Gray
+Write-Host "`n📋 API key written (value not printed)" -ForegroundColor Cyan
+Write-Host "   Full key stored in: $apiKeyFile" -ForegroundColor Gray
 
 if ($UpdateFrontend) {
     $frontendEnvFile = Join-Path $projectRoot "frontend" ".env"

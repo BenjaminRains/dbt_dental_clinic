@@ -55,7 +55,8 @@ if (-not $SkipCreate) {
     } else {
         $tempPolicy = Join-Path $env:TEMP "mdc-clinic-managed-$([Guid]::NewGuid().ToString('N')).json"
         try {
-            Copy-Item -LiteralPath $PolicyFile -Destination $tempPolicy -Force
+            $policyBody = (Get-Content -LiteralPath $PolicyFile -Raw -Encoding UTF8) -replace '<AWS_ACCOUNT_ID>', $accountId
+            Set-Content -LiteralPath $tempPolicy -Value $policyBody -Encoding UTF8 -NoNewline
             Write-Host "Creating managed policy..." -ForegroundColor Cyan
             aws iam create-policy --policy-name $PolicyName --policy-document (ConvertTo-AwsCliFileUri -Path $tempPolicy)
             if ($LASTEXITCODE -ne 0) { exit 1 }
