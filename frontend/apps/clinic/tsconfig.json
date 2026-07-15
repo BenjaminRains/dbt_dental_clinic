@@ -1,0 +1,31 @@
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "useDefineForClassFields": true,
+    "module": "ESNext",
+    "lib": ["ES2020", "DOM", "DOM.Iterable"],
+    "skipLibCheck": true,
+    "moduleResolution": "bundler",
+    "allowImportingTsExtensions": true,
+    "isolatedModules": true,
+    "moduleDetection": "force",
+    "noEmit": true,
+    "jsx": "react-jsx",
+    "strict": true,
+    "noUnusedLocals": true,
+    "noUnusedParameters": true,
+    "noFallthroughCasesInSwitch": true,
+    "noUncheckedSideEffectImports": true,
+    "baseUrl": "../..",
+    "paths": {
+      "@mdc/analytics-api/clinic": ["packages/analytics-api/src/authApi.ts"],
+      "@mdc/analytics-api": ["packages/analytics-api/src/index.ts"],
+      "@mdc/analytics-api/*": ["packages/analytics-api/src/*"],
+      "@mdc/analytics-ui": ["packages/analytics-ui/src/index.ts"],
+      "@mdc/analytics-ui/*": ["packages/analytics-ui/src/*"],
+      "@mdc/ui-common": ["packages/ui-common/src/index.ts"],
+      "@mdc/ui-common/*": ["packages/ui-common/src/*"]
+    }
+  },
+  "include": ["src", "../../packages/*/src"]
+}

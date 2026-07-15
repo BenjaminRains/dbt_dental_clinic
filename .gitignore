@@ -66,6 +66,9 @@ desktop.ini
 *.json
 !dbt_project.json
 !package.json
+!frontend/**/tsconfig.json
+!frontend/**/tsconfig.*.json
+!frontend/package-lock.json
 !deployment_credentials.json.template
 !scripts/iam/cloudtrail_lookup_readonly_policy.json
 !scripts/iam/clinic_secrets_put_only_policy.json
@@ -81,6 +84,8 @@ desktop.ini
 *.db
 *.sqlite*
 *.html
+# Frontend SPA entrypoints (Vite apps)
+!frontend/**/index.html
 
 # SQL backup/dump files (may contain PHI)
 converted_backup.sql
@@ -127,7 +132,7 @@ scripts/ec2/run_dbt_ssm.ps1
 scripts/ec2/run_dbt_debug_ssm.sh
 scripts/deployment/
 
-# Deployment ops helpers (local scripts may reference credentials ó only README tracked)
+# Deployment ops helpers (local scripts may reference credentials ù only README tracked)
 deployment/**/*.sh
 deployment/**/*.ps1
 deployment/**/*.json
@@ -158,6 +163,8 @@ docs/etl/archive/
 !docs/dbt/**
 !docs/findings/
 !docs/findings/**
+!docs/frontend/
+!docs/frontend/**
 api/clinic-portal-users.json
 docs/deployment-connections/clinic-portal-users.json
 /docs/analytics/
@@ -202,8 +209,8 @@ deployment-notes.txt
 # Development notes
 TODO.md
 
-# Portfolio directory (local development assets)
-portfolio/
+# Legacy portfolio assets at repo root (do not ignore frontend/apps/portfolio)
+/portfolio/
 
 # any log files:
 *.log
