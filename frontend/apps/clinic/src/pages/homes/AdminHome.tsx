@@ -1,13 +1,14 @@
 import React from 'react';
 import RoleHomePlaceholder from './RoleHomePlaceholder';
 
-const OwnerHome: React.FC = () => (
+const AdminHome: React.FC = () => (
     <RoleHomePlaceholder
-        role="owner"
-        summary="Full practice view — all role homes and reports (same access as admin for now)."
+        role="admin"
+        summary="Full clinic portal access — all role homes and reports."
         quickLinks={[
             { label: 'Dashboard', path: '/dashboard' },
             { label: 'Practice Manager home', path: '/home/practice-manager' },
+            { label: 'Owner home', path: '/home/owner' },
             { label: 'Front Desk home', path: '/home/front-desk' },
             { label: 'Insurance home', path: '/home/insurance' },
             { label: 'AR aging', path: '/ar-aging' },
@@ -17,4 +18,4 @@ const OwnerHome: React.FC = () => (
     />
 );
 
-export default OwnerHome;
+export default AdminHome;

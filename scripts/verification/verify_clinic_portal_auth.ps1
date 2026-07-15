@@ -32,13 +32,9 @@ if (-not $manager) {
 $loginPayload = (@{ username = $manager.username; password = $manager.password } | ConvertTo-Json -Compress)
 $loginPayloadBash = $loginPayload -replace "'", "'\''"
 
+# Single-line SSH/SSM commands — avoid CRLF (Windows here-strings break bash as echo\r)
 $commands = @(
-    @"
-HTTP=`$(curl -s -o /tmp/portal_login.json -w '%{http_code}' -X POST http://127.0.0.1:8000/auth/login -H 'Content-Type: application/json' -d '$loginPayloadBash')
-echo login_http=`$HTTP
-head -c 300 /tmp/portal_login.json 2>/dev/null; echo
-test "`$HTTP" = "200"
-"@
+    "HTTP=`$(curl -s -o /tmp/portal_login.json -w '%{http_code}' -X POST http://127.0.0.1:8000/auth/login -H 'Content-Type: application/json' -d '$loginPayloadBash'); echo login_http=`$HTTP; head -c 300 /tmp/portal_login.json 2>/dev/null; echo; test `"`$HTTP`" = `"200`""
 )
 
 $body = @{
@@ -47,7 +43,8 @@ $body = @{
     Parameters   = @{ commands = $commands }
 }
 $tmp = Join-Path $env:TEMP ("ssm-portal-verify-" + [Guid]::NewGuid().ToString() + ".json")
-$body | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $tmp -Encoding UTF8
+$json = ($body | ConvertTo-Json -Depth 6) -replace "`r`n", "`n" -replace "`r", "`n"
+[System.IO.File]::WriteAllText($tmp, $json, [System.Text.UTF8Encoding]::new($false))
 $fileUrl = "file://" + ((Resolve-Path -LiteralPath $tmp).Path -replace '\\', '/')
 
 $result = aws ssm send-command --cli-input-json $fileUrl --region us-east-1 --output json | ConvertFrom-Json

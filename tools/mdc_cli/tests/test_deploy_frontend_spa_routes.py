@@ -20,6 +20,7 @@ def test_portfolio_keys_include_showcase_not_clinic_homes():
 
 def test_clinic_keys_include_portal_not_portfolio_showcase():
     assert "login" in CLINIC_SPA_ROUTE_KEYS
+    assert "home/admin" in CLINIC_SPA_ROUTE_KEYS
     assert "home/owner" in CLINIC_SPA_ROUTE_KEYS
     assert "home/practice-manager" in CLINIC_SPA_ROUTE_KEYS
     assert "dashboard" in CLINIC_SPA_ROUTE_KEYS

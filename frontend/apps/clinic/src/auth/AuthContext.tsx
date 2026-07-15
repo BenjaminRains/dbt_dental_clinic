@@ -7,7 +7,7 @@ import React, {
     useState,
 } from 'react';
 import { authApi } from '@mdc/analytics-api/clinic';
-import { ROLE_HOME_PATHS, UserRole } from './roleTypes';
+import { isUserRole, ROLE_HOME_PATHS, UserRole } from './roleTypes';
 
 const SESSION_STORAGE_KEY = 'clinic_portal_session';
 const LEGACY_ROLE_STORAGE_KEY = 'clinic_user_role';
@@ -33,15 +33,6 @@ interface AuthContextValue {
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
-
-function isUserRole(value: string): value is UserRole {
-    return (
-        value === 'practice-manager' ||
-        value === 'owner' ||
-        value === 'front-desk' ||
-        value === 'insurance'
-    );
-}
 
 function clearLegacyClinicRoleStorage(): void {
     try {

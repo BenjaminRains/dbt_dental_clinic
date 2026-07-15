@@ -25,7 +25,9 @@ logger = logging.getLogger(__name__)
 API_DIR = Path(__file__).resolve().parent.parent
 DEFAULT_PORTAL_USERS_FILE = API_DIR / "clinic-portal-users.json"
 
-VALID_ROLES = frozenset({"practice-manager", "owner", "front-desk", "insurance"})
+VALID_ROLES = frozenset(
+    {"admin", "practice-manager", "owner", "front-desk", "insurance"}
+)
 SESSION_TTL_SECONDS = 12 * 60 * 60  # 12 hours — clinic shift length
 
 

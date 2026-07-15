@@ -189,14 +189,15 @@ Verification script (read-only): `.\scripts\verification\check_waf_web_acls.ps1`
 
 ## Clinic portal login (username / password / role)
 
-After WAF allows traffic, staff **sign in** at `https://clinic.dbtdentalclinic.com/login`. Each account maps to one of four roles:
+After WAF allows traffic, staff **sign in** at `https://clinic.dbtdentalclinic.com/login`. Each account maps to a role; the UI only shows routes that role is allowed to open (`admin` sees everything):
 
-| Role key | UI label | Home route |
-|----------|----------|------------|
-| `owner` | Owner | `/home/owner` |
-| `practice-manager` | Practice Manager | `/home/practice-manager` |
-| `front-desk` | Front Desk | `/home/front-desk` |
-| `insurance` | Insurance Specialist | `/home/insurance` |
+| Role key | UI label | Home route | Access |
+|----------|----------|------------|--------|
+| `admin` | Admin | `/home/admin` | All homes + all reports |
+| `owner` | Owner | `/home/owner` | All homes + all reports (same as admin for now) |
+| `practice-manager` | Practice Manager | `/home/practice-manager` | Manager home + all reports |
+| `front-desk` | Front Desk | `/home/front-desk` | Desk home + schedule/patients/hygiene |
+| `insurance` | Insurance Specialist | `/home/insurance` | Insurance home + AR/revenue/treatment |
 
 ### Stock accounts (temporary passwords)
 
@@ -208,6 +209,7 @@ Canonical user file (gitignored, **deploy to EC2**):
 
 | Username | Password (temp) | Role | Home after login |
 |----------|-----------------|------|------------------|
+| `admin` | `Tmpp0rtal-Admin-9qXe2m` | Admin | `/home/admin` |
 | `owner` | `Tmpp0rtal-Owner-8kRm4n` | Owner | `/home/owner` |
 | `manager` | `Tmpp0rtal-Mgr-5hWq9x` | Practice Manager | `/home/practice-manager` |
 | `frontdesk` | `Tmpp0rtal-Desk-2jZk7p` | Front Desk | `/home/front-desk` |

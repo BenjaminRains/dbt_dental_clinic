@@ -267,6 +267,7 @@ PORTFOLIO_SPA_ROUTE_KEYS: tuple[str, ...] = (
 
 CLINIC_SPA_ROUTE_KEYS: tuple[str, ...] = (
     "login",
+    "home/admin",
     "home/practice-manager",
     "home/owner",
     "home/front-desk",
