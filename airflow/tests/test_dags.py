@@ -70,3 +70,11 @@ def test_etl_pipeline_dag_has_publish_and_notify(dag_bag):
     assert "publish_analytics" in task_ids
     assert "send_completion_notification" in task_ids
     assert "should_run_publish" in task_ids
+
+
+def test_etl_pipeline_dag_has_layer0_replica_checks(dag_bag):
+    """etl_pipeline keeps Layer 0 replica drift checks after Airflow 3 port."""
+    if "etl_pipeline" not in dag_bag.dags:
+        pytest.skip("etl_pipeline DAG not loaded")
+    task_ids = [t.task_id for t in dag_bag.dags["etl_pipeline"].tasks]
+    assert any("layer0" in tid for tid in task_ids), f"Expected layer0 tasks in {task_ids}"

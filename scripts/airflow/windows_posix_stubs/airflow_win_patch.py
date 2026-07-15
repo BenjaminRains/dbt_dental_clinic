@@ -38,6 +38,8 @@ _UNIX_SIGNALS = {
     "SIGKILL": 9,
     "SIGUSR1": 10,
     "SIGUSR2": 12,
+    "SIGPIPE": 13,
+    "SIGALRM": 14,
     "SIGTERM": 15,
     "SIGCHLD": 17,
     "SIGTTIN": 21,
@@ -47,6 +49,14 @@ _UNIX_SIGNALS = {
 for _name, _value in _UNIX_SIGNALS.items():
     if not hasattr(signal, _name):
         setattr(signal, _name, _value)
+
+if not hasattr(signal, "ITIMER_REAL"):
+    signal.ITIMER_REAL = 0
+if not hasattr(signal, "setitimer"):
+    # DagBag import timeout uses setitimer/SIGALRM (POSIX-only). No-op on Windows.
+    signal.setitimer = lambda *args, **kwargs: (0.0, 0.0)
+if not hasattr(signal, "getitimer"):
+    signal.getitimer = lambda *args, **kwargs: (0.0, 0.0)
 
 if not hasattr(signal, "siginterrupt"):
     signal.siginterrupt = lambda signum, flag: None

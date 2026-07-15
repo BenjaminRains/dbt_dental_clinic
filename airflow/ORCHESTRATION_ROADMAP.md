@@ -36,7 +36,7 @@ Planning lives primarily under `airflow/`. There is **no separate Airflow plan u
 | [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) | What one run means: guard → schema refresh → ETL → dbt → publish |
 | [`DAGS_STATUS.md`](DAGS_STATUS.md) | Quick status reference |
 | [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md) | **Future** dbt enhancements (selectors, Cosmos) — initial dbt is already in `etl_pipeline` |
-| [`AIRFLOW_UPGRADE_PLAN.md`](AIRFLOW_UPGRADE_PLAN.md) | Security-driven upgrade 2.7.3 → 2.11.1 (Dependabot Airflow CVEs) |
+| [`AIRFLOW_UPGRADE_PLAN.md`](AIRFLOW_UPGRADE_PLAN.md) | Upgrade 2.11.1 → **3.1.7** (Task SDK / api-server) |
 | [`docs/deployment/ENVIRONMENT_FILES.md`](../docs/deployment/ENVIRONMENT_FILES.md) §4.4 | Native Airflow vs optional Compose sandbox |
 
 ---
@@ -186,15 +186,15 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 
 ### Phase A — Local proof (1–2 days)
 
-- [x] Create venv; `pip install -r requirements-airflow-native.txt` (Airflow **2.11.1** pinned)
-- [x] `airflow db init` (metadata DB — SQLite `airflow/airflow.db` on dev laptop)
+- [x] Create venv; `pip install -r requirements-airflow-native.txt` (Airflow **3.1.7** pinned)
+- [x] `airflow db init` / `db migrate` (metadata DB — SQLite `airflow/airflow.db` on dev laptop)
 - [x] Set Airflow Variables: `etl_environment=test`, `dbt_target=local`, `project_root=<repo root>`
-- [x] Windows native bootstrap: POSIX stubs, `run_airflow.py`, scheduler + webserver (two terminals)
+- [x] Windows native bootstrap: POSIX stubs, `run_airflow.py`, scheduler + dag-processor + api-server
 - [x] Confirm DAGs load in UI — `etl_pipeline` + `schema_analysis` visible at http://localhost:8080
 - [ ] **Unpause `etl_pipeline`** in UI (leave `schema_analysis` paused unless testing change reports)
 - [ ] Confirm `etl_pipeline/.env_test` exists; `mdc etl validate --env test --profile full`
 - [ ] Trigger `etl_pipeline` manually **outside** business hours (after 9 PM Central)
-- [ ] Confirm: validation → ETL → `dbt_build` completes
+- [ ] Confirm: validation → ETL → Layer 0 → `dbt_build` completes
 - [ ] `pytest airflow/tests/ -v`
 
 **Start commands (Windows, from repo root):**
@@ -203,11 +203,14 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 # Terminal 1 — scheduler
 mdc airflow start --scheduler
 
-# Terminal 2 — webserver (Flask debug mode; not gunicorn)
-mdc airflow start --webserver
+# Terminal 2 — dag-processor (required in Airflow 3)
+mdc airflow start --dag-processor
+
+# Terminal 3 — api-server (UI; --webserver is an alias)
+mdc airflow start --api-server
 ```
 
-Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing. Do not use `airflow standalone` on Windows; use the two-terminal pattern above.
+Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing. Do not use `airflow standalone` on Windows; use the three-terminal pattern above.
 
 ### Phase B — Clinic on dev laptop (Option A) (2–3 days)
 

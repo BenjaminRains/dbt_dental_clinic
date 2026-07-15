@@ -1,10 +1,17 @@
 # Native Airflow install (Option A / Phase A on host — not Docker image base).
 # Install: pip install -r requirements-airflow-native.txt
-# Requires Python 3.11.x (matches constraints-2.11.1).
+# Requires Python 3.11.x (matches constraints-3.1.7).
 
--c https://raw.githubusercontent.com/apache/airflow/constraints-2.11.1/constraints-3.11.txt
+-c https://raw.githubusercontent.com/apache/airflow/constraints-3.1.7/constraints-3.11.txt
 
-apache-airflow==2.11.1
+apache-airflow==3.1.7
+
+# Operators moved out of core in Airflow 3 (PythonOperator, BashOperator, etc.)
+apache-airflow-providers-standard>=1.0.0
+
+# FAB auth manager — keeps `airflow users create` + existing .env.native admin password flow
+# (Simple Auth is Airflow 3 default; we opt into FAB for Option A continuity)
+apache-airflow-providers-fab>=2.0.0
 
 # DAG runtime (ETL imports, schema refresh, connections)
 pyyaml>=6.0

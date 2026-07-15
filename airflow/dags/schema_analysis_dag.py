@@ -16,11 +16,9 @@ from datetime import datetime, timedelta
 from pathlib import Path
 import logging
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator
-from airflow.operators.bash import BashOperator
-from airflow.utils.task_group import TaskGroup
-from airflow.models import Variable
+from airflow.sdk import DAG, TaskGroup, Variable
+from airflow.providers.standard.operators.python import PythonOperator
+from airflow.providers.standard.operators.bash import BashOperator
 from airflow.exceptions import AirflowException
 
 # Default arguments for all tasks
@@ -40,7 +38,7 @@ dag = DAG(
     'schema_analysis',
     default_args=default_args,
     description='Analyze OpenDental schema and generate ETL configuration',
-    schedule_interval='0 2 * * 0',  # Weekly on Sunday at 2 AM
+    schedule='0 2 * * 0',  # Weekly on Sunday at 2 AM
     start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['etl', 'configuration', 'schema-analysis'],
@@ -52,14 +50,14 @@ dag = DAG(
 # ============================================================================
 
 # Project root: override via Airflow Variable "project_root" for EC2 vs local
-PROJECT_ROOT = Path(Variable.get('project_root', default_var='/opt/airflow/dbt_dental_clinic'))
+PROJECT_ROOT = Path(Variable.get('project_root', default='/opt/airflow/dbt_dental_clinic'))
 ETL_PIPELINE_DIR = PROJECT_ROOT / 'etl_pipeline'
 TABLES_YML_PATH = ETL_PIPELINE_DIR / 'etl_pipeline' / 'config' / 'tables.yml'
 BACKUP_DIR = PROJECT_ROOT / 'etl_pipeline' / 'logs' / 'schema_analysis' / 'backups'
 CHANGELOG_DIR = PROJECT_ROOT / 'etl_pipeline' / 'logs' / 'schema_analysis' / 'reports'
 
 # Environment (from Airflow Variable or default to clinic)
-ENVIRONMENT = Variable.get('etl_environment', default_var='clinic')
+ENVIRONMENT = Variable.get('etl_environment', default='clinic')
 
 # ============================================================================
 # Task Functions
@@ -395,7 +393,7 @@ def send_notification(**context):
     
     # Send Slack notification if webhook configured
     try:
-        slack_webhook_url = Variable.get('slack_webhook_url', default_var=None)
+        slack_webhook_url = Variable.get('slack_webhook_url', default=None)
         if slack_webhook_url:
             slack = SlackWebhookHook(http_conn_id='slack_webhook')
             slack.send(text=f"{level}\n{message}")

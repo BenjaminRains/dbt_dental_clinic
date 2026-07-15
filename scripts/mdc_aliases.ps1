@@ -165,7 +165,16 @@ function airflow-start-scheduler {
     Invoke-MDC @("airflow", "start", "--scheduler") + $args
 }
 
+function airflow-start-dag-processor {
+    Invoke-MDC @("airflow", "start", "--dag-processor") + $args
+}
+
+function airflow-start-api-server {
+    Invoke-MDC @("airflow", "start", "--api-server") + $args
+}
+
 function airflow-start-webserver {
+    # Alias for api-server (Airflow 2 name)
     Invoke-MDC @("airflow", "start", "--webserver") + $args
 }
 
@@ -250,7 +259,9 @@ Write-Host "  consult-audio-validate       mdc consult-audio validate" -Foregrou
 Write-Host "  consult-audio-run            mdc consult-audio pipeline run" -ForegroundColor Cyan
 Write-Host "  airflow-init                 mdc airflow init" -ForegroundColor Cyan
 Write-Host "  airflow-start-scheduler      mdc airflow start --scheduler" -ForegroundColor Cyan
-Write-Host "  airflow-start-webserver      mdc airflow start --webserver" -ForegroundColor Cyan
+Write-Host "  airflow-start-dag-processor  mdc airflow start --dag-processor" -ForegroundColor Cyan
+Write-Host "  airflow-start-api-server     mdc airflow start --api-server" -ForegroundColor Cyan
+Write-Host "  airflow-start-webserver      mdc airflow start --webserver (alias)" -ForegroundColor Cyan
 Write-Host "  airflow-logs                 mdc airflow logs" -ForegroundColor Cyan
 Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api-clinic" -ForegroundColor Cyan
 Write-Host "  mdc api run --env clinic --tunnel-db  clinic API via mdc tunnel clinic-db" -ForegroundColor Cyan

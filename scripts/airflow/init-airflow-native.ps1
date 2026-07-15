@@ -26,7 +26,7 @@ if (-not (Test-Path $VenvDir)) {
     python -m venv $VenvDir
 }
 
-Write-Step "Install Airflow 2.11.1 + DAG deps"
+Write-Step "Install Airflow 3.1.7 + DAG deps"
 & $Python -m pip install --upgrade pip | Out-Null
 & $Python -m pip install -r (Join-Path $RepoRoot "requirements-airflow-native.txt")
 
@@ -43,9 +43,13 @@ $env:PYTHONUTF8 = "1"
 $env:PYTHONPATH = if ($env:PYTHONPATH) { "$StubsDir;$env:PYTHONPATH" } else { $StubsDir }
 $env:AIRFLOW__CORE__LOAD_EXAMPLES = "False"
 $env:AIRFLOW__CORE__DEFAULT_TIMEZONE = "America/Chicago"
-# SequentialExecutor: safest on Windows for local smoke tests
-$env:AIRFLOW__CORE__EXECUTOR = "SequentialExecutor"
+# LocalExecutor replaces SequentialExecutor (removed in Airflow 3); works with SQLite for local use
+$env:AIRFLOW__CORE__EXECUTOR = "LocalExecutor"
 $env:AIRFLOW__CORE__DAGS_FOLDER = (Join-Path $AirflowHome "dags")
+# So `from lib.mdc_runner` resolves (Airflow 3 BundleDagBag also adds this at runtime)
+$env:PYTHONPATH = "$(Join-Path $AirflowHome 'dags');$env:PYTHONPATH"
+# FAB auth — preserves `airflow users create` + .env.native admin password
+$env:AIRFLOW__CORE__AUTH_MANAGER = "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
 
 if ($env:AIRFLOW_METADATA_URL) {
     $env:AIRFLOW__DATABASE__SQL_ALCHEMY_CONN = $env:AIRFLOW_METADATA_URL
@@ -141,13 +145,19 @@ Write-Step "Set Phase A Airflow Variables"
 # publish_environment intentionally unset for Phase A
 
 Write-Step "Verify DAGs parse"
+& $Airflow dags reserialize 2>&1 | Out-Host
 & $Airflow dags list
 
 Write-Step "Run DAG unit tests"
 & $Python -m pytest (Join-Path $RepoRoot "airflow\tests") -v
 
-Write-Host "`nDone. Native Airflow ready (no DAG run triggered)." -ForegroundColor Green
+Write-Host "`nDone. Native Airflow 3.1.7 ready (no DAG run triggered)." -ForegroundColor Green
 Write-Host "  AIRFLOW_HOME: $AirflowHome"
 Write-Host "  Admin login:  $adminUser / (see airflow\.env.native)"
 Write-Host "  Start UI:     .\scripts\airflow\start-airflow-native.ps1"
 Write-Host "  Full DAG run: after 9 PM Central (business-hours guard)"
+Write-Host ""
+Write-Host "  Recommended three terminals (Airflow 3):" -ForegroundColor Yellow
+Write-Host "    .\scripts\airflow\start-airflow-native.ps1 -SchedulerOnly"
+Write-Host "    .\scripts\airflow\start-airflow-native.ps1 -DagProcessorOnly"
+Write-Host "    .\scripts\airflow\start-airflow-native.ps1 -ApiServerOnly"
