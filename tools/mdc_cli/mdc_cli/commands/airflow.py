@@ -41,21 +41,36 @@ def start_cmd(
         "--scheduler",
         help="Start scheduler only (recommended terminal 1 on Windows).",
     ),
+    dag_processor: bool = typer.Option(
+        False,
+        "--dag-processor",
+        help="Start dag-processor only (recommended terminal 2 on Windows; required in Airflow 3).",
+    ),
+    api_server: bool = typer.Option(
+        False,
+        "--api-server",
+        help="Start api-server only (recommended terminal 3 on Windows; UI at :8080).",
+    ),
     webserver: bool = typer.Option(
         False,
         "--webserver",
-        help="Start webserver only (recommended terminal 2 on Windows).",
+        help="Alias for --api-server (Airflow 2 name).",
     ),
 ) -> None:
-    """Start native Airflow scheduler and/or webserver."""
-    if scheduler and webserver:
+    """Start native Airflow scheduler, dag-processor, and/or api-server."""
+    flags = sum(bool(x) for x in (scheduler, dag_processor, api_server, webserver))
+    if flags > 1:
         typer.echo(
-            "Run --scheduler and --webserver in separate terminals, not together.",
+            "Run --scheduler, --dag-processor, and --api-server in separate terminals, not together.",
             err=True,
         )
         raise typer.Exit(code=2)
     try:
-        code = run_airflow_start(scheduler=scheduler, webserver=webserver)
+        code = run_airflow_start(
+            scheduler=scheduler,
+            dag_processor=dag_processor,
+            api_server=api_server or webserver,
+        )
     except RuntimeError as exc:
         typer.echo(str(exc), err=True)
         raise typer.Exit(code=2) from exc

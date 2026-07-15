@@ -32,7 +32,13 @@ def run_airflow_init() -> int:
     return invoke_ps_script_file(script, [])
 
 
-def run_airflow_start(*, scheduler: bool, webserver: bool) -> int:
+def run_airflow_start(
+    *,
+    scheduler: bool,
+    dag_processor: bool = False,
+    api_server: bool = False,
+    webserver: bool = False,  # deprecated alias
+) -> int:
     require_windows_native()
     script = airflow_script("start-airflow-native.ps1")
     if not script.exists():
@@ -40,8 +46,10 @@ def run_airflow_start(*, scheduler: bool, webserver: bool) -> int:
     ps_args: list[str] = []
     if scheduler:
         ps_args.append("-SchedulerOnly")
-    elif webserver:
-        ps_args.append("-WebserverOnly")
+    elif dag_processor:
+        ps_args.append("-DagProcessorOnly")
+    elif api_server or webserver:
+        ps_args.append("-ApiServerOnly")
     return invoke_ps_script_file(script, ps_args)
 
 

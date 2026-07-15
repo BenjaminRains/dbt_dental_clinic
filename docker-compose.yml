@@ -2,7 +2,7 @@ services:
   # Airflow Services (optional sandbox — NOT used for Option A clinic nightly runs)
   # Option A uses native Airflow on the host + etl_pipeline/.env_<stage> (same as mdc).
   # ETL/dbt connection vars are intentionally NOT injected here (would override stage files).
-  airflow-webserver:
+  airflow-api-server:
     build:
       context: .
       dockerfile: Dockerfile.airflow
@@ -14,6 +14,7 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       # Nightly DAG at 9 PM Central (cron "0 21 * * *" interpreted in this timezone)
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
       # Email Configuration for Monitoring (optional)
@@ -34,7 +35,7 @@ services:
       - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
     ports:
       - "8080:8080"
-    command: webserver
+    command: api-server
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
       interval: 30s
@@ -53,6 +54,7 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
       # Email Configuration for Monitoring (optional)
       - SMTP_SERVER=${SMTP_SERVER:-localhost}
@@ -71,6 +73,30 @@ services:
       - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
     command: scheduler
 
+  airflow-dag-processor:
+    build:
+      context: .
+      dockerfile: Dockerfile.airflow
+    depends_on:
+      - postgres
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+      - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
+      - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+      - ./airflow/scripts:/opt/airflow/scripts
+      - ./config:/opt/airflow/config
+      - ./etl_job:/opt/airflow/dags/etl_job
+      - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
+      - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
+    command: dag-processor
+
   # Airflow Init (run once to initialize database)
   airflow-init:
     build:
@@ -83,6 +109,7 @@ services:
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
       - AIRFLOW__CORE__LOAD_EXAMPLES=False
       - AIRFLOW__CORE__FERNET_KEY=${AIRFLOW_FERNET_KEY}
+      - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       # SECURITY: Airflow admin credentials from environment
       - AIRFLOW_ADMIN_USERNAME=${AIRFLOW_ADMIN_USERNAME}
       - AIRFLOW_ADMIN_PASSWORD=${AIRFLOW_ADMIN_PASSWORD}
@@ -97,7 +124,7 @@ services:
           echo 'ERROR: AIRFLOW_ADMIN_PASSWORD not set. Refusing to create admin with default password.'
           exit 1
         fi
-        airflow db init &&
+        airflow db migrate &&
         airflow users create \
           --username $${AIRFLOW_ADMIN_USERNAME} \
           --firstname Admin \

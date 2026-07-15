@@ -16,6 +16,15 @@ import pytest
 # Repo root (parent of airflow/)
 REPO_ROOT = Path(__file__).resolve().parent.parent.parent
 AIRFLOW_DAGS_DIR = REPO_ROOT / "airflow" / "dags"
+_STUBS_DIR = REPO_ROOT / "scripts" / "airflow" / "windows_posix_stubs"
+
+# Windows: apply POSIX shims before DagBag (needs SIGALRM/setitimer stubs)
+if sys.platform == "win32" and str(_STUBS_DIR) not in sys.path:
+    sys.path.insert(0, str(_STUBS_DIR))
+    try:
+        import airflow_win_patch  # noqa: F401
+    except ImportError:
+        pass
 
 
 @pytest.fixture(scope="session", autouse=True)
@@ -25,23 +34,30 @@ def airflow_test_env():
     Patches Variable.get to return safe defaults for project_root, etl_environment, dbt_target.
     """
     # Do NOT add REPO_ROOT to sys.path: this repo has a folder named "airflow/"
-    # which would shadow the real apache-airflow package when DAGs do "from airflow.models import ...".
+    # which would shadow the real apache-airflow package when DAGs do "from airflow...".
 
-    # Mock Airflow Variable.get so DAGs parse without DB
     try:
         from unittest.mock import patch
-        with patch.dict(os.environ, {"AIRFLOW_HOME": str(REPO_ROOT / "airflow")}):
-            # Patch at module load time for DagBag
-            from airflow.models import Variable
 
-            def _mock_get(key, default_var=None):
+        with patch.dict(
+            os.environ,
+            {
+                "AIRFLOW_HOME": str(REPO_ROOT / "airflow"),
+                # Avoid DagBag SIGALRM import timeout path on Windows
+                "AIRFLOW__CORE__DAGBAG_IMPORT_TIMEOUT": "0",
+            },
+        ):
+            # Airflow 3 Task SDK Variable (DAGs import from airflow.sdk)
+            from airflow.sdk import Variable
+
+            def _mock_get(key, default=None, **kwargs):
                 defaults = {
                     "project_root": str(REPO_ROOT),
                     "etl_environment": "test",
                     "dbt_target": "local",
                     "publish_environment": "",
                 }
-                return defaults.get(key, default_var)
+                return defaults.get(key, default)
 
             with patch.object(Variable, "get", side_effect=_mock_get):
                 yield
@@ -59,7 +75,12 @@ def dag_bag(airflow_test_env):
     try:
         if str(REPO_ROOT) in sys.path:
             sys.path.remove(str(REPO_ROOT))
+        # lib.mdc_runner resolves via dags folder on PYTHONPATH
+        dags_path = str(AIRFLOW_DAGS_DIR)
+        if dags_path not in sys.path:
+            sys.path.insert(0, dags_path)
         from airflow.models import DagBag
+
         bag = DagBag(dag_folder=str(AIRFLOW_DAGS_DIR), include_examples=False)
         return bag
     finally:

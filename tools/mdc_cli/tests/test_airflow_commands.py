@@ -46,18 +46,40 @@ def test_airflow_init_non_windows_message(mock_init):
 def test_airflow_start_scheduler(mock_start):
     result = runner.invoke(app, ["airflow", "start", "--scheduler"])
     assert result.exit_code == 0
-    mock_start.assert_called_once_with(scheduler=True, webserver=False)
+    mock_start.assert_called_once_with(
+        scheduler=True, dag_processor=False, api_server=False
+    )
 
 
 @patch("mdc_cli.commands.airflow.run_airflow_start", return_value=0)
-def test_airflow_start_webserver(mock_start):
+def test_airflow_start_dag_processor(mock_start):
+    result = runner.invoke(app, ["airflow", "start", "--dag-processor"])
+    assert result.exit_code == 0
+    mock_start.assert_called_once_with(
+        scheduler=False, dag_processor=True, api_server=False
+    )
+
+
+@patch("mdc_cli.commands.airflow.run_airflow_start", return_value=0)
+def test_airflow_start_api_server(mock_start):
+    result = runner.invoke(app, ["airflow", "start", "--api-server"])
+    assert result.exit_code == 0
+    mock_start.assert_called_once_with(
+        scheduler=False, dag_processor=False, api_server=True
+    )
+
+
+@patch("mdc_cli.commands.airflow.run_airflow_start", return_value=0)
+def test_airflow_start_webserver_alias(mock_start):
     result = runner.invoke(app, ["airflow", "start", "--webserver"])
     assert result.exit_code == 0
-    mock_start.assert_called_once_with(scheduler=False, webserver=True)
+    mock_start.assert_called_once_with(
+        scheduler=False, dag_processor=False, api_server=True
+    )
 
 
 def test_airflow_start_both_flags_rejected():
-    result = runner.invoke(app, ["airflow", "start", "--scheduler", "--webserver"])
+    result = runner.invoke(app, ["airflow", "start", "--scheduler", "--api-server"])
     assert result.exit_code == 2
     assert "separate terminals" in result.stderr
 

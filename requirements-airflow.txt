@@ -1,8 +1,8 @@
 # Extra Python packages for Airflow Docker image (etl_pipeline DAG + dbt)
-# Base image apache/airflow:2.7.1 already provides apache-airflow and core providers.
+# Base image apache/airflow:3.1.7 already provides apache-airflow and core providers.
 #
 # Native host install (Option A): use requirements-airflow-native.txt instead.
-# Do NOT pip install this file alone on the host — it omits apache-airflow and can pull Airflow 3.
+# Do NOT pip install this file alone on the host — it omits apache-airflow.
 
 # Business-hours guard (wall clock in America/Chicago)
 pendulum>=2.0
@@ -11,8 +11,13 @@ pendulum>=2.0
 pyyaml>=6.0
 psycopg2-binary>=2.9
 pymysql>=1.1
-sqlalchemy>=1.4,<2.0
 python-dotenv>=1.0
+
+# Operators moved out of core in Airflow 3
+apache-airflow-providers-standard>=1.0.0
+
+# FAB auth (docker-compose init uses `airflow users create`)
+apache-airflow-providers-fab>=2.0.0
 
 # dbt (BashOperator runs dbt deps / dbt build in nightly DAG)
 dbt-core>=1.6,<2

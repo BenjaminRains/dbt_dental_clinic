@@ -32,12 +32,14 @@ try:
 except ImportError:
     pendulum = None
 
-from airflow import DAG
-from airflow.operators.python import PythonOperator, BranchPythonOperator, ShortCircuitOperator
-from airflow.utils.task_group import TaskGroup
-from airflow.models import Variable
+from airflow.sdk import DAG, TaskGroup, Variable
+from airflow.providers.standard.operators.python import (
+    PythonOperator,
+    BranchPythonOperator,
+    ShortCircuitOperator,
+)
 from airflow.exceptions import AirflowException, AirflowSkipException
-from airflow.utils.trigger_rule import TriggerRule
+from airflow.task.trigger_rule import TriggerRule
 
 from lib.mdc_runner import run_mdc, run_mdc_etl_invoke
 
@@ -59,7 +61,7 @@ dag = DAG(
     'etl_pipeline',
     default_args=default_args,
     description='Nightly ETL (incremental) + dbt: OpenDental → raw → staging/intermediate/marts',
-    schedule_interval='0 21 * * *',  # 9 PM daily (Central if default timezone set)
+    schedule='0 21 * * *',  # 9 PM daily (Central if default timezone set)
     start_date=datetime(2025, 1, 1),
     catchup=False,
     tags=['etl', 'data-pipeline', 'production', 'nightly'],
@@ -77,17 +79,17 @@ dag = DAG(
 
 # Project root: override via Airflow Variable "project_root" (native Option A: repo root on disk)
 _REPO_ROOT_DEFAULT = Path(__file__).resolve().parent.parent.parent
-PROJECT_ROOT = Path(Variable.get('project_root', default_var=str(_REPO_ROOT_DEFAULT)))
+PROJECT_ROOT = Path(Variable.get('project_root', default=str(_REPO_ROOT_DEFAULT)))
 ETL_PIPELINE_DIR = PROJECT_ROOT / 'etl_pipeline'
 DBT_PROJECT_DIR = PROJECT_ROOT / 'dbt_dental_models'
 DBT_PROFILES_DIR = DBT_PROJECT_DIR  # profiles.yml in project; or use Variable for .dbt path
 TABLES_YML_PATH = ETL_PIPELINE_DIR / 'etl_pipeline' / 'config' / 'tables.yml'
 
 # Orchestration variables (set in Airflow UI — used every run, not manual follow-up steps)
-ENVIRONMENT = Variable.get('etl_environment', default_var='clinic')
-DBT_TARGET = Variable.get('dbt_target', default_var='local')
+ENVIRONMENT = Variable.get('etl_environment', default='clinic')
+DBT_TARGET = Variable.get('dbt_target', default='local')
 # When set (e.g. clinic), runs mdc publish analytics after dbt. Empty/unset skips publish.
-PUBLISH_ENVIRONMENT = Variable.get('publish_environment', default_var='')
+PUBLISH_ENVIRONMENT = Variable.get('publish_environment', default='')
 
 
 def _run_mdc_cmd(mdc_args: list, *, timeout_seconds: int | None = None) -> None:
@@ -123,12 +125,12 @@ def publish_analytics(**context):
             f"publish_environment={stage!r} not supported (clinic only today)"
         )
 
-    tunnel_port = Variable.get('publish_tunnel_port', default_var='5433')
+    tunnel_port = Variable.get('publish_tunnel_port', default='5433')
     cmd = ['publish', 'analytics', '--env', stage, '--tunnel-port', str(tunnel_port)]
-    ensure_tunnel = Variable.get('publish_ensure_tunnel', default_var='true').lower()
+    ensure_tunnel = Variable.get('publish_ensure_tunnel', default='true').lower()
     if ensure_tunnel in ('1', 'true', 'yes'):
         cmd.append('--ensure-tunnel')
-    elif Variable.get('publish_skip_tunnel_check', default_var='').lower() in ('1', 'true', 'yes'):
+    elif Variable.get('publish_skip_tunnel_check', default='').lower() in ('1', 'true', 'yes'):
         cmd.append('--skip-tunnel-check')
 
     _run_mdc_cmd(cmd, timeout_seconds=3600)
@@ -560,7 +562,7 @@ def generate_pipeline_report(**context):
         
         # Generate report
         report = {
-            'execution_date': context['execution_date'].isoformat(),
+            'execution_date': context['logical_date'].isoformat(),
             'dag_run_id': context['run_id'],
             'environment': ENVIRONMENT,
             'configuration': {
@@ -666,7 +668,7 @@ def send_completion_notification(**context):
         message += f"dbt target: {DBT_TARGET}\n"
         if (PUBLISH_ENVIRONMENT or '').strip():
             message += f"Publish: {PUBLISH_ENVIRONMENT.strip()}\n"
-        message += f"Execution: {context['execution_date'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+        message += f"Execution: {context['logical_date'].strftime('%Y-%m-%d %H:%M:%S')}\n"
         message += f"\nResults:\n"
         message += f"  • Processed: {total_processed} tables\n"
         message += f"  • Successful: {total_success}\n"
@@ -697,7 +699,7 @@ def send_completion_notification(**context):
         
         # Send Slack notification if configured
         try:
-            slack_webhook_url = Variable.get('slack_webhook_url', default_var=None)
+            slack_webhook_url = Variable.get('slack_webhook_url', default=None)
             if slack_webhook_url:
                 slack = SlackWebhookHook(http_conn_id='slack_webhook')
                 slack.send(text=f"{level}\n{message}")
