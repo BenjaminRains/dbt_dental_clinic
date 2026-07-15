@@ -8,7 +8,10 @@ report definition. KPI-specific validation instances live under
 
 | ID | Title | Type | Status |
 | --- | --- | --- | --- |
-| [ETL-FND-001](./ETL-FND-001-replica-row-drift-procedurelog.md) | Replica row drift — `procedurelog` | Pipeline defect + observability gap | Open |
+| [ETL-FND-001](./ETL-FND-001-replica-row-drift-procedurelog.md) | Replica row drift — `procedurelog` | Pipeline defect + observability gap | Mitigated (local KPI PASS; clinic deploy pending) |
+| [ETL-FND-002](./ETL-FND-002-sync-profile-pk-only-misclassification.md) | `sync_profile` PK-only misclassification — `sheetfield` pattern | Config generation + loader defect | Fixed locally; clinic deploy / merge pending |
+
+See also: [ETL replica fidelity roadmap](../etl/ETL_REPLICA_FIDELITY_ROADMAP.md) (schema analyzer, Layer 0, Sunday full refresh).
 
 ## dbt findings
 

@@ -96,7 +96,7 @@ Inside a container, `localhost` in `etl_pipeline/.env_clinic` points at the **co
 | **Airflow metadata** | Local Postgres DB (e.g. database `airflow` on your existing instance) | Not the analytics warehouse |
 | **Airflow Variables** | `etl_environment`, `dbt_target`, `publish_environment`, `project_root` | See table below |
 | **Root `/.env`** | **Not used** for Option A clinic orchestration | Only needed if you use optional Docker sandbox |
-| **SSM tunnel** | `mdc tunnel clinic-db` on localhost:5433 before publish task | Must be running when publish runs (see ops note below) |
+| **SSM tunnel** | Auto-started by `mdc publish analytics --ensure-tunnel` (DAG default) | Manual `mdc tunnel clinic-db` still works if port already open |
 
 ### Airflow Variables (Option A clinic nightly)
 
@@ -107,43 +107,29 @@ Inside a container, `localhost` in `etl_pipeline/.env_clinic` points at the **co
 | `dbt_target` | `local` |
 | `publish_environment` | `clinic` |
 | `publish_tunnel_port` | `5433` (optional) |
+| `publish_ensure_tunnel` | `true` (default — auto-start SSM tunnel for publish) |
 | `slack_webhook_url` | optional |
 
 Leave `publish_environment` **unset** for Phase A smoke tests (skips publish). Do **not** set `dbt_target=clinic` until dbt can build directly against RDS safely.
 
-### SSM tunnel (publish prerequisite) — **manual for now**
+### SSM tunnel (publish prerequisite)
 
-**Decided:** Start the tunnel yourself before the nightly run (or before a manual DAG trigger). No Scheduled Task or DAG `start_tunnel` task yet.
+**Default (Airflow + unattended publish):** `publish_ensure_tunnel=true` (default) runs `mdc publish analytics --ensure-tunnel`, which starts a **background** SSM session when `127.0.0.1:5433` is closed and stops it after publish completes.
 
-`mdc publish analytics` (inside the DAG) connects to RDS via **`127.0.0.1:5433`**. That port only works while an SSM port-forward session is active.
+**Manual (interactive):** You can still run `mdc tunnel clinic-db` in a dedicated terminal before the nightly run. If the port is already open, publish reuses it and does not stop your session.
 
-**Before 9 PM Central (or before triggering the DAG):**
+`mdc publish analytics` (inside the DAG) connects to RDS via **`127.0.0.1:5433`**.
 
-1. Open a **dedicated terminal** (leave it open for the whole run).
-2. Run:
+**Optional manual preflight:**
 
-   ```powershell
-   mdc tunnel clinic-db
-   ```
+```powershell
+mdc tunnel clinic-db
+Test-NetConnection 127.0.0.1 -Port 5433
+```
 
-3. Wait until you see:
+The tunnel uses **AWS SSM** through the clinic API EC2 instance into the private RDS VPC — separate from **WireGuard** (which is only needed for OpenDental ETL). You need both on nightly runs: **VPN for ETL**, **SSM tunnel for publish** (auto or manual).
 
-   ```
-   Port 5433 opened ...
-   Waiting for connections...
-   ```
-
-4. Optional check:
-
-   ```powershell
-   Test-NetConnection 127.0.0.1 -Port 5433
-   ```
-
-   `TcpTestSucceeded` should be `True`.
-
-The tunnel uses **AWS SSM** through the clinic API EC2 instance into the private RDS VPC — separate from **WireGuard** (which is only needed for OpenDental ETL). You need both on nightly runs: **VPN for ETL**, **SSM tunnel for publish**.
-
-**Future (Phase D):** automate tunnel start (Scheduled Task or DAG task). Until then, if publish fails with “tunnel not reachable,” the tunnel terminal was not open or the session dropped.
+**If publish fails:** check Airflow task logs for `Failed to start clinic RDS tunnel`; verify AWS credentials, Session Manager plugin, and `deployment_credentials.json` instance IDs. Fallback: start `mdc tunnel clinic-db` manually and set Airflow Variable `publish_ensure_tunnel=false`.
 
 ### Pre-flight (same as manual)
 
@@ -180,7 +166,7 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 
 - [ ] **Machine on at 9 PM Central** — disable sleep during the run window, or use “Never sleep when plugged in”
 - [ ] **WireGuard connected** before scheduler fires (manual, or OS startup task / scheduled connect at 8:55 PM)
-- [ ] **SSM tunnel** — `mdc tunnel clinic-db` in a separate terminal; wait for port **5433** before 9 PM (see § SSM tunnel above)
+- [ ] **SSM tunnel** — auto via `publish_ensure_tunnel=true` (default); optional manual `mdc tunnel clinic-db`
 - [ ] **Native Airflow** — venv with `requirements-airflow-native.txt`; scheduler + webserver via `start-airflow-native.ps1` (Windows) or host processes (not Docker)
 - [ ] **`etl_pipeline/.env_clinic`** — unchanged; same file as `mdc etl run --env clinic`
 - [ ] **Airflow Variable `project_root`** — repo root on disk (not `/opt/airflow/...`)
@@ -240,7 +226,7 @@ Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing
 - [ ] Airflow UI (localhost:8080) — no public exposure; laptop-only
 - [ ] Monitor 2–3 consecutive nightly runs (VPN + **tunnel terminal open** + native Airflow up)
 - [ ] Document break-glass: manual `mdc etl run`, `mdc dbt run`, `mdc publish analytics`
-- [ ] (Later) Automate SSM tunnel start before publish task
+- [ ] (Later) Long-lived tunnel Scheduled Task for debugging only — publish auto-starts tunnel by default
 
 ### Phase D — Hardening (later)
 

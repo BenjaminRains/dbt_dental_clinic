@@ -125,7 +125,10 @@ def publish_analytics(**context):
 
     tunnel_port = Variable.get('publish_tunnel_port', default_var='5433')
     cmd = ['publish', 'analytics', '--env', stage, '--tunnel-port', str(tunnel_port)]
-    if Variable.get('publish_skip_tunnel_check', default_var='').lower() in ('1', 'true', 'yes'):
+    ensure_tunnel = Variable.get('publish_ensure_tunnel', default_var='true').lower()
+    if ensure_tunnel in ('1', 'true', 'yes'):
+        cmd.append('--ensure-tunnel')
+    elif Variable.get('publish_skip_tunnel_check', default_var='').lower() in ('1', 'true', 'yes'):
         cmd.append('--skip-tunnel-check')
 
     _run_mdc_cmd(cmd, timeout_seconds=3600)
@@ -447,6 +450,41 @@ def process_tiny_tables(**context):
 # ============================================================================
 # Task Functions - Verification & Reporting
 # ============================================================================
+
+def run_layer0_replica_checks(**context):
+    """
+    Layer 0: MySQL source vs raw aggregate drift checks (Phase 3 Tier A).
+
+    Runs via mdc etl invoke check-replica-drift --tier A --warn-only during rollout.
+    """
+    logging.info("Running Layer 0 replica drift checks (Tier A)")
+
+    result = run_mdc_etl_invoke(
+        ENVIRONMENT,
+        ['check-replica-drift', '--tier', 'A', '--warn-only'],
+        project_root=PROJECT_ROOT,
+        timeout_seconds=600,
+    )
+
+    ti = context['task_instance']
+    ti.xcom_push(key='replica_drift_detected', value=result.get('replica_drift_detected', False))
+    ti.xcom_push(key='layer0_checks_run', value=result.get('checks_run', 0))
+    ti.xcom_push(key='layer0_checks_failed', value=result.get('checks_failed', 0))
+
+    if result.get('replica_drift_detected'):
+        logging.warning(
+            "⚠️  Layer 0 replica drift detected (%s/%s checks failed)",
+            result.get('checks_failed', 0),
+            result.get('checks_run', 0),
+        )
+    else:
+        logging.info(
+            "✅ Layer 0 replica checks passed (%s check(s))",
+            result.get('checks_run', 0),
+        )
+
+    return True
+
 
 def verify_loads(**context):
     """
@@ -814,6 +852,26 @@ with dag:
         large_tables >> medium_tables >> small_tables >> tiny_tables
     
     # =======================================================================
+    # LAYER 0 REPLICA CHECKS (post-ETL, pre-reporting)
+    # =======================================================================
+    
+    with TaskGroup(group_id='layer0_replica_checks', tooltip='MySQL vs raw aggregate drift (Tier A)') as layer0_group:
+        layer0_checks = PythonOperator(
+            task_id='check_replica_drift_tier_a',
+            python_callable=run_layer0_replica_checks,
+            trigger_rule=TriggerRule.ALL_DONE,
+            execution_timeout=timedelta(minutes=15),
+            doc_md="""
+            ### Layer 0 Replica Drift Checks
+            
+            Compares MySQL source vs raw.* aggregate totals over a 30-day window
+            for procedurelog, payment, claimproc, and adjustment.
+            
+            Initial rollout uses `--warn-only`; flip to hard-fail per check after baseline green.
+            """,
+        )
+    
+    # =======================================================================
     # VERIFICATION & REPORTING TASKS
     # =======================================================================
     
@@ -916,7 +974,8 @@ with dag:
         ### Publish analytics to RDS
 
         Runs `mdc publish analytics --env {PUBLISH_ENVIRONMENT or 'clinic'}` after dbt.
-        Requires SSM tunnel (`mdc tunnel clinic-db`) on localhost:5433 unless skipped.
+        Starts SSM tunnel automatically when `publish_ensure_tunnel` is true (default).
+        Manual tunnel still works: `mdc tunnel clinic-db` before the run.
         """,
     )
     dbt_build >> short_circuit_publish >> publish_analytics_task
@@ -942,7 +1001,7 @@ with dag:
     # DAG FLOW
     # =======================================================================
 
-    guard_business_hours_task >> refresh_schema_task >> validation_group >> etl_group >> reporting_group
+    guard_business_hours_task >> refresh_schema_task >> validation_group >> etl_group >> layer0_group >> reporting_group
 
 
 # ============================================================================
@@ -1007,7 +1066,7 @@ Clinic RDS (marts on api-clinic)
 
 ### 6. Publish (only when ETL succeeded and publish_environment set)
 - `mdc publish analytics --env {publish_environment}` (default `clinic`)
-- Requires SSM tunnel on localhost:5433 (`mdc tunnel clinic-db`) before the run
+- Auto-starts SSM tunnel when `publish_ensure_tunnel=true` (default); or run `mdc tunnel clinic-db` manually
 
 ### 7. Notification
 - Summary after report and publish (Slack optional)
@@ -1046,7 +1105,8 @@ Override when triggering manually:
 | `dbt_target` | `local` | `local` |
 | `publish_environment` | `clinic` | *(unset — skips publish)* |
 | `publish_tunnel_port` | `5433` (optional) | optional |
-| `slack_webhook_url` | recommended | optional |
+| `publish_ensure_tunnel` | `true` (default) | `true` — auto-start SSM tunnel for publish |
+| `slack_webhook_url` | recommended | recommended |
 
 Leave `publish_environment` unset to skip RDS publish (smoke tests). Do **not** set `dbt_target=clinic` until dbt can build safely against RDS directly.
 

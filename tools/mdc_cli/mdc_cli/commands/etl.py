@@ -13,6 +13,7 @@ from mdc_cli.run_helper import (
     echo_run_banner,
     load_env_dict_isolated,
     require_component_python,
+    resolve_component_python_script_cmd,
     run_isolated,
     venv_root_from_python,
 )
@@ -337,15 +338,17 @@ def exec_cmd(
         tunnel_port=tunnel_port,
     )
     python = require_component_python("etl")
+    script_cmd = resolve_component_python_script_cmd(python, ctx.args)
+    cmd = script_cmd if script_cmd is not None else list(ctx.args)
     echo_run_banner(
         "etl",
         env,
         etl_env_file(env),
-        f"profile={resolved_profile}  -> exec {_tunnel_options(tunnel_db, tunnel_port)}",
+        f"profile={resolved_profile}  -> exec {' '.join(cmd)}{_tunnel_options(tunnel_db, tunnel_port)}",
     )
     code = run_isolated(
         settings=settings,
-        cmd=list(ctx.args),
+        cmd=cmd,
         cwd=ETL_DIR,
         venv_root=venv_root_from_python(python),
     )
@@ -381,12 +384,18 @@ def invoke(
         tunnel_port=tunnel_port,
     )
     python = require_component_python("etl")
-    cmd = [str(python), "-m", "etl_pipeline.cli.main", *ctx.args]
+    script_cmd = resolve_component_python_script_cmd(python, ctx.args)
+    if script_cmd is not None:
+        cmd = script_cmd
+        detail = " ".join(ctx.args)
+    else:
+        cmd = [str(python), "-m", "etl_pipeline.cli.main", *ctx.args]
+        detail = f"etl {' '.join(ctx.args)}"
     echo_run_banner(
         "etl",
         env,
         etl_env_file(env),
-        f"profile={resolved_profile}  -> etl {' '.join(ctx.args)}{_tunnel_options(tunnel_db, tunnel_port)}",
+        f"profile={resolved_profile}  -> {detail}{_tunnel_options(tunnel_db, tunnel_port)}",
     )
     code = run_isolated(
         settings=settings,

@@ -455,4 +455,41 @@ class TestPostgresLoaderAdvancedQuery:
         assert 'WHERE' in result.upper()
         # With proper mocking, should have AND in the WHERE clause
         if 'DateCreated' in result and 'DateModified' in result:
-            assert 'AND' in result.upper() 
+            assert 'AND' in result.upper()
+
+    def test_enhanced_load_query_procedurelog_includes_lookback(self, mock_postgres_loader_instance):
+        """ETL-FND-001: procedurelog incremental query includes 30-day business-date lookback."""
+        if not POSTGRES_LOADER_AVAILABLE:
+            pytest.skip("PostgresLoader not available")
+
+        loader = mock_postgres_loader_instance
+        loader._get_loaded_at_time = lambda t: datetime(2024, 1, 1, 10, 0, 0)
+        loader._get_last_primary_value = lambda t: None
+        loader._validate_incremental_columns = lambda t, cols: cols
+        loader.get_table_config = lambda t: {
+            "sync_profile": "in_place_updates",
+            "primary_incremental_column": "DateTStamp",
+            "replicator_watermark_column": "DateTStamp",
+            "incremental_columns": ["ProcNum", "DateTStamp"],
+            "incremental_strategy": "or_logic",
+            "lookback_resync": {
+                "enabled": True,
+                "window_days": 30,
+                "predicate_columns": ["DateComplete", "ProcDate"],
+            },
+        }
+
+        result = loader._build_enhanced_load_query(
+            "procedurelog",
+            ["ProcNum", "DateTStamp"],
+            primary_column=None,
+            force_full=False,
+            incremental_strategy="or_logic",
+        )
+
+        assert "procedurelog" in result
+        assert "ProcNum" not in result
+        assert "DateTStamp" in result
+        assert "`DateComplete` >=" in result
+        assert "`ProcDate` >=" in result
+        assert "INTERVAL 30 DAY" in result

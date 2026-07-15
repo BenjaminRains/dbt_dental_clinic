@@ -3,9 +3,14 @@
 from __future__ import annotations
 
 import json
+import logging
 import os
+import subprocess
+import sys
+import time
+from contextlib import contextmanager
 from dataclasses import dataclass
-from typing import Optional
+from typing import Iterator, Optional
 
 import typer
 
@@ -13,9 +18,17 @@ from mdc_cli.credentials import _dig, _norm, load_deployment_credentials
 from mdc_cli.paths import REPO_ROOT
 from mdc_cli.process_util import (
     find_executable,
+    resolve_cmd,
     run_subprocess,
     run_subprocess_completed,
 )
+from mdc_cli.run_helper import is_local_tcp_port_open
+
+logger = logging.getLogger(__name__)
+
+
+class ClinicDbTunnelError(RuntimeError):
+    """Clinic RDS SSM tunnel could not be started or did not become ready."""
 
 SSM_PORT_FORWARD_DOCUMENT = "AWS-StartPortForwardingSessionToRemoteHost"
 
@@ -95,6 +108,143 @@ def _require_aws() -> None:
         )
 
 
+def _port_forward_cmd(
+    target_instance_id: str,
+    hostname: str,
+    local_port: str,
+    *,
+    remote_port: str = "5432",
+) -> list[str]:
+    params = port_forward_parameters_json(hostname, remote_port, local_port)
+    return [
+        "aws",
+        "ssm",
+        "start-session",
+        "--target",
+        target_instance_id,
+        "--document-name",
+        SSM_PORT_FORWARD_DOCUMENT,
+        "--parameters",
+        params,
+    ]
+
+
+def wait_for_local_port(
+    host: str,
+    port: int,
+    *,
+    timeout_seconds: float = 90.0,
+    poll_interval: float = 1.0,
+) -> bool:
+    """Poll until host:port accepts TCP or timeout."""
+    deadline = time.monotonic() + timeout_seconds
+    while time.monotonic() < deadline:
+        if is_local_tcp_port_open(host, port, timeout=min(poll_interval, 3.0)):
+            return True
+        time.sleep(poll_interval)
+    return False
+
+
+def _start_port_forward_background(
+    target_instance_id: str,
+    hostname: str,
+    local_port: str,
+    *,
+    remote_port: str = "5432",
+) -> subprocess.Popen[str]:
+    _require_aws()
+    cmd = resolve_cmd(
+        _port_forward_cmd(
+            target_instance_id,
+            hostname,
+            local_port,
+            remote_port=remote_port,
+        )
+    )
+    popen_kwargs: dict = {
+        "cwd": str(REPO_ROOT),
+        "stdout": subprocess.DEVNULL,
+        "stderr": subprocess.PIPE,
+        "text": True,
+    }
+    if sys.platform == "win32":
+        popen_kwargs["creationflags"] = getattr(subprocess, "CREATE_NO_WINDOW", 0)
+    return subprocess.Popen(cmd, **popen_kwargs)
+
+
+def _stop_port_forward_process(proc: subprocess.Popen[str]) -> None:
+    if proc.poll() is not None:
+        return
+    proc.terminate()
+    try:
+        proc.wait(timeout=15)
+    except subprocess.TimeoutExpired:
+        proc.kill()
+        proc.wait(timeout=5)
+
+
+@contextmanager
+def managed_clinic_db_tunnel(
+    *,
+    local_port: Optional[str] = None,
+    wait_timeout_seconds: float = 90.0,
+) -> Iterator[str]:
+    """
+    Ensure localhost port forwards to clinic RDS.
+
+    Yields ``existing`` when the port was already open (does not stop it on exit).
+    Yields ``started`` when this call started a background SSM session (stopped on exit).
+    """
+    port_str = local_port or os.environ.get("POSTGRES_PORT") or "5433"
+    port = int(port_str)
+
+    if is_local_tcp_port_open("127.0.0.1", port, timeout=1.0):
+        logger.info("Clinic DB tunnel already listening on 127.0.0.1:%s", port)
+        yield "existing"
+        return
+
+    ctx = load_ssm_context()
+    if not ctx.clinic_api_instance_id:
+        raise ClinicDbTunnelError(
+            "dental-clinic-api-clinic instance ID missing "
+            "(backend_api.clinic_api.ec2.instance_id)."
+        )
+    if not ctx.rds_endpoint:
+        raise ClinicDbTunnelError("RDS endpoint not in deployment_credentials.json.")
+
+    logger.info(
+        "Starting background SSM tunnel to clinic RDS via %s (127.0.0.1:%s)",
+        ctx.clinic_api_instance_id,
+        port,
+    )
+    proc = _start_port_forward_background(
+        ctx.clinic_api_instance_id,
+        ctx.rds_endpoint,
+        port_str,
+    )
+    try:
+        if proc.poll() is not None:
+            stderr = (proc.stderr.read() if proc.stderr else "") or ""
+            raise ClinicDbTunnelError(
+                f"SSM port-forward exited immediately (code {proc.returncode}). {stderr.strip()}"
+            )
+        if not wait_for_local_port("127.0.0.1", port, timeout_seconds=wait_timeout_seconds):
+            stderr = ""
+            if proc.stderr:
+                try:
+                    stderr = proc.stderr.read() or ""
+                except Exception:
+                    pass
+            raise ClinicDbTunnelError(
+                f"SSM tunnel did not open 127.0.0.1:{port} within {wait_timeout_seconds:.0f}s. "
+                f"{stderr.strip()}"
+            )
+        logger.info("Clinic DB tunnel ready on 127.0.0.1:%s", port)
+        yield "started"
+    finally:
+        _stop_port_forward_process(proc)
+
+
 def start_port_forward_session(
     target_instance_id: str,
     hostname: str,
@@ -104,27 +254,13 @@ def start_port_forward_session(
     label: str = "",
 ) -> int:
     _require_aws()
-    params = port_forward_parameters_json(hostname, remote_port, local_port)
     if label:
         typer.echo(f"TUNNEL  {label}")
     typer.echo(f"  Local port: {local_port}")
     typer.echo(f"  Remote: {hostname}:{remote_port}")
     typer.echo(f"  Via instance: {target_instance_id}")
     typer.echo("Keep this terminal open. Press Ctrl+C to stop forwarding.")
-    return run_subprocess(
-        [
-            "aws",
-            "ssm",
-            "start-session",
-            "--target",
-            target_instance_id,
-            "--document-name",
-            SSM_PORT_FORWARD_DOCUMENT,
-            "--parameters",
-            params,
-        ],
-        cwd=REPO_ROOT,
-    )
+    return run_subprocess(_port_forward_cmd(target_instance_id, hostname, local_port, remote_port=remote_port), cwd=REPO_ROOT)
 
 
 def start_ssm_shell_session(target_instance_id: str, label: str) -> int:

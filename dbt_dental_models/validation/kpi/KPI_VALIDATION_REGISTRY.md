@@ -33,7 +33,8 @@ is the check that implemented logic produces the same result as OD on golden dat
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
 | within_tolerance | [daily-payments](./daily-payments/) | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Payments | Reports → Standard → Daily → Payments | ±0.5% or ±$10 | **Complete (2026-06-26):** 3 golden dates; layers 1–4 PASS; [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md). ETL before same-day validate; income transfers net to $0. |
-| golden_exported | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `fact_procedure` | `sum(actual_fee)` by `date_complete` | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **Blocked:** [ETL-FND-001](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) — instance [2026-06-10](./daily-production-by-procedure/findings/2026-06-10.md) |
+
+| compare_sql_draft | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `fact_procedure` | `sum(actual_fee)` by `date_complete` | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **1/3 golden dates PASS (2026-06-27):** [2026-06-10](./daily-production-by-procedure/findings/2026-06-10.md) — layers 0–3 PASS local after [ETL-FND-001](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) Phase 1–2. Need 2+ more spot-check dates for `within_tolerance`. |
 
 | not_started | [aging-of-a-r](./aging-of-a-r/) | AR total | `mart_ar_summary` | `total_ar_balance` | Aging of A/R | Reports → Standard → Monthly → Aging of A/R | ±$50 or ±0.5% | Simplified DSO in exposures |
 
@@ -129,7 +130,7 @@ Golden path: `daily-payments/golden/`
 
 | --- | --- | --- | --- |
 
-| daily_2026-06-10 | 2026-06-10 | 2026-06-10 | Blocked on [ETL-FND-001](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) — [findings/2026-06-10.md](./daily-production-by-procedure/findings/2026-06-10.md) |
+| daily_2026-06-10 | 2026-06-10 | 2026-06-10 | **PASS** (local, 2026-06-27 re-check) — 140 / $15,239; layers 0–3; 28 codes — [findings/2026-06-10.md](./daily-production-by-procedure/findings/2026-06-10.md) |
 
 
 
@@ -179,17 +180,16 @@ Golden path: `daily-production-by-procedure/golden/`
 
 | --- | --- |
 
-| [compare/compare_daily_production_by_procedure_total.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_total.sql) | golden exported 2026-06-10 |
+| [compare/compare_daily_production_by_procedure_total.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_total.sql) | OD validated 2026-06-10 (PASS) |
 
 | [compare/compare_daily_production_by_procedure_staging.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_staging.sql) | mart vs staging |
 
-| [compare/compare_daily_production_by_procedure_by_code.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_by_code.sql) | code-level vs snapshot |
+| [compare/compare_daily_production_by_procedure_by_code.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_by_code.sql) | code-level — **PASS** 2026-06-10 (28 codes) |
 
-| [compare/investigate_daily_production_by_procedure_2026-06-10.sql](./daily-production-by-procedure/compare/investigate_daily_production_by_procedure_2026-06-10.sql) | first golden date drill-down |
+| [compare/investigate_daily_production_by_procedure_2026-06-10.sql](./daily-production-by-procedure/compare/investigate_daily_production_by_procedure_2026-06-10.sql) | Query 8 PASS — raw = staging 140 / $15,239 |
 
 
 
 Future reports: add compare SQL under `aging-of-a-r/compare/`, etc. Period **Production and Income**
 shortcuts (`today/`, `this-month/`, …) are separate OD exports — not the same as Daily →
 Production by Procedure.
-

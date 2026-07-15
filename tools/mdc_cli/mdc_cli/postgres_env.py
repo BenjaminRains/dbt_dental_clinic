@@ -167,7 +167,13 @@ def load_local_warehouse_postgres_env_dict() -> dict[str, str]:
             f"No local warehouse env found. Create {file_path} "
             "(see dbt_dental_models/.env_local.template)."
         )
-    merged = overlay_os_env(file_vals)
+    # File is authoritative for local — do not overlay shell POSTGRES_* exports
+    # (often stale clinic RDS vars after `mdc secrets` or clinic workflow).
+    merged = {
+        key: value
+        for key, value in file_vals.items()
+        if key.startswith(POSTGRES_ANALYTICS_PREFIX) and value.strip()
+    }
     missing = [key for key in POSTGRES_ANALYTICS_REQUIRED if not (merged.get(key) or "").strip()]
     if missing:
         sample = ", ".join(missing[:4])
@@ -175,8 +181,8 @@ def load_local_warehouse_postgres_env_dict() -> dict[str, str]:
         raise ValueError(
             f"Missing required vars ({sample}{suffix}) from {file_path}."
         )
-    merged.setdefault("POSTGRES_ANALYTICS_SCHEMA", "raw")
-    merged.setdefault("POSTGRES_ANALYTICS_SSLMODE", "prefer")
+    merged.setdefault("POSTGRES_ANALYTICS_SCHEMA", file_vals.get("POSTGRES_ANALYTICS_SCHEMA", "raw"))
+    merged.setdefault("POSTGRES_ANALYTICS_SSLMODE", file_vals.get("POSTGRES_ANALYTICS_SSLMODE", "prefer"))
     merged.setdefault("PGSSLMODE", merged["POSTGRES_ANALYTICS_SSLMODE"])
     return merged
 

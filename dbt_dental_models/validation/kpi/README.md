@@ -71,6 +71,16 @@ flowchart LR
 | **3. Mart → OD** | `compare_*_collections.sql` + `FIELD_MAP.md` | **End-to-end:** `opendental_analytics.marts.mart_*` matches what the OD report shows the practice. This is the KPI sign-off. |
 | **4. API / frontend** | `compare/compare_daily_collections_api.sql` + optional `api/tests/kpi/verify_daily_collections.py` | Clinic app reads mart via API with **no extra logic**. SQL must match mart; UI must show the same numbers. |
 
+**Automated Layer 0 (Tier A):**
+
+```powershell
+mdc etl invoke --env local -- check-replica-drift --tier A --warn-only
+mdc etl invoke --env local -- check-replica-drift --check L0-PAY-001 --warn-only
+mdc etl invoke --env local -- check-procedurelog-drift --warn-only   # L0-PROC-001 alias
+```
+
+Registry: `etl_pipeline/config/replica_drift_checks.yml` — checks `L0-PROC-001` … `L0-ADJ-001`.
+
 **Platform findings** (pipeline defects affecting multiple KPIs): [docs/findings/](../../../docs/findings/README.md)
 
 
@@ -343,7 +353,7 @@ When OD total is zero and mart is zero, treat as PASS. When OD golden is not yet
 | --- | --- | --- | --- |
 
 | [daily-payments](./daily-payments/) | `mart_daily_payments` | **`within_tolerance` — complete** | [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md) |
-| [daily-production-by-procedure](./daily-production-by-procedure/) | `fact_procedure` (agg.) | `golden_exported` | [README.md](./daily-production-by-procedure/README.md) |
+| [daily-production-by-procedure](./daily-production-by-procedure/) | `fact_procedure` (agg.) | `compare_sql_draft` (1/3 PASS) | [README.md](./daily-production-by-procedure/README.md) · [2026-06-10 PASS](./daily-production-by-procedure/findings/2026-06-10.md) |
 | [aging-of-a-r](./aging-of-a-r/) | `mart_ar_summary` | Not started | — |
 
 

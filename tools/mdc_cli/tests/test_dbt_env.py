@@ -139,6 +139,8 @@ def test_load_dbt_env_dict_demo_localhost_defaults(tmp_path, monkeypatch, clean_
     monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
     creds_path = tmp_path / "deployment_credentials.json"
     monkeypatch.setattr(dbt_env, "DEPLOYMENT_CREDENTIALS", creds_path)
+    monkeypatch.setattr(postgres_env, "DEPLOYMENT_CREDENTIALS", creds_path)
+    monkeypatch.setattr(paths, "DEPLOYMENT_CREDENTIALS", creds_path)
     creds_path.write_text(
         json.dumps(
             {
@@ -165,8 +167,9 @@ def test_load_dbt_env_dict_local_missing_file(tmp_path, monkeypatch):
         dbt_env.load_dbt_env_dict("local")
 
 
-def test_os_env_wins_over_file(tmp_path, monkeypatch):
+def test_local_file_wins_over_os_env(tmp_path, monkeypatch):
+    """Local warehouse file is authoritative — shell POSTGRES_* must not override."""
     _write_local_env(tmp_path, monkeypatch)
     monkeypatch.setenv("POSTGRES_ANALYTICS_HOST", "os-host-wins")
     data = dbt_env.load_dbt_env_dict("local")
-    assert data["POSTGRES_ANALYTICS_HOST"] == "os-host-wins"
+    assert data["POSTGRES_ANALYTICS_HOST"] == "localhost"
