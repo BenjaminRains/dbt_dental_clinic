@@ -1,7 +1,6 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import {
     AppBar,
-    Alert,
     Box,
     CssBaseline,
     Drawer,
@@ -28,10 +27,10 @@ import {
     CheckCircle as TreatmentAcceptanceIcon,
     Spa as HygieneIcon,
     ShareOutlined as ReferralIcon,
-    Close as CloseIcon,
     HelpOutline as HelpIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
+import DemoDataBanner from './DemoDataBanner';
 
 const drawerWidth = 240;
 
@@ -55,17 +54,10 @@ const menuItems = [
 
 const DemoLayout: React.FC<DemoLayoutProps> = ({ children }) => {
     const [mobileOpen, setMobileOpen] = useState(false);
-    const [bannerDismissed, setBannerDismissed] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-
-    useEffect(() => {
-        if (localStorage.getItem('syntheticDataBannerDismissed') === 'true') {
-            setBannerDismissed(true);
-        }
-    }, []);
 
     const handleDrawerToggle = () => setMobileOpen((open) => !open);
 
@@ -74,11 +66,6 @@ const DemoLayout: React.FC<DemoLayoutProps> = ({ children }) => {
         if (isMobile) {
             setMobileOpen(false);
         }
-    };
-
-    const handleBannerClose = () => {
-        setBannerDismissed(true);
-        localStorage.setItem('syntheticDataBannerDismissed', 'true');
     };
 
     const drawer = (
@@ -180,31 +167,7 @@ const DemoLayout: React.FC<DemoLayoutProps> = ({ children }) => {
                 }}
             >
                 <Toolbar />
-                {!bannerDismissed && (
-                    <Alert
-                        severity="info"
-                        onClose={handleBannerClose}
-                        sx={{ mb: 3 }}
-                        action={
-                            <IconButton
-                                aria-label="close"
-                                color="inherit"
-                                size="small"
-                                onClick={handleBannerClose}
-                            >
-                                <CloseIcon fontSize="inherit" />
-                            </IconButton>
-                        }
-                    >
-                        <Typography variant="body2">
-                            <strong>Demo Site Notice:</strong> This demonstration dashboard uses
-                            synthetic data for portfolio purposes. The production platform I built
-                            serves real dental practices with live patient data across multiple clinics
-                            and 40,000+ patients, demonstrating production-grade data engineering
-                            capabilities.
-                        </Typography>
-                    </Alert>
-                )}
+                <DemoDataBanner />
                 {children}
             </Box>
         </Box>

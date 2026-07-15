@@ -165,6 +165,9 @@ docs/etl/archive/
 !docs/findings/**
 !docs/frontend/
 !docs/frontend/**
+# Non-sensitive frontend design notes (under the app tree)
+!frontend/docs/
+!frontend/docs/**
 api/clinic-portal-users.json
 docs/deployment-connections/clinic-portal-users.json
 /docs/analytics/

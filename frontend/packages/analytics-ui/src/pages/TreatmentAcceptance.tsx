@@ -50,7 +50,7 @@ const TreatmentAcceptance: React.FC = () => {
     const [error, setError] = useState<string | null>(null);
 
     // Filter state
-    // Default to "Last 30 Days" to ensure data is available (synthetic data: 2023-01-01 to now)
+    // Default to "Last 30 Days" so empty mart windows still show demo rows when available
     const [startDate, setStartDate] = useState<string>(() => {
         const range = dateUtils.getLast30Days();
         return range.start_date || new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split('T')[0];

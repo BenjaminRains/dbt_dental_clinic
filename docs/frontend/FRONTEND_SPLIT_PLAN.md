@@ -1,6 +1,6 @@
 # Frontend split plan: Portfolio vs Clinic
 
-**Status:** Active — Phases 0–3 complete in tree; deploy/verify in production next  
+**Status:** Active — Phases 0–5 complete in tree; production redeploy + smoke still recommended  
 **Owner:** Engineering  
 **Last updated:** 2026-07-15  
 **Tracking:** [TODO.md](../../TODO.md) (Tier 5 → Frontend Split; Frontend Evolution)
@@ -284,8 +284,10 @@ Each phase has **deliverables**, **exit criteria**, and **rollback**. Do not ski
 
 **Exit criteria**
 
-- [ ] New contributor can run portfolio locally without clinic env vars
-- [ ] Deploying demo cannot accidentally upload clinic bundle (assert `VITE_API_URL` / package name in preflight)
+- [x] New contributor can run portfolio locally without clinic env vars (`mdc frontend dev --app portfolio`)
+- [x] Deploying demo cannot accidentally upload clinic bundle (workspace name + API host + `index.html` markers + forbidden cross-product markers)
+
+**Rollback:** Revert CLI / workflow commits only.
 
 ---
 
@@ -303,8 +305,10 @@ Each phase has **deliverables**, **exit criteria**, and **rollback**. Do not ski
 
 **Exit criteria**
 
-- [ ] Grep for `isClinicSite` / `VITE_IS_DEMO` in `apps/` and `packages/` returns only deploy config or zero hits
-- [ ] Both apps pass `npm run type-check`
+- [x] Grep for `isClinicSite` / `VITE_IS_DEMO` in `apps/` and `packages/` returns zero routing hits (`VITE_IS_DEMO` only as deploy/dev metadata outside apps packages)
+- [x] Both apps pass `npm run type-check`
+
+**Rollback:** Revert cleanup commits on the feature branch.
 
 ---
 
@@ -361,7 +365,7 @@ Each phase has **deliverables**, **exit criteria**, and **rollback**. Do not ski
 ### Scripts
 
 - Existing: `scripts/verification/verify_clinic_portal_auth.ps1` (clinic)
-- Add: `scripts/verification/verify_portfolio_routes.ps1` — smoke HTTP checks for demo host (no `/home/*` 200s)
+- Add: `scripts/verification/verify_portfolio_routes.ps1` — smoke HTTP checks for demo host (no clinic product HTML on `/home/*`)
 
 ### Manual smoke after each deploy
 

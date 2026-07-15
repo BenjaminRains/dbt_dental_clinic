@@ -108,3 +108,55 @@ def test_deploy_frontend_default_demo(mock_deploy):
 def test_deploy_frontend_invalid_target():
     result = runner.invoke(app, ["deploy", "frontend", "--target", "local"])
     assert result.exit_code == 2
+
+
+@patch("mdc_cli.commands.frontend.find_executable", return_value="/usr/bin/npm")
+def test_frontend_status_shows_workspaces(mock_find, tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    frontend = repo / "frontend"
+    portfolio = frontend / "apps" / "portfolio"
+    clinic = frontend / "apps" / "clinic"
+    portfolio.mkdir(parents=True)
+    clinic.mkdir(parents=True)
+    (portfolio / "package.json").write_text('{"name":"@mdc/portfolio"}', encoding="utf-8")
+    (clinic / "package.json").write_text('{"name":"@mdc/clinic"}', encoding="utf-8")
+
+    monkeypatch.setattr("mdc_cli.commands.frontend.FRONTEND_DIR", frontend)
+    monkeypatch.setattr("mdc_cli.commands.frontend.REPO_ROOT", repo)
+    monkeypatch.setattr(
+        "mdc_cli.commands.frontend.demo_frontend_status",
+        lambda: type(
+            "S",
+            (),
+            {
+                "label": "demo",
+                "bucket_name": "demo-b",
+                "distribution_id": "ED",
+                "domain": "https://dbtdentalclinic.com",
+                "api_url": "https://api.dbtdentalclinic.com",
+                "api_key_source": None,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        "mdc_cli.commands.frontend.clinic_frontend_status",
+        lambda: type(
+            "S",
+            (),
+            {
+                "label": "clinic",
+                "bucket_name": "clinic-b",
+                "distribution_id": "EC",
+                "domain": "https://clinic.dbtdentalclinic.com",
+                "api_url": "https://api-clinic.dbtdentalclinic.com",
+                "api_key_source": None,
+            },
+        )(),
+    )
+
+    result = runner.invoke(app, ["frontend", "status"])
+    assert result.exit_code == 0
+    assert "@mdc/portfolio" in result.output
+    assert "@mdc/clinic" in result.output
+    assert "Local workspace apps" in result.output
+    assert "Last local deploy" in result.output

@@ -32,7 +32,6 @@ import {
     HelpOutline as HelpIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { useRole } from '../auth/RoleContext';
 import { useAuth } from '../auth/AuthContext';
 import RoleSwitcher from '../components/RoleSwitcher';
 
@@ -61,8 +60,7 @@ const ClinicLayout: React.FC<ClinicLayoutProps> = ({ children }) => {
     const location = useLocation();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-    const { homePath } = useRole();
-    const { logout } = useAuth();
+    const { homePath, logout } = useAuth();
 
     const handleDrawerToggle = () => setMobileOpen((open) => !open);
 
