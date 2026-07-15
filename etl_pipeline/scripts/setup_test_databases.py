@@ -423,19 +423,20 @@ def setup_postgresql_test_database():
                 )
             """))
             
-            # Create procedurelog table with correct column types to match ETL expectations
+            # Create procedurelog table (OpenDental-aligned: ProcStatus tinyint, DateComplete)
             conn.execute(text(f"""
                 CREATE TABLE raw.procedurelog (
                     "ProcNum" bigint NOT NULL DEFAULT nextval('raw."procedurelog_ProcNum_seq"'::regclass),
                     "PatNum" bigint NOT NULL,
                     "AptNum" bigint NOT NULL,
-                    "ProcStatus" boolean DEFAULT false,
+                    "ProcStatus" smallint NOT NULL DEFAULT 0,
                     "ProcFee" decimal(10,2) NOT NULL DEFAULT 0.00,
                     "ProcFeeCur" decimal(10,2) NOT NULL DEFAULT 0.00,
                     "ProcDate" date NOT NULL,
                     "CodeNum" bigint NOT NULL DEFAULT 0,
                     "ProcNote" text COLLATE pg_catalog."default",
                     "DateTStamp" timestamp without time zone NOT NULL,
+                    "DateComplete" date NOT NULL DEFAULT '0001-01-01',
                     "SecDateEntry" timestamp without time zone NOT NULL DEFAULT '0001-01-01 00:00:00',
                     CONSTRAINT procedurelog_pkey PRIMARY KEY ("ProcNum")
                 )
@@ -632,11 +633,13 @@ def setup_mysql_test_database(database_type):
                     CodeNum BIGINT(20) NOT NULL DEFAULT 0,
                     ProcNote TEXT,
                     DateTStamp DATETIME NOT NULL,
+                    DateComplete DATE NOT NULL DEFAULT '0001-01-01',
                     SecDateEntry DATE NOT NULL DEFAULT '0001-01-01',
                     PRIMARY KEY (ProcNum),
                     KEY PatNum (PatNum),
                     KEY AptNum (AptNum),
-                    KEY CodeNum (CodeNum)
+                    KEY CodeNum (CodeNum),
+                    KEY DateComplete (DateComplete)
                 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci
             """
             conn.execute(text(create_procedurelog_sql))

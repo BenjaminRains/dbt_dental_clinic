@@ -50,6 +50,7 @@ from etl_pipeline.config import get_settings, DatabaseType, PostgresSchema as Co
 from etl_pipeline.config.logging import get_logger
 from etl_pipeline.monitoring.replica_sync_config import (
     build_mysql_loader_where_clause,
+    build_mysql_lookback_predicate,
     get_loader_incremental_columns,
     get_replicator_watermark_column,
     lookback_resync_enabled,
@@ -1053,29 +1054,67 @@ class PostgresLoader:
             query = self._build_load_query(table_name, incremental_columns, force_full)
             
             # ============================================================
-            # 4. INCREMENTAL FALLBACK DETECTION
+            # 4. INCREMENTAL FALLBACK + P2 AGGREGATE DRIFT DETECTION
             # ============================================================
-            # Detect stale state: If incremental query returns 0 rows but analytics
-            # needs updating (e.g., due to data corruption, missed loads, or reset),
-            # automatically fall back to full load to ensure data consistency.
-            # This prevents silent data gaps and is implemented ONCE for all strategies.
+            # Classic path: incremental count = 0 but analytics still behind → full load.
+            # ETL-FND-001 P2: also compare lookback-window aggregates (replication vs
+            # analytics). Drift with 0 watermark rows triggers lookback-only resync
+            # (or full if lookback window is empty). Drift with rows > 0 logs and
+            # continues — the upcoming upsert should heal analytics.
             
             should_force_full = force_full
             
             if not force_full:
-                # Check if incremental query will return 0 rows
                 row_count = self._execute_count_query(query)
+                aggregate_drift = self._lookback_aggregate_drift_detected(
+                    table_name, table_config
+                )
+
                 if row_count == 0:
-                    # Verify if analytics actually needs updating (stale state detection)
-                    needs_updating, _, _, force_full_recommended = self._check_analytics_needs_updating(table_name)
+                    needs_updating, _, _, force_full_recommended = (
+                        self._check_analytics_needs_updating(table_name)
+                    )
                     if needs_updating:
                         logger.warning(
-                            f"Incremental query returned 0 rows for {table_name}, "
-                            f"but analytics needs updating. Falling back to full load to ensure data consistency."
+                            "Incremental query returned 0 rows for %s, "
+                            "but analytics needs updating. Falling back to full load.",
+                            table_name,
                         )
-                        # Rebuild query without incremental WHERE clause
                         query = self._build_full_load_query(table_name)
                         should_force_full = True or force_full_recommended
+                    elif aggregate_drift:
+                        lookback_query = self._build_lookback_only_load_query(
+                            table_name, table_config
+                        )
+                        lookback_count = (
+                            self._execute_count_query(lookback_query)
+                            if lookback_query
+                            else 0
+                        )
+                        if lookback_count > 0:
+                            logger.warning(
+                                "ETL-FND-001 P2: lookback aggregate drift for %s with 0 "
+                                "watermark rows; forcing lookback-only resync (%s rows).",
+                                table_name,
+                                lookback_count,
+                            )
+                            query = lookback_query
+                        else:
+                            logger.warning(
+                                "ETL-FND-001 P2: lookback aggregate drift for %s but "
+                                "lookback window is empty on replication; falling back "
+                                "to full load.",
+                                table_name,
+                            )
+                            query = self._build_full_load_query(table_name)
+                            should_force_full = True
+                elif aggregate_drift:
+                    logger.warning(
+                        "ETL-FND-001 P2: lookback aggregate drift for %s with %s "
+                        "incremental/lookback rows; proceeding with upsert load.",
+                        table_name,
+                        row_count,
+                    )
             
             # ============================================================
             # 5. ESTIMATE TABLE SIZE
@@ -1516,6 +1555,62 @@ class PostgresLoader:
         replication_db = replication_config.get('database', 'opendental_replication')
         
         return f"SELECT * FROM `{replication_db}`.`{table_name}`"
+
+    def _build_lookback_only_load_query(
+        self, table_name: str, table_config: Dict
+    ) -> Optional[str]:
+        """Build SELECT limited to lookback_resync business-date window (ETL-FND-001 P2)."""
+        predicate = build_mysql_lookback_predicate(table_config)
+        if not predicate:
+            return None
+        replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+        replication_db = replication_config.get("database", "opendental_replication")
+        return f"SELECT * FROM `{replication_db}`.`{table_name}` WHERE {predicate}"
+
+    def _lookback_aggregate_drift_detected(
+        self, table_name: str, table_config: Dict
+    ) -> bool:
+        """
+        ETL-FND-001 P2: true when lookback-window aggregates diverge between
+        replication MySQL and analytics PostgreSQL.
+
+        Currently implemented for procedurelog (complete production by DateComplete).
+        Failures are logged and treated as no-drift so prep stays non-fatal.
+        """
+        if not lookback_resync_enabled(table_config):
+            return False
+
+        from etl_pipeline.monitoring.procedurelog_drift import (
+            is_procedurelog_table,
+            check_procedurelog_drift,
+        )
+
+        if not is_procedurelog_table(table_name):
+            return False
+
+        try:
+            replication_config = self.settings.get_database_config(DatabaseType.REPLICATION)
+            replication_db = replication_config.get("database", "opendental_replication")
+            lookback_days = int(
+                (table_config.get("lookback_resync") or {}).get("window_days") or 30
+            )
+            result = check_procedurelog_drift(
+                self.replication_engine,
+                self.analytics_engine,
+                source_database=replication_db,
+                lookback_days=lookback_days,
+                analytics_schema=self.analytics_schema,
+            )
+            if result.drift_detected:
+                logger.warning(result.message)
+            return result.drift_detected
+        except Exception as exc:
+            logger.warning(
+                "ETL-FND-001 P2: could not compare lookback aggregates for %s: %s",
+                table_name,
+                exc,
+            )
+            return False
     
     def _build_enhanced_load_query(self, table_name: str, incremental_columns: List[str], 
                                   primary_column: Optional[str] = None,

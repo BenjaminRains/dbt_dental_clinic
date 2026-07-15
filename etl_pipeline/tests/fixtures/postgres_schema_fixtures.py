@@ -279,6 +279,7 @@ def sample_mysql_schemas():
                     CodeNum INT DEFAULT 0,
                     ProcNote TEXT,
                     DateTStamp DATETIME,
+                    DateComplete DATE DEFAULT '0001-01-01',
                     PRIMARY KEY (ProcNum)
                 )
             '''
@@ -340,13 +341,14 @@ def expected_postgres_schemas():
                     "ProcNum" integer PRIMARY KEY,
                     "PatNum" integer,
                     "AptNum" integer,
-                    "ProcStatus" boolean DEFAULT false,
+                    "ProcStatus" smallint DEFAULT 0,
                     "ProcFee" numeric(10,2) DEFAULT 0.00,
                     "ProcFeeCur" numeric(10,2) DEFAULT 0.00,
                     "ProcDate" date,
                     "CodeNum" integer DEFAULT 0,
                     "ProcNote" text,
-                    "DateTStamp" timestamp without time zone
+                    "DateTStamp" timestamp without time zone,
+                    "DateComplete" date DEFAULT '0001-01-01'
                 )
             '''
         },
