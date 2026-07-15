@@ -7,7 +7,8 @@ from typer.testing import CliRunner
 
 from mdc_cli.main import app
 
-runner = CliRunner()
+# Disable Rich coloring so help text is plain ASCII in CI and locally.
+runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
 
 _ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
 
@@ -18,11 +19,14 @@ def _plain(text: str) -> str:
 
 
 def test_frontend_dev_help():
-    result = runner.invoke(app, ["frontend", "dev", "--help"])
+    result = runner.invoke(app, ["frontend", "dev", "--help"], color=False)
     assert result.exit_code == 0
     output = _plain(result.output)
     assert "Vite" in output
+    # Rich may still split "--app" with ANSI; after strip it must be contiguous.
     assert "--app" in output
+    assert "portfolio" in output
+    assert "clinic" in output
 
 
 def _make_frontend_tree(tmp_path):
