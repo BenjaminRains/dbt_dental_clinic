@@ -1,5 +1,6 @@
 """Tests for frontend commands (Phase 5.3)."""
 
+import re
 from unittest.mock import patch
 
 from typer.testing import CliRunner
@@ -8,12 +9,20 @@ from mdc_cli.main import app
 
 runner = CliRunner()
 
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Strip Rich/ANSI styling so option names like --app match literally."""
+    return _ANSI_RE.sub("", text)
+
 
 def test_frontend_dev_help():
     result = runner.invoke(app, ["frontend", "dev", "--help"])
     assert result.exit_code == 0
-    assert "Vite" in result.output
-    assert "--app" in result.output
+    output = _plain(result.output)
+    assert "Vite" in output
+    assert "--app" in output
 
 
 def _make_frontend_tree(tmp_path):
