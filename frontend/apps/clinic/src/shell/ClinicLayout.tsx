@@ -33,6 +33,7 @@ import {
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import { useAuth } from '../auth/AuthContext';
+import { filterNavPaths } from '../auth/roleAccess';
 import RoleSwitcher from '../components/RoleSwitcher';
 
 const drawerWidth = 240;
@@ -60,7 +61,8 @@ const ClinicLayout: React.FC<ClinicLayoutProps> = ({ children }) => {
     const location = useLocation();
     const theme = useTheme();
     const isMobile = useMediaQuery(theme.breakpoints.down('md'));
-    const { homePath, logout } = useAuth();
+    const { homePath, logout, role } = useAuth();
+    const visibleReports = filterNavPaths(role, clinicReportItems);
 
     const handleDrawerToggle = () => setMobileOpen((open) => !open);
 
@@ -104,10 +106,12 @@ const ClinicLayout: React.FC<ClinicLayoutProps> = ({ children }) => {
             </Toolbar>
             <List>
                 {renderNavItem({ text: 'Home', icon: <HomeIcon />, path: homePath })}
-                <ListSubheader component="div" sx={{ lineHeight: 2.5 }}>
-                    Reports
-                </ListSubheader>
-                {clinicReportItems.map(renderNavItem)}
+                {visibleReports.length > 0 && (
+                    <ListSubheader component="div" sx={{ lineHeight: 2.5 }}>
+                        Reports
+                    </ListSubheader>
+                )}
+                {visibleReports.map(renderNavItem)}
             </List>
         </div>
     );

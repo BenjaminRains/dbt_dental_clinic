@@ -20,6 +20,7 @@ const PracticeManagerHome = lazy(() => import('./pages/homes/PracticeManagerHome
 const OwnerHome = lazy(() => import('./pages/homes/OwnerHome'));
 const FrontDeskHome = lazy(() => import('./pages/homes/FrontDeskHome'));
 const InsuranceHome = lazy(() => import('./pages/homes/InsuranceHome'));
+const AdminHome = lazy(() => import('./pages/homes/AdminHome'));
 
 const PageLoader = () => (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -50,6 +51,7 @@ function App() {
             <Route path="/home/owner" element={clinicPage(withSuspense(<OwnerHome />))} />
             <Route path="/home/front-desk" element={clinicPage(withSuspense(<FrontDeskHome />))} />
             <Route path="/home/insurance" element={clinicPage(withSuspense(<InsuranceHome />))} />
+            <Route path="/home/admin" element={clinicPage(withSuspense(<AdminHome />))} />
 
             <Route path="/dashboard" element={clinicPage(withSuspense(<Dashboard />))} />
             <Route path="/revenue" element={clinicPage(withSuspense(<Revenue />))} />

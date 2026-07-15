@@ -72,6 +72,36 @@ def test_portal_login_success(portal_env):
     assert me.json()["username"] == "owner"
 
 
+def test_portal_admin_role_accepted(monkeypatch):
+    users = [
+        {
+            "username": "admin",
+            "password": "admin-pass",
+            "role": "admin",
+            "display_name": "Clinic Admin",
+        }
+    ]
+    monkeypatch.setenv("API_ENVIRONMENT", "clinic")
+    monkeypatch.setenv("CLINIC_PORTAL_USERS", json.dumps(users))
+    monkeypatch.delenv("CLINIC_PORTAL_USERS_FILE", raising=False)
+    monkeypatch.setattr(
+        "auth.portal.DEFAULT_PORTAL_USERS_FILE",
+        __import__("pathlib").Path("/nonexistent/clinic-portal-users.json"),
+    )
+    monkeypatch.setenv("CLINIC_PORTAL_SESSION_SECRET", "test-portal-secret")
+    monkeypatch.setenv("CLINIC_API_KEY", "test-api-key")
+
+    from main import app
+
+    client = TestClient(app)
+    response = client.post(
+        "/auth/login",
+        json={"username": "admin", "password": "admin-pass"},
+    )
+    assert response.status_code == 200
+    assert response.json()["role"] == "admin"
+
+
 def test_portal_login_invalid_password(portal_env):
     from main import app
 

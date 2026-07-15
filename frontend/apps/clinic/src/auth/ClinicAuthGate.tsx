@@ -2,16 +2,17 @@ import React from 'react';
 import { Navigate, useLocation } from 'react-router-dom';
 import { Box, CircularProgress } from '@mui/material';
 import { useAuth } from './AuthContext';
-import { isRoleHomePath } from '../utils/roleNavigation';
+import { canAccessPath } from './roleAccess';
 
 interface ClinicAuthGateProps {
     children: React.ReactNode;
 }
 
-/** Clinic app requires portal login before showing app content. */
+/** Require login and enforce per-role route allowlists. */
 const ClinicAuthGate: React.FC<ClinicAuthGateProps> = ({ children }) => {
-    const { isAuthenticated, authLoading, homePath } = useAuth();
+    const { isAuthenticated, authLoading, homePath, role } = useAuth();
     const location = useLocation();
+    const path = location.pathname;
 
     if (authLoading) {
         return (
@@ -29,14 +30,14 @@ const ClinicAuthGate: React.FC<ClinicAuthGateProps> = ({ children }) => {
     }
 
     if (!isAuthenticated) {
-        return <Navigate to="/login" replace state={{ from: location.pathname }} />;
+        return <Navigate to="/login" replace state={{ from: path }} />;
     }
 
-    if (location.pathname === '/' || location.pathname === '/login') {
+    if (path === '/' || path === '/login') {
         return <Navigate to={homePath} replace />;
     }
 
-    if (isRoleHomePath(location.pathname) && location.pathname !== homePath) {
+    if (!canAccessPath(role, path)) {
         return <Navigate to={homePath} replace />;
     }
 

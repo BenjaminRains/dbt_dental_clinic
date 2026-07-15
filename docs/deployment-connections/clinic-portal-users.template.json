@@ -1,5 +1,11 @@
 [
   {
+    "username": "admin",
+    "password": "Tmpp0rtal-Admin-9qXe2m",
+    "role": "admin",
+    "display_name": "Clinic Admin"
+  },
+  {
     "username": "owner",
     "password": "Tmpp0rtal-Owner-8kRm4n",
     "role": "owner",
