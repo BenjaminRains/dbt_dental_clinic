@@ -1,0 +1,10 @@
+export { default as DashboardPage } from './pages/Dashboard';
+export { default as RevenuePage } from './pages/Revenue';
+export { default as ARPage } from './pages/AR';
+export { default as ProvidersPage } from './pages/Providers';
+export { default as PatientsPage } from './pages/Patients';
+export { default as AppointmentsPage } from './pages/Appointments';
+export { default as TreatmentAcceptancePage } from './pages/TreatmentAcceptance';
+export { default as HygieneRetentionPage } from './pages/HygieneRetention';
+export { default as ReferralSourcesPage } from './pages/ReferralSources';
+export { default as KPIDefinitionsPage } from './pages/KPIDefinitions';

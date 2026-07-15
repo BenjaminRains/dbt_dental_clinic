@@ -64,27 +64,67 @@ def npm_install_if_needed(frontend_dir: Path) -> None:
         raise typer.Exit(code=code)
 
 
-def npm_build(frontend_dir: Path, config: FrontendDeployConfig) -> None:
+# Deploy target → npm workspace package (apps/portfolio | apps/clinic).
+FRONTEND_APP_BY_TARGET: dict[str, str] = {
+    "demo": "portfolio",
+    "clinic": "clinic",
+}
+FRONTEND_WORKSPACE_BY_TARGET: dict[str, str] = {
+    "demo": "@mdc/portfolio",
+    "clinic": "@mdc/clinic",
+}
+
+
+def frontend_app_dir(frontend_dir: Path, target: str) -> Path:
+    app_name = FRONTEND_APP_BY_TARGET.get(target)
+    if not app_name:
+        raise ValueError(f"Unknown frontend deploy target: {target}")
+    return frontend_dir / "apps" / app_name
+
+
+def npm_build(frontend_dir: Path, config: FrontendDeployConfig) -> Path:
+    """Build the workspace app for the deploy target; return its dist directory."""
+    workspace = FRONTEND_WORKSPACE_BY_TARGET.get(config.target)
+    if not workspace:
+        raise ValueError(f"Unknown frontend deploy target: {config.target}")
+
+    dist_dir = frontend_app_dir(frontend_dir, config.target) / "dist"
     build_env = os.environ.copy()
     build_env["VITE_API_URL"] = config.api_url
     build_env["VITE_API_KEY"] = config.api_key
     build_env["VITE_IS_DEMO"] = "true" if config.vite_is_demo else "false"
-    typer.echo(f"Building frontend (target={config.target}, API={config.api_url})...")
-    code = _run(["npm", "run", "build"], cwd=frontend_dir, env=build_env)
+    typer.echo(
+        f"Building {workspace} (target={config.target}, API={config.api_url})..."
+    )
+    code = _run(
+        ["npm", "run", "build", "-w", workspace],
+        cwd=frontend_dir,
+        env=build_env,
+    )
     if code != 0:
         typer.echo("Frontend build failed.", err=True)
         raise typer.Exit(code=code)
 
+    # Guard against uploading the wrong product bundle.
+    expected_marker = "Benjamin Rains" if config.target == "demo" else "MDC & GLIC Analytics"
+    index_html = dist_dir / "index.html"
+    if index_html.is_file():
+        html = index_html.read_text(encoding="utf-8", errors="replace")
+        if expected_marker not in html:
+            typer.echo(
+                f"Deploy preflight failed: {dist_dir}/index.html missing "
+                f"expected marker for target={config.target!r} ({expected_marker!r}).",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+    return dist_dir
+
+
 
 # React Router paths that must resolve when entered directly in the browser (S3 has no
 # server-side rewrite; CloudFront custom errors are preferred — see configure_clinic_cloudfront_spa.ps1).
-CLINIC_SPA_ROUTE_KEYS: tuple[str, ...] = (
-    "login",
-    "home/practice-manager",
-    "home/owner",
-    "home/front-desk",
-    "home/insurance",
-    "agent-profile",
+# Keep target-specific lists so demo does not get clinic deep-link keys and vice versa.
+ANALYTICS_SPA_ROUTE_KEYS: tuple[str, ...] = (
     "dashboard",
     "revenue",
     "providers",
@@ -95,21 +135,49 @@ CLINIC_SPA_ROUTE_KEYS: tuple[str, ...] = (
     "hygiene-retention",
     "referral-sources",
     "kpi-definitions",
+)
+
+PORTFOLIO_SPA_ROUTE_KEYS: tuple[str, ...] = (
+    "agent-profile",
+    *ANALYTICS_SPA_ROUTE_KEYS,
     "environment-manager",
     "schema-discovery",
 )
 
+CLINIC_SPA_ROUTE_KEYS: tuple[str, ...] = (
+    "login",
+    "home/practice-manager",
+    "home/owner",
+    "home/front-desk",
+    "home/insurance",
+    *ANALYTICS_SPA_ROUTE_KEYS,
+)
 
-def upload_spa_route_fallbacks(dist_dir: Path, bucket_name: str) -> None:
+
+def spa_route_keys_for_target(target: str) -> tuple[str, ...]:
+    if target == "clinic":
+        return CLINIC_SPA_ROUTE_KEYS
+    if target == "demo":
+        return PORTFOLIO_SPA_ROUTE_KEYS
+    raise ValueError(f"Unknown frontend deploy target: {target}")
+
+
+def upload_spa_route_fallbacks(
+    dist_dir: Path,
+    bucket_name: str,
+    route_keys: tuple[str, ...],
+) -> None:
     """Copy index.html to each client route key so /login etc. work without CloudFront error pages."""
     index_html = dist_dir / "index.html"
     if not index_html.is_file():
         typer.echo("index.html missing; skipping SPA route fallbacks.", err=True)
         return
 
-    typer.echo("Uploading SPA route fallbacks (index.html copies for deep links)...")
+    typer.echo(
+        f"Uploading SPA route fallbacks ({len(route_keys)} routes; index.html copies for deep links)..."
+    )
     cache = "no-cache, no-store, must-revalidate"
-    for route in CLINIC_SPA_ROUTE_KEYS:
+    for route in route_keys:
         for key in (route, f"{route}/index.html"):
             dest = f"s3://{bucket_name}/{key}"
             code = _run(
@@ -238,23 +306,29 @@ def deploy_frontend_target(target: str) -> int:
     validate_cloudfront_distribution(config.distribution_id)
 
     npm_install_if_needed(FRONTEND_DIR)
-    npm_build(FRONTEND_DIR, config)
-    upload_dist_to_s3(FRONTEND_DIR / "dist", config.bucket_name)
-    if target == "clinic":
-        upload_spa_route_fallbacks(FRONTEND_DIR / "dist", config.bucket_name)
+    dist_dir = npm_build(FRONTEND_DIR, config)
+    upload_dist_to_s3(dist_dir, config.bucket_name)
+    upload_spa_route_fallbacks(
+        dist_dir,
+        config.bucket_name,
+        spa_route_keys_for_target(target),
+    )
     invalidate_cloudfront(config.distribution_id, ["/*"])
 
     typer.echo(f"Frontend deployment completed (target={target}).")
     if config.domain:
         typer.echo(f"Available at: {config.domain}")
+    typer.echo(
+        f"SPA deep links: uploaded route fallbacks for target={target} "
+        f"({len(spa_route_keys_for_target(target))} routes)."
+    )
     if target == "clinic":
         typer.echo(
             "Reminder: clinic frontend is IP-restricted (WAF). "
             "Verify clinic-office-ips and clinic-dev-ips.",
         )
         typer.echo(
-            "SPA deep links: route fallbacks uploaded to S3. "
-            "For cleaner setup, also run scripts/deployment/configure_clinic_cloudfront_spa.ps1 "
+            "For cleaner spa setup, also run scripts/deployment/configure_clinic_cloudfront_spa.ps1 "
             "(CloudFront 403/404 -> index.html).",
         )
     return 0

@@ -1,140 +1,94 @@
 # Dental Analytics Frontend
 
-A modern React dashboard for dental practice analytics, built with TypeScript, Material-UI, and Recharts.
+npm workspaces monorepo with **two deployable apps** and shared packages.
 
-## 🚀 Getting Started
+| App / package | Role |
+|---------------|------|
+| `@mdc/portfolio` (`apps/portfolio`) | Public portfolio + synthetic demo (`dbtdentalclinic.com`) |
+| `@mdc/clinic` (`apps/clinic`) | Staff portal + PHI analytics (`clinic.dbtdentalclinic.com`) |
+| `@mdc/analytics-ui` | Shared dashboard pages + charts |
+| `@mdc/analytics-api` | Shared API client + types (`authApi` via `@mdc/analytics-api/clinic` only) |
+| `@mdc/ui-common` | Format helpers, tooltips, Mermaid |
+
+See [docs/frontend/FRONTEND_SPLIT_PLAN.md](../docs/frontend/FRONTEND_SPLIT_PLAN.md).
+
+## Getting started
 
 ### Prerequisites
-- Node.js 18+ 
-- npm or yarn
+- Node.js 18+
+- npm
 
-### Installation
+### Install (repo root of this folder)
 
-1. Install dependencies:
 ```bash
 npm install
 ```
 
-2. Create environment file:
+### Local development
+
+Prefer the CLI (writes `.env.local` under the chosen app):
+
 ```bash
-cp .env.example .env
+mdc frontend dev                 # portfolio (default)
+mdc frontend dev --app clinic    # clinic portal
 ```
 
-3. Update `.env` with your API URL:
-```
-VITE_API_URL=http://localhost:8000
-VITE_API_KEY=your_api_key_here
-```
+Or from this directory:
 
-### Environment Variables
-
-- `VITE_API_URL` - Backend API URL (default: `http://localhost:8000`)
-- `VITE_API_KEY` - API authentication key
-- `VITE_IS_DEMO` - Set to `"true"` to enable demo mode (shows synthetic data banner). 
-  - **Portfolio site build**: Set `VITE_IS_DEMO=true` in `.env.production` or build environment
-  - **Local production**: Leave unset or set to `"false"` (banner will not show)
-
-4. Start development server:
 ```bash
-npm run dev
+npm run dev:portfolio
+npm run dev:clinic
 ```
 
-The application will be available at `http://localhost:3000`
+App URLs: `http://localhost:3000` (Vite proxies `/api` → `http://localhost:8000`).
 
-## 🏗️ Project Structure
+### Environment variables
+
+Written per-app to `apps/<name>/.env.local` by `mdc frontend dev`:
+
+| Variable | Purpose |
+|----------|---------|
+| `VITE_API_URL` | Backend API (local: `http://localhost:8000`) |
+| `VITE_API_KEY` | API key |
+| `VITE_IS_DEMO` | Build metadata (`true` portfolio / `false` clinic). Routing no longer depends on hostname helpers. |
+
+## Project structure
 
 ```
-src/
-├── components/          # Reusable UI components
-│   ├── charts/         # Custom chart components
-│   ├── layout/         # Layout components
-│   └── common/         # Shared components
-├── pages/              # Route components
-├── services/           # API service layer
-├── store/              # Zustand state management
-├── types/              # TypeScript type definitions
-└── utils/              # Utility functions
+frontend/
+├── apps/
+│   ├── portfolio/          # Public product
+│   └── clinic/             # Staff portal
+├── packages/
+│   ├── analytics-api/
+│   ├── analytics-ui/
+│   └── ui-common/
+├── package.json            # workspaces root
+└── vite.shared.ts          # shared Vite alias / chunk config
 ```
 
-## 🛠️ Tech Stack
+## Scripts
 
-- **React 18** - UI framework
-- **TypeScript** - Type safety
-- **Material-UI** - Component library
-- **Recharts** - Data visualization
-- **Zustand** - State management
-- **Axios** - HTTP client
-- **React Router** - Navigation
-- **Vite** - Build tool
+| Script | Description |
+|--------|-------------|
+| `npm run dev` / `dev:portfolio` | Portfolio Vite dev |
+| `npm run dev:clinic` | Clinic Vite dev |
+| `npm run build:portfolio` | Production build → `apps/portfolio/dist` |
+| `npm run build:clinic` | Production build → `apps/clinic/dist` |
+| `npm run build` | Build both apps |
+| `npm run type-check` | Typecheck both apps |
 
-## 📊 Features
+## Deploy
 
-- **Executive Dashboard** - KPI overview and key metrics
-- **Revenue Analytics** - Financial performance tracking
-- **Provider Performance** - Individual provider metrics
-- **Patient Analytics** - Retention and acquisition insights
-- **Appointment Analytics** - Scheduling and utilization metrics
+AWS targets unchanged; CLI chooses workspace:
 
-## 🔧 Development
-
-### Available Scripts
-
-- `npm run dev` - Start development server
-- `npm run build` - Build for production
-- `npm run preview` - Preview production build
-
-### API Integration
-
-The frontend communicates with the FastAPI backend through the service layer in `src/services/api.ts`. All API calls are type-safe and include error handling.
-
-### State Management
-
-Uses Zustand for lightweight state management. Stores are organized by domain (revenue, providers, etc.).
-
-## 🎨 Styling
-
-- Material-UI theme system
-- Responsive design with mobile-first approach
-- Custom color palette for dental practice branding
-- Consistent spacing and typography
-
-## 📱 Responsive Design
-
-- Mobile-first approach
-- Collapsible sidebar navigation
-- Responsive charts and tables
-- Touch-friendly interactions
-
-## 🚀 Deployment
-
-The application can be deployed to any static hosting service:
-
-- Vercel
-- Netlify
-- AWS S3 + CloudFront
-- GitHub Pages
-
-### Building for Production
-
-**For Portfolio/Demo Site (dbtdentalclinic.com):**
 ```bash
-# Set demo mode environment variable
-export VITE_IS_DEMO=true  # Linux/Mac
-# or
-$env:VITE_IS_DEMO="true"  # Windows PowerShell
-
-# Build
-npm run build
+mdc deploy frontend --target demo     # builds @mdc/portfolio
+mdc deploy frontend --target clinic   # builds @mdc/clinic
 ```
 
-**For Local Production (real data):**
-```bash
-# Don't set VITE_IS_DEMO (or set to false)
-npm run build
-```
+SPA deep-link fallbacks are uploaded per target (`PORTFOLIO_SPA_ROUTE_KEYS` / `CLINIC_SPA_ROUTE_KEYS`).
 
-The `dist` folder contains the production build.
+## Tech stack
 
-**Note:** The synthetic data disclaimer banner will automatically show on:
-- Portfolio site (dbtdentalclinic.com) - via hostname detection
-- Any build with `VITE_IS_DEMO=true` - via environment variable
+- React 18, TypeScript, Material-UI 6, Recharts, Axios, React Router 6, Vite 6

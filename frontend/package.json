@@ -3,11 +3,18 @@
   "private": true,
   "version": "0.0.0",
   "type": "module",
+  "workspaces": [
+    "packages/*",
+    "apps/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "type-check": "tsc --noEmit",
+    "dev": "npm run dev -w @mdc/portfolio",
+    "dev:portfolio": "npm run dev -w @mdc/portfolio",
+    "dev:clinic": "npm run dev -w @mdc/clinic",
+    "build": "npm run build:portfolio && npm run build:clinic",
+    "build:portfolio": "npm run build -w @mdc/portfolio",
+    "build:clinic": "npm run build -w @mdc/clinic",
+    "type-check": "npm run type-check -w @mdc/portfolio && npm run type-check -w @mdc/clinic",
     "setup": "powershell -ExecutionPolicy Bypass -File scripts/dev-setup.ps1"
   },
   "devDependencies": {
@@ -23,11 +30,11 @@
     "@mui/icons-material": "^6.4.7",
     "@mui/material": "^6.4.7",
     "axios": "^1.8.3",
+    "mermaid": "^10.9.1",
     "react": "18.3.1",
     "react-dom": "18.3.1",
     "react-router-dom": "^6.28.0",
     "recharts": "^2.15.1",
-    "zustand": "^5.0.3",
-    "mermaid": "^10.9.1"
+    "zustand": "^5.0.3"
   }
 }
