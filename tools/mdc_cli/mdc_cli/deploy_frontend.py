@@ -4,7 +4,6 @@ from __future__ import annotations
 
 import json
 import os
-import shutil
 from pathlib import Path
 
 import typer
@@ -82,11 +81,109 @@ def frontend_app_dir(frontend_dir: Path, target: str) -> Path:
     return frontend_dir / "apps" / app_name
 
 
+def validate_workspace_app(frontend_dir: Path, target: str) -> Path:
+    """Ensure apps/<name>/package.json exists and matches the expected workspace name."""
+    app_dir = frontend_app_dir(frontend_dir, target)
+    package_json = app_dir / "package.json"
+    if not package_json.is_file():
+        typer.echo(f"Workspace package missing: {package_json}", err=True)
+        raise typer.Exit(code=1)
+
+    expected_name = FRONTEND_WORKSPACE_BY_TARGET[target]
+    try:
+        payload = json.loads(package_json.read_text(encoding="utf-8"))
+    except json.JSONDecodeError as exc:
+        typer.echo(f"Invalid package.json at {package_json}: {exc}", err=True)
+        raise typer.Exit(code=1) from exc
+
+    actual_name = payload.get("name")
+    if actual_name != expected_name:
+        typer.echo(
+            f"Workspace name mismatch for target={target!r}: "
+            f"expected {expected_name!r}, found {actual_name!r} in {package_json}",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    return app_dir
+
+
+def validate_api_url_for_target(config: FrontendDeployConfig) -> None:
+    """Reject obviously cross-wired API hosts before build/upload."""
+    api = (config.api_url or "").lower()
+    if config.target == "demo":
+        if "api-clinic" in api:
+            typer.echo(
+                f"Deploy preflight failed: demo target must not use clinic API URL "
+                f"({config.api_url!r}).",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+        if "api.dbtdentalclinic.com" not in api and "localhost" not in api:
+            typer.echo(
+                f"Deploy preflight warning: unexpected demo API URL ({config.api_url!r}).",
+                err=True,
+            )
+    elif config.target == "clinic":
+        if "api-clinic" not in api and "localhost" not in api:
+            typer.echo(
+                f"Deploy preflight failed: clinic target expected api-clinic host, "
+                f"got {config.api_url!r}.",
+                err=True,
+            )
+            raise typer.Exit(code=1)
+
+
+def npm_typecheck(frontend_dir: Path, workspace: str) -> None:
+    typer.echo(f"Type-checking {workspace}...")
+    code = _run(["npm", "run", "type-check", "-w", workspace], cwd=frontend_dir)
+    if code != 0:
+        typer.echo("Frontend type-check failed.", err=True)
+        raise typer.Exit(code=code)
+
+
+def write_last_deploy_record(
+    frontend_dir: Path,
+    config: FrontendDeployConfig,
+    workspace: str,
+) -> None:
+    """Local (gitignored) hint for `mdc frontend status`."""
+    from datetime import datetime, timezone
+
+    record = {
+        "target": config.target,
+        "workspace": workspace,
+        "bucket": config.bucket_name,
+        "distribution_id": config.distribution_id,
+        "domain": config.domain,
+        "api_url": config.api_url,
+        "vite_is_demo": config.vite_is_demo,
+        "deployed_at": datetime.now(timezone.utc).isoformat(),
+    }
+    path = frontend_dir / f".last-deploy-{config.target}.json"
+    path.write_text(json.dumps(record, indent=2) + "\n", encoding="utf-8")
+    typer.echo(f"Wrote local deploy record: {path.relative_to(REPO_ROOT)}")
+
+
+def read_last_deploy_record(frontend_dir: Path, target: str) -> dict[str, object] | None:
+    path = frontend_dir / f".last-deploy-{target}.json"
+    if not path.is_file():
+        return None
+    try:
+        payload = json.loads(path.read_text(encoding="utf-8"))
+    except (json.JSONDecodeError, OSError):
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
 def npm_build(frontend_dir: Path, config: FrontendDeployConfig) -> Path:
     """Build the workspace app for the deploy target; return its dist directory."""
     workspace = FRONTEND_WORKSPACE_BY_TARGET.get(config.target)
     if not workspace:
         raise ValueError(f"Unknown frontend deploy target: {config.target}")
+
+    validate_workspace_app(frontend_dir, config.target)
+    validate_api_url_for_target(config)
+    npm_typecheck(frontend_dir, workspace)
 
     dist_dir = frontend_app_dir(frontend_dir, config.target) / "dist"
     build_env = os.environ.copy()
@@ -107,16 +204,40 @@ def npm_build(frontend_dir: Path, config: FrontendDeployConfig) -> Path:
 
     # Guard against uploading the wrong product bundle.
     expected_marker = "Benjamin Rains" if config.target == "demo" else "MDC & GLIC Analytics"
+    forbidden_marker = "MDC & GLIC Analytics" if config.target == "demo" else "Benjamin Rains"
     index_html = dist_dir / "index.html"
-    if index_html.is_file():
-        html = index_html.read_text(encoding="utf-8", errors="replace")
-        if expected_marker not in html:
-            typer.echo(
-                f"Deploy preflight failed: {dist_dir}/index.html missing "
-                f"expected marker for target={config.target!r} ({expected_marker!r}).",
-                err=True,
-            )
-            raise typer.Exit(code=1)
+    if not index_html.is_file():
+        typer.echo(f"Deploy preflight failed: missing {index_html}", err=True)
+        raise typer.Exit(code=1)
+
+    html = index_html.read_text(encoding="utf-8", errors="replace")
+    if expected_marker not in html:
+        typer.echo(
+            f"Deploy preflight failed: {dist_dir}/index.html missing "
+            f"expected marker for target={config.target!r} ({expected_marker!r}).",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    if forbidden_marker in html:
+        typer.echo(
+            f"Deploy preflight failed: {dist_dir}/index.html contains "
+            f"wrong-product marker ({forbidden_marker!r}) for target={config.target!r}.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+
+    expected_demo_flag = "true" if config.vite_is_demo else "false"
+    if config.vite_is_demo != (config.target == "demo"):
+        typer.echo(
+            f"Deploy preflight failed: vite_is_demo={config.vite_is_demo} "
+            f"incompatible with target={config.target!r}.",
+            err=True,
+        )
+        raise typer.Exit(code=1)
+    typer.echo(
+        f"Preflight OK: workspace={workspace}, api={config.api_url}, "
+        f"VITE_IS_DEMO={expected_demo_flag}"
+    )
     return dist_dir
 
 
@@ -314,6 +435,11 @@ def deploy_frontend_target(target: str) -> int:
         spa_route_keys_for_target(target),
     )
     invalidate_cloudfront(config.distribution_id, ["/*"])
+    write_last_deploy_record(
+        FRONTEND_DIR,
+        config,
+        FRONTEND_WORKSPACE_BY_TARGET[target],
+    )
 
     typer.echo(f"Frontend deployment completed (target={target}).")
     if config.domain:

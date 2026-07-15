@@ -43,11 +43,13 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 - `mdc publish analytics --env clinic` — local marts → clinic RDS (`--ensure-tunnel` for unattended/Airflow; live Secrets Manager password; see [docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md](../../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md))
 - `mdc secrets pull clinic` — read RDS master secret (`rds!db-...`), sync password into `api/.env_api_clinic` (see [CLINIC_ANALYTICS_WORKFLOW.md](../../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md))
 
-### Frontend (Phase 5.3)
+### Frontend (workspace apps)
 
-- `mdc frontend dev` — local Vite dev server (writes `frontend/.env.local`)
-- `mdc frontend status` — demo/clinic S3/CloudFront/API key resolution
-- `mdc deploy frontend --target demo|clinic` — build + S3 sync + CloudFront invalidation
+Two deployable apps under `frontend/` (`@mdc/portfolio`, `@mdc/clinic`). See [frontend/README.md](../../frontend/README.md) and [docs/frontend/FRONTEND_SPLIT_PLAN.md](../../docs/frontend/FRONTEND_SPLIT_PLAN.md).
+
+- `mdc frontend dev [--app portfolio|clinic]` — Vite for one app (writes `frontend/apps/<app>/.env.local`)
+- `mdc frontend status` — workspace paths, S3/CloudFront/API key resolution, last local deploy hint
+- `mdc deploy frontend --target demo|clinic` — typecheck + build matching workspace, SPA fallbacks, CloudFront invalidation
 - `mdc deploy dbt-docs [--env local] [--skip-generate]` — upload `dbt_dental_models/target` to `s3://…/dbt-docs/`
 
 ### Consult audio (Phase 5.4)

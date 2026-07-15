@@ -1,4 +1,4 @@
-"""Frontend dev and status commands (Phase 5.3)."""
+"""Frontend dev and status commands (Phase 5.3 / split Phase 4)."""
 
 from __future__ import annotations
 
@@ -12,7 +12,11 @@ from mdc_cli.credentials import (
     demo_frontend_status,
     read_local_api_key_from_pem,
 )
-from mdc_cli.deploy_frontend import FRONTEND_WORKSPACE_BY_TARGET
+from mdc_cli.deploy_frontend import (
+    FRONTEND_APP_BY_TARGET,
+    FRONTEND_WORKSPACE_BY_TARGET,
+    read_last_deploy_record,
+)
 from mdc_cli.paths import FRONTEND_DIR, REPO_ROOT
 from mdc_cli.process_util import find_executable, run_subprocess
 
@@ -93,6 +97,10 @@ def frontend_dev(
 
     typer.echo(f"Starting Vite ({workspace}) at http://localhost:3000")
     typer.echo("API URL: http://localhost:8000")
+    if is_demo:
+        typer.echo("Product: portfolio (no clinic auth env required)")
+    else:
+        typer.echo("Product: clinic portal (login required against local API)")
     code = _run_forever(
         ["npm", "run", "dev", "-w", workspace],
         cwd=str(FRONTEND_DIR),
@@ -103,16 +111,37 @@ def frontend_dev(
 
 @frontend_app.command("status")
 def frontend_status() -> None:
-    """Show demo/clinic frontend deploy configuration."""
+    """Show demo/clinic frontend apps, buckets, and last local deploy hint."""
     typer.echo("Frontend deployment status")
     typer.echo(
         "Nomenclature: local = localhost dev | demo = portfolio | clinic = production"
     )
     typer.echo("Apps: @mdc/portfolio (demo) · @mdc/clinic (clinic)")
+    typer.echo("Dev:  mdc frontend dev --app portfolio|clinic")
+    typer.echo("Deploy: mdc deploy frontend --target demo|clinic")
 
-    for status in (demo_frontend_status(), clinic_frontend_status()):
+    typer.echo("")
+    typer.echo("Local workspace apps")
+    for app_name, workspace in (
+        ("portfolio", "@mdc/portfolio"),
+        ("clinic", "@mdc/clinic"),
+    ):
+        app_dir = FRONTEND_DIR / "apps" / app_name
+        present = (app_dir / "package.json").is_file()
+        typer.echo(
+            f"  {workspace}: {'ok' if present else 'MISSING'} "
+            f"({app_dir.relative_to(REPO_ROOT) if present else app_dir})"
+        )
+
+    status_by_target = {
+        "demo": demo_frontend_status(),
+        "clinic": clinic_frontend_status(),
+    }
+    for target, status in status_by_target.items():
+        workspace = FRONTEND_WORKSPACE_BY_TARGET[target]
+        app_name = FRONTEND_APP_BY_TARGET[target]
         typer.echo("")
-        typer.echo(status.label)
+        typer.echo(f"{status.label}  [{workspace} / apps/{app_name}]")
         typer.echo(
             f"  S3 bucket: {status.bucket_name or 'not configured'}"
         )
@@ -126,6 +155,15 @@ def frontend_status() -> None:
             typer.echo(f"  API key: from {status.api_key_source}")
         else:
             typer.echo("  API key: not configured")
+
+        last = read_last_deploy_record(FRONTEND_DIR, target)
+        if last:
+            typer.echo(
+                f"  Last local deploy: {last.get('deployed_at', 'unknown')} "
+                f"(workspace={last.get('workspace')}, api={last.get('api_url')})"
+            )
+        else:
+            typer.echo("  Last local deploy: none recorded")
 
     typer.echo("")
     prereqs = []

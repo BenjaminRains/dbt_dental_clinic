@@ -89,6 +89,8 @@ mdc deploy frontend --target clinic   # builds @mdc/clinic
 
 SPA deep-link fallbacks are uploaded per target (`PORTFOLIO_SPA_ROUTE_KEYS` / `CLINIC_SPA_ROUTE_KEYS`).
 
+CI (`.github/workflows/frontend.yml`) type-checks and builds both workspace apps on PRs that touch `frontend/`.
+
 ## Tech stack
 
 - React 18, TypeScript, Material-UI 6, Recharts, Axios, React Router 6, Vite 6

@@ -1,19 +1,32 @@
 """Tests for frontend commands (Phase 5.3)."""
 
+import re
 from unittest.mock import patch
 
 from typer.testing import CliRunner
 
 from mdc_cli.main import app
 
-runner = CliRunner()
+# Disable Rich coloring so help text is plain ASCII in CI and locally.
+runner = CliRunner(env={"NO_COLOR": "1", "TERM": "dumb"})
+
+_ANSI_RE = re.compile(r"\x1b\[[0-9;]*m")
+
+
+def _plain(text: str) -> str:
+    """Strip Rich/ANSI styling so option names like --app match literally."""
+    return _ANSI_RE.sub("", text)
 
 
 def test_frontend_dev_help():
-    result = runner.invoke(app, ["frontend", "dev", "--help"])
+    result = runner.invoke(app, ["frontend", "dev", "--help"], color=False)
     assert result.exit_code == 0
-    assert "Vite" in result.output
-    assert "--app" in result.output
+    output = _plain(result.output)
+    assert "Vite" in output
+    # Rich may still split "--app" with ANSI; after strip it must be contiguous.
+    assert "--app" in output
+    assert "portfolio" in output
+    assert "clinic" in output
 
 
 def _make_frontend_tree(tmp_path):
@@ -108,3 +121,55 @@ def test_deploy_frontend_default_demo(mock_deploy):
 def test_deploy_frontend_invalid_target():
     result = runner.invoke(app, ["deploy", "frontend", "--target", "local"])
     assert result.exit_code == 2
+
+
+@patch("mdc_cli.commands.frontend.find_executable", return_value="/usr/bin/npm")
+def test_frontend_status_shows_workspaces(mock_find, tmp_path, monkeypatch):
+    repo = tmp_path / "repo"
+    frontend = repo / "frontend"
+    portfolio = frontend / "apps" / "portfolio"
+    clinic = frontend / "apps" / "clinic"
+    portfolio.mkdir(parents=True)
+    clinic.mkdir(parents=True)
+    (portfolio / "package.json").write_text('{"name":"@mdc/portfolio"}', encoding="utf-8")
+    (clinic / "package.json").write_text('{"name":"@mdc/clinic"}', encoding="utf-8")
+
+    monkeypatch.setattr("mdc_cli.commands.frontend.FRONTEND_DIR", frontend)
+    monkeypatch.setattr("mdc_cli.commands.frontend.REPO_ROOT", repo)
+    monkeypatch.setattr(
+        "mdc_cli.commands.frontend.demo_frontend_status",
+        lambda: type(
+            "S",
+            (),
+            {
+                "label": "demo",
+                "bucket_name": "demo-b",
+                "distribution_id": "ED",
+                "domain": "https://dbtdentalclinic.com",
+                "api_url": "https://api.dbtdentalclinic.com",
+                "api_key_source": None,
+            },
+        )(),
+    )
+    monkeypatch.setattr(
+        "mdc_cli.commands.frontend.clinic_frontend_status",
+        lambda: type(
+            "S",
+            (),
+            {
+                "label": "clinic",
+                "bucket_name": "clinic-b",
+                "distribution_id": "EC",
+                "domain": "https://clinic.dbtdentalclinic.com",
+                "api_url": "https://api-clinic.dbtdentalclinic.com",
+                "api_key_source": None,
+            },
+        )(),
+    )
+
+    result = runner.invoke(app, ["frontend", "status"])
+    assert result.exit_code == 0
+    assert "@mdc/portfolio" in result.output
+    assert "@mdc/clinic" in result.output
+    assert "Local workspace apps" in result.output
+    assert "Last local deploy" in result.output
