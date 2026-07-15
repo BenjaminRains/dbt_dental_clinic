@@ -15,12 +15,17 @@ Connection Architecture Compliance:
 - ✅ Test data for enum-based database type testing
 """
 
-from typing import List, Dict, Any
-from datetime import datetime, date
+from typing import List, Dict, Any, Tuple
+from datetime import datetime, date, timedelta
 
 # Import connection architecture components
 from etl_pipeline.config import DatabaseType, PostgresSchema, Settings
 from etl_pipeline.config.providers import DictConfigProvider
+
+# OpenDental procedurelog.ProcStatus values used by lookback / production KPIs
+PROC_STATUS_TP = 1
+PROC_STATUS_COMPLETE = 2
+OD_SENTINEL_DATE = date(1, 1, 1)
 
 # Standard test patients that match the real OpenDental schema
 STANDARD_TEST_PATIENTS = [
@@ -318,39 +323,42 @@ STANDARD_TEST_PROCEDURES = [
         'ProcNum': 1,
         'PatNum': 1,
         'AptNum': 1,
-        'ProcStatus': False,
+        'ProcStatus': 0,
         'ProcFee': 150.00,
         'ProcFeeCur': 150.00,
         'ProcDate': date(2023, 1, 15),
         'CodeNum': 1,
         'ProcNote': 'Regular cleaning',
         'DateTStamp': datetime(2023, 1, 15, 9, 0, 0),
+        'DateComplete': OD_SENTINEL_DATE,
         'SecDateEntry': date(2023, 1, 15)
     },
     {
         'ProcNum': 2,
         'PatNum': 2,
         'AptNum': 2,
-        'ProcStatus': False,
+        'ProcStatus': 0,
         'ProcFee': 200.00,
         'ProcFeeCur': 200.00,
         'ProcDate': date(2023, 1, 16),
         'CodeNum': 2,
         'ProcNote': 'Deep cleaning',
         'DateTStamp': datetime(2023, 1, 16, 10, 30, 0),
+        'DateComplete': OD_SENTINEL_DATE,
         'SecDateEntry': date(2023, 1, 16)
     },
     {
         'ProcNum': 3,
         'PatNum': 3,
         'AptNum': 3,
-        'ProcStatus': False,
+        'ProcStatus': 0,
         'ProcFee': 300.00,
         'ProcFeeCur': 300.00,
         'ProcDate': date(2023, 1, 17),
         'CodeNum': 3,
         'ProcNote': 'Cavity filling',
         'DateTStamp': datetime(2023, 1, 17, 14, 0, 0),
+        'DateComplete': OD_SENTINEL_DATE,
         'SecDateEntry': date(2023, 1, 17)
     }
 ]
@@ -446,6 +454,49 @@ def get_test_procedure_data() -> List[Dict[str, Any]]:
         List of procedure data dictionaries
     """
     return STANDARD_TEST_PROCEDURES.copy()
+
+
+def get_tp_complete_lookback_scenario(
+    *,
+    proc_num: int = 1,
+    days_ago: int = 5,
+) -> Tuple[Dict[str, Any], Dict[str, Any]]:
+    """
+    ETL-FND-001 fixture pair for lookback e2e.
+
+    Returns (tp_row, complete_row) where complete_row keeps the same DateTStamp
+    (simulating in-place TP → Complete that watermark incremental alone misses).
+    ProcDate / DateComplete fall inside the default 30-day lookback window.
+    """
+    proc_date = date.today() - timedelta(days=days_ago)
+    stamp = datetime.combine(proc_date, datetime.min.time()).replace(hour=9, minute=0, second=0)
+    tp_row = {
+        "ProcNum": proc_num,
+        "PatNum": 1,
+        "AptNum": 1,
+        "ProcStatus": PROC_STATUS_TP,
+        "ProcFee": 150.00,
+        "ProcFeeCur": 150.00,
+        "ProcDate": proc_date,
+        "CodeNum": 1,
+        "ProcNote": "TP lookback scenario",
+        "DateTStamp": stamp,
+        "DateComplete": OD_SENTINEL_DATE,
+        "SecDateEntry": proc_date,
+    }
+    complete_row = dict(tp_row)
+    complete_row.update(
+        {
+            "ProcStatus": PROC_STATUS_COMPLETE,
+            "ProcFee": 160.00,
+            "ProcFeeCur": 160.00,
+            "ProcNote": "Completed via lookback scenario",
+            "DateComplete": proc_date,
+            # Intentionally unchanged — watermarks alone would skip this row
+            "DateTStamp": stamp,
+        }
+    )
+    return tp_row, complete_row
 
 
 def get_test_data_for_table(table_name: str, include_all_fields: bool = True) -> List[Dict[str, Any]]:

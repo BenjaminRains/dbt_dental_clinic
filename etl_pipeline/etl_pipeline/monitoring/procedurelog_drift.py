@@ -114,12 +114,13 @@ def fetch_postgres_raw_complete_totals(
     *,
     table: str = PROCEDURELOG_TABLE,
     lookback_days: int = PROCEDURELOG_LOOKBACK_DAYS,
+    schema: str = "raw",
 ) -> CompleteProductionTotals:
     query = text(
         f"""
         SELECT COUNT(*) AS complete_rows,
                COALESCE(ROUND(SUM("ProcFee")::numeric, 2), 0) AS complete_fees
-        FROM raw.{table}
+        FROM {schema}.{table}
         WHERE "ProcStatus" = 2
           AND "DateComplete"::date >= CURRENT_DATE - make_interval(days => :lookback_days)
         """
@@ -139,8 +140,9 @@ def check_procedurelog_drift(
     source_database: str,
     lookback_days: int = PROCEDURELOG_LOOKBACK_DAYS,
     fee_tolerance: Decimal = DEFAULT_FEE_TOLERANCE,
+    analytics_schema: str = "raw",
 ) -> ProcedurelogDriftResult:
-    """Compare MySQL source vs raw.procedurelog complete-production totals."""
+    """Compare MySQL source (or replication) vs analytics procedurelog complete-production totals."""
     source = fetch_mysql_complete_totals(
         source_engine,
         database=source_database,
@@ -149,6 +151,7 @@ def check_procedurelog_drift(
     raw = fetch_postgres_raw_complete_totals(
         analytics_engine,
         lookback_days=lookback_days,
+        schema=analytics_schema,
     )
 
     row_delta = source.complete_rows - raw.complete_rows

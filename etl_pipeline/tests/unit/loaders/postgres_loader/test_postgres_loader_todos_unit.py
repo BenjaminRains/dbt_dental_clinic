@@ -65,6 +65,21 @@ def _load_prep(**overrides):
     return LoadPreparation(**base)
 
 
+PROCEDURELOG_LOOKBACK_CONFIG = {
+    "sync_profile": "in_place_updates",
+    "primary_incremental_column": "DateTStamp",
+    "replicator_watermark_column": "DateTStamp",
+    "incremental_columns": ["ProcNum", "DateTStamp"],
+    "incremental_strategy": "or_logic",
+    "primary_key": "ProcNum",
+    "lookback_resync": {
+        "enabled": True,
+        "window_days": 30,
+        "predicate_columns": ["DateComplete", "ProcDate"],
+    },
+}
+
+
 @pytest.mark.unit
 class TestPostgresLoaderStrategySelection:
     def test_parallel_disabled_uses_copy_csv_for_large_table(self, postgres_loader):
@@ -96,6 +111,7 @@ class TestPostgresLoaderStrategySelection:
         """ETL-FND-001: lookback loads must upsert, not COPY."""
         prep = _load_prep(
             table_name="procedurelog",
+            table_config=PROCEDURELOG_LOOKBACK_CONFIG,
             should_truncate=False,
             force_full=False,
             estimated_rows=815_286,
@@ -125,6 +141,98 @@ class TestParallelLoadStrategy:
         assert ranges[0][0] == 1
         assert ranges[-1][1] == 100
         assert len(ranges) == 4
+
+
+@pytest.mark.unit
+class TestLookbackAggregateStaleDetection:
+    """ETL-FND-001 P2: aggregate drift triggers lookback-only or full resync."""
+
+    def test_build_lookback_only_load_query(self, postgres_loader):
+        postgres_loader.settings.get_database_config = MagicMock(
+            return_value={"database": "opendental_replication", "schema": "raw"}
+        )
+        query = postgres_loader._build_lookback_only_load_query(
+            "procedurelog", PROCEDURELOG_LOOKBACK_CONFIG
+        )
+        assert query is not None
+        assert "opendental_replication" in query
+        assert "DateComplete" in query
+        assert "ProcDate" in query
+        assert "INTERVAL 30 DAY" in query
+
+    def test_zero_watermark_rows_with_drift_uses_lookback_only(self, postgres_loader):
+        prep_config = PROCEDURELOG_LOOKBACK_CONFIG
+        postgres_loader.get_table_config = MagicMock(return_value=prep_config)
+        postgres_loader._get_cached_schema = MagicMock(return_value={"ProcNum": {}})
+        postgres_loader.schema_adapter.ensure_table_exists = MagicMock(return_value=True)
+        postgres_loader._get_primary_incremental_column = MagicMock(return_value="DateTStamp")
+        postgres_loader._build_load_query = MagicMock(
+            return_value="SELECT * FROM procedurelog WHERE DateTStamp > 'x'"
+        )
+        postgres_loader._execute_count_query = MagicMock(side_effect=[0, 500])
+        postgres_loader._lookback_aggregate_drift_detected = MagicMock(return_value=True)
+        postgres_loader._check_analytics_needs_updating = MagicMock(
+            return_value=(False, None, None, False)
+        )
+        postgres_loader._build_lookback_only_load_query = MagicMock(
+            return_value="SELECT * FROM procedurelog WHERE lookback"
+        )
+        postgres_loader.settings.get_database_config = MagicMock(
+            return_value={"database": "opendental_replication", "schema": "raw"}
+        )
+
+        prep = postgres_loader._prepare_table_load("procedurelog", force_full=False)
+
+        assert prep is not None
+        assert prep.query == "SELECT * FROM procedurelog WHERE lookback"
+        assert prep.force_full is False
+        assert prep.should_truncate is False
+
+    def test_zero_watermark_rows_with_drift_empty_lookback_forces_full(
+        self, postgres_loader
+    ):
+        prep_config = PROCEDURELOG_LOOKBACK_CONFIG
+        postgres_loader.get_table_config = MagicMock(return_value=prep_config)
+        postgres_loader._get_cached_schema = MagicMock(return_value={"ProcNum": {}})
+        postgres_loader.schema_adapter.ensure_table_exists = MagicMock(return_value=True)
+        postgres_loader._get_primary_incremental_column = MagicMock(return_value="DateTStamp")
+        postgres_loader._build_load_query = MagicMock(
+            return_value="SELECT * FROM procedurelog WHERE DateTStamp > 'x'"
+        )
+        postgres_loader._execute_count_query = MagicMock(return_value=0)
+        postgres_loader._lookback_aggregate_drift_detected = MagicMock(return_value=True)
+        postgres_loader._check_analytics_needs_updating = MagicMock(
+            return_value=(False, None, None, False)
+        )
+        postgres_loader._build_lookback_only_load_query = MagicMock(
+            return_value="SELECT * FROM procedurelog WHERE lookback"
+        )
+        postgres_loader._build_full_load_query = MagicMock(
+            return_value="SELECT * FROM procedurelog"
+        )
+
+        prep = postgres_loader._prepare_table_load("procedurelog", force_full=False)
+
+        assert prep is not None
+        assert prep.query == "SELECT * FROM procedurelog"
+        assert prep.force_full is True
+
+    def test_nonzero_rows_with_drift_keeps_incremental_query(self, postgres_loader):
+        prep_config = PROCEDURELOG_LOOKBACK_CONFIG
+        postgres_loader.get_table_config = MagicMock(return_value=prep_config)
+        postgres_loader._get_cached_schema = MagicMock(return_value={"ProcNum": {}})
+        postgres_loader.schema_adapter.ensure_table_exists = MagicMock(return_value=True)
+        postgres_loader._get_primary_incremental_column = MagicMock(return_value="DateTStamp")
+        incremental_query = "SELECT * FROM procedurelog WHERE DateTStamp > 'x' OR lookback"
+        postgres_loader._build_load_query = MagicMock(return_value=incremental_query)
+        postgres_loader._execute_count_query = MagicMock(return_value=1200)
+        postgres_loader._lookback_aggregate_drift_detected = MagicMock(return_value=True)
+
+        prep = postgres_loader._prepare_table_load("procedurelog", force_full=False)
+
+        assert prep is not None
+        assert prep.query == incremental_query
+        assert prep.force_full is False
 
 
 @pytest.mark.unit

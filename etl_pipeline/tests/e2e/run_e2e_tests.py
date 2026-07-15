@@ -9,6 +9,7 @@ Usage:
     python run_e2e_tests.py --help
     python run_e2e_tests.py --basic
     python run_e2e_tests.py --incremental
+    python run_e2e_tests.py --lookback
     python run_e2e_tests.py --copy-strategies
     python run_e2e_tests.py --validation
     python run_e2e_tests.py --all
@@ -82,6 +83,12 @@ Examples:
         action="store_true",
         help="Run incremental method tests (PostgresLoader, SimpleMySQLReplicator, Bulk)"
     )
+
+    parser.add_argument(
+        "--lookback",
+        action="store_true",
+        help="Run procedurelog lookback_resync e2e (ETL-FND-001 TP→Complete)",
+    )
     
     parser.add_argument(
         "--copy-strategies",
@@ -124,6 +131,9 @@ Examples:
     
     if args.incremental or args.all:
         test_files.append("test_incremental_methods_e2e.py")
+
+    if args.lookback or args.all:
+        test_files.append("test_procedurelog_lookback_e2e.py")
     
     if args.copy_strategies or args.all:
         test_files.append("test_copy_strategies_e2e.py")
