@@ -19,6 +19,9 @@ dependencies = [
 [project.optional-dependencies]
 dev = [
     "pytest>=7.0.0",
+    # compose_etl_env_dict imports etl_pipeline.config.settings_v2, which loads
+    # config_reader (tables.yml) — PyYAML is required for those unit tests in CI.
+    "pyyaml>=6.0",
 ]
 
 [project.scripts]
