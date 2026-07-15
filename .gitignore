@@ -169,7 +169,6 @@ docs/etl/archive/
 !frontend/docs/
 !frontend/docs/**
 api/clinic-portal-users.json
-docs/deployment-connections/clinic-portal-users.json
 /docs/analytics/
 etl_pipeline/docs/
 etl_pipeline/CODE_REVIEW.md

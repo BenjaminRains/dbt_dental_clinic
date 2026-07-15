@@ -201,11 +201,17 @@ After WAF allows traffic, staff **sign in** at `https://clinic.dbtdentalclinic.c
 
 ### Stock accounts (temporary passwords)
 
-Canonical user file (gitignored, **deploy to EC2**):
+**Single source of truth** (gitignored, used by API + deploy):
 
-- `api/clinic-portal-users.json` — loaded by API (`CLINIC_PORTAL_USERS_FILE`)
-- Copy for reference: `docs/deployment-connections/clinic-portal-users.json` (same content)
-- Template (committed): `clinic-portal-users.template.json`
+- `api/clinic-portal-users.json` — edit this file only; `CLINIC_PORTAL_USERS_FILE` on EC2 points here
+- Bootstrap (committed template): `clinic-portal-users.template.json` → copy once into `api/clinic-portal-users.json`, then set real passwords
+
+```powershell
+Copy-Item docs\deployment-connections\clinic-portal-users.template.json api\clinic-portal-users.json
+# Edit passwords in api\clinic-portal-users.json before deploy
+```
+
+Template usernames / placeholder passwords (replace before production use):
 
 | Username | Password (temp) | Role | Home after login |
 |----------|-----------------|------|------------------|
@@ -219,11 +225,12 @@ Session signing secret (temp): `Tmpp0rtal-Session-Sign-9vLx2mKq8Wp` → `CLINIC_
 
 ### Deploy login (API code + users file)
 
-`mdc deploy api --env clinic` copies **only** `api/.env`. The `/auth/login` routes must be deployed separately:
+`mdc deploy frontend --target clinic` updates the SPA only — it does **not** copy portal users.  
+`mdc deploy api --env clinic` copies **only** `api/.env`. The `/auth/login` routes and users JSON must be deployed separately:
 
 ```powershell
-.\scripts\deployment\deploy_clinic_portal_auth.ps1   # portal.py, portal_auth router, main.py, users JSON
-mdc deploy api --env clinic                          # .env with CLINIC_PORTAL_USERS_FILE
+.\scripts\deployment\deploy_clinic_portal_auth.ps1   # portal.py, portal_auth router, main.py, api/clinic-portal-users.json
+mdc deploy api --env clinic                          # .env with CLINIC_PORTAL_USERS_FILE (once / when env changes)
 ```
 
 Then hard-refresh `https://clinic.dbtdentalclinic.com/login`.
@@ -258,9 +265,9 @@ TTL **0** on both. Wait 5–15 minutes after saving.
 
 ### Local dev
 
-1. Set `CLINIC_PORTAL_USERS` and `CLINIC_PORTAL_SESSION_SECRET` in `api/.env_api_local` or `api/.env_api_clinic`.
+1. Ensure `api/clinic-portal-users.json` exists (copy from the template if needed) and set `CLINIC_PORTAL_SESSION_SECRET` in `api/.env_api_local` or `api/.env_api_clinic`.
 2. `mdc api run --env clinic` (or `local` with `API_ENVIRONMENT=clinic`).
-3. `mdc frontend dev` with clinic API URL / proxy.
+3. `mdc frontend dev --app clinic` with clinic API URL / proxy.
 
 ---
 
@@ -272,4 +279,5 @@ TTL **0** on both. Wait 5–15 minutes after saving.
 | `connections.yaml` | Gitignored — your filled inventory |
 | `deployment_credentials.json` | Gitignored — AWS IDs + live CIDR list |
 | `deployment_credentials.json.template` | Committed — structure reference |
-| `clinic-portal-users.template.json` | Committed — starter accounts for `CLINIC_PORTAL_USERS` |
+| `clinic-portal-users.template.json` | Committed — bootstrap into `api/clinic-portal-users.json` only |
+| `api/clinic-portal-users.json` | Gitignored — sole live portal credentials (deploy + API) |
