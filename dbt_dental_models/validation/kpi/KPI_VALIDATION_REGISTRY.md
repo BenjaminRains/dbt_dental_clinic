@@ -34,7 +34,7 @@ is the check that implemented logic produces the same result as OD on golden dat
 
 | within_tolerance | [daily-payments](./daily-payments/) | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Payments | Reports → Standard → Daily → Payments | ±0.5% or ±$10 | **Complete (2026-06-26):** 3 golden dates; layers 1–4 PASS; [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md). ETL before same-day validate; income transfers net to $0. |
 
-| compare_sql_draft | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `fact_procedure` | `sum(actual_fee)` by `date_complete` | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **1/3 golden dates PASS (2026-06-27):** [2026-06-10](./daily-production-by-procedure/findings/2026-06-10.md) — layers 0–3 PASS local after [ETL-FND-001](../../../docs/findings/ETL-FND-001-replica-row-drift-procedurelog.md) Phase 1–2. Need 2+ more spot-check dates for `within_tolerance`. |
+| within_tolerance | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `mart_daily_production_by_procedure` | `sum(total_fees)` by `production_date` / code | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **Complete (2026-07-16):** 3 golden dates; layers 0–4; [VALIDATION_REPORT.md](./daily-production-by-procedure/VALIDATION_REPORT.md). DateComplete + status 2; Sundays excluded. |
 
 | not_started | [aging-of-a-r](./aging-of-a-r/) | AR total | `mart_ar_summary` | `total_ar_balance` | Aging of A/R | Reports → Standard → Monthly → Aging of A/R | ±$50 or ±0.5% | Simplified DSO in exposures |
 
@@ -132,6 +132,10 @@ Golden path: `daily-payments/golden/`
 
 | daily_2026-06-10 | 2026-06-10 | 2026-06-10 | **PASS** (local, 2026-06-27 re-check) — 140 / $15,239; layers 0–3; 28 codes — [findings/2026-06-10.md](./daily-production-by-procedure/findings/2026-06-10.md) |
 
+| daily_2025-11-18 | 2025-11-18 | 2025-11-18 | **PASS** (local, 2026-07-16) — 202 / $36,589; 48 codes exact — [findings/2025-11-18.md](./daily-production-by-procedure/findings/2025-11-18.md) |
+
+| daily_2026-02-07 | 2026-02-07 | 2026-02-07 | **PASS** (local, 2026-07-16) — Sat 79 / $22,344; 25 codes exact — [findings/2026-02-07.md](./daily-production-by-procedure/findings/2026-02-07.md) |
+
 
 
 Golden path: `daily-production-by-procedure/golden/`
@@ -180,11 +184,13 @@ Golden path: `daily-production-by-procedure/golden/`
 
 | --- | --- |
 
-| [compare/compare_daily_production_by_procedure_total.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_total.sql) | OD validated 2026-06-10 (PASS) |
+| [compare/compare_daily_production_by_procedure_total.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_total.sql) | OD validated 3/3 golden — subject `mart_daily_production_by_procedure` |
 
-| [compare/compare_daily_production_by_procedure_staging.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_staging.sql) | mart vs staging |
+| [compare/compare_daily_production_by_procedure_staging.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_staging.sql) | mart vs staging (DateComplete + status 2) |
 
-| [compare/compare_daily_production_by_procedure_by_code.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_by_code.sql) | code-level — **PASS** 2026-06-10 (28 codes) |
+| [compare/compare_daily_production_by_procedure_by_code.sql](./daily-production-by-procedure/compare/compare_daily_production_by_procedure_by_code.sql) | code-level — **PASS** on golden dates |
+
+| [compare/compare_daily_production_api.sql](./daily-production-by-procedure/compare/compare_daily_production_api.sql) | Layer 4 API day rollup vs OD golden |
 
 | [compare/investigate_daily_production_by_procedure_2026-06-10.sql](./daily-production-by-procedure/compare/investigate_daily_production_by_procedure_2026-06-10.sql) | Query 8 PASS — raw = staging 140 / $15,239 |
 
