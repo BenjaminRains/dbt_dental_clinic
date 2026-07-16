@@ -1,6 +1,8 @@
 services:
-  # Airflow Services (optional sandbox — NOT used for Option A clinic nightly runs)
-  # Option A uses native Airflow on the host + etl_pipeline/.env_<stage> (same as mdc).
+  # Airflow Compose sandbox (Phase A / laptop Option A experiments).
+  # Prefer native Airflow for clinic nightly. Do not treat this stack as a
+  # production clinic host — host.docker.internal can reach host-bound DBs when
+  # stage env files are mounted.
   # ETL/dbt connection vars are intentionally NOT injected here (would override stage files).
   airflow-api-server:
     build:
@@ -27,7 +29,7 @@ services:
       - MDC_ETL_PYTHON=/opt/airflow/venvs/etl/bin/python
       - MDC_DBT_PYTHON=/opt/airflow/venvs/dbt-python
       - MDC_DBT_EXECUTABLE=/opt/airflow/venvs/dbt
-      # Option A: clinic OD source + local warehouse (publish still uses RDS + tunnel)
+      # Option A laptop: clinic OD source + local warehouse (publish still uses RDS + tunnel)
       - MDC_CLINIC_WAREHOUSE=local
       # Email Configuration for Monitoring (optional)
       - SMTP_SERVER=${SMTP_SERVER:-localhost}
@@ -46,10 +48,10 @@ services:
       - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
       - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
       - ./tools:/opt/airflow/dbt_dental_clinic/tools
-      - ./deployment_credentials.json:/opt/airflow/dbt_dental_clinic/deployment_credentials.json:ro
+      # No deployment_credentials.json here — UI does not run ETL; secrets stay on scheduler.
     ports:
-      # 8081 avoids a sticky Windows ghost listener on 8080 after native Airflow
-      - "8081:8080"
+      # Localhost only; 8081 avoids Windows ghost listener on 8080 after native Airflow
+      - "127.0.0.1:8081:8080"
     command: api-server
     healthcheck:
       test: [ "CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health" ]
@@ -98,6 +100,7 @@ services:
       - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
       - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
       - ./tools:/opt/airflow/dbt_dental_clinic/tools
+      # LocalExecutor runs tasks here — clinic RDS metadata for schema refresh / publish path
       - ./deployment_credentials.json:/opt/airflow/dbt_dental_clinic/deployment_credentials.json:ro
     command: scheduler
 
@@ -134,7 +137,7 @@ services:
       - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
       - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
       - ./tools:/opt/airflow/dbt_dental_clinic/tools
-      - ./deployment_credentials.json:/opt/airflow/dbt_dental_clinic/deployment_credentials.json:ro
+      # No credentials — dag-processor only parses DAGs; tasks run on scheduler.
     command: dag-processor
 
   # Airflow Init (run once to initialize database)
