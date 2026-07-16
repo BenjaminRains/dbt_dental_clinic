@@ -1,5 +1,5 @@
 # Extra Python packages for Airflow Docker image (etl_pipeline DAG + dbt)
-# Base image apache/airflow:3.1.7 already provides apache-airflow and core providers.
+# Base image apache/airflow:3.2.2 already provides apache-airflow and core providers.
 #
 # Native host install (Option A): use requirements-airflow-native.txt instead.
 # Do NOT pip install this file alone on the host — it omits apache-airflow.
