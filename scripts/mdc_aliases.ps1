@@ -62,6 +62,15 @@ function api-test {
     Invoke-MDC @("api", "test-config", "--env", $stage)
 }
 
+function api-health {
+    param(
+        [ValidateSet("local", "demo", "clinic", "test", "")]
+        [string]$Env = ""
+    )
+    $stage = Get-MdcStageDefault -Name "api" -ShellValue $Env -Fallback $(Get-MdcStageDefault -Name "api" -ShellValue $env:API_ENVIRONMENT -Fallback "local")
+    Invoke-MDC @("api", "health", "--env", $stage)
+}
+
 function etl-run {
     param(
         [string]$Env = "",
@@ -120,6 +129,36 @@ function etl-status {
     Invoke-MDC @mdcArgs
 }
 
+function etl-schema {
+    param(
+        [string]$Env = "",
+        [ValidateSet("load", "full", "")]
+        [string]$Profile = "full"
+    )
+    $stage = Get-MdcStageDefault -Name "etl" -ShellValue $Env -Fallback $(Get-MdcStageDefault -Name "etl" -ShellValue $env:ETL_ENVIRONMENT -Fallback "clinic")
+    $mdcArgs = @("etl", "schema", "--env", $stage, "--profile", $Profile)
+    if ($args.Count -gt 0) {
+        $mdcArgs += "--"
+        $mdcArgs += $args
+    }
+    Invoke-MDC @mdcArgs
+}
+
+function etl-exec {
+    param(
+        [string]$Env = "",
+        [ValidateSet("load", "full", "")]
+        [string]$Profile = "full"
+    )
+    $stage = Get-MdcStageDefault -Name "etl" -ShellValue $Env -Fallback $(Get-MdcStageDefault -Name "etl" -ShellValue $env:ETL_ENVIRONMENT -Fallback "clinic")
+    $mdcArgs = @("etl", "exec", "--env", $stage, "--profile", $Profile)
+    if ($args.Count -gt 0) {
+        $mdcArgs += "--"
+        $mdcArgs += $args
+    }
+    Invoke-MDC @mdcArgs
+}
+
 function frontend-dev {
     Invoke-MDC @("frontend", "dev") + $args
 }
@@ -138,6 +177,51 @@ function clinic-frontend-deploy {
 
 function dbt-docs-deploy {
     Invoke-MDC @("deploy", "dbt-docs") + $args
+}
+
+function deploy-api {
+    param(
+        [ValidateSet("local", "demo", "clinic", "test", "")]
+        [string]$Env = "clinic"
+    )
+    Invoke-MDC @("deploy", "api", "--env", $Env) + $args
+}
+
+function publish-analytics {
+    Invoke-MDC @("publish", "analytics", "--env", "clinic") + $args
+}
+
+function tunnel-clinic-db {
+    Invoke-MDC @("tunnel", "clinic-db") + $args
+}
+
+function tunnel-demo-db {
+    Invoke-MDC @("tunnel", "demo-db") + $args
+}
+
+function tunnel-rds {
+    Invoke-MDC @("tunnel", "rds") + $args
+}
+
+function tunnel-close {
+    Invoke-MDC @("tunnel", "close") + $args
+}
+
+function ssm-status {
+    Invoke-MDC @("ssm", "status") + $args
+}
+
+function dbt-validate {
+    param(
+        [ValidateSet("local", "demo", "clinic", "")]
+        [string]$Env = ""
+    )
+    $stage = Get-MdcStageDefault -Name "dbt" -ShellValue $Env -Fallback $(Get-MdcStageDefault -Name "dbt" -ShellValue $env:DBT_TARGET -Fallback "local")
+    Invoke-MDC @("dbt", "validate", "--env", $stage)
+}
+
+function consult-audio-install {
+    Invoke-MDC @("consult-audio", "install") + $args
 }
 
 function consult-audio-init {
@@ -240,21 +324,54 @@ Write-Host ''
 Write-Host 'Dental Clinic Dev CLI (mdc aliases)' -ForegroundColor Blue
 Write-Host '-----------------------------------' -ForegroundColor DarkBlue
 Write-Host ""
-Write-Host "Quick start (no *-init required):" -ForegroundColor White
-Write-Host "  status / env-status          mdc status (includes data freshness)" -ForegroundColor Cyan
-Write-Host "  status-clinic-rds            mdc tunnel clinic-db + mdc status --env clinic --tunnel-db" -ForegroundColor Cyan
-Write-Host "  secrets-pull-clinic         mdc secrets pull clinic (sync rotating RDS password to .env)" -ForegroundColor Cyan
+Write-Host "Quick start (no *-init required). Prefer aliases below or raw mdc --help:" -ForegroundColor White
+Write-Host ""
+Write-Host "Status / secrets" -ForegroundColor White
+Write-Host "  status / env-status          mdc status (freshness + secrets check)" -ForegroundColor Cyan
+Write-Host "  status-clinic-rds            mdc status --env clinic --tunnel-db" -ForegroundColor Cyan
+Write-Host "  secrets-pull-clinic          mdc secrets pull clinic" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "API (local/clinic require CLINIC_PORTAL_SESSION_SECRET or CLINIC_API_KEY)" -ForegroundColor White
 Write-Host "  api-run                      mdc api run --env local" -ForegroundColor Cyan
 Write-Host "  api-test                     mdc api test-config --env local" -ForegroundColor Cyan
+Write-Host "  api-health                   mdc api health --env local" -ForegroundColor Cyan
+Write-Host "  api-run -Env clinic          mdc api run --env clinic --tunnel-db  (add --tunnel-db)" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "ETL" -ForegroundColor White
 Write-Host "  etl-validate                 mdc etl validate --env local --profile load" -ForegroundColor Cyan
 Write-Host "  etl-run                      mdc etl run --env clinic --profile full" -ForegroundColor Cyan
-Write-Host "  etl-status                   mdc etl status --env clinic --profile full (use -Env local for local)" -ForegroundColor Cyan
+Write-Host "  etl-status                   mdc etl status --env clinic (use -Env local for local)" -ForegroundColor Cyan
 Write-Host "  etl-test                     mdc etl test-connections --env clinic" -ForegroundColor Cyan
-Write-Host "  mdc dbt run --env local      dbt via stateless subprocess" -ForegroundColor Cyan
-Write-Host "  mdc tunnel clinic-db         SSM port forward (Python)" -ForegroundColor Cyan
-Write-Host "  frontend-dev                 mdc frontend dev (local Vite)" -ForegroundColor Cyan
+Write-Host "  etl-schema                   mdc etl schema --env clinic --profile full" -ForegroundColor Cyan
+Write-Host "  etl-exec                     mdc etl exec --env clinic --profile full -- <cmd>" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "dbt" -ForegroundColor White
+Write-Host "  dbt-validate                 mdc dbt validate --env local" -ForegroundColor Cyan
+Write-Host "  dbt run|test|docs ...        mdc dbt run|test|docs --env local" -ForegroundColor Cyan
+Write-Host "  dbt deps                     mdc dbt invoke --env local -- deps" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Frontend / deploy" -ForegroundColor White
+Write-Host "  frontend-dev --app clinic    mdc frontend dev --app clinic (proxy auto-picks healthy API)" -ForegroundColor Cyan
+Write-Host "  frontend-dev --app portfolio mdc frontend dev --app portfolio" -ForegroundColor Cyan
+Write-Host "  frontend-status              mdc frontend status" -ForegroundColor Cyan
+Write-Host "  demo-frontend-deploy         mdc deploy frontend --target demo" -ForegroundColor Cyan
 Write-Host "  clinic-frontend-deploy       mdc deploy frontend --target clinic" -ForegroundColor Cyan
 Write-Host "  dbt-docs-deploy              mdc deploy dbt-docs" -ForegroundColor Cyan
+Write-Host "  deploy-api                   mdc deploy api --env clinic" -ForegroundColor Cyan
+Write-Host "  publish-analytics            mdc publish analytics --env clinic" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Tunnels / SSM" -ForegroundColor White
+Write-Host "  tunnel-clinic-db             mdc tunnel clinic-db" -ForegroundColor Cyan
+Write-Host "  tunnel-demo-db               mdc tunnel demo-db" -ForegroundColor Cyan
+Write-Host "  tunnel-rds                   mdc tunnel rds" -ForegroundColor Cyan
+Write-Host "  tunnel-close                 mdc tunnel close" -ForegroundColor Cyan
+Write-Host "  ssm-status                   mdc ssm status" -ForegroundColor Cyan
+Write-Host "  ssm-connect-clinic-api       mdc ssm connect clinic-api" -ForegroundColor Cyan
+Write-Host "  ssm-connect-api              mdc ssm connect api" -ForegroundColor Cyan
+Write-Host "  ssm-connect-demo-db          mdc ssm connect demo-db" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Consult audio / Airflow" -ForegroundColor White
+Write-Host "  consult-audio-install        mdc consult-audio install" -ForegroundColor Cyan
 Write-Host "  consult-audio-validate       mdc consult-audio validate" -ForegroundColor Cyan
 Write-Host "  consult-audio-run            mdc consult-audio pipeline run" -ForegroundColor Cyan
 Write-Host "  airflow-init                 mdc airflow init" -ForegroundColor Cyan
@@ -263,7 +380,6 @@ Write-Host "  airflow-start-dag-processor  mdc airflow start --dag-processor" -F
 Write-Host "  airflow-start-api-server     mdc airflow start --api-server" -ForegroundColor Cyan
 Write-Host "  airflow-start-webserver      mdc airflow start --webserver (alias)" -ForegroundColor Cyan
 Write-Host "  airflow-logs                 mdc airflow logs" -ForegroundColor Cyan
-Write-Host "  mdc deploy api --env clinic   copy api/.env_api_clinic to EC2; restart dental-clinic-api-clinic" -ForegroundColor Cyan
-Write-Host "  mdc api run --env clinic --tunnel-db  clinic API via mdc tunnel clinic-db" -ForegroundColor Cyan
-Write-Host "  ssm-connect-clinic-api       SSM shell on clinic API EC2" -ForegroundColor Cyan
+Write-Host ""
+Write-Host "Full command tree: mdc --help  |  docs: tools/mdc_cli/README.md" -ForegroundColor DarkGray
 Write-Host ""

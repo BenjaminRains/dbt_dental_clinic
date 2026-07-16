@@ -30,6 +30,7 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 ### Validation
 
 - `mdc status` — config paths, validation overview, venv discovery, **clinic credential sync vs Secrets Manager**, and **analytics data freshness** (use `--no-secrets-check` / `--no-freshness` to skip sections)
+- `mdc api health --env <stage>` — pydantic settings load (no HTTP)
 - `mdc api test-config --env <stage>`
 - `mdc etl validate --env <stage> [--profile load|full]`
 - `mdc dbt validate --env <stage>`
@@ -69,19 +70,29 @@ Two deployable apps under `frontend/` (`@mdc/portfolio`, `@mdc/clinic`). See [fr
 
 ### PowerShell aliases (Phase 4.5)
 
-`scripts/mdc_aliases.ps1` (default via `load_project.ps1`): `status`, `api-run`, `api-test`,
-`etl-run`, `etl-validate`, `etl-test`, `etl-status`, `env-status`, `ssm-connect-clinic-api`,
-`ssm-connect-api`, `ssm-connect-demo-db`.
+`scripts/mdc_aliases.ps1` (default via `load_project.ps1`) mirrors the current `mdc` surface:
+
+| Area | Aliases |
+|------|---------|
+| Status / secrets | `status`, `env-status`, `status-clinic-rds`, `secrets-pull-clinic` |
+| API | `api-run`, `api-test`, `api-health` |
+| ETL | `etl-run`, `etl-validate`, `etl-test`, `etl-status`, `etl-schema`, `etl-exec` |
+| dbt | `dbt` (run/test/docs/deps), `dbt-validate` |
+| Frontend / deploy | `frontend-dev`, `frontend-status`, `demo-frontend-deploy`, `clinic-frontend-deploy`, `dbt-docs-deploy`, `deploy-api`, `publish-analytics` |
+| Tunnels / SSM | `tunnel-clinic-db`, `tunnel-demo-db`, `tunnel-rds`, `tunnel-close`, `ssm-status`, `ssm-connect-api`, `ssm-connect-clinic-api`, `ssm-connect-demo-db` |
+| Consult audio / Airflow | `consult-audio-install`, `consult-audio-validate`, `consult-audio-run`, `airflow-init`, `airflow-start-*`, `airflow-logs` |
 
 **ETL alias defaults** (when stage/profile omitted):
 
 | Alias | Default stage | Default profile |
 |-------|---------------|-----------------|
 | `etl-validate` | `local` | `load` for local, `full` otherwise |
-| `etl-run`, `etl-test` | `clinic` | `full` |
+| `etl-run`, `etl-test`, `etl-schema`, `etl-exec` | `clinic` | `full` |
 | `etl-status` | `clinic` | `full` (use `etl-status -Env local` for local warehouse) |
 
 Stages: `local`, `clinic`, `test`, `demo` (API/dbt). Use `clinic` for live clinic context.
+
+Clinic portal local stack: `api-run` (needs `CLINIC_PORTAL_SESSION_SECRET` or `CLINIC_API_KEY`) then `frontend-dev --app clinic`.
 
 ## CI
 

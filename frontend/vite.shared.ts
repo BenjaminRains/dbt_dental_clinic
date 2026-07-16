@@ -53,7 +53,11 @@ export function createAppViteConfig(appRoot: string) {
                     port: 3000,
                     proxy: {
                         '/api': {
-                            target: 'http://localhost:8000',
+                            // Override when port 8000 is occupied by a stale API:
+                            //   $env:MDC_API_PROXY_TARGET='http://127.0.0.1:8001'
+                            target:
+                                process.env.MDC_API_PROXY_TARGET ||
+                                'http://localhost:8000',
                             changeOrigin: true,
                             rewrite: (p: string) => p.replace(/^\/api/, ''),
                         },

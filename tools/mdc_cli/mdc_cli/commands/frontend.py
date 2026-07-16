@@ -2,8 +2,11 @@
 
 from __future__ import annotations
 
+import json
 import os
 from typing import Optional
+from urllib.error import URLError
+from urllib.request import urlopen
 
 import typer
 
@@ -31,6 +34,17 @@ _APP_TO_WORKSPACE = {
 
 def _run_forever(cmd: list[str], *, cwd: str, env: dict[str, str] | None = None) -> int:
     return run_subprocess(cmd, cwd=cwd, env=env)
+
+
+def _portal_ready(api_base: str) -> bool:
+    try:
+        with urlopen(f"{api_base}/auth/configured", timeout=2.0) as response:
+            if response.status != 200:
+                return False
+            payload = json.loads(response.read().decode("utf-8"))
+    except (URLError, TimeoutError, ValueError, json.JSONDecodeError):
+        return False
+    return bool(payload.get("portal_login_enabled"))
 
 
 @frontend_app.command("dev")
@@ -101,10 +115,18 @@ def frontend_dev(
         typer.echo("Product: portfolio (no clinic auth env required)")
     else:
         typer.echo("Product: clinic portal (login required against local API)")
+    child_env = os.environ.copy()
+    if not is_demo and not child_env.get("MDC_API_PROXY_TARGET"):
+        default_target = "http://127.0.0.1:8000"
+        fallback_target = "http://127.0.0.1:8001"
+        if not _portal_ready(default_target) and _portal_ready(fallback_target):
+            child_env["MDC_API_PROXY_TARGET"] = fallback_target
+    proxy_target = child_env.get("MDC_API_PROXY_TARGET", "http://127.0.0.1:8000")
+    typer.echo(f"Proxy target: {proxy_target}")
     code = _run_forever(
         ["npm", "run", "dev", "-w", workspace],
         cwd=str(FRONTEND_DIR),
-        env=os.environ.copy(),
+        env=child_env,
     )
     raise typer.Exit(code=code)
 
