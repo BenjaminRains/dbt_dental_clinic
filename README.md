@@ -211,7 +211,7 @@ Validation is layered — config checks, dbt tests, and OpenDental report benchm
 | KPI (OD report) | Mart | Status |
 |-----------------|------|--------|
 | [Daily Payments](dbt_dental_models/validation/kpi/daily-payments/) | `mart_daily_payments` | **Complete** — 3 golden dates, layers 1–4 PASS ([report](dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md)) |
-| [Daily Production by Procedure](dbt_dental_models/validation/kpi/daily-production-by-procedure/) | `fact_procedure` | In progress |
+| [Daily Production by Procedure](dbt_dental_models/validation/kpi/daily-production-by-procedure/) | `fact_procedure` | ✅ Validated |
 
 **Config validation (before you run):**
 

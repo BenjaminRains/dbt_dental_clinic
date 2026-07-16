@@ -43,8 +43,9 @@ Final row (empty Category/Code): **report total** in Total Fees column.
 OD Production by Procedure includes **ProcStatus = 2 (Complete) only**.  
 Do **not** include status 4 (Existing Prior) — it inflates hygiene counts vs OD.
 
-`fact_procedure` currently uses `procedure_date` + status `(2, 4)` — mart compare will diverge
-until aligned to `date_complete` + status 2.
+`fact_procedure` compare uses `date_id` = report DateComplete. On all three golden dates
+(2026-06-10, 2025-11-18, 2026-02-07) mart totals matched OD exact under status-complete
+production rules — see [VALIDATION_REPORT.md](./VALIDATION_REPORT.md).
 
 ---
 
