@@ -4,11 +4,11 @@
 | --- | --- |
 | **Report ID** | `kpi-daily-production-by-procedure-001` |
 | **Report date** | 2026-07-16 |
-| **Workflow** | **Complete** — layers 0–3 signed off on 3 golden dates (API/frontend TBD) |
+| **Workflow** | **Complete** — layers 0–4 (API day rollup) on 3 golden dates |
 | **Registry status** | `within_tolerance` |
 | **KPI name** | Daily production by procedure |
-| **Subject model** | `marts.fact_procedure` (aggregate by `date_id` / complete fees) |
-| **Primary measure** | `sum(actual_fee)` where complete production aligns with OD DateComplete |
+| **Subject model** | `marts.mart_daily_production_by_procedure` |
+| **Primary measure** | `total_fees` (by code); day rollup `sum(total_fees)` |
 | **Reference report** | OpenDental → Reports → Standard → Daily → Production by Procedure |
 | **Validator** | Analytics / dbt validation workflow (clinic secure site) |
 
@@ -16,15 +16,15 @@
 
 ## 1. Executive summary
 
-We validated that warehouse complete-production totals (raw → staging → `fact_procedure`)
-implement the same business logic OpenDental uses in **Daily → Production by Procedure**:
-**DateComplete** + **ProcStatus = 2 (Complete)** + procedure fee by code.
+We validated that **`mart_daily_production_by_procedure`** implements the same business logic
+OpenDental uses in **Daily → Production by Procedure**: **DateComplete** + **ProcStatus = 2
+(Complete)** + procedure fee by code.
 
 Three spot-check dates (heavy weekday, baseline weekday, Saturday) all **PASS exact** at total
-and by-code grain.
+and by-code grain. Day-level API rollup matches the mart (Layer 4).
 
-**Recommendation:** Register as validated once the measure is exposed in the clinic API/frontend.
-Re-run golden compare after material changes to `procedurelog` ETL, staging, or `fact_procedure`.
+**Recommendation:** Registered in `validatedKpis.ts` / Practice Manager Home. Re-run golden
+compare after material changes to `procedurelog` ETL, staging, or this mart.
 
 ---
 
@@ -58,12 +58,12 @@ First golden (2026-06-10) initially **FAIL**ed due to replica row drift on `proc
 
 ---
 
-## 5. Out of scope
+### Out of scope
 
 | Item | Notes |
 | --- | --- |
-| API / frontend layer | KPI not yet a dedicated clinic API endpoint / validatedKpis entry |
-| Clinic RDS re-compare for new dates | Local warehouse signed off; publish path already proven on 2026-06-10 |
+| `fact_procedure` date/status semantics | Separate TODO — ProcDate + status 2/4; not the OD production source of truth |
+| Portfolio validation UI | Optional showcase |
 
 ---
 

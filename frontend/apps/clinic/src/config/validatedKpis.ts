@@ -11,6 +11,15 @@ export const VALIDATED_KPIS = {
         odMenuPath: 'Reports → Standard → Daily Payments',
         registryStatus: 'within_tolerance' as const,
     },
+    dailyProductionByProcedure: {
+        id: 'daily-production-by-procedure',
+        name: 'Daily production by procedure',
+        model: 'mart_daily_production_by_procedure',
+        field: 'total_fees',
+        odReport: 'Production by Procedure',
+        odMenuPath: 'Reports → Standard → Daily → Production by Procedure',
+        registryStatus: 'within_tolerance' as const,
+    },
 } as const;
 
 export type ValidatedKpiId = keyof typeof VALIDATED_KPIS;

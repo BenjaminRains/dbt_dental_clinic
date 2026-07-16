@@ -1,0 +1,48 @@
+version: 2
+
+models:
+  - name: mart_daily_production_by_procedure
+    description: >
+      Daily production by procedure code, aligned with OpenDental Daily → Production by Procedure.
+
+      Grain: one row per production_date × procedure_code. Date = DateComplete; status = Complete (2)
+      only. Validated against OD golden exports (2026-06-10, 2025-11-18, 2026-02-07) — see
+      validation/kpi/daily-production-by-procedure/.
+    config:
+      materialized: table
+      schema: marts
+      unique_key: ['production_date', 'procedure_code']
+      on_schema_change: fail
+      tags: ['kpi', 'daily', 'production']
+    tests:
+      - dbt_utils.unique_combination_of_columns:
+          combination_of_columns:
+            - production_date
+            - procedure_code
+    columns:
+      - name: production_date
+        description: "Calendar date the procedure was set complete (OpenDental DateComplete)."
+        tests:
+          - not_null
+      - name: procedure_code
+        description: "Procedure code string (CDT or clinic product code), trimmed."
+        tests:
+          - not_null
+      - name: procedure_description
+        description: "Procedure code description from procedurecode."
+      - name: procedure_category
+        description: "OpenDental procedure category ItemName from definition (ProcCat)."
+      - name: procedure_quantity
+        description: "Count of complete procedure rows for this code on production_date."
+        tests:
+          - not_null
+      - name: total_fees
+        description: "Sum of procedure_fee for this code on production_date (OD Total Fees)."
+        tests:
+          - not_null
+      - name: average_fee
+        description: "total_fees / procedure_quantity (OD Average Fee)."
+      - name: _transformed_at
+        description: "When this mart model was last built by dbt."
+      - name: _mart_refreshed_at
+        description: "When this mart was last refreshed (publish time on clinic RDS)."

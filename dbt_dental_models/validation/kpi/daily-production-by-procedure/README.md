@@ -1,8 +1,8 @@
 # Daily Production by Procedure (OpenDental) — KPI validation
 
 **OD report:** Reports → Standard → Daily → Production by Procedure  
-**Warehouse:** `marts.fact_procedure` (aggregate by `date_complete`, `procedure_status = 2`)  
-**Status:** `within_tolerance` — **3/3** golden spot-checks PASS (layers 0–3); API/frontend TBD  
+**Warehouse:** `marts.mart_daily_production_by_procedure` (`production_date` × `procedure_code`)  
+**Status:** `within_tolerance` — **3/3** golden spot-checks PASS (layers 0–4); API + Practice Manager Home  
 **Sign-off:** [VALIDATION_REPORT.md](./VALIDATION_REPORT.md)
 
 ## Golden spot-check dates
@@ -20,7 +20,7 @@
 | 1 | Business rules | [FIELD_MAP.md](./FIELD_MAP.md) | DateComplete + status 2 documented |
 | 2 | OD golden export | `golden/od_daily_production_by_procedure_*.csv` | 3 dates done |
 | 3 | Staging ↔ mart ↔ OD | `compare/*.sql`, `findings/*.md` | **3/3 PASS** |
-| 4 | API / frontend | TBD when KPI exposed in app | — |
+| 4 | API / frontend | `compare_daily_production_api.sql` + `/kpi/daily-production` | Done |
 | 5 | Registry | [KPI_VALIDATION_REGISTRY.md](../KPI_VALIDATION_REGISTRY.md) | `within_tolerance` |
 
 Template: follow [daily-payments](../daily-payments/) for four-layer validation.

@@ -455,6 +455,36 @@ export interface LatestCollectionsDate {
     has_data: boolean;
 }
 
+/** mart_daily_production_by_procedure — validated vs OD Production by Procedure */
+export interface DailyProductionKPI {
+    production_date: string;
+    total_fees: number;
+    procedure_quantity: number;
+    procedure_code_count: number;
+    has_data: boolean;
+}
+
+export interface LatestProductionDate {
+    production_date: string | null;
+    has_data: boolean;
+}
+
+export interface DailyProductionByCodeRow {
+    production_date: string;
+    procedure_code: string;
+    procedure_description?: string | null;
+    procedure_category?: string | null;
+    procedure_quantity: number;
+    average_fee: number;
+    total_fees: number;
+}
+
+export interface DailyProductionByCodeResponse {
+    production_date: string;
+    rows: DailyProductionByCodeRow[];
+    has_data: boolean;
+}
+
 // API Query Parameters
 export interface DateRange {
     start_date?: string;

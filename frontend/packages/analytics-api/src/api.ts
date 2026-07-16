@@ -36,6 +36,9 @@ import {
     ReferralSourceSummaryResponse,
     DailyCollectionsKPI,
     LatestCollectionsDate,
+    DailyProductionKPI,
+    LatestProductionDate,
+    DailyProductionByCodeResponse,
 } from './types';
 
 // Configure axios base URL
@@ -439,6 +442,30 @@ export const kpiApi = {
 
     getLatestCollectionsDate: async (): Promise<ApiResponse<LatestCollectionsDate>> => {
         return apiCall(() => api.get('/kpi/daily-collections/latest-date'));
+    },
+
+    getDailyProduction: async (
+        productionDate?: string
+    ): Promise<ApiResponse<DailyProductionKPI>> => {
+        return apiCall(() =>
+            api.get('/kpi/daily-production', {
+                params: productionDate ? { production_date: productionDate } : undefined,
+            })
+        );
+    },
+
+    getLatestProductionDate: async (): Promise<ApiResponse<LatestProductionDate>> => {
+        return apiCall(() => api.get('/kpi/daily-production/latest-date'));
+    },
+
+    getDailyProductionByCode: async (
+        productionDate?: string
+    ): Promise<ApiResponse<DailyProductionByCodeResponse>> => {
+        return apiCall(() =>
+            api.get('/kpi/daily-production/by-code', {
+                params: productionDate ? { production_date: productionDate } : undefined,
+            })
+        );
     },
 };
 

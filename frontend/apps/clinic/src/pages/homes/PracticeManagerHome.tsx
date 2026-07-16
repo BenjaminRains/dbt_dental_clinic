@@ -10,20 +10,26 @@ import {
     ToggleButtonGroup,
     Divider,
     TextField,
+    Table,
+    TableBody,
+    TableCell,
+    TableHead,
+    TableRow,
 } from '@mui/material';
 import VerifiedIcon from '@mui/icons-material/Verified';
 import { dateUtils, kpiApi, useApiQuery } from '@mdc/analytics-api';
 import { formatCurrencyPrecise } from '@mdc/ui-common';
 import { VALIDATED_KPIS } from '../../config/validatedKpis';
 
-const dailyKpiMeta = VALIDATED_KPIS.dailyNetCollections;
+const collectionsMeta = VALIDATED_KPIS.dailyNetCollections;
+const productionMeta = VALIDATED_KPIS.dailyProductionByProcedure;
 
 type DatePickerMode = 'today' | 'yesterday' | 'latest-business-day' | 'custom';
 
 const DATE_MODE_LABELS: Record<Exclude<DatePickerMode, 'custom'>, string> = {
     today: 'Today (Central)',
     yesterday: 'Yesterday (Central)',
-    'latest-business-day': 'Latest with payments',
+    'latest-business-day': 'Latest with activity',
 };
 
 function formatDisplayDate(isoDate: string): string {
@@ -36,6 +42,14 @@ function formatDisplayDate(isoDate: string): string {
     });
 }
 
+/** Prefer the later of collections vs production latest dates for the shared picker. */
+function maxIsoDate(a: string | null | undefined, b: string | null | undefined): string | null {
+    if (a && b) {
+        return a >= b ? a : b;
+    }
+    return a ?? b ?? null;
+}
+
 const PracticeManagerHome: React.FC = () => {
     const [dateMode, setDateMode] = useState<DatePickerMode>('latest-business-day');
     const [customDate, setCustomDate] = useState<string>('');
@@ -43,9 +57,10 @@ const PracticeManagerHome: React.FC = () => {
     const clinicToday = dateUtils.getClinicToday();
     const clinicYesterday = dateUtils.getClinicYesterday();
 
-    const latestDateQuery = useApiQuery(() => kpiApi.getLatestCollectionsDate(), []);
+    const latestCollectionsQuery = useApiQuery(() => kpiApi.getLatestCollectionsDate(), []);
+    const latestProductionQuery = useApiQuery(() => kpiApi.getLatestProductionDate(), []);
 
-    const resolvedPaymentDate = useMemo(() => {
+    const resolvedReportDate = useMemo(() => {
         if (dateMode === 'custom' && customDate) {
             return customDate;
         }
@@ -56,7 +71,10 @@ const PracticeManagerHome: React.FC = () => {
             return clinicYesterday;
         }
         if (dateMode === 'latest-business-day') {
-            return latestDateQuery.data?.payment_date ?? null;
+            return maxIsoDate(
+                latestCollectionsQuery.data?.payment_date,
+                latestProductionQuery.data?.production_date
+            );
         }
         return null;
     }, [
@@ -64,25 +82,50 @@ const PracticeManagerHome: React.FC = () => {
         customDate,
         clinicToday,
         clinicYesterday,
-        latestDateQuery.data?.payment_date,
+        latestCollectionsQuery.data?.payment_date,
+        latestProductionQuery.data?.production_date,
     ]);
 
     const dailyCollectionsQuery = useApiQuery(
         () => {
-            if (!resolvedPaymentDate) {
+            if (!resolvedReportDate) {
                 return Promise.resolve({ loading: false, data: undefined });
             }
-            return kpiApi.getDailyCollections(resolvedPaymentDate);
+            return kpiApi.getDailyCollections(resolvedReportDate);
         },
-        [resolvedPaymentDate]
+        [resolvedReportDate]
+    );
+
+    const dailyProductionQuery = useApiQuery(
+        () => {
+            if (!resolvedReportDate) {
+                return Promise.resolve({ loading: false, data: undefined });
+            }
+            return kpiApi.getDailyProduction(resolvedReportDate);
+        },
+        [resolvedReportDate]
+    );
+
+    const productionByCodeQuery = useApiQuery(
+        () => {
+            if (!resolvedReportDate) {
+                return Promise.resolve({ loading: false, data: undefined });
+            }
+            return kpiApi.getDailyProductionByCode(resolvedReportDate);
+        },
+        [resolvedReportDate]
     );
 
     const waitingForLatestDate =
         dateMode === 'latest-business-day' &&
-        latestDateQuery.loading &&
-        !latestDateQuery.data?.payment_date;
+        (latestCollectionsQuery.loading || latestProductionQuery.loading) &&
+        !resolvedReportDate;
 
-    const loading = waitingForLatestDate || dailyCollectionsQuery.loading;
+    const loading =
+        waitingForLatestDate ||
+        dailyCollectionsQuery.loading ||
+        dailyProductionQuery.loading ||
+        productionByCodeQuery.loading;
 
     const handleDateModeChange = (
         _event: React.MouseEvent<HTMLElement>,
@@ -108,20 +151,28 @@ const PracticeManagerHome: React.FC = () => {
         );
     }
 
-    const data = dailyCollectionsQuery.data;
-    const queryError = latestDateQuery.error || dailyCollectionsQuery.error;
+    const collections = dailyCollectionsQuery.data;
+    const production = dailyProductionQuery.data;
+    const byCode = productionByCodeQuery.data;
+    const queryError =
+        latestCollectionsQuery.error ||
+        latestProductionQuery.error ||
+        dailyCollectionsQuery.error ||
+        dailyProductionQuery.error ||
+        productionByCodeQuery.error;
     const modeLabel =
         dateMode === 'custom'
             ? 'Custom date'
             : DATE_MODE_LABELS[dateMode as Exclude<DatePickerMode, 'custom'>];
 
     return (
-        <Box sx={{ maxWidth: 720 }}>
+        <Box sx={{ maxWidth: 900 }}>
             <Typography variant="h4" component="h1" gutterBottom>
                 Practice Manager Home
             </Typography>
             <Typography variant="subtitle1" color="text.secondary" gutterBottom>
-                Validated KPIs — reconciled against OpenDental Daily Payments (Central US dates)
+                Validated KPIs — reconciled against OpenDental Daily Payments and Production by
+                Procedure (Central US dates)
             </Typography>
 
             <Paper variant="outlined" sx={{ p: 2.5, mt: 2, mb: 2 }}>
@@ -144,7 +195,7 @@ const PracticeManagerHome: React.FC = () => {
                         exclusive
                         onChange={handleDateModeChange}
                         size="small"
-                        aria-label="Collections report date"
+                        aria-label="Report date"
                     >
                         <ToggleButton value="latest-business-day">Latest</ToggleButton>
                         <ToggleButton value="yesterday">Yesterday</ToggleButton>
@@ -155,26 +206,26 @@ const PracticeManagerHome: React.FC = () => {
                         type="date"
                         label="Pick date"
                         size="small"
-                        value={dateMode === 'custom' ? customDate : resolvedPaymentDate ?? ''}
+                        value={dateMode === 'custom' ? customDate : resolvedReportDate ?? ''}
                         onChange={(e) => handleCustomDateChange(e.target.value)}
                         InputLabelProps={{ shrink: true }}
                         sx={{ minWidth: 160 }}
                     />
                 </Box>
 
-                {resolvedPaymentDate ? (
+                {resolvedReportDate ? (
                     <>
                         <Typography variant="h5" component="p" fontWeight="bold">
-                            {formatDisplayDate(resolvedPaymentDate)}
+                            {formatDisplayDate(resolvedReportDate)}
                         </Typography>
                         <Typography variant="body2" color="text.secondary" sx={{ mt: 0.5 }}>
-                            {modeLabel} · <strong>{resolvedPaymentDate}</strong>
+                            {modeLabel} · <strong>{resolvedReportDate}</strong>
                         </Typography>
                     </>
                 ) : (
                     <Alert severity="info" sx={{ mt: 1 }}>
-                        No payment dates in mart_daily_payments yet. Publish analytics to RDS, or
-                        pick a date manually.
+                        No dates in payment or production marts yet. Publish analytics, or pick a
+                        date manually.
                     </Alert>
                 )}
 
@@ -190,10 +241,10 @@ const PracticeManagerHome: React.FC = () => {
                 </Alert>
             )}
 
-            {!queryError && data && resolvedPaymentDate && (
-                <Paper variant="outlined" sx={{ p: 3 }}>
+            {!queryError && collections && resolvedReportDate && (
+                <Paper variant="outlined" sx={{ p: 3, mb: 2 }}>
                     <Typography variant="overline" color="text.secondary">
-                        {dailyKpiMeta.name}
+                        {collectionsMeta.name}
                     </Typography>
                     <Typography
                         variant="h3"
@@ -202,23 +253,21 @@ const PracticeManagerHome: React.FC = () => {
                         color="primary.main"
                         sx={{ mt: 0.5, mb: 1 }}
                     >
-                        {formatCurrencyPrecise(data.net_collections_amount)}
+                        {formatCurrencyPrecise(collections.net_collections_amount)}
                     </Typography>
 
-                    {data.has_data ? (
+                    {collections.has_data ? (
                         <Typography variant="body2" color="text.secondary">
-                            Patient {formatCurrencyPrecise(data.patient_payment_amount)}
+                            Patient {formatCurrencyPrecise(collections.patient_payment_amount)}
                             {' · '}
-                            Insurance {formatCurrencyPrecise(data.insurance_payment_amount)}
+                            Insurance {formatCurrencyPrecise(collections.insurance_payment_amount)}
                             {' · '}
-                            {data.payment_count} payments
+                            {collections.payment_count} payments
                         </Typography>
                     ) : (
                         <Alert severity="info" sx={{ mt: 1 }}>
                             No row in <code>mart_daily_payments</code> for{' '}
-                            <strong>{resolvedPaymentDate}</strong>. Try <strong>Latest</strong>, pick{' '}
-                            <strong>2026-06-24</strong> (validated golden day), or run{' '}
-                            <code>mdc publish analytics --env clinic</code>.
+                            <strong>{resolvedReportDate}</strong>.
                         </Alert>
                     )}
 
@@ -231,9 +280,83 @@ const PracticeManagerHome: React.FC = () => {
                             icon={<VerifiedIcon />}
                             label="Validated vs OD Daily Payments"
                         />
-                        <Chip size="small" variant="outlined" label={dailyKpiMeta.model} />
-                        <Chip size="small" variant="outlined" label={dailyKpiMeta.odReport} />
+                        <Chip size="small" variant="outlined" label={collectionsMeta.model} />
+                        <Chip size="small" variant="outlined" label={collectionsMeta.odReport} />
                     </Box>
+                </Paper>
+            )}
+
+            {!queryError && production && resolvedReportDate && (
+                <Paper variant="outlined" sx={{ p: 3 }}>
+                    <Typography variant="overline" color="text.secondary">
+                        {productionMeta.name}
+                    </Typography>
+                    <Typography
+                        variant="h3"
+                        component="p"
+                        fontWeight="bold"
+                        color="primary.main"
+                        sx={{ mt: 0.5, mb: 1 }}
+                    >
+                        {formatCurrencyPrecise(production.total_fees)}
+                    </Typography>
+
+                    {production.has_data ? (
+                        <Typography variant="body2" color="text.secondary">
+                            {production.procedure_quantity} procedures
+                            {' · '}
+                            {production.procedure_code_count} codes
+                        </Typography>
+                    ) : (
+                        <Alert severity="info" sx={{ mt: 1 }}>
+                            No rows in <code>mart_daily_production_by_procedure</code> for{' '}
+                            <strong>{resolvedReportDate}</strong>. Try golden dates{' '}
+                            <strong>2026-06-10</strong>, <strong>2025-11-18</strong>, or{' '}
+                            <strong>2026-02-07</strong>.
+                        </Alert>
+                    )}
+
+                    <Divider sx={{ my: 2 }} />
+
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mb: 2 }}>
+                        <Chip
+                            size="small"
+                            color="success"
+                            icon={<VerifiedIcon />}
+                            label="Validated vs OD Production by Procedure"
+                        />
+                        <Chip size="small" variant="outlined" label={productionMeta.model} />
+                        <Chip size="small" variant="outlined" label={productionMeta.odReport} />
+                    </Box>
+
+                    {byCode?.has_data && byCode.rows.length > 0 && (
+                        <Table size="small" aria-label="Production by procedure code">
+                            <TableHead>
+                                <TableRow>
+                                    <TableCell>Code</TableCell>
+                                    <TableCell>Category</TableCell>
+                                    <TableCell align="right">Qty</TableCell>
+                                    <TableCell align="right">Avg fee</TableCell>
+                                    <TableCell align="right">Total fees</TableCell>
+                                </TableRow>
+                            </TableHead>
+                            <TableBody>
+                                {byCode.rows.map((row) => (
+                                    <TableRow key={row.procedure_code}>
+                                        <TableCell>{row.procedure_code}</TableCell>
+                                        <TableCell>{row.procedure_category ?? '—'}</TableCell>
+                                        <TableCell align="right">{row.procedure_quantity}</TableCell>
+                                        <TableCell align="right">
+                                            {formatCurrencyPrecise(row.average_fee)}
+                                        </TableCell>
+                                        <TableCell align="right">
+                                            {formatCurrencyPrecise(row.total_fees)}
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                    )}
                 </Paper>
             )}
         </Box>
