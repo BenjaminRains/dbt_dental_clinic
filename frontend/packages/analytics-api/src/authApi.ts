@@ -1,17 +1,5 @@
 import axios from 'axios';
-
-function resolveApiBaseUrl(): string {
-    const envUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-    const localHostPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i;
-
-    if (import.meta.env.DEV) {
-        if (envUrl && !localHostPattern.test(envUrl)) {
-            return envUrl.replace(/\/$/, '');
-        }
-        return '/api';
-    }
-    return envUrl?.replace(/\/$/, '') || 'http://localhost:8000';
-}
+import { resolveApiBaseUrl } from './baseUrl';
 
 const API_BASE_URL = resolveApiBaseUrl();
 
@@ -29,6 +17,13 @@ export interface SessionInfo {
     role: string;
 }
 
+export interface PortalConfiguredInfo {
+    portal_login_enabled: boolean;
+    users_loaded: boolean;
+    session_secret_configured: boolean;
+    users_file: string;
+}
+
 export const authApi = {
     async login(username: string, password: string): Promise<LoginResult> {
         const response = await axios.post<LoginResult>(
@@ -44,6 +39,14 @@ export const authApi = {
             headers: { Authorization: `Bearer ${token}` },
             timeout: 15000,
         });
+        return response.data;
+    },
+
+    async configured(): Promise<PortalConfiguredInfo> {
+        const response = await axios.get<PortalConfiguredInfo>(
+            `${API_BASE_URL}/auth/configured`,
+            { timeout: 15000 }
+        );
         return response.data;
     },
 };

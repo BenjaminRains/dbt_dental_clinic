@@ -40,24 +40,12 @@ import {
     LatestProductionDate,
     DailyProductionByCodeResponse,
 } from './types';
+import { resolveApiBaseUrl } from './baseUrl';
 
 // Configure axios base URL
 // Dev: prefer Vite proxy (/api → localhost:8000) so the browser does not call :8000 directly
 // (avoids ERR_CONNECTION_REFUSED when VITE_API_URL=http://localhost:8000 but is wrong origin).
 // Use VITE_API_URL in dev only for a non-local API (e.g. https://api.example.com).
-function resolveApiBaseUrl(): string {
-    const envUrl = (import.meta.env.VITE_API_URL as string | undefined)?.trim();
-    const localHostPattern = /^https?:\/\/(localhost|127\.0\.0\.1)(:\d+)?\/?$/i;
-
-    if (import.meta.env.DEV) {
-        if (envUrl && !localHostPattern.test(envUrl)) {
-            return envUrl.replace(/\/$/, '');
-        }
-        return '/api';
-    }
-    return envUrl?.replace(/\/$/, '') || 'http://localhost:8000';
-}
-
 const API_BASE_URL = resolveApiBaseUrl();
 
 const api = axios.create({

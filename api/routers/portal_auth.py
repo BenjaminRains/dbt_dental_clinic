@@ -10,7 +10,9 @@ from pydantic import BaseModel, Field
 from auth.portal import (
     authenticate,
     create_session_token,
+    has_session_secret,
     load_portal_users,
+    portal_users_source,
     verify_session_token,
     parse_bearer_token,
 )
@@ -67,4 +69,11 @@ def portal_me(authorization: Optional[str] = Header(None)) -> SessionResponse:
 def portal_configured() -> dict:
     """Whether portal login is available (no secrets exposed)."""
     users = load_portal_users()
-    return {"portal_login_enabled": bool(users)}
+    users_loaded = bool(users)
+    secret_configured = has_session_secret()
+    return {
+        "portal_login_enabled": users_loaded and secret_configured,
+        "users_loaded": users_loaded,
+        "session_secret_configured": secret_configured,
+        "users_file": portal_users_source(),
+    }

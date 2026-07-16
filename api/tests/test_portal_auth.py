@@ -113,6 +113,50 @@ def test_portal_login_invalid_password(portal_env):
     assert response.status_code == 401
 
 
+def test_portal_configured_reports_ready_state(portal_env):
+    from main import app
+
+    client = TestClient(app)
+    response = client.get("/auth/configured")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["portal_login_enabled"] is True
+    assert data["users_loaded"] is True
+    assert data["session_secret_configured"] is True
+    assert data["users_file"] == "env:CLINIC_PORTAL_USERS"
+
+
+def test_portal_configured_reports_missing_secret(monkeypatch):
+    users = [
+        {
+            "username": "owner",
+            "password": "owner-pass",
+            "role": "owner",
+            "display_name": "Practice Owner",
+        }
+    ]
+    monkeypatch.setenv("API_ENVIRONMENT", "clinic")
+    monkeypatch.setenv("CLINIC_PORTAL_USERS", json.dumps(users))
+    monkeypatch.delenv("CLINIC_PORTAL_USERS_FILE", raising=False)
+    monkeypatch.setattr(
+        "auth.portal.DEFAULT_PORTAL_USERS_FILE",
+        __import__("pathlib").Path("/nonexistent/clinic-portal-users.json"),
+    )
+    monkeypatch.delenv("CLINIC_PORTAL_SESSION_SECRET", raising=False)
+    monkeypatch.delenv("CLINIC_API_KEY", raising=False)
+
+    from main import app
+
+    client = TestClient(app)
+    response = client.get("/auth/configured")
+    assert response.status_code == 200
+    data = response.json()
+    assert data["portal_login_enabled"] is False
+    assert data["users_loaded"] is True
+    assert data["session_secret_configured"] is False
+    assert data["users_file"] == "env:CLINIC_PORTAL_USERS"
+
+
 def test_load_users_from_json_file(tmp_path, monkeypatch):
     users_file = tmp_path / "users.json"
     users_file.write_text(

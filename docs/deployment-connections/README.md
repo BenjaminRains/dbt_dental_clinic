@@ -205,6 +205,7 @@ After WAF allows traffic, staff **sign in** at `https://clinic.dbtdentalclinic.c
 
 - `api/clinic-portal-users.json` — edit this file only; `CLINIC_PORTAL_USERS_FILE` on EC2 points here
 - Bootstrap (committed template): `clinic-portal-users.template.json` → copy once into `api/clinic-portal-users.json`, then set real passwords
+- If `api/clinic-portal-users.json` exists, `CLINIC_PORTAL_USERS` env is ignored (file source takes precedence)
 
 ```powershell
 Copy-Item docs\deployment-connections\clinic-portal-users.template.json api\clinic-portal-users.json
@@ -226,11 +227,11 @@ Session signing secret (temp): `Tmpp0rtal-Session-Sign-9vLx2mKq8Wp` → `CLINIC_
 ### Deploy login (API code + users file)
 
 `mdc deploy frontend --target clinic` updates the SPA only — it does **not** copy portal users.  
-`mdc deploy api --env clinic` copies **only** `api/.env`. The `/auth/login` routes and users JSON must be deployed separately:
+`mdc deploy api --env clinic` copies **only** `api/.env` values. Ensure portal auth code and `api/clinic-portal-users.json` are present on the server:
 
 ```powershell
-.\scripts\deployment\deploy_clinic_portal_auth.ps1   # portal.py, portal_auth router, main.py, api/clinic-portal-users.json
-mdc deploy api --env clinic                          # .env with CLINIC_PORTAL_USERS_FILE (once / when env changes)
+.\scripts\verification\verify_clinic_portal_auth.ps1 # verify routes + users file
+mdc deploy api --env clinic                           # deploy .env (CLINIC_PORTAL_SESSION_SECRET / CLINIC_PORTAL_USERS_FILE)
 ```
 
 Then hard-refresh `https://clinic.dbtdentalclinic.com/login`.
