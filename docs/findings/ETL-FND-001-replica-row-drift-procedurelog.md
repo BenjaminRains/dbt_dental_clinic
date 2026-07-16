@@ -1,6 +1,6 @@
 # ETL-FND-001: Replica row drift — `procedurelog`
 
-**Status:** Mitigated (local KPI PASS 2026-06-26, Phase 2 re-validated 2026-06-27) — branch `fix/etl-fnd-001-procedurelog-row-drift` (P0 drift check + P1 lookback re-sync + Phase 2 replicator/loader alignment). Clinic RDS deploy + nightly automation pending before close.
+**Status:** ✅ **Closed** (2026-07-16) — local KPI PASS 2026-06-26; Phase 2 re-validated 2026-06-27; clinic RDS marts KPI compare PASS 2026-07-16 (total $15,239 / 140 rows; 28/28 procedure codes). Branch `fix/etl-fnd-001-procedurelog-row-drift` (P0 drift check + P1 lookback re-sync + Phase 2 alignment). Staging on RDS remains stale by design (publish copies marts only).
 
 **Platform roadmap (pre-CDC):** [ETL_REPLICA_FIDELITY_ROADMAP.md](../ETL_REPLICA_FIDELITY_ROADMAP.md) — schema analyzer fix, Layer 0 checks, Sunday full refresh, CDC sketch.
 **Severity:** High (blocks production KPI validation; affects any metric keyed on complete procedures)  
@@ -254,8 +254,11 @@ mdc etl invoke --env local -- check-procedurelog-drift --warn-only
 mdc dbt run --env local -- --select stg_opendental__procedurelog+
 ```
 
-**Clinic RDS (pending):** repeat ETL on `--env clinic`, then `mdc dbt run --env local` + publish or
-EC2 dbt per [CLINIC_ANALYTICS_WORKFLOW.md](../../CLINIC_ANALYTICS_WORKFLOW.md).
+**Clinic RDS (done 2026-07-16):** Option A path — clinic OD → local warehouse ETL → `mdc dbt` local →
+`mdc publish analytics --env clinic` → compare SQL via SSM tunnel (`127.0.0.1:5433`):
+- `compare_daily_production_by_procedure_total.sql` — `mart_validation_status` **PASS** ($15,239)
+- `compare_daily_production_by_procedure_by_code.sql` — all 28 codes `mart_status` **PASS**
+- Staging columns on RDS **FAIL** (expected: no `raw` / stale staging; publish is marts-only)
 
 ---
 
@@ -264,8 +267,8 @@ EC2 dbt per [CLINIC_ANALYTICS_WORKFLOW.md](../../CLINIC_ANALYTICS_WORKFLOW.md).
 | # | Criterion | Status |
 | --- | --- | --- |
 | 1 | Automated drift check runs post-ETL and alerts on MySQL vs raw mismatch for `procedurelog` | **Done** — `mdc etl invoke -- check-procedurelog-drift` |
-| 2 | 2026-06-10 KPI compare PASS after backfill | **Done** (local, 2026-06-26) |
-| 3 | Lookback re-sync **or** verified `DateTStamp` behavior + config fix deployed | **Done** (30-day lookback + Phase 2 replicator/loader alignment); clinic deploy pending |
+| 2 | 2026-06-10 KPI compare PASS after backfill | **Done** (local 2026-06-26; **clinic RDS marts 2026-07-16**) |
+| 3 | Lookback re-sync **or** verified `DateTStamp` behavior + config fix deployed | **Done** (30-day lookback + Phase 2; clinic Option A publish path) |
 | 4 | Documented in KPI validation workflow as Layer 0 (replica fidelity before golden compare) | **Done** — [kpi/README.md](../../../dbt_dental_models/validation/kpi/README.md) |
 
 ---

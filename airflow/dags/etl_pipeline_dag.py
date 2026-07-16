@@ -274,13 +274,25 @@ def validate_configuration(**context):
                 f"Consider running Schema Analysis DAG to refresh."
             )
         
-        # Check 4: Environment matches
+        # Check 4: Environment matches (warn when Phase A keeps clinic-sized tables.yml
+        # after refusing a tiny test-OD schema refresh)
         config_environment = metadata.get('environment')
         if config_environment != ENVIRONMENT:
-            raise AirflowException(
-                f"Configuration environment mismatch: "
-                f"config={config_environment}, current={ENVIRONMENT}"
-            )
+            table_count_preview = len(config.get('tables') or {})
+            if table_count_preview >= 100:
+                logging.warning(
+                    "Configuration environment mismatch (continuing): "
+                    "config=%s, current=%s, tables=%s — likely protected "
+                    "clinic-sized tables.yml under a test Airflow Variable",
+                    config_environment,
+                    ENVIRONMENT,
+                    table_count_preview,
+                )
+            else:
+                raise AirflowException(
+                    f"Configuration environment mismatch: "
+                    f"config={config_environment}, current={ENVIRONMENT}"
+                )
         
         # Check 5: Table count sanity check
         table_count = len(config['tables'])
@@ -513,6 +525,35 @@ def verify_loads(**context):
     return True
 
 
+def _context_run_timestamp(context: dict):
+    """
+    Best-effort run timestamp for reports/notifications.
+
+    Airflow 3 may omit ``logical_date`` from the task context on manual runs
+    (and asset-triggered runs). Prefer context keys, then dag_run attributes.
+    """
+    for key in ('logical_date', 'data_interval_start', 'dag_run_logical_date'):
+        value = context.get(key)
+        if value is not None:
+            return value
+    dag_run = context.get('dag_run')
+    if dag_run is not None:
+        for attr in ('logical_date', 'data_interval_start', 'run_after', 'start_date'):
+            value = getattr(dag_run, attr, None)
+            if value is not None:
+                return value
+    return None
+
+
+def _format_context_timestamp(context: dict) -> str:
+    ts = _context_run_timestamp(context)
+    if ts is None:
+        return context.get('run_id') or 'unknown'
+    if hasattr(ts, 'isoformat'):
+        return ts.isoformat()
+    return str(ts)
+
+
 def generate_pipeline_report(**context):
     """
     Generate comprehensive pipeline execution report.
@@ -521,69 +562,62 @@ def generate_pipeline_report(**context):
     a summary report with metrics and recommendations.
     """
     logging.info("Generating pipeline execution report")
-    
+
+    # Collect results outside the report-formatting try so a KeyError on
+    # Airflow 3 context keys cannot leave pipeline_success unset (which
+    # falsely skips dbt via should_run_dbt).
+    ti = context['task_instance']
+    total_tables = ti.xcom_pull(task_ids='validation.validate_configuration', key='total_tables')
+    config_age = ti.xcom_pull(task_ids='validation.validate_configuration', key='config_age_days')
+
+    categories = ['large', 'medium', 'small', 'tiny']
+    results_by_category = {}
+    for category in categories:
+        task_id = f'etl_processing.process_{category}_tables'
+        success = ti.xcom_pull(task_ids=task_id, key='success_count') or 0
+        failed = ti.xcom_pull(task_ids=task_id, key='failure_count') or 0
+        total = ti.xcom_pull(task_ids=task_id, key='total_count') or 0
+        failed_tables = ti.xcom_pull(task_ids=task_id, key='failed_tables') or []
+        results_by_category[category] = {
+            'success': success,
+            'failed': failed,
+            'total': total,
+            'failed_tables': failed_tables,
+        }
+
+    total_success = sum(r['success'] for r in results_by_category.values())
+    total_failed = sum(r['failed'] for r in results_by_category.values())
+    total_processed = sum(r['total'] for r in results_by_category.values())
+    pipeline_success = total_processed > 0 and total_failed == 0
+    ti.xcom_push(key='pipeline_success', value=pipeline_success)
+
+    analytics_successful = ti.xcom_pull(task_ids='reporting.verify_loads', key='analytics_successful') or 0
+    analytics_failed = ti.xcom_pull(task_ids='reporting.verify_loads', key='analytics_failed') or 0
+    schema_drift = ti.xcom_pull(task_ids='validation.check_schema_hash', key='schema_drift_detected')
+
     try:
-        # Collect results from all tasks
-        ti = context['task_instance']
-        
-        # Configuration info (TaskGroup prefixes task_id)
-        total_tables = ti.xcom_pull(task_ids='validation.validate_configuration', key='total_tables')
-        config_age = ti.xcom_pull(task_ids='validation.validate_configuration', key='config_age_days')
-        
-        # Processing results by category
-        categories = ['large', 'medium', 'small', 'tiny']
-        results_by_category = {}
-        
-        for category in categories:
-            task_id = f'etl_processing.process_{category}_tables'
-            success = ti.xcom_pull(task_ids=task_id, key='success_count') or 0
-            failed = ti.xcom_pull(task_ids=task_id, key='failure_count') or 0
-            total = ti.xcom_pull(task_ids=task_id, key='total_count') or 0
-            failed_tables = ti.xcom_pull(task_ids=task_id, key='failed_tables') or []
-            
-            results_by_category[category] = {
-                'success': success,
-                'failed': failed,
-                'total': total,
-                'failed_tables': failed_tables
-            }
-        
-        # Calculate totals
-        total_success = sum(r['success'] for r in results_by_category.values())
-        total_failed = sum(r['failed'] for r in results_by_category.values())
-        total_processed = sum(r['total'] for r in results_by_category.values())
-        
-        # Verification results
-        analytics_successful = ti.xcom_pull(task_ids='reporting.verify_loads', key='analytics_successful') or 0
-        analytics_failed = ti.xcom_pull(task_ids='reporting.verify_loads', key='analytics_failed') or 0
-        
-        # Schema drift check
-        schema_drift = ti.xcom_pull(task_ids='validation.check_schema_hash', key='schema_drift_detected')
-        
-        # Generate report
         report = {
-            'execution_date': context['logical_date'].isoformat(),
+            'execution_date': _format_context_timestamp(context),
             'dag_run_id': context['run_id'],
             'environment': ENVIRONMENT,
             'configuration': {
                 'total_tables_configured': total_tables,
                 'config_age_days': config_age,
-                'schema_drift_detected': schema_drift
+                'schema_drift_detected': schema_drift,
             },
             'processing_results': {
                 'total_processed': total_processed,
                 'total_success': total_success,
                 'total_failed': total_failed,
                 'success_rate': f"{(total_success/total_processed*100):.1f}%" if total_processed > 0 else "0%",
-                'by_category': results_by_category
+                'by_category': results_by_category,
             },
             'verification': {
                 'analytics_successful': analytics_successful,
-                'analytics_failed': analytics_failed
-            }
+                'analytics_failed': analytics_failed,
+            },
         }
-        
-        # Log report
+
         logging.info("=" * 60)
         logging.info("ETL PIPELINE EXECUTION REPORT")
         logging.info("=" * 60)
@@ -591,36 +625,30 @@ def generate_pipeline_report(**context):
         logging.info(f"Environment: {ENVIRONMENT}")
         logging.info(f"Configuration Age: {config_age} days")
         logging.info("")
-        logging.info(f"Processing Results:")
+        logging.info("Processing Results:")
         logging.info(f"  Total Processed: {total_processed}")
         logging.info(f"  Successful: {total_success}")
         logging.info(f"  Failed: {total_failed}")
         logging.info(f"  Success Rate: {report['processing_results']['success_rate']}")
         logging.info("")
-        logging.info(f"By Category:")
+        logging.info("By Category:")
         for category, results in results_by_category.items():
             logging.info(f"  {category.upper()}: {results['success']}/{results['total']} successful")
             if results['failed_tables']:
                 logging.info(f"    Failed: {', '.join(results['failed_tables'][:5])}")
         logging.info("")
-        logging.info(f"Analytics Status:")
+        logging.info("Analytics Status:")
         logging.info(f"  Successful: {analytics_successful}")
         logging.info(f"  Failed: {analytics_failed}")
         logging.info("=" * 60)
-        
-        # Store report in XCom for notification task
-        context['task_instance'].xcom_push(key='pipeline_report', value=report)
-        
-        # Determine if pipeline was successful (must have processed tables, not just zero failures)
-        pipeline_success = total_processed > 0 and total_failed == 0
-        context['task_instance'].xcom_push(key='pipeline_success', value=pipeline_success)
-        
+
+        ti.xcom_push(key='pipeline_report', value=report)
         return report
-        
+
     except Exception as e:
         logging.error(f"❌ Failed to generate report: {e}")
-        # Don't fail the pipeline for reporting failures
-        return {'error': str(e)}
+        # Don't fail the pipeline for reporting failures; pipeline_success already pushed.
+        return {'error': str(e), 'pipeline_success': pipeline_success}
 
 
 def send_completion_notification(**context):
@@ -668,7 +696,7 @@ def send_completion_notification(**context):
         message += f"dbt target: {DBT_TARGET}\n"
         if (PUBLISH_ENVIRONMENT or '').strip():
             message += f"Publish: {PUBLISH_ENVIRONMENT.strip()}\n"
-        message += f"Execution: {context['logical_date'].strftime('%Y-%m-%d %H:%M:%S')}\n"
+        message += f"Execution: {_format_context_timestamp(context)}\n"
         message += f"\nResults:\n"
         message += f"  • Processed: {total_processed} tables\n"
         message += f"  • Successful: {total_success}\n"

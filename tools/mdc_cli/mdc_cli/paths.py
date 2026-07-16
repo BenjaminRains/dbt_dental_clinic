@@ -110,6 +110,14 @@ def _venv_python(venv_root: Path) -> Optional[Path]:
     return candidate if candidate.exists() else None
 
 
+def _python_from_env(var_name: str) -> Optional[Path]:
+    raw = (os.environ.get(var_name) or "").strip()
+    if not raw:
+        return None
+    candidate = Path(raw)
+    return candidate if candidate.exists() else None
+
+
 def discover_api_python() -> Optional[Path]:
     """Return api/venv python if present."""
     return _venv_python(API_DIR / "venv")
@@ -117,6 +125,9 @@ def discover_api_python() -> Optional[Path]:
 
 def discover_etl_python() -> Optional[Path]:
     """Return Pipenv venv python for etl_pipeline if discoverable."""
+    override = _python_from_env("MDC_ETL_PYTHON")
+    if override is not None:
+        return override
     if not (ETL_DIR / "Pipfile").exists():
         return None
     try:
@@ -136,6 +147,9 @@ def discover_etl_python() -> Optional[Path]:
 
 def discover_dbt_python() -> Optional[Path]:
     """Return Pipenv venv python for dbt_dental_models if discoverable."""
+    override = _python_from_env("MDC_DBT_PYTHON")
+    if override is not None:
+        return override
     if not (DBT_DIR / "Pipfile").exists():
         return None
     try:

@@ -198,6 +198,10 @@ def require_component_python(component: str) -> Path:
 
 
 def discover_dbt_executable() -> Optional[Path]:
+    override = (os.environ.get("MDC_DBT_EXECUTABLE") or "").strip()
+    if override:
+        candidate = Path(override)
+        return candidate if candidate.exists() else None
     python = discover_dbt_python()
     if python is None:
         return None

@@ -9,6 +9,8 @@ services:
     depends_on:
       - postgres
       - mysql
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
@@ -18,6 +20,15 @@ services:
       - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       # Nightly DAG at 9 PM Central (cron "0 21 * * *" interpreted in this timezone)
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
+      # Task SDK must reach api-server by Compose DNS (not localhost)
+      - AIRFLOW__CORE__EXECUTION_API_SERVER_URL=http://airflow-api-server:8080/execution/
+      - MDC_IN_DOCKER=1
+      - MDC_HOST_GATEWAY=host.docker.internal
+      - MDC_ETL_PYTHON=/opt/airflow/venvs/etl/bin/python
+      - MDC_DBT_PYTHON=/opt/airflow/venvs/dbt-python
+      - MDC_DBT_EXECUTABLE=/opt/airflow/venvs/dbt
+      # Option A: clinic OD source + local warehouse (publish still uses RDS + tunnel)
+      - MDC_CLINIC_WAREHOUSE=local
       # Email Configuration for Monitoring (optional)
       - SMTP_SERVER=${SMTP_SERVER:-localhost}
       - SMTP_PORT=${SMTP_PORT:-587}
@@ -31,14 +42,17 @@ services:
       - ./airflow/scripts:/opt/airflow/scripts
       - ./config:/opt/airflow/config
       - ./etl_job:/opt/airflow/dags/etl_job
-      # Project root for ETL + dbt (nightly DAG)
+      # Project root for ETL + dbt + mdc (Phase A Compose / LocalExecutor)
       - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
       - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
+      - ./tools:/opt/airflow/dbt_dental_clinic/tools
+      - ./deployment_credentials.json:/opt/airflow/dbt_dental_clinic/deployment_credentials.json:ro
     ports:
-      - "8080:8080"
+      # 8081 avoids a sticky Windows ghost listener on 8080 after native Airflow
+      - "8081:8080"
     command: api-server
     healthcheck:
-      test: [ "CMD", "curl", "--fail", "http://localhost:8080/health" ]
+      test: [ "CMD", "curl", "--fail", "http://localhost:8080/api/v2/monitor/health" ]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -50,6 +64,8 @@ services:
     depends_on:
       - postgres
       - mysql
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
@@ -58,6 +74,14 @@ services:
       - AIRFLOW__API_AUTH__JWT_SECRET=${AIRFLOW_JWT_SECRET:-${AIRFLOW_FERNET_KEY}}
       - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
+      # Task SDK must reach api-server by Compose DNS (not localhost)
+      - AIRFLOW__CORE__EXECUTION_API_SERVER_URL=http://airflow-api-server:8080/execution/
+      - MDC_IN_DOCKER=1
+      - MDC_HOST_GATEWAY=host.docker.internal
+      - MDC_ETL_PYTHON=/opt/airflow/venvs/etl/bin/python
+      - MDC_DBT_PYTHON=/opt/airflow/venvs/dbt-python
+      - MDC_DBT_EXECUTABLE=/opt/airflow/venvs/dbt
+      - MDC_CLINIC_WAREHOUSE=local
       # Email Configuration for Monitoring (optional)
       - SMTP_SERVER=${SMTP_SERVER:-localhost}
       - SMTP_PORT=${SMTP_PORT:-587}
@@ -73,6 +97,8 @@ services:
       - ./etl_job:/opt/airflow/dags/etl_job
       - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
       - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
+      - ./tools:/opt/airflow/dbt_dental_clinic/tools
+      - ./deployment_credentials.json:/opt/airflow/dbt_dental_clinic/deployment_credentials.json:ro
     command: scheduler
 
   airflow-dag-processor:
@@ -81,6 +107,8 @@ services:
       dockerfile: Dockerfile.airflow
     depends_on:
       - postgres
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
@@ -89,6 +117,13 @@ services:
       - AIRFLOW__API_AUTH__JWT_SECRET=${AIRFLOW_JWT_SECRET:-${AIRFLOW_FERNET_KEY}}
       - AIRFLOW__CORE__AUTH_MANAGER=airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager
       - AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago
+      - AIRFLOW__CORE__EXECUTION_API_SERVER_URL=http://airflow-api-server:8080/execution/
+      - MDC_IN_DOCKER=1
+      - MDC_HOST_GATEWAY=host.docker.internal
+      - MDC_ETL_PYTHON=/opt/airflow/venvs/etl/bin/python
+      - MDC_DBT_PYTHON=/opt/airflow/venvs/dbt-python
+      - MDC_DBT_EXECUTABLE=/opt/airflow/venvs/dbt
+      - MDC_CLINIC_WAREHOUSE=local
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
@@ -98,6 +133,8 @@ services:
       - ./etl_job:/opt/airflow/dags/etl_job
       - ./etl_pipeline:/opt/airflow/dbt_dental_clinic/etl_pipeline
       - ./dbt_dental_models:/opt/airflow/dbt_dental_clinic/dbt_dental_models
+      - ./tools:/opt/airflow/dbt_dental_clinic/tools
+      - ./deployment_credentials.json:/opt/airflow/dbt_dental_clinic/deployment_credentials.json:ro
     command: dag-processor
 
   # Airflow Init (run once to initialize database)
@@ -106,7 +143,8 @@ services:
       context: .
       dockerfile: Dockerfile.airflow
     depends_on:
-      - postgres
+      postgres:
+        condition: service_healthy
     environment:
       - AIRFLOW__CORE__EXECUTOR=LocalExecutor
       - AIRFLOW__DATABASE__SQL_ALCHEMY_CONN=postgresql+psycopg2://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DATABASE}
@@ -122,21 +160,8 @@ services:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
       - ./airflow/plugins:/opt/airflow/plugins
-    command: >
-      bash -c "
-        if [ -z \"$${AIRFLOW_ADMIN_PASSWORD}\" ]; then
-          echo 'ERROR: AIRFLOW_ADMIN_PASSWORD not set. Refusing to create admin with default password.'
-          exit 1
-        fi
-        airflow db migrate &&
-        airflow users create \
-          --username $${AIRFLOW_ADMIN_USERNAME} \
-          --firstname Admin \
-          --lastname User \
-          --role Admin \
-          --email $${AIRFLOW_ADMIN_EMAIL} \
-          --password $${AIRFLOW_ADMIN_PASSWORD}
-      "
+      - ./scripts/airflow:/opt/airflow/repo-scripts:ro
+    entrypoint: ["/bin/bash", "/opt/airflow/repo-scripts/compose-init.sh"]
     profiles:
       - init # Only run when specifically called
 
@@ -160,17 +185,15 @@ services:
 
   # Database services
   postgres:
+    # Local cache already has 18; mount parent dir per PG18+ image layout.
     image: postgres:18
     env_file:
       - .env
-    # SECURITY: Ports removed - use Docker network for internal access
-    # Uncomment ONLY for maintenance operations like pg_restore, then remove immediately:
-    ports:
-      - "5432:5432"
+    # Do not publish 5432 — host already runs analytics Postgres for Phase A test.
+    # Airflow metadata uses the Compose network hostname `postgres`.
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
       - ./sql/init:/docker-entrypoint-initdb.d # For initialization scripts
-      - /usr/share/zoneinfo:/usr/share/zoneinfo:ro # Mount timezone data
     environment:
       - POSTGRES_USER=${POSTGRES_USER}
       - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
@@ -181,7 +204,6 @@ services:
       interval: 10s
       timeout: 5s
       retries: 5
-    user: "999:999" # Run as postgres user (non-root)
 
   mysql:
     image: mysql:8.4

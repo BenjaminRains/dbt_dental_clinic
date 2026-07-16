@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import os
 from typing import Optional
 
 from mdc_cli import paths
@@ -21,6 +22,18 @@ logger = logging.getLogger(__name__)
 TEST_POSTGRES_PREFIX = "TEST_POSTGRES_ANALYTICS_"
 
 
+def _clinic_warehouse_mode() -> str:
+    """Where clinic-stage ETL writes analytics on this host.
+
+    - rds (default): VPC/EC2 — clinic RDS from deployment_credentials + Secrets Manager
+    - local: Option A laptop — dbt_dental_models/.env_local; publish pushes marts to RDS
+    """
+    raw = (os.environ.get("MDC_CLINIC_WAREHOUSE") or "").strip().lower()
+    if raw in ("local", "laptop", "warehouse"):
+        return "local"
+    return "rds"
+
+
 def _read_etl_stage_file(stage: str) -> dict[str, str]:
     return read_env_file(paths.etl_env_file(stage))
 
@@ -34,6 +47,12 @@ def _overlay_analytics_authority(
     """Replace analytics creds with the Phase 6 authority for local/clinic."""
     if stage == "clinic":
         merged = strip_prefix_keys(env, POSTGRES_ANALYTICS_PREFIX)
+        if _clinic_warehouse_mode() == "local":
+            merged.update(load_local_warehouse_postgres_env_dict())
+            logger.info(
+                "ETL clinic analytics: local warehouse (MDC_CLINIC_WAREHOUSE=local)"
+            )
+            return apply_postgres_ssl_env(merged)
         merged.update(load_clinic_postgres_env_dict())
         merged, resolution = overlay_clinic_rds_credentials(
             merged,
@@ -83,7 +102,7 @@ def compose_etl_env_dict(
         if stale:
             logger.warning(
                 "Ignoring deprecated %s in %s — analytics creds come from Phase 6 authority "
-                "(clinic: deployment_credentials.json + Secrets Manager; "
+                "(clinic: RDS credentials, or local warehouse when MDC_CLINIC_WAREHOUSE=local; "
                 "local: dbt_dental_models/.env_local).",
                 ", ".join(sorted(stale)[:3]) + ("..." if len(stale) > 3 else ""),
                 paths.etl_env_file(stage).name,
@@ -120,7 +139,9 @@ def compose_etl_env_dict(
 
         env_dict = apply_tunnel_db_overrides(env_dict, local_port=tunnel_port)
 
-    return apply_postgres_ssl_env(env_dict)
+    from mdc_cli.docker_host import rewrite_localhost_hosts
+
+    return apply_postgres_ssl_env(rewrite_localhost_hosts(env_dict))
 
 
 def ensure_etl_importable() -> None:
