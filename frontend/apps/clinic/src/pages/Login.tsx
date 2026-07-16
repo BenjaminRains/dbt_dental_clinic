@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import {
     Alert,
@@ -12,15 +12,29 @@ import {
 } from '@mui/material';
 import LockOutlinedIcon from '@mui/icons-material/LockOutlined';
 import axios from 'axios';
+import { authApi } from '@mdc/analytics-api/clinic';
 import { useAuth } from '../auth/AuthContext';
 import { resolvePostLoginPath } from '../utils/roleNavigation';
+
+const PORTAL_MISCONFIGURED_MESSAGE =
+    'Clinic portal login is not configured on the local API (users and/or session secret missing). Restart API with mdc api run --env local.';
 
 function loginErrorMessage(error: unknown): string {
     if (axios.isAxiosError(error)) {
         const status = error.response?.status;
         const detail = error.response?.data?.detail;
         if (status === 404) {
-            return 'Login service not found. Deploy clinic API auth (deploy_clinic_portal_auth.ps1).';
+            return 'Login service not found. Verify clinic portal auth routes are deployed.';
+        }
+        if (status === 503) {
+            return PORTAL_MISCONFIGURED_MESSAGE;
+        }
+        if (
+            status === 500 &&
+            typeof detail === 'string' &&
+            detail.includes('CLINIC_PORTAL_SESSION_SECRET')
+        ) {
+            return PORTAL_MISCONFIGURED_MESSAGE;
         }
         if (typeof detail === 'string') {
             return detail;
@@ -38,6 +52,30 @@ const Login: React.FC = () => {
     const [password, setPassword] = useState('');
     const [error, setError] = useState<string | null>(null);
     const [submitting, setSubmitting] = useState(false);
+    const [portalReady, setPortalReady] = useState(true);
+
+    useEffect(() => {
+        let cancelled = false;
+        authApi
+            .configured()
+            .then((cfg) => {
+                if (!cancelled) {
+                    setPortalReady(cfg.portal_login_enabled);
+                    if (!cfg.portal_login_enabled) {
+                        setError(PORTAL_MISCONFIGURED_MESSAGE);
+                    }
+                }
+            })
+            .catch(() => {
+                // Keep form usable; submission path will surface real API errors.
+                if (!cancelled) {
+                    setPortalReady(true);
+                }
+            });
+        return () => {
+            cancelled = true;
+        };
+    }, []);
 
     if (authLoading) {
         return (
@@ -61,6 +99,10 @@ const Login: React.FC = () => {
     const handleSubmit = async (event: React.FormEvent) => {
         event.preventDefault();
         setError(null);
+        if (!portalReady) {
+            setError(PORTAL_MISCONFIGURED_MESSAGE);
+            return;
+        }
         setSubmitting(true);
         try {
             const session = await login(username.trim(), password);
@@ -126,7 +168,7 @@ const Login: React.FC = () => {
                             variant="contained"
                             fullWidth
                             size="large"
-                            disabled={submitting}
+                            disabled={submitting || !portalReady}
                             sx={{ mt: 3 }}
                         >
                             {submitting ? 'Signing in…' : 'Sign in'}

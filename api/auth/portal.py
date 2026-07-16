@@ -64,6 +64,14 @@ def _session_secret() -> str:
     )
 
 
+def has_session_secret() -> bool:
+    try:
+        _session_secret()
+    except ValueError:
+        return False
+    return True
+
+
 def _portal_users_file_path() -> Optional[Path]:
     explicit = (os.getenv("CLINIC_PORTAL_USERS_FILE") or "").strip()
     if explicit:
@@ -71,6 +79,15 @@ def _portal_users_file_path() -> Optional[Path]:
     if DEFAULT_PORTAL_USERS_FILE.is_file():
         return DEFAULT_PORTAL_USERS_FILE
     return None
+
+
+def portal_users_source() -> str:
+    users_file = _portal_users_file_path()
+    if users_file is not None:
+        return users_file.name
+    if (os.getenv("CLINIC_PORTAL_USERS") or "").strip():
+        return "env:CLINIC_PORTAL_USERS"
+    return "none"
 
 
 def _load_portal_users_raw() -> list[dict[str, Any]]:
@@ -142,9 +159,15 @@ def authenticate(username: str, password: str) -> PortalUser:
 
     normalized = username.strip().lower()
     for user in users:
-        if user.username.lower() == normalized and secrets.compare_digest(
-            user.password, password
-        ):
+        if user.username.lower() != normalized:
+            continue
+        try:
+            matches = len(user.password) == len(password) and secrets.compare_digest(
+                user.password, password
+            )
+        except ValueError:
+            matches = False
+        if matches:
             return user
 
     raise HTTPException(

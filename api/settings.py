@@ -220,11 +220,39 @@ def _env_file_for_stage(stage: Stage) -> Optional[Path]:
     return None
 
 
+def _fill_missing_clinic_env_from_stage_file(stage: Stage) -> None:
+    """
+    Fill missing CLINIC_* values from stage file when analytics OS env skips dotenv.
+
+    This is fill-only and does not override any existing non-blank process values.
+    """
+    env_file = API_DIR / f".env_api_{stage.value}"
+    if not env_file.exists():
+        return
+    try:
+        from dotenv import dotenv_values
+
+        values = dotenv_values(env_file) or {}
+    except Exception:
+        return
+
+    for key, value in values.items():
+        if not key.startswith("CLINIC_"):
+            continue
+        if value is None or not str(value).strip():
+            continue
+        if (os.getenv(key) or "").strip():
+            continue
+        os.environ[key] = str(value).strip()
+
+
 def load_api_settings(*, environment: Optional[str] = None) -> APISettings:
     """Load and validate settings (not cached — use get_settings() in production)."""
     stage = _detect_stage(environment)
     prefix = STAGE_PREFIX[stage.value]
     env_file = _env_file_for_stage(stage)
+    if env_file is None:
+        _fill_missing_clinic_env_from_stage_file(stage)
 
     logger.info("Validating API environment: %s", stage.value)
 

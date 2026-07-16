@@ -1,6 +1,10 @@
 # Load Project — thin mdc aliases (Phase 5.5 default).
 # Run from project root: .\load_project.ps1
 # One-time: pip install -e tools/mdc_cli
+#
+# Loads scripts/mdc_aliases.ps1 and prints the current mdc quickstart
+# (api/etl/dbt/frontend/deploy/publish/tunnel/ssm/airflow/consult-audio).
+# Full tree: mdc --help  |  docs: tools/mdc_cli/README.md
 
 param(
     [switch]$Legacy
@@ -30,3 +34,4 @@ if (-not (Test-Path $aliasesPath)) {
 
 . $aliasesPath
 Write-Host "mdc aliases loaded. Ensure mdc is installed: pip install -e tools/mdc_cli" -ForegroundColor Green
+Write-Host "Tip: frontend-dev --app clinic  |  api-run  |  mdc --help" -ForegroundColor DarkGray

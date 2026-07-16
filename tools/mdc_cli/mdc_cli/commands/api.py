@@ -22,6 +22,25 @@ from mdc_cli.stages import require_api_stage
 api_app = typer.Typer(help="API server commands")
 
 
+def _portal_users_source(settings: dict[str, str]) -> str:
+    users_file = (settings.get("CLINIC_PORTAL_USERS_FILE") or "").strip()
+    if users_file:
+        return users_file
+    default_users = API_DIR / "clinic-portal-users.json"
+    if default_users.exists():
+        return str(default_users)
+    if (settings.get("CLINIC_PORTAL_USERS") or "").strip():
+        return "env:CLINIC_PORTAL_USERS"
+    return "none"
+
+
+def _portal_secret_present(settings: dict[str, str]) -> bool:
+    return bool(
+        (settings.get("CLINIC_PORTAL_SESSION_SECRET") or "").strip()
+        or (settings.get("CLINIC_API_KEY") or "").strip()
+    )
+
+
 def _check_api_config(stage: str, *, success_label: str) -> None:
     require_api_stage(stage)
     config_path = api_env_file(stage)
@@ -89,6 +108,20 @@ def run(
     settings = load_env_dict_isolated("api", env)
     if tunnel_db:
         settings = apply_tunnel_db_overrides(settings, local_port=tunnel_port)
+
+    if env in ("local", "clinic"):
+        has_portal_secret = _portal_secret_present(settings)
+        users_source = _portal_users_source(settings)
+        typer.echo(
+            f"Portal auth preflight: portal_secret={'yes' if has_portal_secret else 'no'} users_file={users_source}"
+        )
+        if not has_portal_secret:
+            typer.echo(
+                "Refusing to start API: set CLINIC_PORTAL_SESSION_SECRET or CLINIC_API_KEY for portal login.",
+                err=True,
+            )
+            raise typer.Exit(code=2)
+
     python = require_component_python("api")
     bind_host = host or settings.get("API_HOST", "0.0.0.0")
     bind_port = str(port or settings.get("API_PORT", "8000"))
