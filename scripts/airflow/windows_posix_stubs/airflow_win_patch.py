@@ -5,9 +5,43 @@ import os
 import signal
 import socket
 import sys
+from pathlib import Path
+from types import ModuleType
 
 if sys.platform != "win32":
     raise ImportError("airflow_win_patch is for Windows only")
+
+# Ensure fcntl is importable even when stubs are not on PYTHONPATH (site .pth bootstrap).
+if "fcntl" not in sys.modules:
+    _fcntl = ModuleType("fcntl")
+    _fcntl.F_GETFD = 1
+    _fcntl.F_SETFD = 2
+    _fcntl.F_GETFL = 3
+    _fcntl.F_SETFL = 4
+    _fcntl.FD_CLOEXEC = 1
+    _fcntl.LOCK_SH = 1
+    _fcntl.LOCK_EX = 2
+    _fcntl.LOCK_NB = 4
+    _fcntl.LOCK_UN = 8
+    _fcntl.fcntl = lambda fd, cmd, arg=0: 0
+    _fcntl.flock = lambda fd, operation: None
+    _fcntl.lockf = lambda fd, cmd, len=0, start=0, whence=0: None
+    sys.modules["fcntl"] = _fcntl
+    # Prefer repo stub if present on sys.path (keeps single source of truth).
+    _stub_candidates = [
+        Path(__file__).resolve().parent / "fcntl.py",
+        Path(__file__).resolve().parents[1] / "windows_posix_stubs" / "fcntl.py",
+    ]
+    for _cand in _stub_candidates:
+        if _cand.is_file():
+            import importlib.util
+
+            _spec = importlib.util.spec_from_file_location("fcntl", _cand)
+            if _spec and _spec.loader:
+                _mod = importlib.util.module_from_spec(_spec)
+                _spec.loader.exec_module(_mod)
+                sys.modules["fcntl"] = _mod
+            break
 
 if not hasattr(os, "geteuid"):
     os.geteuid = lambda: 1000

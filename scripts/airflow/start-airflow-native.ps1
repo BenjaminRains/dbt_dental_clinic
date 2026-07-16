@@ -65,6 +65,21 @@ if (Test-Path $LocalEnvFile) {
     Write-Warning "Missing $LocalEnvFile - Fernet key may be unset."
 }
 
+# Airflow 3.2+: local webserver_config may still import removed airflow.www FAB paths
+$WebserverConfig = Join-Path $AirflowHome "webserver_config.py"
+if (Test-Path $WebserverConfig) {
+    $cfg = Get-Content $WebserverConfig -Raw
+    if ($cfg -match 'airflow\.www\.fab_security') {
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_DB', 'from flask_appbuilder.const import AUTH_DB'
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_LDAP', 'from flask_appbuilder.const import AUTH_LDAP'
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_OAUTH', 'from flask_appbuilder.const import AUTH_OAUTH'
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_OID', 'from flask_appbuilder.const import AUTH_OID'
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_REMOTE_USER', 'from flask_appbuilder.const import AUTH_REMOTE_USER'
+        Set-Content -Path $WebserverConfig -Value $cfg -Encoding UTF8
+        Write-Host "Patched $WebserverConfig for Flask-AppBuilder AUTH_* imports (Airflow 3.2+)."
+    }
+}
+
 if ($SchedulerOnly) {
     Write-Host "Starting Airflow scheduler (AIRFLOW_HOME=$AirflowHome)" -ForegroundColor Cyan
     & $Python $RunAirflow scheduler --skip-serve-logs

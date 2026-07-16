@@ -36,7 +36,7 @@ Planning lives primarily under `airflow/`. There is **no separate Airflow plan u
 | [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) | What one run means: guard → schema refresh → ETL → dbt → publish |
 | [`DAGS_STATUS.md`](DAGS_STATUS.md) | Quick status reference |
 | [`DBT_DAG_PLAN.md`](DBT_DAG_PLAN.md) | **Future** dbt enhancements (selectors, Cosmos) — initial dbt is already in `etl_pipeline` |
-| [`AIRFLOW_UPGRADE_PLAN.md`](AIRFLOW_UPGRADE_PLAN.md) | Upgrade 2.11.1 → **3.1.7** (Task SDK / api-server) |
+| [`AIRFLOW_UPGRADE_PLAN.md`](AIRFLOW_UPGRADE_PLAN.md) | Upgrade path → **3.2.2** (Task SDK / api-server; security floor) |
 | [`docs/deployment/ENVIRONMENT_FILES.md`](../docs/deployment/ENVIRONMENT_FILES.md) §4.4 | Native Airflow vs optional Compose sandbox |
 
 ---
@@ -186,7 +186,7 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 
 ### Phase A — Local proof (1–2 days)
 
-- [x] Create venv; `pip install -r requirements-airflow-native.txt` (Airflow **3.1.7** pinned)
+- [x] Create venv; `pip install -r requirements-airflow-native.txt` (Airflow **3.2.2** pinned)
 - [x] `airflow db init` / `db migrate` (metadata DB — SQLite `airflow/airflow.db` on dev laptop)
 - [x] Set Airflow Variables: `etl_environment=test`, `dbt_target=local`, `project_root=<repo root>`
 - [x] Windows native bootstrap: POSIX stubs, `run_airflow.py`, scheduler + dag-processor + api-server

@@ -1,10 +1,10 @@
 # Native Airflow install (Option A / Phase A on host — not Docker image base).
 # Install: pip install -r requirements-airflow-native.txt
-# Requires Python 3.11.x (matches constraints-3.1.7).
+# Requires Python 3.11.x (matches constraints-3.2.2).
 
--c https://raw.githubusercontent.com/apache/airflow/constraints-3.1.7/constraints-3.11.txt
+-c https://raw.githubusercontent.com/apache/airflow/constraints-3.2.2/constraints-3.11.txt
 
-apache-airflow==3.1.7
+apache-airflow==3.2.2
 
 # Operators moved out of core in Airflow 3 (PythonOperator, BashOperator, etc.)
 apache-airflow-providers-standard>=1.0.0
@@ -19,7 +19,7 @@ psycopg2-binary>=2.9
 pymysql>=1.1
 python-dotenv>=1.0
 
-# dbt runs via mdc subprocess (user pipenv), not in this venv — do not pip-install dbt here.
+# dbt runs via mdc subprocess (separate pipenv), not in this venv — do not pip-install dbt here.
 
 # Notifications
 apache-airflow-providers-slack>=8.0

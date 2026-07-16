@@ -26,7 +26,7 @@ if (-not (Test-Path $VenvDir)) {
     python -m venv $VenvDir
 }
 
-Write-Step "Install Airflow 3.1.7 + DAG deps"
+Write-Step "Install Airflow 3.2.2 + DAG deps"
 & $Python -m pip install --upgrade pip | Out-Null
 & $Python -m pip install -r (Join-Path $RepoRoot "requirements-airflow-native.txt")
 
@@ -85,22 +85,33 @@ $LocalEnvFile = Join-Path $AirflowHome ".env.native"
 if (-not (Test-Path $LocalEnvFile)) {
     $fernet = Get-IssuedFernetKey
     if (-not $fernet) {
-        $fernet = & $Python -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
+        # -S avoids site .pth (airflow_win_patch) printing Airflow warnings into the key
+        $fernet = & $Python -S -c "from cryptography.fernet import Fernet; print(Fernet.generate_key().decode())"
         Write-Host "Generated new Fernet key (no AIRFLOW_FERNET_KEY found in repo env files)."
     } else {
         Write-Host "Using Fernet key from airflow\.env.native (or root .env)."
     }
+    $jwtSecret = & $Python -S -c "import secrets; print(secrets.token_urlsafe(32))"
     $adminPass = if ($env:AIRFLOW_ADMIN_PASSWORD) { $env:AIRFLOW_ADMIN_PASSWORD } else {
         -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
     }
     @(
         "# Native Airflow local config (Phase A). Not used by mdc/ETL.",
         "AIRFLOW__CORE__FERNET_KEY=$fernet",
+        "AIRFLOW__API_AUTH__JWT_SECRET=$jwtSecret",
         "AIRFLOW_ADMIN_USERNAME=admin",
         "AIRFLOW_ADMIN_PASSWORD=$adminPass",
         "AIRFLOW_ADMIN_EMAIL=rains.bp@gmail.com"
     ) | Set-Content -Path $LocalEnvFile -Encoding UTF8
     Write-Host "Wrote $LocalEnvFile (admin password stored there)."
+}
+
+# Airflow 3.2+ api-server requires api_auth/jwt_secret
+$hasJwt = Select-String -Path $LocalEnvFile -Pattern '^\s*AIRFLOW__API_AUTH__JWT_SECRET=\S' -Quiet
+if (-not $hasJwt) {
+    $jwtSecret = & $Python -S -c "import secrets; print(secrets.token_urlsafe(32))"
+    Add-Content -Path $LocalEnvFile -Value "`n# Required by Airflow 3.2+ api-server`nAIRFLOW__API_AUTH__JWT_SECRET=$jwtSecret"
+    Write-Host "Appended AIRFLOW__API_AUTH__JWT_SECRET to $LocalEnvFile"
 }
 
 Get-Content $LocalEnvFile | ForEach-Object {
@@ -114,6 +125,21 @@ Get-Content $LocalEnvFile | ForEach-Object {
 New-Item -ItemType Directory -Force -Path (Join-Path $AirflowHome "dags") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $AirflowHome "logs") | Out-Null
 New-Item -ItemType Directory -Force -Path (Join-Path $AirflowHome "plugins") | Out-Null
+
+# Airflow 3.2+: generated webserver_config still may import removed airflow.www FAB paths
+$WebserverConfig = Join-Path $AirflowHome "webserver_config.py"
+if (Test-Path $WebserverConfig) {
+    $cfg = Get-Content $WebserverConfig -Raw
+    if ($cfg -match 'airflow\.www\.fab_security') {
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_DB', 'from flask_appbuilder.const import AUTH_DB'
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_LDAP', 'from flask_appbuilder.const import AUTH_LDAP'
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_OAUTH', 'from flask_appbuilder.const import AUTH_OAUTH'
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_OID', 'from flask_appbuilder.const import AUTH_OID'
+        $cfg = $cfg -replace 'from airflow\.www\.fab_security\.manager import AUTH_REMOTE_USER', 'from flask_appbuilder.const import AUTH_REMOTE_USER'
+        Set-Content -Path $WebserverConfig -Value $cfg -Encoding UTF8
+        Write-Host "Patched $WebserverConfig for Flask-AppBuilder AUTH_* imports (Airflow 3.2+)."
+    }
+}
 
 Write-Step "Initialize / migrate metadata DB"
 # Airflow emits POSIX warnings on stderr for Windows; avoid terminating the script.
@@ -151,7 +177,7 @@ Write-Step "Verify DAGs parse"
 Write-Step "Run DAG unit tests"
 & $Python -m pytest (Join-Path $RepoRoot "airflow\tests") -v
 
-Write-Host "`nDone. Native Airflow 3.1.7 ready (no DAG run triggered)." -ForegroundColor Green
+Write-Host "`nDone. Native Airflow 3.2.2 ready (no DAG run triggered)." -ForegroundColor Green
 Write-Host "  AIRFLOW_HOME: $AirflowHome"
 Write-Host "  Admin login:  $adminUser / (see airflow\.env.native)"
 Write-Host "  Start UI:     .\scripts\airflow\start-airflow-native.ps1"

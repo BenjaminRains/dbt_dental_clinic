@@ -1,9 +1,9 @@
-# Airflow Upgrade Plan: 2.11.1 → 3.1.7
+# Airflow Upgrade Plan: → 3.2.2
 
-**Status:** Code cutover on `feat/airflow-3.1.7` (2026-07-15); clinic nightly validation still pending  
+**Status:** Security bump on `chore/security-dependency-bumps` (2026-07-15); clinic nightly validation still pending  
 **Last updated:** 2026-07-15  
-**Driver:** Align repo with laptop `.venv-airflow` on Airflow 3.x (Task SDK / api-server)  
-**Target:** **Apache Airflow 3.1.7** (Python 3.11)
+**Driver:** Clear Dependabot Critical/High advisories (JWT logout, template injection, deserialization, example_xcom); keep Task SDK / api-server line  
+**Target:** **Apache Airflow 3.2.2** (Python 3.11)
 
 Related: [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md), [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md)
 
@@ -13,8 +13,9 @@ Related: [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md), [`ORCHESTRATION_ROA
 
 | Reason | Detail |
 |--------|--------|
-| Platform line | 2.11.x is the last 2.x security line; 3.1.x is current stable major |
-| Architecture | Task Execution API, FastAPI api-server UI, separate dag-processor |
+| Security | 3.2.2 patches JWT-still-valid-after-logout, template neutralization, XCom deserialization, and related Highs |
+| Platform line | Prior cutover landed on 3.1.7; 3.2.2 is the security floor for those advisories |
+| Architecture | Task Execution API, FastAPI api-server UI, separate dag-processor (unchanged vs 3.1.x) |
 | Operators | Core operators live in `apache-airflow-providers-standard` |
 | Removed in 3 | `SequentialExecutor`, `schedule_interval`, `execution_date` context key, Flask `webserver` CLI |
 
@@ -24,13 +25,13 @@ Related: [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md), [`ORCHESTRATION_ROA
 
 | Component | Previous | Target |
 |-----------|----------|--------|
-| `apache-airflow` | 2.11.1 | **3.1.7** |
-| Constraints | `constraints-2.11.1` | `constraints-3.1.7` |
-| Executor | SequentialExecutor | **LocalExecutor** (SQLite OK for local) |
-| UI process | `airflow webserver` | **`airflow api-server`** |
-| DAG parse | embedded in scheduler | **`airflow dag-processor`** |
-| Auth | FAB (bundled) | FAB via `apache-airflow-providers-fab` |
-| Operators | `airflow.operators.*` | `airflow.providers.standard.operators.*` |
+| `apache-airflow` | 3.1.7 | **3.2.2** |
+| Constraints | `constraints-3.1.7` | `constraints-3.2.2` |
+| Executor | LocalExecutor | **LocalExecutor** (SQLite OK for local) |
+| UI process | `airflow api-server` | **`airflow api-server`** |
+| DAG parse | `airflow dag-processor` | **`airflow dag-processor`** |
+| Auth | FAB via `apache-airflow-providers-fab` | FAB (unchanged opt-in) |
+| Operators | `airflow.providers.standard.operators.*` | unchanged |
 
 ---
 
@@ -49,6 +50,9 @@ Related: [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md), [`ORCHESTRATION_ROA
 ---
 
 ## Native start (Windows)
+
+`airflow/.env.native` must include `AIRFLOW__API_AUTH__JWT_SECRET` (Airflow 3.2+ api-server).  
+`init-airflow-native.ps1` creates or appends it automatically.
 
 ```powershell
 mdc airflow start --scheduler
@@ -76,6 +80,4 @@ mdc airflow start --api-server
 
 1. Stop scheduler / dag-processor / api-server.
 2. Restore prior `.venv-airflow` backup (if kept) + metadata DB copy from before `db migrate`.
-3. Checkout prior commit that pinned 2.11.1.
-
-Note: metadata migrated for 3.x may not run cleanly under 2.11.1 without a DB restore.
+3. Checkout prior commit that pinned 3.1.7.
