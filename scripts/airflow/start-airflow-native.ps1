@@ -52,8 +52,14 @@ $env:AIRFLOW__CORE__LOAD_EXAMPLES = "False"
 $env:AIRFLOW__CORE__DEFAULT_TIMEZONE = "America/Chicago"
 $env:AIRFLOW__CORE__EXECUTOR = "LocalExecutor"
 $env:AIRFLOW__CORE__AUTH_MANAGER = "airflow.providers.fab.auth_manager.fab_auth_manager.FabAuthManager"
+# Option A: clinic OD source + local warehouse (publish still uses RDS + tunnel)
+if (-not $env:MDC_CLINIC_WAREHOUSE) {
+    $env:MDC_CLINIC_WAREHOUSE = "local"
+}
 $DbPath = (Join-Path $AirflowHome "airflow.db") -replace '\\', '/'
 $env:AIRFLOW__DATABASE__SQL_ALCHEMY_CONN = "sqlite:///$DbPath"
+# Windows cannot create paths with ':' (ISO run_ids like manual__2026-07-16T02:53:48+00:00)
+$env:AIRFLOW__LOGGING__LOG_FILENAME_TEMPLATE = "dag_id={{ ti.dag_id }}/run_id={{ ti.run_id | replace(':', '-') }}/task_id={{ ti.task_id }}/{% if ti.map_index >= 0 %}map_index={{ ti.map_index }}/{% endif %}attempt={{ try_number|default(ti.try_number) }}.log"
 
 if (Test-Path $LocalEnvFile) {
     Get-Content $LocalEnvFile | ForEach-Object {

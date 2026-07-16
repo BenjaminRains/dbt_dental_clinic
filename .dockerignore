@@ -1,0 +1,22 @@
+.git
+.venv
+.venv-airflow
+**/__pycache__
+**/.pytest_cache
+**/node_modules
+frontend
+airflow/logs
+airflow/airflow.db
+airflow/airflow.db-*
+**/*.pyc
+etl_pipeline/.venv
+etl_pipeline/logs
+dbt_dental_models/logs
+dbt_dental_models/target
+dbt_dental_models/dbt_packages
+.env
+.env_*
+**/.env
+**/.env_*
+# Secrets — never bake into image layers (runtime mount on scheduler only)
+deployment_credentials.json

@@ -124,6 +124,33 @@ def test_compose_etl_clinic_tunnel_db(mock_overlay, phase6_layout):
     assert env.get("PGSSLMODE") == "prefer"
 
 
+def test_compose_etl_clinic_warehouse_local(phase6_layout, monkeypatch):
+    """Option A laptop: clinic OD source + local warehouse (not private RDS)."""
+    etl_dir, dbt_dir, _ = phase6_layout
+    _write_clinic_etl_file(etl_dir, include_stale_postgres=True)
+    (dbt_dir / ".env_local").write_text(
+        "\n".join(
+            [
+                "POSTGRES_ANALYTICS_HOST=localhost",
+                "POSTGRES_ANALYTICS_PORT=5432",
+                "POSTGRES_ANALYTICS_DB=opendental_analytics",
+                "POSTGRES_ANALYTICS_USER=analytics_user",
+                "POSTGRES_ANALYTICS_PASSWORD=warehouse-pass",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("MDC_CLINIC_WAREHOUSE", "local")
+
+    env = etl_env.compose_etl_env_dict("clinic", "full", prefer_secrets_manager=False)
+
+    assert env["POSTGRES_ANALYTICS_HOST"] == "localhost"
+    assert env["POSTGRES_ANALYTICS_PASSWORD"] == "warehouse-pass"
+    assert env["POSTGRES_ANALYTICS_PASSWORD"] != "STALE_PASSWORD"
+    assert env["OPENDENTAL_SOURCE_HOST"] == "192.168.1.10"
+
+
 def test_compose_etl_local_uses_dbt_env_local(phase6_layout):
     etl_dir, dbt_dir, _ = phase6_layout
     (etl_dir / ".env_local").write_text(

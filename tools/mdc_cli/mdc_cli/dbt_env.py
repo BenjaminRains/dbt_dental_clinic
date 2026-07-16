@@ -139,7 +139,9 @@ def load_dbt_env_dict(stage: str) -> dict[str, str]:
         env.update(_overlay_os_env(creds))
         _require_keys(env, DEMO_REQUIRED, str(DEPLOYMENT_CREDENTIALS))
 
-    return env
+    from mdc_cli.docker_host import rewrite_localhost_hosts
+
+    return rewrite_localhost_hosts(env)
 
 
 def validate_dbt_stage(stage: str) -> tuple[bool, Optional[str]]:
