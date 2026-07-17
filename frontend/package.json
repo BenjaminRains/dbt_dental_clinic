@@ -30,10 +30,10 @@
     "@mui/icons-material": "^6.4.7",
     "@mui/material": "^6.4.7",
     "axios": "^1.18.1",
-    "mermaid": "^10.9.1",
+    "mermaid": "^10.9.6",
     "react": "18.3.1",
     "react-dom": "18.3.1",
-    "react-router-dom": "^6.28.0",
+    "react-router-dom": "^6.30.4",
     "recharts": "^2.15.1",
     "zustand": "^5.0.3"
   },
@@ -41,6 +41,11 @@
     "lodash": "4.18.1",
     "lodash-es": "4.18.1",
     "rollup": "^4.59.0",
-    "form-data": "^4.0.6"
+    "form-data": "^4.0.6",
+    "dompurify": "3.4.11",
+    "uuid": "11.1.1",
+    "postcss": "8.5.10",
+    "picomatch": "4.0.4",
+    "yaml": "2.8.3"
   }
 }

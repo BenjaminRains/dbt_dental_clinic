@@ -23,6 +23,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, id = 'mermaid-di
                 // Initialize Mermaid
                 mermaid.initialize({
                     startOnLoad: false,
+                    securityLevel: 'sandbox',
                     theme: 'default',
                     flowchart: {
                         useMaxWidth: true,
