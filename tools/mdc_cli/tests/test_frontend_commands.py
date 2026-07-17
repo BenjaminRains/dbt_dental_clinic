@@ -118,10 +118,17 @@ def test_deploy_frontend_default_demo(mock_deploy):
     mock_deploy.assert_called_once_with("demo")
 
 
+@patch("mdc_cli.commands.deploy.deploy_frontend_target", return_value=0)
+def test_deploy_frontend_portfolio_alias(mock_deploy):
+    result = runner.invoke(app, ["deploy", "frontend", "--target", "portfolio"])
+    assert result.exit_code == 0
+    mock_deploy.assert_called_once_with("demo")
+
+
 def test_deploy_frontend_invalid_target():
     result = runner.invoke(app, ["deploy", "frontend", "--target", "local"])
     assert result.exit_code == 2
-
+    assert "portfolio" in result.output or "demo" in result.output
 
 @patch("mdc_cli.commands.frontend.find_executable", return_value="/usr/bin/npm")
 def test_frontend_status_shows_workspaces(mock_find, tmp_path, monkeypatch):
@@ -173,3 +180,4 @@ def test_frontend_status_shows_workspaces(mock_find, tmp_path, monkeypatch):
     assert "@mdc/clinic" in result.output
     assert "Local workspace apps" in result.output
     assert "Last local deploy" in result.output
+    assert "demo|portfolio|clinic" in result.output

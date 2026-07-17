@@ -4,8 +4,8 @@ import CloseIcon from '@mui/icons-material/Close';
 
 const STORAGE_KEY = 'syntheticDataBannerDismissed';
 
-/** Portfolio-only notice that demo dashboards use synthetic data. */
-const DemoDataBanner: React.FC = () => {
+/** Portfolio-only notice that dashboards use synthetic data. */
+const SyntheticDataBanner: React.FC = () => {
     const [dismissed, setDismissed] = useState(false);
 
     useEffect(() => {
@@ -50,4 +50,4 @@ const DemoDataBanner: React.FC = () => {
     );
 };
 
-export default DemoDataBanner;
+export default SyntheticDataBanner;

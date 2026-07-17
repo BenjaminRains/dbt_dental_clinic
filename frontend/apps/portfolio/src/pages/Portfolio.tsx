@@ -39,6 +39,7 @@ import {
     Dns,
     OpenInNew,
     ArrowForward,
+    Verified,
 } from '@mui/icons-material';
 
 const GITHUB = 'https://github.com/BenjaminRains/dbt_dental_clinic';
@@ -153,6 +154,14 @@ const PRODUCTION_CAPABILITIES: CapabilityLink[] = [
         icon: <Cloud />,
         href: `${GITHUB}/tree/main/tools/mdc_cli`,
         linkLabel: 'Deploy CLI & runbooks',
+    },
+    {
+        title: 'KPI validation vs OpenDental',
+        desc: 'Layered golden-report compares and a clinic UI allowlist—metrics stay off role homes until within_tolerance.',
+        icon: <Verified />,
+        href: '/kpi-validation',
+        linkLabel: 'Validation methodology',
+        external: false,
     },
 ];
 
@@ -326,7 +335,7 @@ const PortfolioV4: React.FC = () => {
                         { title: 'Collections prioritization', desc: 'AR aging and opportunity metrics surfaced for front-office action.' },
                         { title: 'Revenue leakage visibility', desc: 'Treatment and production gaps identified at provider and clinic level.' },
                         { title: 'Reduced manual reporting', desc: 'Self-serve dashboards backed by tested warehouse models.' },
-                        { title: 'Vendor metric recreation', desc: 'Rebuilt key OpenDental reports in SQL with auditable lineage.' },
+                        { title: 'OpenDental KPI parity', desc: 'Golden-date validation to within_tolerance before metrics appear on clinic role homes.' },
                         { title: '73% AWS cost reduction', desc: 'EC2 scheduling and region consolidation without sacrificing uptime.' },
                     ].map(({ title, desc }) => (
                         <Grid item xs={12} sm={6} md={4} key={title}>
@@ -471,7 +480,7 @@ const PortfolioV4: React.FC = () => {
             <Box sx={sectionSx}>
                 <Typography variant="h5" fontWeight="bold" gutterBottom>Additional Projects</Typography>
                 <Grid container spacing={2}>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} sm={6} md={3}>
                         <Card
                             component="a"
                             href={`${GITHUB}/tree/main/consult_audio_pipe`}
@@ -491,7 +500,7 @@ const PortfolioV4: React.FC = () => {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} sm={6} md={3}>
                         <Card component={RouterLink} to="/environment-manager" variant="outlined" sx={{ height: '100%', textDecoration: 'none', color: 'inherit', display: 'block', '&:hover': { boxShadow: 3 } }}>
                             <CardContent>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -504,7 +513,7 @@ const PortfolioV4: React.FC = () => {
                             </CardContent>
                         </Card>
                     </Grid>
-                    <Grid item xs={12} md={4}>
+                    <Grid item xs={12} sm={6} md={3}>
                         <Card component={RouterLink} to="/schema-discovery" variant="outlined" sx={{ height: '100%', textDecoration: 'none', color: 'inherit', display: 'block', '&:hover': { boxShadow: 3 } }}>
                             <CardContent>
                                 <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
@@ -513,6 +522,19 @@ const PortfolioV4: React.FC = () => {
                                 </Box>
                                 <Typography variant="body2" color="text.secondary">
                                     SQLAlchemy introspection across 450+ tables—tables.yml generation and drift detection.
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <Card component={RouterLink} to="/kpi-validation" variant="outlined" sx={{ height: '100%', textDecoration: 'none', color: 'inherit', display: 'block', '&:hover': { boxShadow: 3 } }}>
+                            <CardContent>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                    <Verified sx={{ color: '#5e7086' }} />
+                                    <Typography variant="subtitle2" fontWeight="bold">KPI Validation</Typography>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    OpenDental golden-report parity and a clinic UI allowlist for signed-off metrics.
                                 </Typography>
                             </CardContent>
                         </Card>

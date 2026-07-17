@@ -12,7 +12,9 @@
 
 | Host | Product | Workspace app | Build target |
 |------|---------|---------------|--------------|
-| `dbtdentalclinic.com` | Portfolio + synthetic analytics demo | `@mdc/portfolio` | `mdc deploy frontend --target demo` |
+| `dbtdentalclinic.com` | Portfolio + synthetic analytics demo | `@mdc/portfolio` | `mdc deploy frontend --target demo` (or `--target portfolio`) |
 | `clinic.dbtdentalclinic.com` | Staff portal + PHI analytics | `@mdc/clinic` | `mdc deploy frontend --target clinic` |
 
 Local: `mdc frontend dev --app portfolio|clinic`
+
+Nomenclature: use **portfolio/clinic** for the Vite apps (`--app`); use **demo/clinic** for env stages; frontend deploy accepts both `demo` and `portfolio`.

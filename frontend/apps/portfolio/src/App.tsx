@@ -1,7 +1,7 @@
 import { Routes, Route, Navigate } from 'react-router-dom';
 import { Suspense, lazy, type ReactNode } from 'react';
 import { Box, CircularProgress } from '@mui/material';
-import DemoLayout from './shell/DemoLayout';
+import PortfolioLayout from './shell/PortfolioLayout';
 import Portfolio from './pages/Portfolio';
 import AgentProfile from './pages/AgentProfile';
 
@@ -17,6 +17,7 @@ const ReferralSources = lazy(() => import('@mdc/analytics-ui/pages/ReferralSourc
 const KPIDefinitions = lazy(() => import('@mdc/analytics-ui/pages/KPIDefinitions'));
 const EnvironmentManager = lazy(() => import('./pages/EnvironmentManager'));
 const SchemaDiscovery = lazy(() => import('./pages/SchemaDiscovery'));
+const KpiValidation = lazy(() => import('./pages/KpiValidation'));
 
 const PageLoader = () => (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -31,7 +32,7 @@ function withSuspense(element: ReactNode) {
 function pageShell(element: ReactNode) {
     return (
         <Box sx={{ display: 'flex', minHeight: '100vh' }}>
-            <DemoLayout>{element}</DemoLayout>
+            <PortfolioLayout>{element}</PortfolioLayout>
         </Box>
     );
 }
@@ -64,6 +65,7 @@ function App() {
             <Route path="/kpi-definitions" element={pageShell(withSuspense(<KPIDefinitions />))} />
             <Route path="/environment-manager" element={pageShell(withSuspense(<EnvironmentManager />))} />
             <Route path="/schema-discovery" element={pageShell(withSuspense(<SchemaDiscovery />))} />
+            <Route path="/kpi-validation" element={pageShell(withSuspense(<KpiValidation />))} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

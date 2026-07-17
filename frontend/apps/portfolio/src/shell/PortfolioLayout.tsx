@@ -28,13 +28,14 @@ import {
     Spa as HygieneIcon,
     ShareOutlined as ReferralIcon,
     HelpOutline as HelpIcon,
+    Verified as VerifiedIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
-import DemoDataBanner from './DemoDataBanner';
+import SyntheticDataBanner from './SyntheticDataBanner';
 
 const drawerWidth = 240;
 
-interface DemoLayoutProps {
+interface PortfolioLayoutProps {
     children: React.ReactNode;
 }
 
@@ -42,6 +43,7 @@ const menuItems = [
     { text: 'Portfolio', icon: <HomeIcon />, path: '/' },
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
     { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
+    { text: 'KPI Validation', icon: <VerifiedIcon />, path: '/kpi-validation' },
     { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
     { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
     { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },
@@ -52,7 +54,7 @@ const menuItems = [
     { text: 'Appointments', icon: <AppointmentsIcon />, path: '/appointments' },
 ];
 
-const DemoLayout: React.FC<DemoLayoutProps> = ({ children }) => {
+const PortfolioLayout: React.FC<PortfolioLayoutProps> = ({ children }) => {
     const [mobileOpen, setMobileOpen] = useState(false);
     const navigate = useNavigate();
     const location = useLocation();
@@ -167,11 +169,11 @@ const DemoLayout: React.FC<DemoLayoutProps> = ({ children }) => {
                 }}
             >
                 <Toolbar />
-                <DemoDataBanner />
+                <SyntheticDataBanner />
                 {children}
             </Box>
         </Box>
     );
 };
 
-export default DemoLayout;
+export default PortfolioLayout;

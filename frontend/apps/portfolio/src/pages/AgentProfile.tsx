@@ -168,6 +168,7 @@ Parallel pipeline – Consult Audio Whisper Pipeline:
                     <li>150+ dbt models with tests and lineage documentation</li>
                     <li>Three-phase ETL: MySQL → replication → PostgreSQL raw; full / incremental / incremental_chunked strategies</li>
                     <li>Schema conversion, type mapping, connection pooling, retries, and backfill-safe incremental loads</li>
+                    <li>KPI validation vs OpenDental: layered golden-report compares, registry within_tolerance gate, and clinic UI allowlist so role homes only show signed-off metrics</li>
                 </Typography>
                 <Typography variant="subtitle1" gutterBottom>
                     Deployment and Operations
@@ -203,6 +204,12 @@ Parallel pipeline – Consult Audio Whisper Pipeline:
                         Portfolio:{' '}
                         <Link href="https://dbtdentalclinic.com" target="_blank" rel="noopener noreferrer">
                             https://dbtdentalclinic.com
+                        </Link>
+                    </li>
+                    <li>
+                        KPI Validation showcase:{' '}
+                        <Link href="https://dbtdentalclinic.com/kpi-validation" target="_blank" rel="noopener noreferrer">
+                            https://dbtdentalclinic.com/kpi-validation
                         </Link>
                     </li>
                     <li>
