@@ -28,6 +28,9 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, id = 'mermaid-di
                         useMaxWidth: true,
                         htmlLabels: true,
                         curve: 'basis',
+                        nodeSpacing: 40,
+                        rankSpacing: 50,
+                        padding: 16,
                     },
                     themeVariables: {
                         primaryColor: '#1976d2',
@@ -36,6 +39,7 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, id = 'mermaid-di
                         lineColor: '#666',
                         secondaryColor: '#e3f2fd',
                         tertiaryColor: '#f5f5f5',
+                        fontSize: '16px',
                     },
                 });
 
@@ -100,10 +104,11 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, id = 'mermaid-di
                 overflowX: 'auto',
                 minHeight: isLoaded ? 'auto' : '400px',
                 '& .mermaid': {
-                    display: 'flex',
-                    justifyContent: 'center',
+                    display: 'block',
+                    width: '100%',
                 },
                 '& svg': {
+                    width: '100% !important',
                     maxWidth: '100%',
                     height: 'auto',
                 },
