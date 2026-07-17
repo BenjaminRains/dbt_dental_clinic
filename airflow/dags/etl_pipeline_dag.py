@@ -9,9 +9,9 @@ What a run is:
 2. ETL: Full pass over all tables by category (large → medium → small → tiny). Default is
    incremental load (force_full_refresh=False); each table uses config from tables.yml.
 3. Reporting: Verify loads, generate execution report.
-4. dbt: When ETL succeeded — mdc dbt deps + build --target {dbt_target} (default local).
+4. dbt: When ETL succeeded — mdc dbt deps + build (models hard) + test (soft; noted in notify).
 5. Publish: When publish_environment is set (e.g. clinic) — mdc publish analytics to RDS.
-6. Notify: Slack/email summary (after report and publish when configured).
+6. Notify: Slack/email summary including dbt test ERROR/WARN counts (after report and publish).
 
 Schedule: Nightly Mon–Sun at 9 PM Central (set AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago).
 Dependencies: Valid tables.yml (from Schema Analysis DAG or manual run).
@@ -41,7 +41,7 @@ from airflow.providers.standard.operators.python import (
 from airflow.exceptions import AirflowException, AirflowSkipException
 from airflow.task.trigger_rule import TriggerRule
 
-from lib.mdc_runner import run_mdc, run_mdc_etl_invoke
+from lib.mdc_runner import parse_dbt_run_summary, run_mdc, run_mdc_etl_invoke
 
 # Default arguments for all tasks
 default_args = {
@@ -92,9 +92,19 @@ DBT_TARGET = Variable.get('dbt_target', default='local')
 PUBLISH_ENVIRONMENT = Variable.get('publish_environment', default='')
 
 
-def _run_mdc_cmd(mdc_args: list, *, timeout_seconds: int | None = None) -> None:
+def _run_mdc_cmd(
+    mdc_args: list,
+    *,
+    timeout_seconds: int | None = None,
+    check: bool = True,
+):
     """Run mdc CLI from project root (same env isolation as manual mdc commands)."""
-    run_mdc(mdc_args, cwd=PROJECT_ROOT, timeout_seconds=timeout_seconds)
+    return run_mdc(
+        mdc_args,
+        cwd=PROJECT_ROOT,
+        timeout_seconds=timeout_seconds,
+        check=check,
+    )
 
 
 def run_dbt_deps(**context):
@@ -103,11 +113,68 @@ def run_dbt_deps(**context):
 
 
 def run_dbt_build(**context):
-    """Run dbt build via mdc against DBT_TARGET (local = laptop Postgres)."""
+    """
+    Materialize dbt models (hard fail), then run tests (soft fail).
+
+    Test ERROR/WARN must not block publish or mark the DAG run failed. Summary
+    is pushed to XCom for the completion notification.
+    """
+    ti = context['task_instance']
+
+    # Models / seeds / snapshots — must succeed for marts to be trustworthy.
     _run_mdc_cmd(
-        ['dbt', 'invoke', '--env', DBT_TARGET, '--', 'build', '--target', DBT_TARGET],
+        [
+            'dbt',
+            'invoke',
+            '--env',
+            DBT_TARGET,
+            '--',
+            'build',
+            '--exclude-resource-type',
+            'test',
+            '--target',
+            DBT_TARGET,
+        ],
         timeout_seconds=7200,
     )
+
+    # Data tests — note + alert only; do not fail the task.
+    test_result = _run_mdc_cmd(
+        [
+            'dbt',
+            'invoke',
+            '--env',
+            DBT_TARGET,
+            '--',
+            'test',
+            '--target',
+            DBT_TARGET,
+        ],
+        timeout_seconds=7200,
+        check=False,
+    )
+    combined = (test_result.stdout or '') + '\n' + (test_result.stderr or '')
+    summary = parse_dbt_run_summary(combined)
+    summary['exit_code'] = test_result.returncode
+    ti.xcom_push(key='dbt_test_summary', value=summary)
+
+    if summary.get('has_errors') or test_result.returncode != 0:
+        logging.warning(
+            "dbt tests reported errors (exit=%s, ERROR=%s, WARN=%s, PASS=%s). "
+            "Continuing to publish/notify — see completion notification.",
+            test_result.returncode,
+            summary.get('error'),
+            summary.get('warn'),
+            summary.get('pass'),
+        )
+    else:
+        logging.info(
+            "dbt tests clean: PASS=%s WARN=%s ERROR=%s",
+            summary.get('pass'),
+            summary.get('warn'),
+            summary.get('error'),
+        )
+    return summary
 
 
 def publish_analytics(**context):
@@ -659,6 +726,7 @@ def send_completion_notification(**context):
     - Execution status (success/partial/failed)
     - Processing statistics
     - Failed tables (if any)
+    - dbt test summary (errors noted, do not fail the run)
     - Recommendations
     """
     from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
@@ -670,6 +738,7 @@ def send_completion_notification(**context):
         ti = context['task_instance']
         report = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_report')
         pipeline_success = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_success')
+        dbt_tests = ti.xcom_pull(task_ids='dbt_build.dbt_build', key='dbt_test_summary') or {}
         
         if not report:
             logging.warning("No report available for notification")
@@ -679,10 +748,15 @@ def send_completion_notification(**context):
         total_processed = report['processing_results']['total_processed']
         total_success = report['processing_results']['total_success']
         total_failed = report['processing_results']['total_failed']
+        dbt_test_errors = int(dbt_tests.get('error') or 0)
+        dbt_test_warns = int(dbt_tests.get('warn') or 0)
         
-        if pipeline_success:
+        if pipeline_success and dbt_test_errors == 0:
             level = "✅ SUCCESS"
             status = "completed successfully"
+        elif pipeline_success and dbt_test_errors > 0:
+            level = "⚠️  SUCCESS WITH DBT TEST ERRORS"
+            status = "completed; dbt tests reported errors (publish not blocked)"
         elif total_failed > 0 and total_success > 0:
             level = "⚠️  PARTIAL SUCCESS"
             status = "completed with some failures"
@@ -710,6 +784,20 @@ def send_completion_notification(**context):
                 if results['failed_tables']:
                     message += f"  {category}: {', '.join(results['failed_tables'][:5])}\n"
         
+        if dbt_tests:
+            message += "\ndbt tests:\n"
+            message += (
+                f"  • PASS={dbt_tests.get('pass', 0)} "
+                f"WARN={dbt_test_warns} ERROR={dbt_test_errors} "
+                f"SKIP={dbt_tests.get('skip', 0)}\n"
+            )
+            if dbt_tests.get('raw_done_line'):
+                message += f"  • {dbt_tests['raw_done_line']}\n"
+            if dbt_test_errors > 0:
+                message += (
+                    "  • Test ERRORs are noted only — they did not stop publish.\n"
+                )
+
         # Add recommendations
         config_age = report['configuration']['config_age_days']
         if config_age > 30:
@@ -981,7 +1069,15 @@ with dag:
             task_id='dbt_build',
             python_callable=run_dbt_build,
             execution_timeout=timedelta(hours=2),
-            doc_md=f"Run dbt build --target {DBT_TARGET} via mdc.",
+            doc_md=f"""
+            ### dbt materialize + test
+
+            1. `dbt build --exclude-resource-type test --target {DBT_TARGET}` — **hard fail**
+               if models/seeds fail (blocks publish).
+            2. `dbt test --target {DBT_TARGET}` — **soft fail**: ERROR/WARN are logged and
+               pushed to XCom (`dbt_test_summary`) for the completion notification; they do
+               **not** fail this task or block publish.
+            """,
         )
         dbt_deps >> dbt_build
     
@@ -1050,9 +1146,9 @@ and loads it into the PostgreSQL analytics database.
 One run = **incremental ETL** (full pass, config-driven) + **dbt build** + **publish to RDS** (when configured).
 
 - **Incremental load**: `force_full_refresh=False` by default; each table uses `tables.yml`.
-- **dbt**: `mdc dbt invoke --env {dbt_target}` then `build --target {dbt_target}` when ETL succeeded.
-- **Publish**: `mdc publish analytics --env {publish_environment}` after dbt when `publish_environment` is set.
-- **Failure handling**: Validation fails fast; dbt/publish skipped when ETL failed; notify runs last.
+- **dbt**: `mdc dbt invoke --env {dbt_target}` → `build --exclude-resource-type test` (hard) then `test` (soft; noted in notify).
+- **Publish**: `mdc publish analytics --env {publish_environment}` after dbt models when `publish_environment` is set.
+- **Failure handling**: Validation fails fast; dbt/publish skipped when ETL failed; dbt **test** ERRORs do not stop publish; notify runs last.
 
 ## Data Flow
 

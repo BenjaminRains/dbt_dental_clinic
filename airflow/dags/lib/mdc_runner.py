@@ -45,13 +45,61 @@ def parse_airflow_result(stdout: str) -> dict[str, Any]:
     return {}
 
 
+def parse_dbt_run_summary(stdout: str) -> dict[str, Any]:
+    """
+    Parse dbt CLI summary lines (PASS=/WARN=/ERROR= or Completed with N errors).
+
+    Returns counts plus exit-friendly flags; missing fields default to 0/False.
+    """
+    import re
+
+    summary: dict[str, Any] = {
+        "pass": 0,
+        "warn": 0,
+        "error": 0,
+        "skip": 0,
+        "total": 0,
+        "has_errors": False,
+        "raw_done_line": "",
+    }
+    # e.g. Done. PASS=2773 WARN=253 ERROR=4 SKIP=1980 NO-OP=1 TOTAL=5011
+    done = re.search(
+        r"Done\.\s+PASS=(?P<pass>\d+)\s+WARN=(?P<warn>\d+)\s+ERROR=(?P<error>\d+)"
+        r"(?:\s+SKIP=(?P<skip>\d+))?(?:.*?TOTAL=(?P<total>\d+))?",
+        stdout,
+    )
+    if done:
+        summary["pass"] = int(done.group("pass"))
+        summary["warn"] = int(done.group("warn"))
+        summary["error"] = int(done.group("error"))
+        if done.group("skip") is not None:
+            summary["skip"] = int(done.group("skip"))
+        if done.group("total") is not None:
+            summary["total"] = int(done.group("total"))
+        summary["raw_done_line"] = done.group(0).strip()
+    else:
+        completed = re.search(
+            r"Completed with (?P<error>\d+) errors?.*?and (?P<warn>\d+) warnings?",
+            stdout,
+            re.IGNORECASE | re.DOTALL,
+        )
+        if completed:
+            summary["error"] = int(completed.group("error"))
+            summary["warn"] = int(completed.group("warn"))
+            summary["raw_done_line"] = completed.group(0).strip()[:200]
+
+    summary["has_errors"] = summary["error"] > 0
+    return summary
+
+
 def run_mdc(
     mdc_args: list[str],
     *,
     cwd: Path,
     timeout_seconds: int | None = None,
+    check: bool = True,
 ) -> subprocess.CompletedProcess[str]:
-    """Run mdc with args from project root; log output and raise on non-zero exit."""
+    """Run mdc with args from project root; log output and optionally raise on non-zero exit."""
     cmd = [*resolve_mdc_cmd(), *mdc_args]
     logger.info("Running: %s (cwd=%s)", " ".join(cmd), cwd)
 
@@ -72,7 +120,7 @@ def run_mdc(
         logger.info("mdc stdout:\n%s", result.stdout)
     if result.stderr:
         logger.warning("mdc stderr:\n%s", result.stderr)
-    if result.returncode != 0:
+    if check and result.returncode != 0:
         raise AirflowException(
             f"mdc command failed (exit {result.returncode}): {' '.join(cmd)}"
         )
