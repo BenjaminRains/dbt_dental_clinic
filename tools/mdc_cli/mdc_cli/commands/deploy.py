@@ -57,12 +57,18 @@ def deploy_frontend(
     target: str = typer.Option(
         "demo",
         "--target",
-        help="Frontend target: demo (portfolio) or clinic (IP-restricted)",
+        help="Frontend target: demo|portfolio (same app) or clinic (IP-restricted)",
     ),
 ) -> None:
     """Build and deploy frontend to S3/CloudFront."""
+    # portfolio is an alias for the demo stage (apps/portfolio → demo env).
+    if target == "portfolio":
+        target = "demo"
     if target not in ("demo", "clinic"):
-        typer.echo("--target must be demo or clinic.", err=True)
+        typer.echo(
+            "--target must be demo, portfolio (alias for demo), or clinic.",
+            err=True,
+        )
         raise typer.Exit(code=2)
     code = deploy_frontend_target(target)
     raise typer.Exit(code=code)

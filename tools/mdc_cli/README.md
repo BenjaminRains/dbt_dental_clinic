@@ -50,9 +50,10 @@ Two deployable apps under `frontend/` (`@mdc/portfolio`, `@mdc/clinic`). See [fr
 
 - `mdc frontend dev [--app portfolio|clinic]` — Vite for one app (writes `frontend/apps/<app>/.env.local`)
 - `mdc frontend status` — workspace paths, S3/CloudFront/API key resolution, last local deploy hint
-- `mdc deploy frontend --target demo|clinic` — typecheck + build matching workspace, SPA fallbacks, CloudFront invalidation
+- `mdc deploy frontend --target demo|portfolio|clinic` — typecheck + build matching workspace, SPA fallbacks, CloudFront invalidation (`portfolio` is an alias for the `demo` stage / `@mdc/portfolio`)
 - `mdc deploy dbt-docs [--env local] [--skip-generate]` — upload `dbt_dental_models/target` to `s3://…/dbt-docs/`
 
+Nomenclature: use **portfolio/clinic** for Vite apps (`--app`); use **demo/clinic** for env stages; frontend deploy accepts both `demo` and `portfolio`.
 ### Consult audio (Phase 5.4)
 
 - `mdc consult-audio install` — create `consult_audio_pipe/venv` and install requirements

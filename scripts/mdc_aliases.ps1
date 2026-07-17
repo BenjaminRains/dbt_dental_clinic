@@ -171,6 +171,10 @@ function demo-frontend-deploy {
     Invoke-MDC @("deploy", "frontend", "--target", "demo") + $args
 }
 
+function portfolio-frontend-deploy {
+    Invoke-MDC @("deploy", "frontend", "--target", "demo") + $args
+}
+
 function clinic-frontend-deploy {
     Invoke-MDC @("deploy", "frontend", "--target", "clinic") + $args
 }
@@ -355,6 +359,7 @@ Write-Host "  frontend-dev --app clinic    mdc frontend dev --app clinic (proxy 
 Write-Host "  frontend-dev --app portfolio mdc frontend dev --app portfolio" -ForegroundColor Cyan
 Write-Host "  frontend-status              mdc frontend status" -ForegroundColor Cyan
 Write-Host "  demo-frontend-deploy         mdc deploy frontend --target demo" -ForegroundColor Cyan
+Write-Host "  portfolio-frontend-deploy    mdc deploy frontend --target demo (alias)" -ForegroundColor Cyan
 Write-Host "  clinic-frontend-deploy       mdc deploy frontend --target clinic" -ForegroundColor Cyan
 Write-Host "  dbt-docs-deploy              mdc deploy dbt-docs" -ForegroundColor Cyan
 Write-Host "  deploy-api                   mdc deploy api --env clinic" -ForegroundColor Cyan

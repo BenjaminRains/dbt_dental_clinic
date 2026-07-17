@@ -136,11 +136,12 @@ def frontend_status() -> None:
     """Show demo/clinic frontend apps, buckets, and last local deploy hint."""
     typer.echo("Frontend deployment status")
     typer.echo(
-        "Nomenclature: local = localhost dev | demo = portfolio | clinic = production"
+        "Nomenclature: --app portfolio|clinic (Vite apps); "
+        "env stages demo|clinic; frontend deploy accepts demo|portfolio|clinic"
     )
-    typer.echo("Apps: @mdc/portfolio (demo) · @mdc/clinic (clinic)")
+    typer.echo("Apps: @mdc/portfolio (demo stage) · @mdc/clinic (clinic)")
     typer.echo("Dev:  mdc frontend dev --app portfolio|clinic")
-    typer.echo("Deploy: mdc deploy frontend --target demo|clinic")
+    typer.echo("Deploy: mdc deploy frontend --target demo|portfolio|clinic")
 
     typer.echo("")
     typer.echo("Local workspace apps")
