@@ -19,6 +19,9 @@ on:
       - "api/config.py"
       - "etl_pipeline/etl_pipeline/config/**"
 
+permissions:
+  contents: read
+
 jobs:
   test:
     runs-on: ubuntu-latest
