@@ -32,7 +32,7 @@ urllib3>=2.6.3,<3
 structlog>=23.0.0
 
 # Security (for production)
-python-jose[cryptography]>=3.3.0
+python-jose[cryptography]>=3.5.0
 passlib[bcrypt]>=1.7.4
 
 # AWS SDK (for Secrets Manager access)
