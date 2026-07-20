@@ -1,7 +1,7 @@
 """
 SDK-shaped Open Dental extract surface (Airbyte Track A / gate #0).
 
-Read + classify helpers only. No Settings, PostgresLoader, Airflow, or
+Read + classify helpers only. No Settings, analytics loaders, Airflow, or
 replication-hop writers. Cursor *logic* lives here; cursor *persistence*
 (etl_copy_status / etl_load_status / Airbyte STATE) stays outside.
 """

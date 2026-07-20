@@ -246,7 +246,7 @@ class TestUtilityMethods:
         columns = ['id', 'name', 'date', 'amount', 'active']
         table_name = 'patient'
         
-        with patch('etl_pipeline.core.simple_mysql_replicator.logger') as mock_logger:
+        with patch('etl_pipeline.opendental_extract.row_cleaner.logger') as mock_logger:
             cleaned_row = replicator._clean_row_data(row, columns, table_name)
             
             # Should handle error gracefully and use None for problematic values
@@ -254,7 +254,7 @@ class TestUtilityMethods:
             assert cleaned_row[0] == 1
             assert cleaned_row[2] == '2024-01-01'
             
-            # Verify warning was logged
+            # Verify warning was logged (logging lives in opendental_extract.row_cleaner)
             mock_logger.warning.assert_called_once()
 
     def test_build_mysql_upsert_sql_with_primary_key(self, replicator_with_mock_engines):
