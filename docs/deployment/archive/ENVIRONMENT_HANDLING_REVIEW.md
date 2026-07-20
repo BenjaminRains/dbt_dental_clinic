@@ -1,6 +1,10 @@
-# Environment handling review — phase history
+# Environment handling review — phase history (ARCHIVED)
 
-Historical tracker for the environment modernization effort (Phases 0–5 complete). **Day-to-day reference:** [ENVIRONMENT_FILES.md](ENVIRONMENT_FILES.md). **Daily commands:** [tools/mdc_cli/README.md](../../tools/mdc_cli/README.md).
+**Status:** Complete — archived 2026-07-20.  
+**Day-to-day reference:** [../ENVIRONMENT_FILES.md](../ENVIRONMENT_FILES.md).  
+**Daily commands:** [../../../tools/mdc_cli/README.md](../../../tools/mdc_cli/README.md).
+
+Historical tracker for the environment modernization effort (Phases 0–6 all **Done**). Do not extend with new work; update `ENVIRONMENT_FILES.md` instead.
 
 The old root-level `ENVIRONMENT_HANDLING_REVIEW.md` and `ENVIRONMENT_HANDLING_REVIEW_PHASE5_PROPOSAL.md` were never committed to this repo; this file replaces them.
 
@@ -26,7 +30,7 @@ Current **`mdc` version:** see `tools/mdc_cli/pyproject.toml` (0.9.x at time of 
 - **Deploy:** `mdc deploy api --env clinic` writes `/opt/dbt_dental_clinic/api/.env` from `api/.env_api_clinic`; Python does not re-read the source file on the instance.
 - **ETL / ad-hoc scripts:** `override=False` when loading dotenv so process env wins.
 
-See [ENVIRONMENT_FILES.md §3.2](ENVIRONMENT_FILES.md#32-precedence-rule-target-state) and [api/settings.py](../../api/settings.py).
+See [ENVIRONMENT_FILES.md §3.2](../ENVIRONMENT_FILES.md#32-precedence-rule-target-state) and [api/settings.py](../../../api/settings.py).
 
 ---
 
@@ -37,7 +41,7 @@ See [ENVIRONMENT_FILES.md §3.2](ENVIRONMENT_FILES.md#32-precedence-rule-target-
 - **CLI:** `pip install -e tools/mdc_cli`; `mdc status`, `mdc * validate`, `mdc * run` inject validated env into child processes without mutating the parent shell.
 - **Clinic RDS password:** RDS master user secret (`rds!db-...` in Secrets Manager) for publish/freshness; `mdc secrets pull clinic` syncs the live password into `api/.env_api_clinic` for EC2 deploy.
 
-See [ENVIRONMENT_FILES.md §4](ENVIRONMENT_FILES.md#4-who-loads-what-by-component) and [CLINIC_ANALYTICS_WORKFLOW.md](CLINIC_ANALYTICS_WORKFLOW.md).
+See [ENVIRONMENT_FILES.md §4](../ENVIRONMENT_FILES.md#4-who-loads-what-by-component) and [CLINIC_ANALYTICS_WORKFLOW.md](../CLINIC_ANALYTICS_WORKFLOW.md).
 
 ---
 
@@ -72,13 +76,13 @@ See [ENVIRONMENT_FILES.md §4](ENVIRONMENT_FILES.md#4-who-loads-what-by-componen
 - ETL `connections.py` — honors `POSTGRES_ANALYTICS_SSLMODE` / `PGSSLMODE`
 - `mdc publish analytics` — local source defaults to `dbt_dental_models/.env_local`
 
-See [ENVIRONMENT_FILES.md §3.6](ENVIRONMENT_FILES.md#36-phase-6--postgres-authority-matrix).
+See [ENVIRONMENT_FILES.md §3.6](../ENVIRONMENT_FILES.md#36-phase-6--postgres-authority-matrix).
 
 ---
 
 ## Related docs
 
-- [ENVIRONMENT_FILES.md](ENVIRONMENT_FILES.md) — operator reference (inventory, loaders, templates)
-- [CLINIC_ANALYTICS_WORKFLOW.md](CLINIC_ANALYTICS_WORKFLOW.md) — local dbt → publish to RDS
-- [api/API_ENV_FILE_EXPLANATION.md](../api/API_ENV_FILE_EXPLANATION.md) — API file loading
-- [scripts/archive/environment_manager.ps1](../../scripts/archive/environment_manager.ps1) — legacy (reference only)
+- [ENVIRONMENT_FILES.md](../ENVIRONMENT_FILES.md) — operator reference (inventory, loaders, templates)
+- [CLINIC_ANALYTICS_WORKFLOW.md](../CLINIC_ANALYTICS_WORKFLOW.md) — local dbt → publish to RDS
+- [api/API_ENV_FILE_EXPLANATION.md](../../api/API_ENV_FILE_EXPLANATION.md) — API file loading
+- [scripts/archive/environment_manager.ps1](../../../scripts/archive/environment_manager.ps1) — legacy (reference only)

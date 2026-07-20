@@ -7,13 +7,17 @@
 #
 #   cp profiles.yml.template profiles.yml
 #
-# Select the target with DBT_TARGET (local | demo | clinic), or pass
-# `--target <stage>` on the dbt CLI. All credentials come from env_var() —
-# never hardcode secrets in profiles.yml.
+# Select the target with DBT_TARGET (local | demo | clinic | snowflake), or pass
+# `--target <stage>` on the dbt CLI. Prefer `mdc dbt … --env <stage>` so
+# mdc_cli/dbt_env.py injects credentials (ENVIRONMENT_FILES.md).
+# All credentials come from env_var() — never hardcode secrets in profiles.yml.
 #
-# Unified stage vocabulary across subprojects: local | test | demo | clinic.
+# Unified stage vocabulary: local | test | demo | clinic | snowflake (dbt-only).
 # dbt has no `test` target (ETL/API integration tests own the test databases),
 # and ETL has no `demo` stage (demo data comes from the synthetic generator).
+# `snowflake` is the dual-warehouse portfolio target (payments/collections subset;
+# see docs/snowflake/SNOWFLAKE_INTEGRATION_PLAN.md). Requires dbt-snowflake +
+# dbt_dental_models/.env_snowflake.
 dbt_dental_models:
   target: "{{ env_var('DBT_TARGET', 'local') }}"
   outputs:
@@ -86,4 +90,21 @@ dbt_dental_models:
       client_encoding: UTF8
       lc_collate: "en-US"
       lc_ctype: "en-US"
-      threads: 4 
+      threads: 4
+    # Portfolio mini warehouse — payments/collections (synthetic only).
+    # Auth: key-pair preferred (SNOWFLAKE_PRIVATE_KEY_PATH). Password optional fallback.
+    # Install: pip install "dbt-snowflake>=1.7,<1.8"
+    # Run: mdc dbt invoke --env snowflake -- build --select tag:snowflake
+    snowflake:
+      type: snowflake
+      account: "{{ env_var('SNOWFLAKE_ACCOUNT') }}"
+      user: "{{ env_var('SNOWFLAKE_USER') }}"
+      private_key_path: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PATH') }}"
+      private_key_passphrase: "{{ env_var('SNOWFLAKE_PRIVATE_KEY_PASSPHRASE', '') }}"
+      role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORMER') }}"
+      database: "{{ env_var('SNOWFLAKE_DATABASE', 'OPENDENTAL_SF') }}"
+      warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'WH_DEMO_XS') }}"
+      schema: "{{ env_var('SNOWFLAKE_SCHEMA_DBT', 'DBT') }}"
+      threads: 4
+      client_session_keep_alive: False
+      query_tag: dbt_dental_snowflake

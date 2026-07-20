@@ -91,7 +91,7 @@ Nomenclature: use **portfolio/clinic** for Vite apps (`--app`); use **demo/clini
 | `etl-run`, `etl-test`, `etl-schema`, `etl-exec` | `clinic` | `full` |
 | `etl-status` | `clinic` | `full` (use `etl-status -Env local` for local warehouse) |
 
-Stages: `local`, `clinic`, `test`, `demo` (API/dbt). Use `clinic` for live clinic context.
+Stages: `local`, `clinic`, `test`, `demo` (API/dbt), `snowflake` (dbt portfolio mini warehouse). Use `clinic` for live clinic context.
 
 Clinic portal local stack: `api-run` (needs `CLINIC_PORTAL_SESSION_SECRET` or `CLINIC_API_KEY`) then `frontend-dev --app clinic`.
 

@@ -47,7 +47,7 @@ def _execute_dbt(
 
 @dbt_app.command("validate")
 def validate(
-    env: str = typer.Option(..., "--env", help="Stage: local, clinic, or demo"),
+    env: str = typer.Option(..., "--env", help="Stage: local, clinic, demo, or snowflake"),
 ) -> None:
     """Validate dbt connection env for a stage (profiles.yml env_var sources)."""
     require_dbt_stage(env)
@@ -64,7 +64,7 @@ def validate(
 @dbt_app.command("run", context_settings=PASSTHROUGH)
 def run(
     ctx: typer.Context,
-    env: str = typer.Option(..., "--env", help="Stage: local, clinic, or demo"),
+    env: str = typer.Option(..., "--env", help="Stage: local, clinic, demo, or snowflake"),
     tunnel_db: bool = typer.Option(
         False,
         "--tunnel-db",
@@ -89,7 +89,7 @@ def run(
 @dbt_app.command("test", context_settings=PASSTHROUGH)
 def test(
     ctx: typer.Context,
-    env: str = typer.Option(..., "--env", help="Stage: local, clinic, or demo"),
+    env: str = typer.Option(..., "--env", help="Stage: local, clinic, demo, or snowflake"),
     tunnel_db: bool = typer.Option(False, "--tunnel-db"),
     tunnel_port: Optional[int] = typer.Option(None, "--tunnel-port"),
 ) -> None:
@@ -106,7 +106,7 @@ def test(
 @dbt_app.command("docs", context_settings=PASSTHROUGH)
 def docs(
     ctx: typer.Context,
-    env: str = typer.Option(..., "--env", help="Stage: local, clinic, or demo"),
+    env: str = typer.Option(..., "--env", help="Stage: local, clinic, demo, or snowflake"),
     serve: bool = typer.Option(
         False,
         "--serve",
@@ -129,7 +129,7 @@ def docs(
 @dbt_app.command("invoke", context_settings=PASSTHROUGH, hidden=True)
 def invoke(
     ctx: typer.Context,
-    env: str = typer.Option(..., "--env", help="Stage: local, clinic, or demo"),
+    env: str = typer.Option(..., "--env", help="Stage: local, clinic, demo, or snowflake"),
     tunnel_db: bool = typer.Option(False, "--tunnel-db"),
     tunnel_port: Optional[int] = typer.Option(None, "--tunnel-port"),
 ) -> None:

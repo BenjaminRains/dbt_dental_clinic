@@ -28,6 +28,7 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | **testing/** | API and connection tests |
 | **maintenance/** | Scheduled housekeeping (log pruning) |
 | **utils/** | One-off tools, exports, metadata, audits |
+| **snowflake/** | Demo Postgres → Snowflake export (payments mini warehouse) |
 
 ## Common Workflows
 
