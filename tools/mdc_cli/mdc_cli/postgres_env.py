@@ -29,7 +29,8 @@ def read_env_file(path: Path) -> dict[str, str]:
     try:
         from dotenv import dotenv_values
 
-        raw = dotenv_values(path) or {}
+        # interpolate=False: passwords/paths may contain '$' (Snowflake key-pair era).
+        raw = dotenv_values(path, interpolate=False) or {}
     except Exception:
         return {}
 

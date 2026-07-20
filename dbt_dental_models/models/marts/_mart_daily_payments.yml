@@ -11,7 +11,7 @@ models:
     config:
       materialized: table
       schema: marts
-      tags: ['kpi', 'daily', 'revenue_cycle']
+      tags: ['kpi', 'daily', 'revenue_cycle', 'snowflake']
     columns:
       - name: payment_date
         description: "Calendar date: PayDate for patient payments; CheckDate for insurance claim payments."

@@ -5,7 +5,7 @@ models:
     config:
       materialized: incremental
       unique_key: claim_payment_id
-      tags: ['staging', 'opendental', 'claimpayment']
+      tags: ['staging', 'opendental', 'claimpayment', 'snowflake']
 
     description: >
       Standardized staging model for insurance claim payments from OpenDental. 

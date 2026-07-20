@@ -2,7 +2,8 @@
 
 This document is the **single source of truth** for how `.env` and related environment files are managed across the dbt_dental_clinic codebase. Use it to onboard, audit, or refactor environment configuration.
 
-See also **[ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md)** (Phases 0–5 complete; Phase 6 planned) and **`tools/mdc_cli/README.md`** for daily commands.
+**Daily commands:** [`tools/mdc_cli/README.md`](../../tools/mdc_cli/README.md).  
+**Phase history (archived):** [archive/ENVIRONMENT_HANDLING_REVIEW.md](archive/ENVIRONMENT_HANDLING_REVIEW.md) — Phases 0–6 complete.
 
 ---
 
@@ -78,6 +79,7 @@ Every env file has a **unique name** = path from repo root. The same basename (e
 | **dbt local** | `dbt_dental_models/.env_local` | `dbt_dental_models/.env_local.template` | `mdc_cli/dbt_env.py` via `mdc dbt … --env local` |
 | **dbt clinic** | `dbt_dental_models/.env_clinic` (optional) | `etl_pipeline/.env_clinic.template` | `mdc_cli/dbt_env.py` + `deployment_credentials.json` |
 | **dbt demo** | (no file) | — | `mdc_cli/dbt_env.py` from `deployment_credentials.json` |
+| **dbt snowflake** | `dbt_dental_models/.env_snowflake` | `dbt_dental_models/.env_snowflake.template` | `mdc_cli/dbt_env.py` via `mdc dbt … --env snowflake` (portfolio mini warehouse) |
 | **Frontend** | `frontend/.env` | (see frontend README) | Vite (dev); build-time for production |
 | **Frontend** | `frontend/.env.local` | — | Vite; `mdc frontend dev` writes API URL/key for local |
 | **Frontend** | `frontend/.env.production` | — | Vite production build (e.g. demo/clinic) |
@@ -101,26 +103,52 @@ Each env file has a **unique name** = its path from the repo root (e.g. `/.env`,
 
 When documenting or scripting, always use the **full path** (e.g. `frontend/.env`) so the file is unambiguous.
 
-### 2.2 Global environment set
+### 2.2 Global environment set (naming)
 
-Use a single vocabulary so adding staging/prod later doesn’t fragment names:
+Use a single vocabulary so stages stay consistent across API, ETL, dbt, and deploy. Components **declare which they support**; they don’t invent new names. Frontend uses Vite’s scheme (`.env`, `.env.local`, `.env.production`) and maps to this via build/deploy targets.
+
+**Deployment model:** local development on the laptop; two AWS deploy paths (demo vs clinic); plus a portfolio-only Snowflake warehouse (synthetic).
+
+```
+                    LOCAL / TEST (localhost)
+                              │
+              ┌───────────────┴───────────────┐
+              ▼                               ▼
+     DEPLOY PATH 1                     DEPLOY PATH 2
+     demo / portfolio                  clinic (PHI)
+     (public, synthetic)               (IP-restricted)
+              │
+              ▼
+     snowflake (optional)
+     portfolio mini WH
+     (synthetic export only)
+```
 
 | **Name** | **Meaning** | **API** | **ETL** | **dbt** |
 |----------|-------------|---------|---------|---------|
 | `local` | Local dev (localhost) | ✅ | ✅ | ✅ |
-| `demo` | Portfolio/demo (synthetic data, public) | ✅ | — | ✅ (from JSON) |
-| `clinic` | Real clinic (PHI, IP‑restricted) | ✅ | ✅ | ✅ |
-| `test` | Test DBs (CI/integration) | ✅ | ✅ | — |
-| `prod` | Future: production / multi-tenant | — | — | — |
+| `demo` | Portfolio/demo (synthetic data, public) — **not** production | ✅ | — | ✅ (from JSON) |
+| `clinic` | Real clinic (PHI, IP‑restricted) — **this is production** | ✅ | ✅ | ✅ |
+| `test` | Test DBs (CI/integration, localhost) | ✅ | ✅ | — |
+| `snowflake` | Portfolio Snowflake mini warehouse (synthetic only) | — | — | ✅ (from `.env_snowflake`) |
 
-Components **declare which they support**; they don’t invent new names. Frontend uses Vite’s scheme (`.env`, `.env.local`, `.env.production`) and maps to this via build scripts.
+**`prod` / `production`:** Not a separate `mdc` stage. Prefer `clinic` in code and env drivers (`API_ENVIRONMENT=clinic`). `prod` / `production` are acceptable only as **AWS resource** naming aliases for clinic infra (e.g. S3 bucket suffixes). Never use `production` to mean the public demo API — that was renamed to `demo` (see [archive/ENVIRONMENT_NAMING_CONVENTION.md](archive/ENVIRONMENT_NAMING_CONVENTION.md)).
+
+| Aspect | `local` | `demo` | `clinic` | `test` | `snowflake` |
+|--------|---------|--------|----------|--------|-------------|
+| Location | Localhost | AWS | AWS | Localhost | Snowflake cloud |
+| Frontend | `localhost:3000` | `dbtdentalclinic.com` | `clinic.dbtdentalclinic.com` | `localhost:3000` | — (portfolio tile later) |
+| API | `localhost:8000` | `api.dbtdentalclinic.com` | `api-clinic.dbtdentalclinic.com` | `localhost:8000` | — |
+| Database | Flexible / local PG | `opendental_demo` | `opendental_analytics` (schemas e.g. `mdc`, `glic`) | Test DBs | `OPENDENTAL_SF` |
+| Data | Any | Synthetic | Real PHI | Test | Synthetic (from demo PG) |
+| Access | Local | Public | IP-restricted | Local | Key-pair / Snowsight |
 
 ### 2.3 Conventions by component
 
 - **Root**: `/.env` (Docker Compose sandbox only); `/.env.template` committed; `/.env_ec2` source for EC2 deploy.
 - **API**: `api/.env_api_<env>` — e.g. `api/.env_api_local`, `api/.env_api_demo`, `api/.env_api_clinic`, `api/.env_api_test`. On EC2, systemd uses `api/.env` (contents from one of the `api/.env_api_*` files).
 - **ETL**: `etl_pipeline/.env_<env>` — e.g. `etl_pipeline/.env_local`, `etl_pipeline/.env_clinic`, `etl_pipeline/.env_test`. **No project-root fallback** (ETL loader reads only from `etl_pipeline/`).
-- **dbt:** `dbt_dental_models/.env_local`, `dbt_dental_models/.env_clinic`; demo/clinic from `deployment_credentials.json` via `mdc_cli/dbt_env.py`. No project-root fallback.
+- **dbt:** `dbt_dental_models/.env_local`, `dbt_dental_models/.env_clinic`, `dbt_dental_models/.env_snowflake`; demo/clinic from `deployment_credentials.json` via `mdc_cli/dbt_env.py`. No project-root fallback.
 - **Frontend**: `frontend/.env`, `frontend/.env.local`, `frontend/.env.production` (Vite; see frontend README).
 - **Consult audio pipe**: `consult_audio_pipe/.env`; template `consult_audio_pipe/.env.template`.
 - **Templates**: Only `*.template` (or `.env.template`) are committed. Actual `.env*` (except templates) are gitignored.
@@ -138,6 +166,8 @@ This makes it obvious at a glance which file to edit. Templates and most env fil
 | **File** | **Used by** |
 |----------|--------------|
 | `/.env` | DOCKER COMPOSE (variable substitution), AIRFLOW, POSTGRES, MYSQL, DBT containers |
+| `dbt_dental_models/.env_local` | `mdc dbt … --env local`; publish local side; Phase 6 ETL analytics overlay |
+| `dbt_dental_models/.env_snowflake` | `mdc dbt … --env snowflake`; `scripts/snowflake/*.py` (portfolio mini warehouse) |
 | `frontend/.env` | VITE (frontend default env) |
 | `consult_audio_pipe/.env` | CONSULT AUDIO PIPE (LLM analysis pipeline) |
 
@@ -195,6 +225,10 @@ Each component should have a single config entrypoint that:
 | Clinic RDS password (live) | Secrets Manager `rds!db-...` (fallback: `api/.env_api_clinic`) | `overlay_clinic_rds_credentials` in etl/dbt/freshness/publish |
 | Clinic API deploy | `api/.env_api_clinic` → EC2 `api/.env` | `mdc deploy api --env clinic`, `mdc secrets pull clinic` |
 | OpenDental source + MySQL replication | `etl_pipeline/.env_clinic` | `mdc etl --env clinic` (source/repl only — **no** `POSTGRES_ANALYTICS_*`) |
+| Snowflake portfolio warehouse | `dbt_dental_models/.env_snowflake` (`SNOWFLAKE_*`; key-pair preferred) | `mdc dbt --env snowflake`; `scripts/snowflake/*.py` |
+| Demo Postgres (synthetic export source) | `etl_pipeline/synthetic_data_generator/.env_demo` (`DEMO_POSTGRES_*`) | Synthetic generator; Snowflake export script |
+
+**Do not** put Snowflake secrets under `scripts/snowflake/` or repo root. **Do not** duplicate `DEMO_POSTGRES_*` into `.env_snowflake` — keep demo Postgres authority on the generator file.
 
 **Do not** duplicate `POSTGRES_ANALYTICS_*` in `etl_pipeline/.env_clinic`. Use:
 
@@ -211,12 +245,12 @@ mdc etl exec --env clinic --tunnel-db -- pipenv run python scripts/initialize_et
 
 | **Improvement** | **Status** | **Notes** |
 |-----------------|------------|------------|
-| Document precedence (process > file > defaults) in code + doc | **Done (Phase 0–1)** | API, ETL `providers.py`, ad-hoc ETL scripts use `override=False`; see [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md). |
+| Document precedence (process > file > defaults) in code + doc | **Done (Phase 0–1)** | API, ETL `providers.py`, ad-hoc ETL scripts use `override=False`; see [archive/ENVIRONMENT_HANDLING_REVIEW.md](archive/ENVIRONMENT_HANDLING_REVIEW.md). |
 | One official loader in production (e.g. API on EC2: systemd only) | **Done (Phase 0)** | `api/settings.py` skips `.env_api_*` when OS env is populated; deploy writes `api/.env` only. |
 | Canonical location only, or noisy + optional fallback | Todo | ETL/dbt today fall back to root; add WARNING and/or flag. |
 | **Phase 6 credential dedup** | **Done** | `postgres_env.py`, `etl_env.py`, `mdc etl --tunnel-db`, `mdc etl exec`; see §3.6. |
-| Global env set (local, demo, clinic, test, prod) | Doc only | §2.2; components to declare “unsupported” instead of new names. |
-| Commit sanitized templates for API + frontend | **Partial** | **Done:** `api/.env_api_local.template`, `api/.env_api_clinic.template`, `dbt_dental_models/.env_local.template`. **Todo:** `api/.env_api_demo.template`, `frontend/.env.template`. |
+| Global env set (local, demo, clinic, test, snowflake) | **Done** | §2.2 naming + comparison matrix; historical rename plan in [archive/ENVIRONMENT_NAMING_CONVENTION.md](archive/ENVIRONMENT_NAMING_CONVENTION.md). |
+| Commit sanitized templates for API + frontend | **Partial** | **Done:** `api/.env_api_local.template`, `api/.env_api_clinic.template`, `dbt_dental_models/.env_local.template`, `dbt_dental_models/.env_snowflake.template`. **Todo:** `api/.env_api_demo.template`, `frontend/.env.template`. |
 | Config module: load once, log source, validate required | **Done (Phase 2–4)** | `api/settings.py`, ETL `settings_v2.py`; `mdc status` / `mdc * validate` |
 | Track `docs/deployment/ENVIRONMENT_FILES.md` in git | **Done (Phase 1)** | Whitelisted in `.gitignore`; README link resolves. |
 | `dbt_dental_models/profiles.yml.template` | **Done** | Uses `env_var()`; copy to local `profiles.yml`. |
@@ -232,7 +266,7 @@ mdc etl exec --env clinic --tunnel-db -- pipenv run python scripts/initialize_et
 - **On EC2:** systemd uses `EnvironmentFile=/opt/dbt_dental_clinic/api/.env`. Deploy with `mdc deploy api --env clinic` (wraps `deploy_api_file.ps1 -ClinicEnv`). Clinic unit: `dental-clinic-api-clinic` (`api/dental-clinic-api-clinic.service`).
 - **Local:** `mdc api test-config --env local` or alias `api-test`. Run with `mdc api run --env local` / `api-run`. Clinic + tunnel: `mdc tunnel clinic-db` then `mdc api run --env clinic --tunnel-db`.
 
-See [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0) and `api/settings.py`.
+See [archive/ENVIRONMENT_HANDLING_REVIEW.md](archive/ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0) and `api/settings.py`.
 
 ### 4.2 ETL pipeline (`etl_pipeline/`)
 
@@ -307,14 +341,22 @@ Development for clinic infra is often done locally before deploy, so **`.env_loc
 
 ### 4.3 dbt (`dbt_dental_models/`)
 
-- **Driver:** `mdc dbt … --env <stage>` (`local`, `demo`, `clinic`). Child env sets `DBT_TARGET` and connection vars.
+- **Driver:** `mdc dbt … --env <stage>` (`local`, `demo`, `clinic`, `snowflake`). Child env sets `DBT_TARGET` and connection vars.
 - **Loader:** `tools/mdc_cli/mdc_cli/dbt_env.py` — mirrors legacy `dbt-init` rules:
   - **local:** `dbt_dental_models/.env_local` (from `dbt_dental_models/.env_local.template`)
   - **clinic:** `deployment_credentials.json` (`clinic_database.postgresql`, or nested `backend_api.clinic_database_reference.rds.*`); optional fallback `dbt_dental_models/.env_clinic` (deprecated)
   - **demo:** `deployment_credentials.json` only (no `.env_demo` file)
+  - **snowflake:** `dbt_dental_models/.env_snowflake` (from `.env_snowflake.template`) — portfolio payments/collections mini warehouse; **synthetic only**
   - Password values in JSON are normalized (handles accidental full Secrets Manager JSON blobs in the password field)
-- **Validate:** `mdc dbt validate --env local`
-- **Run:** `mdc dbt run --env clinic -- --select …` (passthrough after `--`)
+- **Snowflake auth (key-pair preferred):**
+  - Required in `.env_snowflake`: `SNOWFLAKE_ACCOUNT`, `SNOWFLAKE_USER`, `SNOWFLAKE_PRIVATE_KEY_PATH`
+  - Private key file lives under gitignored `dbt_dental_models/.snowflake/` (e.g. `rsa_key.p8`) — **not** an env file; path only goes in `.env_snowflake`
+  - Register public key in Snowsight (`ALTER USER … SET RSA_PUBLIC_KEY=…`); see [docs/snowflake/SETUP.md](../snowflake/SETUP.md)
+  - `SNOWFLAKE_PASSWORD` is optional fallback only (often fails when Snowsight uses passkey login)
+  - `profiles.yml` snowflake target uses `private_key_path` / optional passphrase via `env_var()`
+- **Snowflake export source:** demo Postgres `DEMO_POSTGRES_*` from `etl_pipeline/synthetic_data_generator/.env_demo` (do not duplicate into `.env_snowflake`)
+- **Validate:** `mdc dbt validate --env local` (or `--env snowflake`)
+- **Run:** `mdc dbt run --env clinic -- --select …` (passthrough after `--`); Snowflake: `mdc dbt invoke --env snowflake -- build --select tag:snowflake`
 - **Clinic from laptop:** RDS is private — see [CLINIC_ANALYTICS_WORKFLOW.md](CLINIC_ANALYTICS_WORKFLOW.md) (local dbt + tunnel + publish, or EC2 dbt)
 - **Profiles:** `dbt_dental_models/profiles.yml` (from `profiles.yml.template`); `DBT_PROFILES_DIR` set in child env by `mdc`.
 
@@ -343,6 +385,7 @@ Development for clinic infra is often done locally before deploy, so **`.env_loc
 ### 4.7 Synthetic data generator
 
 - Uses `etl_pipeline/synthetic_data_generator/.env_demo` (from `.env_demo.template`) for demo/synthetic data generation.
+- Also the **authority for `DEMO_POSTGRES_*`** when exporting synthetic tables to Snowflake (`scripts/snowflake/export_demo_to_snowflake.py`). Do not invent a second demo Postgres env file for Snowflake.
 
 ### 4.8 EC2 deployment
 
@@ -384,7 +427,7 @@ Requires `deployment_credentials.json` → `backend_api.clinic_api.ec2.instance_
 .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
 ```
 
-This backs up the previous `.env`, retires any stale `api/.env_api_clinic` on the instance, restarts the API, and verifies `/health/db` (unless `-SkipHealthCheck`). See [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0).
+This backs up the previous `.env`, retires any stale `api/.env_api_clinic` on the instance, restarts the API, and verifies `/health/db` (unless `-SkipHealthCheck`). See [archive/ENVIRONMENT_HANDLING_REVIEW.md](archive/ENVIRONMENT_HANDLING_REVIEW.md) (Phase 0).
 
 - **Root on EC2:** `deployment_credentials.json.template` references `environment_file: ".env_ec2"` and `environment_file_path: "/opt/dbt_dental_clinic/.env"` for dbt on EC2; that is separate from `api/.env`.
 
@@ -397,7 +440,8 @@ This backs up the previous `.env`, retires any stale `api/.env_api_clinic` on th
 | `API_ENVIRONMENT` | API | `local`, `demo`, `clinic`, `test` | Which `api/.env_api_*` `settings.py` may load (if OS env empty) |
 | `ETL_ENVIRONMENT` | ETL pipeline | `local`, `clinic`, `test` | Which `etl_pipeline/.env_*` is loaded in the **mdc child** process |
 | `ETL_PROFILE` | ETL pipeline | `load`, `full` | Which connections to validate (see §4.2 ETL profiles); default `load` for `local`, `full` for `clinic`/`test` |
-| `DBT_TARGET` | dbt | `local`, `demo`, `clinic` | Set by `mdc_cli/dbt_env.py` for dbt subprocess; selects `profiles.yml` target |
+| `DBT_TARGET` | dbt | `local`, `demo`, `clinic`, `snowflake` | Set by `mdc_cli/dbt_env.py` for dbt subprocess; selects `profiles.yml` target |
+| `SNOWFLAKE_*` | dbt snowflake + export scripts | see `.env_snowflake.template` | Account/user/role/warehouse/db; auth via `SNOWFLAKE_PRIVATE_KEY_PATH` (preferred) |
 | (none for frontend) | Frontend | — | File name (e.g. `.env.production`) and build-time env vars |
 
 ---
@@ -409,6 +453,7 @@ Use these to create local/env-specific files; never commit the filled-in files. 
 - [ ] **Root:** `/.env.template` → copy to `/.env` only if using Docker Compose sandbox.
 - [ ] **ETL:** `etl_pipeline/.env_local.template`, `etl_pipeline/.env_clinic.template`, `etl_pipeline/.env_test.template` → copy to `etl_pipeline/.env_local`, `.env_clinic`, `.env_test` as needed.
 - [ ] **dbt local:** `dbt_dental_models/.env_local.template` → copy to `dbt_dental_models/.env_local`.
+- [ ] **dbt snowflake:** `dbt_dental_models/.env_snowflake.template` → copy to `dbt_dental_models/.env_snowflake`; set `SNOWFLAKE_PRIVATE_KEY_PATH` to a key under `dbt_dental_models/.snowflake/` (see [docs/snowflake/SETUP.md](../snowflake/SETUP.md)).
 - [ ] **API local:** `api/.env_api_local.template` → copy to `api/.env_api_local`.
 - [ ] **API clinic:** `api/.env_api_clinic.template` → copy to `api/.env_api_clinic`, then `mdc secrets pull clinic` for the RDS password.
 - [ ] **API test:** `api/.env_api_test.template` → copy to `api/.env_api_test` and fill in test DB credentials.
@@ -433,7 +478,10 @@ This lists known env file paths and reports Present / Missing. See script header
 ## 8. Related docs
 
 - **Daily CLI:** [tools/mdc_cli/README.md](../../tools/mdc_cli/README.md), [scripts/README.md](../../scripts/README.md)
-- **Environment modernization (phase history):** [ENVIRONMENT_HANDLING_REVIEW.md](ENVIRONMENT_HANDLING_REVIEW.md)
+- **Setup cheat sheet (incl. Snowflake):** [ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md)
+- **Environment modernization (phase history, archived):** [archive/ENVIRONMENT_HANDLING_REVIEW.md](archive/ENVIRONMENT_HANDLING_REVIEW.md)
+- **Env naming history (`production` → `demo`/`clinic`, archived):** [archive/ENVIRONMENT_NAMING_CONVENTION.md](archive/ENVIRONMENT_NAMING_CONVENTION.md)
+- **Snowflake portfolio warehouse:** [docs/snowflake/SETUP.md](../snowflake/SETUP.md), [SNOWFLAKE_INTEGRATION_PLAN.md](../snowflake/SNOWFLAKE_INTEGRATION_PLAN.md)
 - **API env in detail:** [docs/api/API_ENV_FILE_EXPLANATION.md](../api/API_ENV_FILE_EXPLANATION.md)
 - **EC2 env file rename/setup:** [EC2_ENV_FILE_RENAME_GUIDE.md](EC2_ENV_FILE_RENAME_GUIDE.md), [EC2_ENV_FILE_RENAME_COMMANDS.md](EC2_ENV_FILE_RENAME_COMMANDS.md)
 - **Deployment credentials (env file refs):** `deployment_credentials.json.template`

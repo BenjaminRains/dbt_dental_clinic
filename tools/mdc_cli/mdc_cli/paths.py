@@ -34,7 +34,7 @@ class ComponentStage:
 
 API_STAGES = ("local", "demo", "clinic", "test")
 ETL_STAGES = ("local", "clinic", "test")
-DBT_STAGES = ("local", "clinic", "demo")
+DBT_STAGES = ("local", "clinic", "demo", "snowflake")
 # Union of stages accepted by `mdc --env` (dev/test targets only; not deployment labels).
 ALL_MDC_STAGES = tuple(sorted(set(API_STAGES) | set(ETL_STAGES) | set(DBT_STAGES)))
 

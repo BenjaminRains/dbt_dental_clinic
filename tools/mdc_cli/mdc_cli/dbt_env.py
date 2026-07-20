@@ -27,7 +27,19 @@ DEMO_REQUIRED = (
     "DEMO_POSTGRES_PASSWORD",
 )
 
-DBT_ENV_PREFIXES = ("POSTGRES_ANALYTICS_", "DEMO_POSTGRES_", "DBT_", "PGSSL")
+SNOWFLAKE_REQUIRED = (
+    "SNOWFLAKE_ACCOUNT",
+    "SNOWFLAKE_USER",
+    "SNOWFLAKE_PRIVATE_KEY_PATH",
+)
+
+DBT_ENV_PREFIXES = (
+    "POSTGRES_ANALYTICS_",
+    "DEMO_POSTGRES_",
+    "SNOWFLAKE_",
+    "DBT_",
+    "PGSSL",
+)
 
 
 def dbt_config_path(stage: str) -> Path:
@@ -36,6 +48,8 @@ def dbt_config_path(stage: str) -> Path:
         return paths.dbt_env_file(stage)
     if stage == "demo":
         return DEPLOYMENT_CREDENTIALS
+    if stage == "snowflake":
+        return paths.dbt_env_file("snowflake")
     if DEPLOYMENT_CREDENTIALS.exists():
         return DEPLOYMENT_CREDENTIALS
     return paths.dbt_env_file("clinic")
@@ -90,10 +104,12 @@ def load_dbt_env_dict(stage: str) -> dict[str, str]:
 
     Phase 6: local warehouse from dbt_dental_models/.env_local;
     clinic RDS from deployment_credentials.json (dbt_dental_models/.env_clinic deprecated).
+    snowflake: dbt_dental_models/.env_snowflake (portfolio mini warehouse; synthetic only).
     """
-    if stage not in ("local", "clinic", "demo"):
+    if stage not in ("local", "clinic", "demo", "snowflake"):
         raise ValueError(
-            f"Unsupported dbt stage '{stage}'. Expected one of: local, clinic, demo"
+            "Unsupported dbt stage "
+            f"'{stage}'. Expected one of: local, clinic, demo, snowflake"
         )
 
     env: dict[str, str] = {
@@ -130,7 +146,7 @@ def load_dbt_env_dict(stage: str) -> dict[str, str]:
         env.update(_overlay_os_env(merged))
         _require_keys(env, LOCAL_CLINIC_REQUIRED, source)
 
-    else:  # demo
+    elif stage == "demo":
         creds = _demo_from_credentials(_load_credentials_json())
         if not creds:
             raise ValueError(
@@ -138,6 +154,27 @@ def load_dbt_env_dict(stage: str) -> dict[str, str]:
             )
         env.update(_overlay_os_env(creds))
         _require_keys(env, DEMO_REQUIRED, str(DEPLOYMENT_CREDENTIALS))
+
+    else:  # snowflake
+        file_path = paths.dbt_env_file("snowflake")
+        file_vals = _read_env_file(file_path)
+        if not file_vals:
+            raise ValueError(
+                f"No Snowflake env found at {file_path}. "
+                "Copy dbt_dental_models/.env_snowflake.template → .env_snowflake."
+            )
+        # Defaults match profiles.yml.template / bootstrap SQL
+        merged = {
+            "SNOWFLAKE_ROLE": "TRANSFORMER",
+            "SNOWFLAKE_WAREHOUSE": "WH_DEMO_XS",
+            "SNOWFLAKE_DATABASE": "OPENDENTAL_SF",
+            "SNOWFLAKE_SCHEMA": "RAW",
+            "SNOWFLAKE_SCHEMA_DBT": "DBT",
+            "SNOWFLAKE_STAGE": "DEMO_EXPORT",
+        }
+        merged.update(file_vals)
+        env.update(_overlay_os_env(merged))
+        _require_keys(env, SNOWFLAKE_REQUIRED, str(file_path))
 
     from mdc_cli.docker_host import rewrite_localhost_hosts
 

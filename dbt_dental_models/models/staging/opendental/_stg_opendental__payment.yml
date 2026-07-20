@@ -5,7 +5,7 @@ models:
     config:
       materialized: incremental
       unique_key: payment_id
-      tags: ['staging', 'opendental', 'finance']
+      tags: ['staging', 'opendental', 'finance', 'snowflake']
 
     description: >
       Staged payment data from OpenDental system containing all financial payment transactions.

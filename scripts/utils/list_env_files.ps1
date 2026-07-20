@@ -41,6 +41,9 @@ $expected = @(
     # dbt
     @{ Path = "dbt_dental_models\.env_local"; Desc = "dbt local warehouse (canonical local POSTGRES_ANALYTICS_*)"; Template = "dbt_dental_models\.env_local.template"; Deprecated = $false },
     @{ Path = "dbt_dental_models\.env_local.template"; Desc = "dbt local template (committed)"; Template = $null; Deprecated = $false },
+    @{ Path = "dbt_dental_models\.env_snowflake"; Desc = "dbt Snowflake portfolio mini warehouse (SNOWFLAKE_*; key-pair via SNOWFLAKE_PRIVATE_KEY_PATH; synthetic only)"; Template = "dbt_dental_models\.env_snowflake.template"; Deprecated = $false },
+    @{ Path = "dbt_dental_models\.env_snowflake.template"; Desc = "dbt Snowflake template (committed)"; Template = $null; Deprecated = $false },
+    @{ Path = "dbt_dental_models\.snowflake\rsa_key.p8"; Desc = "Snowflake private key file (gitignored; path referenced by .env_snowflake)"; Template = $null; Deprecated = $false },
     @{ Path = "dbt_dental_models\.env_clinic"; Desc = "DEPRECATED — use deployment_credentials.json + Secrets Manager"; Template = $null; Deprecated = $true },
     # Frontend
     @{ Path = "frontend\.env";        Desc = "Frontend default"; Template = $null; Deprecated = $false },

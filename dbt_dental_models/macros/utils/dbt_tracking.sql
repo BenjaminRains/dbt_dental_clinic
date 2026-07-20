@@ -11,9 +11,14 @@
     Macro to update the overall ETL transform status.
     This is called by on-run-start and on-run-end hooks.
     Skips quietly when raw.etl_transform_status is not provisioned (e.g. clinic RDS).
+    Skips on Snowflake (Postgres ON CONFLICT upsert; portfolio mini warehouse has no ETL tracker).
     #}
-    
-    {% if execute and etl_transform_status_relation() is not none %}
+
+    {% if target.type == 'snowflake' %}
+        {% if execute %}
+            {{ log("Skipping ETL transform status update on Snowflake target", info=true) }}
+        {% endif %}
+    {% elif execute and etl_transform_status_relation() is not none %}
         {% set update_sql %}
             INSERT INTO {{ target.database }}.raw.etl_transform_status (
                 table_name, 
@@ -47,8 +52,10 @@
     Macro to update the transform status for a specific model.
     This is called by on-model-start and on-model-end hooks.
     #}
-    
-    {% if execute and etl_transform_status_relation() is not none %}
+
+    {% if target.type == 'snowflake' %}
+        {# no-op on Snowflake #}
+    {% elif execute and etl_transform_status_relation() is not none %}
         {% set update_sql %}
             INSERT INTO {{ target.database }}.raw.etl_transform_status (
                 table_name, 

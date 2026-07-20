@@ -117,11 +117,13 @@ tables.yml
 .ssh/
 *.pem
 *.key
+*.p8
 *.crt
 *.cer
 *.p12
 *.pfx
-
+# Local Snowflake key-pair material (never commit)
+dbt_dental_models/.snowflake/
 # Sensitive files in scripts directory
 scripts/utils/check_env.py
 scripts/dbt/run_local.ps1
@@ -132,7 +134,7 @@ scripts/ec2/run_dbt_ssm.ps1
 scripts/ec2/run_dbt_debug_ssm.sh
 scripts/deployment/
 
-# Deployment ops helpers (local scripts may reference credentials ù only README tracked)
+# Deployment ops helpers (local scripts may reference credentials ? only README tracked)
 deployment/**/*.sh
 deployment/**/*.ps1
 deployment/**/*.json
@@ -147,9 +149,11 @@ docs/
 !docs/deployment/
 docs/deployment/*
 !docs/deployment/ENVIRONMENT_FILES.md
+!docs/deployment/ENVIRONMENT_SETUP.md
 !docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md
 !docs/deployment/CLOUDTRAIL_SETUP.md
-!docs/deployment/ENVIRONMENT_HANDLING_REVIEW.md
+!docs/deployment/archive/
+!docs/deployment/archive/**
 !docs/ml/
 !docs/ml/**
 !docs/deployment-connections/
@@ -165,6 +169,9 @@ docs/etl/archive/
 !docs/findings/**
 !docs/frontend/
 !docs/frontend/**
+!docs/snowflake/
+!docs/snowflake/**
+
 # Non-sensitive frontend design notes (under the app tree)
 !frontend/docs/
 !frontend/docs/**

@@ -161,6 +161,44 @@ def test_load_dbt_env_dict_demo_localhost_defaults(tmp_path, monkeypatch, clean_
     assert data["DEMO_POSTGRES_DB"] == "opendental_demo"
 
 
+def test_load_dbt_env_dict_snowflake(tmp_path, monkeypatch, clean_dbt_os_env):
+    monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
+    for key in (
+        "SNOWFLAKE_ACCOUNT",
+        "SNOWFLAKE_USER",
+        "SNOWFLAKE_PASSWORD",
+        "SNOWFLAKE_PRIVATE_KEY_PATH",
+        "SNOWFLAKE_ROLE",
+        "SNOWFLAKE_WAREHOUSE",
+        "SNOWFLAKE_DATABASE",
+    ):
+        monkeypatch.delenv(key, raising=False)
+    env_file = tmp_path / ".env_snowflake"
+    env_file.write_text(
+        "\n".join(
+            [
+                "SNOWFLAKE_ACCOUNT=xy12345.us-west-2",
+                "SNOWFLAKE_USER=demo_user",
+                "SNOWFLAKE_PRIVATE_KEY_PATH=C:/keys/rsa_key.p8",
+            ]
+        )
+        + "\n",
+        encoding="utf-8",
+    )
+    data = dbt_env.load_dbt_env_dict("snowflake")
+    assert data["DBT_TARGET"] == "snowflake"
+    assert data["SNOWFLAKE_ACCOUNT"] == "xy12345.us-west-2"
+    assert data["SNOWFLAKE_PRIVATE_KEY_PATH"] == "C:/keys/rsa_key.p8"
+    assert data["SNOWFLAKE_WAREHOUSE"] == "WH_DEMO_XS"
+    assert data["SNOWFLAKE_DATABASE"] == "OPENDENTAL_SF"
+
+
+def test_load_dbt_env_dict_snowflake_missing_file(tmp_path, monkeypatch):
+    monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
+    with pytest.raises(ValueError, match="No Snowflake env found"):
+        dbt_env.load_dbt_env_dict("snowflake")
+
+
 def test_load_dbt_env_dict_local_missing_file(tmp_path, monkeypatch):
     monkeypatch.setattr(paths, "DBT_DIR", tmp_path)
     with pytest.raises(ValueError, match="No local warehouse env found"):

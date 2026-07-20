@@ -1,0 +1,39 @@
+# Tables exported from demo Postgres → Snowflake OPENDENTAL_SF.RAW
+#
+# Grow this list as domains are enabled on Snowflake. The export script
+# introspects columns from Postgres — no DDL duplication here.
+#
+#   python scripts/snowflake/export_demo_to_snowflake.py --wave wave1_payments
+#   python scripts/snowflake/export_demo_to_snowflake.py --wave wave2_payment_detail
+#
+# --tables / SNOWFLAKE_EXPORT_TABLES override the wave list.
+
+version: 1
+
+# Default set when neither --tables nor SNOWFLAKE_EXPORT_TABLES is set
+default_wave: wave1_payments
+
+waves:
+  wave1_payments:
+    description: Net collections KPI (mart_daily_payments)
+    tables:
+      - payment
+      - claimpayment
+
+  wave2_payment_detail:
+    description: fact_payment lineage (add when Wave 2 starts)
+    tables:
+      - payment
+      - claimpayment
+      - paysplit
+      - adjustment
+      - procedurelog
+      - patient
+      - provider
+      - userod
+      - definition
+
+  # Future: all generator-populated demo tables (~34), then fuller OD shell as needed
+  # demo_core:
+  #   description: Full synthetic generator coverage
+  #   tables: [...]
