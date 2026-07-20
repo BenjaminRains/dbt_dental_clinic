@@ -64,9 +64,12 @@ Snowsight passkeys do not work from Python/dbt. Use RSA key-pair:
    - `set_rsa_public_key.sql` — one statement to run in Snowsight
 2. In Snowsight as **ACCOUNTADMIN**, run the statement in `set_rsa_public_key.sql`
 3. Confirm `.env_snowflake` has:
-   - `SNOWFLAKE_USER=CONCRETE1866`
+   - `SNOWFLAKE_USER=<your Snowsight login>` (example: `CONCRETE1866`)
    - `SNOWFLAKE_PRIVATE_KEY_PATH=.../dbt_dental_models/.snowflake/rsa_key.p8`
-4. Then from repo root:
+4. Attach roles to **that same user** (bootstrap SQL does not hardcode a username):
+   - Preferred: `python scripts/snowflake/bootstrap_snowflake.py` (uses `SNOWFLAKE_USER`), or
+   - In Snowsight: uncomment/adapt the four `GRANT`/`ALTER USER` lines in section 8 of `01_bootstrap.sql`
+5. Then from repo root:
 
 ```powershell
 python -c "from pathlib import Path; from dotenv import load_dotenv; import sys; sys.path.insert(0,'scripts/snowflake'); load_dotenv('dbt_dental_models/.env_snowflake', interpolate=False); from sf_connect import connect_snowflake; c=connect_snowflake(); cur=c.cursor(); cur.execute('select current_user(), current_role()'); print(cur.fetchone()); c.close()"
