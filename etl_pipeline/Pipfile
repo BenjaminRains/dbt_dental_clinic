@@ -4,7 +4,7 @@ verify_ssl = true
 name = "pypi"
 
 [packages]
-psycopg2-binary = "==2.9.9"
+psycopg2-binary = "==2.9.12"
 pymysql = ">=1.1.1"
 mysqlclient = "==2.2.4"
 pandas = ">=2.0.0,<2.3.0"
