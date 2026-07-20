@@ -25,7 +25,7 @@ python-multipart>=0.0.6
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
 httpx>=0.25.0
-requests>=2.31.0
+requests>=2.34.2
 urllib3>=2.6.3,<3
 
 # Logging and monitoring
