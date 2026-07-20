@@ -55,7 +55,7 @@ from typing import Dict, List, Optional, Any, Tuple
 from sqlalchemy import text
 import time
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pymysql.cursors
 
@@ -70,11 +70,16 @@ from etl_pipeline.core.connections import ConnectionFactory, create_connection_m
 from ..exceptions.database import DatabaseConnectionError, DatabaseQueryError
 from ..exceptions.data import DataExtractionError
 from ..exceptions.configuration import ConfigurationError
-from etl_pipeline.monitoring.replica_sync_config import (
+from etl_pipeline.opendental_extract import (
+    SourceMySQLConfig,
+    clean_row_data,
+    create_source_engine,
+)
+from etl_pipeline.opendental_extract.cursor import resolve_watermark_cursor
+from etl_pipeline.opendental_extract.query_builder import (
     build_mysql_lookback_predicate,
     get_replicator_watermark_column,
     lookback_resync_enabled,
-    resolve_watermark_cursor,
 )
 
 # Import method tracking for usage analysis
@@ -761,8 +766,11 @@ class SimpleMySQLReplicator:
             self.tables_config_path = tables_config_path
             logger.info(f"SimpleMySQLReplicator using tables config: {self.tables_config_path}")
             
-            # Get database connections using unified ConnectionFactory API with Settings injection
-            self.source_engine = ConnectionFactory.get_source_connection(self.settings)
+            # Source engine via extract seam (plain dict config); hop target stays MDC
+            source_cfg = SourceMySQLConfig.from_mapping(
+                self.settings.get_source_connection_config()
+            )
+            self.source_engine = create_source_engine(source_cfg)
             self.target_engine = ConnectionFactory.get_replication_connection(self.settings)
             
             # Load configuration
@@ -1597,90 +1605,11 @@ class SimpleMySQLReplicator:
 
 
     def _clean_row_data(self, row, columns, table_name: str):
-        """
-        Clean and validate row data before insertion to prevent type conversion errors.
-        
-        Args:
-            row: The row data to clean
-            columns: Column names
-            table_name: Table name for logging
-            
-        Returns:
-            Cleaned row data
-        """
-        try:
-            cleaned_row = []
-            for i, value in enumerate(row):
-                try:
-                    # Handle None values
-                    if value is None:
-                        cleaned_row.append(None)
-                        continue
-                    
-                    # Handle string values that might contain problematic characters
-                    if isinstance(value, str):
-                        # Remove any control characters that might cause issues
-                        cleaned_value = ''.join(c for c in value if ord(c) >= 32 or c in '\t\n\r')
-                        cleaned_row.append(cleaned_value)
-                    else:
-                        # For non-string values, check if they're problematic objects
-                        # Only convert problematic objects, preserve normal data types
-                        if isinstance(value, (int, float, bool)):
-                            # Preserve normal data types
-                            cleaned_row.append(value)
-                        elif isinstance(value, timedelta):
-                            # MySQL TIME columns are returned as timedelta. str() yields
-                            # '-1 day, 23:00:00' for negatives (and '1 day, ...' for >24h),
-                            # which MySQL rejects (error 1292: Incorrect time value). Emit a
-                            # valid [-]HH:MM:SS literal so negative/over-24h TIME values load.
-                            total_seconds = int(value.total_seconds())
-                            sign = '-' if total_seconds < 0 else ''
-                            total_seconds = abs(total_seconds)
-                            hours, remainder = divmod(total_seconds, 3600)
-                            minutes, seconds = divmod(remainder, 60)
-                            cleaned_row.append(f"{sign}{hours:02d}:{minutes:02d}:{seconds:02d}")
-                        else:
-                            # Handle problematic objects (like raw Python objects)
-                            try:
-                                # Try to convert to a basic type that can be safely stored
-                                if hasattr(value, '__str__'):
-                                    # For objects that can be stringified, try to convert to string
-                                    str_value = str(value)
-                                    # Only use stringified value if it's not the default object representation
-                                    if not str_value.startswith('<') or not str_value.endswith('>'):
-                                        cleaned_row.append(str_value)
-                                    else:
-                                        # Default object representation, use None
-                                        logger.warning(f"Converting problematic object to None for column {columns[i]} in {table_name}: {str_value}")
-                                        cleaned_row.append(None)
-                                else:
-                                    # Object without string representation, use None
-                                    logger.warning(f"Converting object without string representation to None for column {columns[i]} in {table_name}")
-                                    cleaned_row.append(None)
-                            except Exception:
-                                # If any conversion fails, use None
-                                cleaned_row.append(None)
-                        
-                except Exception as e:
-                    logger.warning(f"Error cleaning value for column {columns[i]} in {table_name}: {str(e)}")
-                    # Use None as fallback for problematic values
-                    cleaned_row.append(None)
-            
-            return cleaned_row
-            
-        except Exception as e:
-            logger.error(f"Error cleaning row data for {table_name}: {str(e)}")
-            # Return original row if cleaning fails
-            return row
-    
-
-    
-
-    
+        """Delegate to opendental_extract.row_cleaner (SDK-shaped seam)."""
+        return clean_row_data(row, columns, table_name)
 
 
 
-    
     def _get_last_copy_watermark(
         self, table_name: str, expected_watermark: Optional[str] = None
     ) -> Optional[str]:

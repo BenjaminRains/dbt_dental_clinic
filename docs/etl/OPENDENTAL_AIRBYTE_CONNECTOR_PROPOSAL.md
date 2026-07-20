@@ -1,7 +1,7 @@
 # Open Dental Airbyte Connector Proposal
 
 **Status:** Draft  
-**Last updated:** 2026-07-08  
+**Last updated:** 2026-07-20  
 **Supersedes:** [Open Dental Airbyte Connector Proposal.pdf](../Open%20Dental%20Airbyte%20Connector%20Proposal.pdf)
 
 ---
@@ -89,6 +89,69 @@ Airbyte source connector
 ```
 
 The SDK should accept plain configuration dictionaries, not MDC-specific `Settings` or environment files.
+
+---
+
+## MDC extract seam (Track A / gate #0)
+
+Before packaging `opendental_sdk` for Airbyte, MDC carves the **read + classify** path into
+`etl_pipeline/opendental_extract/` so Airbyte Sprint 1 is a package move + thin wrapper, not a redesign.
+
+### Inventory (IN vs OUT)
+
+| Symbol / concern | Home | Notes |
+| --- | --- | --- |
+| `SourceMySQLConfig`, `create_source_engine` | `opendental_extract.config` / `connection` | Plain dict; no `Settings` |
+| Watermark helpers, lookback, incremental WHERE | `opendental_extract.query_builder` | Dict-shaped `tables.yml` contract |
+| `resolve_watermark_cursor` | `opendental_extract.cursor` | Read-side math only |
+| `clean_row_data` | `opendental_extract.row_cleaner` | No hop UPSERT |
+| `SimpleMySQLReplicator` hop UPSERT / `_update_copy_status` | MDC OUT | Replication MySQL writers |
+| `PostgresLoader` / `etl_load_status` | MDC OUT | Destination only |
+| Airflow DAGs | MDC OUT | Orchestration |
+| `replica_sync_config.should_use_streaming_upsert` | MDC OUT | Loader decision; re-exports extract helpers |
+
+`monitoring/replica_sync_config.py` re-exports extract query/cursor helpers so existing loader imports stay stable.
+
+### Public extract API
+
+```python
+from etl_pipeline.opendental_extract import (
+    SourceMySQLConfig,
+    create_source_engine,
+    resolve_watermark_cursor,
+    build_incremental_where_clause,
+    wrap_mysql_incremental_with_lookback_config,
+    clean_row_data,
+)
+```
+
+MDC edge adapter (today): `SimpleMySQLReplicator` builds `SourceMySQLConfig.from_mapping(settings.get_source_connection_config())` then calls `create_source_engine`. Extract modules never import `Settings`.
+
+### Forbidden imports under `opendental_extract/`
+
+- `etl_pipeline.config.settings` / `get_settings` / `Settings`
+- `PostgresLoader` or any analytics loader
+- Airflow
+- Replication-hop writers (`_update_copy_status`, MySQL UPSERT builders that target the hop)
+
+### Cursor persistence vs cursor logic
+
+A watermark "cursor" is two jobs:
+
+1. **Logic (IN extract):** given last value + table config, resolve staleness, build WHERE, return the next high-water mark.
+2. **Persistence (OUT of extract):** store and reload that value between runs.
+
+| Pipeline | Persistence store | Who writes |
+| --- | --- | --- |
+| MDC extract hop | MySQL `etl_copy_status` | `SimpleMySQLReplicator` |
+| MDC load hop | Postgres `raw.etl_load_status` | `PostgresLoader` |
+| Airbyte (later) | Per-stream STATE messages | Airbyte source wrapper |
+
+Extract modules only accept injected last-cursor values and return resolved/next values. They must not `INSERT` into `etl_copy_status` or `etl_load_status`.
+
+### Deletes / phantoms (soft gate)
+
+Watermark incremental + upsert **never propagates DELETEs**. When Open Dental hard-deletes (or voids that remove) a PK, the row can remain in the hop / `raw` as a **phantom**. Compensating MDC tools (`investigate_replica_phantoms.py`, `purge_raw_phantoms.py`) and future CDC are Track B — not SDK MVP. The Airbyte connector must document that deletes are not captured and that exact PK-set parity with Open Dental requires a separate reconcile/CDC path.
 
 ---
 
@@ -255,7 +318,7 @@ patient:
 
 ### Known limitations to document in the connector
 
-- Deletes are not captured (same as MDC ETL)
+- **Deletes are not captured** (same as MDC ETL). Watermark incremental + upsert never removes rows that Open Dental hard-deleted; leftover PKs in the destination are phantoms. Durable delete sync is MDC/CDC (Track B), not connector MVP — see the MDC extract seam section above and [`ETL_REPLICA_FIDELITY_ROADMAP.md`](ETL_REPLICA_FIDELITY_ROADMAP.md).
 - `DateTStamp` advancement per table is not guaranteed by Open Dental schema
 - PK-only tables classified as `append_only` may drift on in-place edits until full refresh
 - See [ETL-FND-001](findings/ETL-FND-001-replica-row-drift-procedurelog.md) and [ETL-FND-002](findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
