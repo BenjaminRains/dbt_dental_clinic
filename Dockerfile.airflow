@@ -33,7 +33,7 @@ RUN python -m venv /opt/airflow/venvs/etl \
         'pymysql>=1.1.1' \
         'mysqlclient==2.2.4' \
         'pandas>=2.0.0,<2.3.0' \
-        'pyarrow>=17.0.0' \
+        'pyarrow>=23.0.1' \
         'fastparquet>=2024.2.0' \
         'numpy>=1.24.0,<2.0.0' \
         'python-dotenv>=1.0.0' \
