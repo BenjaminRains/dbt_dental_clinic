@@ -11,7 +11,11 @@ report definition. KPI-specific validation instances live under
 | [ETL-FND-001](./ETL-FND-001-replica-row-drift-procedurelog.md) | Replica row drift — `procedurelog` | Pipeline defect + observability gap | Mitigated (local KPI PASS; clinic deploy pending) |
 | [ETL-FND-002](./ETL-FND-002-sync-profile-pk-only-misclassification.md) | `sync_profile` PK-only misclassification — `sheetfield` pattern | Config generation + loader defect | Fixed locally; clinic deploy / merge pending |
 
-See also: [ETL replica fidelity roadmap](../etl/ETL_REPLICA_FIDELITY_ROADMAP.md) (schema analyzer, Layer 0, Sunday full refresh).
+See also:
+
+- [OpenDental write layer](../opendental/WRITE_LAYER_AND_ETL.md) — source mutation / timestamp / soft-delete model behind these findings
+- [ETL sync semantics](../etl/ETL_SYNC_SEMANTICS.md) — current-state insert / upsert / delete contract and orphan (phantom) mode
+- [ETL replica fidelity roadmap](../etl/ETL_REPLICA_FIDELITY_ROADMAP.md) — schema analyzer, Layer 0, Sunday full refresh
 
 ## dbt findings
 

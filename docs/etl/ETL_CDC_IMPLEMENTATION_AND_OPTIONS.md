@@ -2,6 +2,13 @@
 
 This document explains how the ETL pipeline currently handles “change data” and schema evolution, with code references, then outlines options for adding **real deletes** and other CDC improvements.
 
+**Companions:**
+
+| Doc | Role |
+| --- | --- |
+| [ETL_SYNC_SEMANTICS.md](ETL_SYNC_SEMANTICS.md) | Current-state insert / upsert / delete matrix, `or_logic` / `and_logic`, orphan (phantom) failure mode |
+| [../opendental/WRITE_LAYER_AND_ETL.md](../opendental/WRITE_LAYER_AND_ETL.md) | OpenDental write-layer design (mutation model, timestamps, soft vs hard delete) |
+
 ---
 
 ## 1. Current Implementation Overview
@@ -140,8 +147,8 @@ That updated patient row is **not** in the result set, because its `DateTStamp` 
 The assumption behind the current incremental design is that **the source system (OpenDental) updates the timestamp/incremental column on every row modification**. If that holds, most updates are captured; if not, we need to know which tables are affected and how often. Below are practical ways to investigate.
 
 **1. MySQL trigger audit (database-level guarantee)**  
-- The **OpenDental source database has no triggers**. So MySQL does not enforce “update timestamp on change”; any update to the incremental column (`DateTStamp`, `SecDateTEdit`, etc.) must come from the application (OpenDental) only. We cannot assume it happens without testing.  
-- To confirm (or re-check after a source upgrade), run against the **source OpenDental MySQL** (database `opendental`):
+- The **OpenDental source database has no triggers**. Timestamp bumps are **not** enforced by trigger logic. Many mutation tables *do* declare `timestamp … ON UPDATE current_timestamp()` on `DateTStamp` / `SecDateTEdit` (engine auto-touch on ordinary `UPDATE`s) — see [WRITE_LAYER_AND_ETL.md §2.5](../opendental/WRITE_LAYER_AND_ETL.md). That is still not a CDC contract: not every table has it, edge write paths are unverified, and [ETL-FND-001](../findings/ETL-FND-001-replica-row-drift-procedurelog.md) shows watermark sync can still miss in-place edits.  
+- To confirm triggers remain empty (or re-check after a source upgrade), run against the **source OpenDental MySQL** (database `opendental`):
 
 ```sql
 -- List all triggers in the database (expected: empty result set for OpenDental)
@@ -185,11 +192,11 @@ FROM patient;
   - Build the list of tables for trigger audit and for “created vs modified” profiling (only for tables that have both column types in the schema).
 
 **Suggested order**  
-1. Trigger audit (1) is already known: **no triggers** in the source, so timestamp updates are application-only—assume nothing without testing.  
+1. Trigger audit (1) is already known: **no triggers**; rely on DDL `ON UPDATE` + app behavior — assume nothing without testing (spot-edit matrix).  
 2. Run spot-checks (2) on 2–3 critical tables.  
 3. If evidence of missed updates, run profiling (3) on key tables and optionally a full-vs-incremental comparison (4) for one or two tables to quantify scope.
 
-Documenting which tables pass/fail and any OpenDental version or module notes will help decide where to add periodic full refreshes or other mitigations (see Section 5).
+Documenting which tables pass/fail and any OpenDental version or module notes will help decide where to add periodic full refreshes or other mitigations (see Section 5). Record durable OD product facts in [../opendental/](../opendental/).
 
 ---
 
@@ -314,4 +321,4 @@ This section records validation outcomes and active follow-up. The implementatio
 
 ---
 
-*Document version: 1.1 (2026-06-26). §7 added after KPI validation and ETL-FND-001. §1–3 describe current implementation; code paths should be re-checked if refactors occur.*
+*Document version: 1.2 (2026-07-21). Cross-link to OpenDental write-layer notes; §4.1 clarifies `ON UPDATE` vs triggers. §1–3 describe current implementation; code paths should be re-checked if refactors occur.*
