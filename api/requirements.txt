@@ -1,6 +1,6 @@
 # API Dependencies for Dental Clinic FastAPI Application
 # Core FastAPI and server dependencies
-fastapi>=0.104.0
+fastapi>=0.139.2
 uvicorn[standard]>=0.24.0
 
 # Database and ORM dependencies
