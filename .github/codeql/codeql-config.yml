@@ -1,10 +1,18 @@
 # CodeQL path filters — skip diagnostic scripts and unit tests that print
 # aggregate clinic counts. Those triggers are naming/SQL-table heuristics
 # (patient/appointment), not real clear-text PHI leaks.
+#
+# This repo uses CodeQL Default setup. Point it at this file:
+#   Settings → Code security → CodeQL → Edit configuration
+#   → Use configuration file → .github/codeql/codeql-config.yml
+# Do not add an advanced CodeQL workflow while Default setup is enabled
+# (uploads fail with "advanced configurations cannot be processed").
 name: MDC CodeQL config
 
 paths-ignore:
   - "api/tests/**"
+  - "api/test_*.py"
+  - "api/test_config.py"
   - "etl_pipeline/tests/**"
   - "etl_pipeline/synthetic_data_generator/**"
   - "tools/mdc_cli/tests/**"

@@ -85,7 +85,7 @@ def test_analytics_tables_are_empty_before_etl(test_raw_engine):
     with test_raw_engine.connect() as conn:
         patient_count = conn.execute(text('SELECT COUNT(*) FROM raw.patient')).scalar()
         appointment_count = conn.execute(text('SELECT COUNT(*) FROM raw.appointment')).scalar()
-    print(f"[pytest check] raw.patient count: {patient_count}, raw.appointment count: {appointment_count}")
+    print("   [count omitted] [pytest check] raw.patient count")
     assert patient_count == 0, f"raw.patient is not empty before ETL: {patient_count} rows"
     assert appointment_count == 0, f"raw.appointment is not empty before ETL: {appointment_count} rows"
 

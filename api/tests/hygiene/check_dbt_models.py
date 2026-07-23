@@ -47,12 +47,12 @@ def check_dbt_models():
             AND procedure_date <= :end_date
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"   Total procedures: {result1.total_procedures}")
-        print(f"   Unique patients: {result1.unique_people}")
-        print(f"   Unique appointments: {result1.unique_appointments}")
-        print(f"   Hygiene procedures (is_hygiene = true): {result1.hygiene_procedures}")
-        print(f"   Non-hygiene procedures (is_hygiene = false): {result1.non_hygiene_procedures}")
-        print(f"   Null hygiene flag: {result1.null_hygiene}")
+        print("   [count omitted] Total procedures")
+        print("   [count omitted] Unique patients")
+        print("   [count omitted] Unique appointments")
+        print("   [count omitted] Hygiene procedures (is_hygiene = true)")
+        print("   [count omitted] Non-hygiene procedures (is_hygiene = false)")
+        print("   [count omitted] Null hygiene flag")
         
         # 2. Check fact_appointment for hygiene appointments
         print("\n2. fact_appointment (hygiene appointments):")
@@ -73,16 +73,16 @@ def check_dbt_models():
             AND appointment_date <= :end_date
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"   Total appointments: {result2.total_appointments}")
-        print(f"   Unique patients: {result2.unique_people}")
-        print(f"   is_hygiene_appointment = true: {result2.is_hygiene_true}")
-        print(f"   is_hygiene_appointment = false: {result2.is_hygiene_false}")
-        print(f"   is_hygiene_appointment IS NULL: {result2.is_hygiene_null}")
-        print(f"   has_hygienist_id (not null and != 0): {result2.has_hygienist}")
-        print(f"   Hygiene by either flag (is_hygiene_appointment OR hygienist_id): {result2.hygiene_by_either}")
-        print(f"   Hygiene + completed: {result2.hygiene_completed}")
-        print(f"   Hygiene + not completed: {result2.hygiene_not_completed}")
-        print(f"   Hygiene + completed IS NULL: {result2.hygiene_completed_null}")
+        print("   [count omitted] Total appointments")
+        print("   [count omitted] Unique patients")
+        print("   [count omitted] is_hygiene_appointment = true")
+        print("   [count omitted] is_hygiene_appointment = false")
+        print("   [count omitted] is_hygiene_appointment IS NULL")
+        print("   [count omitted] has_hygienist_id (not null and != 0)")
+        print("   [count omitted] Hygiene by either flag (is_hygiene_appointment OR hygienist_id)")
+        print("   [count omitted] Hygiene + completed")
+        print("   [count omitted] Hygiene + not completed")
+        print("   [count omitted] Hygiene + completed IS NULL")
         
         # 3. Check overlap between procedures and appointments
         print("\n3. Overlap between procedures and appointments:")
@@ -113,11 +113,11 @@ def check_dbt_models():
             AND hp.procedure_date = ha.appointment_date
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"   Patients in procedures: {result3.people_in_procedures}")
-        print(f"   Patients in appointments: {result3.people_in_appointments}")
-        print(f"   Patients in both: {result3.people_in_both}")
-        print(f"   Patients only in procedures: {result3.people_only_procedures}")
-        print(f"   Patients only in appointments: {result3.people_only_appointments}")
+        print("   [count omitted] Patients in procedures")
+        print("   [count omitted] Patients in appointments")
+        print("   [count omitted] Patients in both")
+        print("   [count omitted] Patients only in procedures")
+        print("   [count omitted] Patients only in appointments")
         
         # 4. Check appointment status distribution for hygiene appointments
         print("\n4. Appointment status for hygiene appointments:")
@@ -135,7 +135,7 @@ def check_dbt_models():
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchall()
         for row in result4:
-            print(f"   Status '{row.appointment_status}': {row.count} appointments, {row.unique_people} patients")
+            print("   [count omitted] Status '")
         
         # 5. Check if PBN might be counting ALL hygiene appointments (not just completed)
         print("\n5. Hygiene appointments by completion status:")
@@ -154,7 +154,7 @@ def check_dbt_models():
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchall()
         for row in result5:
             status = "True" if row.is_completed else "False" if row.is_completed is False else "NULL"
-            print(f"   is_completed = {status}: {row.appointment_count} appointments, {row.unique_people} patients")
+            print("   [count omitted] is_completed =")
         
         # 6. Check if there are appointments with hygienist_id but is_hygiene_appointment = false
         print("\n6. Hygiene identification patterns:")
@@ -176,7 +176,7 @@ def check_dbt_models():
         """
         result6 = db.execute(text(query6), {"start_date": start_date, "end_date": end_date}).fetchall()
         for row in result6:
-            print(f"   {row.identification_pattern}: {row.appointment_count} appointments, {row.unique_people} patients")
+            print("   [count omitted] diagnostic count")
         
     finally:
         db.close()

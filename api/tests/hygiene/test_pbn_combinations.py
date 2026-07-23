@@ -40,7 +40,7 @@ def test_hygiene_combinations():
             AND appointment_date <= :end_date
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"\n1. Appointments with hygienist_id: {result1.unique_patients} (PBN: 2073)")
+        print("   [count omitted] \n1. Appointments with hygienist_id")
         
         # Test 2: Appointments with hygienist_id + specific appointment types
         query2 = """
@@ -55,7 +55,7 @@ def test_hygiene_combinations():
                  OR iad.appointment_type_name IS NULL)
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"2. Appointments with hygienist_id + cleaning/hygiene types: {result2.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 2. Appointments with hygienist_id + cleaning/hygiene types")
         
         # Test 3: Patients with hygiene procedures (by code) in date range
         query3 = """
@@ -67,7 +67,7 @@ def test_hygiene_combinations():
             AND ipc.procedure_date <= :end_date
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"3. Patients with hygiene procedure codes: {result3.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 3. Patients with hygiene procedure codes")
         
         # Test 4: Appointments OR procedures (union, no dedup by date)
         query4 = """
@@ -93,7 +93,7 @@ def test_hygiene_combinations():
         FULL OUTER JOIN hygiene_procedures hp ON ha.patient_id = hp.patient_id
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"4. Appointments OR procedures (union): {result4.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 4. Appointments OR procedures (union)")
         
         # Test 5: Appointments with hygienist_id OR appointments with hygiene procedures on same date
         query5 = """
@@ -120,7 +120,7 @@ def test_hygiene_combinations():
             ON ha.patient_id = ap.patient_id
         """
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"5. Appointments with hygienist_id OR appointments with hygiene procedures: {result5.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 5. Appointments with hygienist_id OR appointments with hygiene procedures")
         
         # Test 6: All appointments (any status) with hygienist_id
         query6 = """
@@ -132,7 +132,7 @@ def test_hygiene_combinations():
             AND appointment_status IN ('Scheduled', 'Complete', 'Planned', 'Broken', 'UnschedList', 'ASAP', 'PtNote', 'PtNoteCompleted')
         """
         result6 = db.execute(text(query6), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"6. All appointment statuses with hygienist_id: {result6.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 6. All appointment statuses with hygienist_id")
         
         # Test 7: Patients with hygiene procedures, excluding those already counted by appointments
         query7 = """
@@ -162,7 +162,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures_only) as total
         """
         result7 = db.execute(text(query7), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"7. Appointments ({result7.from_appointments}) + Procedures only ({result7.from_procedures_only}) = {result7.total} (PBN: 2073)")
+        print("   [count omitted] 7. Appointments (")
         
         # Test 8: Check if maybe PBN counts unique patient-appointment-date combinations
         query8 = """
@@ -173,7 +173,7 @@ def test_hygiene_combinations():
             AND appointment_date <= :end_date
         """
         result8 = db.execute(text(query8), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"8. Unique (patient_id, appointment_date) combinations: {result8.unique_combinations} (PBN: 2073)")
+        print("   [count omitted] 8. Unique (patient_id, appointment_date) combinations")
         
         # Test 9: Maybe PBN counts patients who had hygiene in ANY appointment (not just with hygienist_id)
         query9 = """
@@ -197,7 +197,7 @@ def test_hygiene_combinations():
         FROM appointments_with_hygiene
         """
         result9 = db.execute(text(query9), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"9. Patients with hygiene in ANY appointment (hygienist_id OR hygiene procedures): {result9.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 9. Patients with hygiene in ANY appointment (hygienist_id OR hygiene procedures)")
         
         # Test 10: Check if maybe PBN uses a rolling 12 months instead of calendar year
         query10 = """
@@ -208,7 +208,7 @@ def test_hygiene_combinations():
             AND appointment_date <= CURRENT_DATE
         """
         result10 = db.execute(text(query10)).fetchone()
-        print(f"10. Rolling 12 months (not calendar year): {result10.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 10. Rolling 12 months (not calendar year)")
         
         # Test 11: Maybe PBN excludes certain procedure codes (like X-rays)
         query11 = """
@@ -220,7 +220,7 @@ def test_hygiene_combinations():
             AND ipc.procedure_date <= :end_date
         """
         result11 = db.execute(text(query11), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"11. Patients with hygiene codes (excluding X-rays): {result11.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 11. Patients with hygiene codes (excluding X-rays)")
         
         # Test 12: Appointments + procedures (excluding X-rays), no double counting
         query12 = """
@@ -248,7 +248,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures_no_xray) as total
         """
         result12 = db.execute(text(query12), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"12. Appointments + procedures (no X-rays, no double count): {result12.total} (PBN: 2073)")
+        print("   [count omitted] 12. Appointments + procedures (no X-rays, no double count)")
         
         # Test 13: Maybe PBN uses a different year (2024?)
         query13 = """
@@ -259,7 +259,7 @@ def test_hygiene_combinations():
             AND appointment_date <= '2024-12-31'
         """
         result13 = db.execute(text(query13)).fetchone()
-        print(f"13. Calendar year 2024: {result13.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 13. Calendar year 2024")
         
         # Test 14: Maybe PBN counts patients who had hygiene in 2025 OR had hygiene procedures
         query14 = """
@@ -283,7 +283,7 @@ def test_hygiene_combinations():
         FULL OUTER JOIN hygiene_procedures_2025 hp ON ha.patient_id = hp.patient_id
         """
         result14 = db.execute(text(query14), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"14. Appointments 2025 OR procedures 2025 (all codes): {result14.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 14. Appointments 2025 OR procedures 2025 (all codes)")
         
         # Test 15: Maybe PBN counts unique patients per month and sums them?
         query15 = """
@@ -294,7 +294,7 @@ def test_hygiene_combinations():
             AND appointment_date <= :end_date
         """
         result15 = db.execute(text(query15), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"15. Unique (patient_id, month) combinations: {result15.unique_patient_months} (PBN: 2073)")
+        print("   [count omitted] 15. Unique (patient_id, month) combinations")
         
         # Test 16: Maybe PBN counts patients who had completed hygiene appointments
         query16 = """
@@ -306,7 +306,7 @@ def test_hygiene_combinations():
             AND is_completed = true
         """
         result16 = db.execute(text(query16), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"16. Completed hygiene appointments only: {result16.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 16. Completed hygiene appointments only")
         
         # Test 17: Maybe PBN counts patients with hygiene procedures that are NOT in appointments with hygienist_id
         query17 = """
@@ -334,7 +334,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM procedures_not_in_hygiene_appts) as total
         """
         result17 = db.execute(text(query17), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"17. Appointments + procedures NOT in appointments: {result17.total} (PBN: 2073)")
+        print("   [count omitted] 17. Appointments + procedures NOT in appointments")
         
         # Test 18: Check if maybe PBN uses a different date (maybe it's showing data as of a specific date, not full year)
         # Let's check what date range would give us 2073
@@ -348,7 +348,7 @@ def test_hygiene_combinations():
                 AND appointment_date <= CURRENT_DATE
             """
             result18 = db.execute(text(query18)).fetchone()
-            print(f"    Last {months} months: {result18.unique_patients}")
+            print("   [count omitted] Last")
         
         # Test 19: Maybe PBN = appointments (1352) + procedures NOT in appointments, but only specific codes?
         # We need exactly 721 more patients
@@ -376,7 +376,7 @@ def test_hygiene_combinations():
         FROM procedures_not_in_appts
         """
         result19 = db.execute(text(query19), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"19. Procedures NOT in appointments (all codes): {result19.unique_patients} (need 721)")
+        print("   [count omitted] 19. Procedures NOT in appointments (all codes)")
         
         # Test 20: Maybe PBN counts ALL patients who had hygiene in last 18 months (not just 2025)?
         query20 = """
@@ -387,7 +387,7 @@ def test_hygiene_combinations():
             AND appointment_date <= CURRENT_DATE
         """
         result20 = db.execute(text(query20)).fetchone()
-        print(f"20. Last 18 months (not calendar year): {result20.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 20. Last 18 months (not calendar year)")
         
         # Test 21: Maybe PBN counts patients who had hygiene in 2025 OR in last 18 months?
         query21 = """
@@ -400,7 +400,7 @@ def test_hygiene_combinations():
             )
         """
         result21 = db.execute(text(query21), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"21. 2025 OR last 18 months: {result21.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 21. 2025 OR last 18 months")
         
         # Test 22: Maybe PBN counts patients with hygiene procedures in 2025, regardless of appointment?
         query22 = """
@@ -428,7 +428,7 @@ def test_hygiene_combinations():
              WHERE patient_id NOT IN (SELECT patient_id FROM hygiene_appointments_2025)) as total
         """
         result22 = db.execute(text(query22), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"22. Appointments (1352) + Procedures only (no X-rays): {result22.from_appts} + {result22.from_procs_only} = {result22.total} (PBN: 2073)")
+        print("   [count omitted] 22. Appointments (1352) + Procedures only (no X-rays)")
         
         # Test 23: Check if maybe PBN uses a specific date (like "as of today" for a specific date in 2025)
         # Let's test what the count would be if we use "as of end of 2025" but include all historical data
@@ -439,7 +439,7 @@ def test_hygiene_combinations():
             AND appointment_date <= :end_date
         """
         result23 = db.execute(text(query23), {"end_date": end_date}).fetchone()
-        print(f"23. All historical appointments up to end of 2025: {result23.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 23. All historical appointments up to end of 2025")
         
         # Test 24: Maybe PBN counts unique patients per procedure code and sums them (wrong but possible)?
         query24 = """
@@ -451,7 +451,7 @@ def test_hygiene_combinations():
             AND ipc.procedure_date <= :end_date
         """
         result24 = db.execute(text(query24), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"24. Patients with D1110 or D1120 (prophylaxis only): {result24.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 24. Patients with D1110 or D1120 (prophylaxis only)")
         
         # Test 25: Find exactly which procedures give us 721 patients (not in appointments)
         # We know we have 1608 total, need to find the subset that gives 721
@@ -488,9 +488,9 @@ def test_hygiene_combinations():
         result25 = db.execute(text(query25), {"start_date": start_date, "end_date": end_date}).fetchall()
         print(f"\n25. Procedures NOT in appointments, by code (cumulative):")
         for row in result25:
-            print(f"    {row.procedure_code}: {row.patient_count} patients (running total: {row.running_total})")
+            print("   [count omitted] diagnostic count")
             if row.running_total >= 721:
-                print(f"    *** Found it! Need codes up to {row.procedure_code} to get ~721 patients")
+                print("   [count omitted] *** Found it! Need codes up to")
         
         # Test 26: Maybe PBN counts appointments + procedures, but only completed procedures?
         query26 = """
@@ -519,7 +519,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM completed_procedures_only) as total
         """
         result26 = db.execute(text(query26), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"26. Appointments + completed procedures only (not in appointments): {result26.total} (PBN: 2073)")
+        print("   [count omitted] 26. Appointments + completed procedures only (not in appointments)")
         
         # Test 27: Maybe PBN uses a different date - what if it's "as of a specific date in 2025"?
         # Let's test mid-year
@@ -531,7 +531,7 @@ def test_hygiene_combinations():
             AND appointment_date <= '2025-06-30'
         """
         result27 = db.execute(text(query27)).fetchone()
-        print(f"27. First half of 2025 (Jan-Jun): {result27.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 27. First half of 2025 (Jan-Jun)")
         
         # Test 28: Maybe PBN counts patients who had hygiene in appointments OR procedures, but with specific filters
         query28 = """
@@ -560,7 +560,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures_filtered) as total
         """
         result28 = db.execute(text(query28), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"28. Appointments + completed prophylaxis only (D1110/D1120, not in appointments): {result28.total} (PBN: 2073)")
+        print("   [count omitted] 28. Appointments + completed prophylaxis only (D1110/D1120, not in appointments)")
         
         # Test 29: Maybe PBN uses a rolling 18-month window for BOTH appointments and procedures?
         query29 = """
@@ -588,7 +588,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures_18mo) as total
         """
         result29 = db.execute(text(query29)).fetchone()
-        print(f"29. Last 18 months: Appointments + Procedures (not in appointments): {result29.total} (PBN: 2073)")
+        print("   [count omitted] 29. Last 18 months: Appointments + Procedures (not in appointments)")
         
         # Test 30: Maybe PBN counts unique patients who had hygiene in last 18 months (appointments OR procedures)
         query30 = """
@@ -612,7 +612,7 @@ def test_hygiene_combinations():
         FULL OUTER JOIN hygiene_procedures_18mo hp ON ha.patient_id = hp.patient_id
         """
         result30 = db.execute(text(query30)).fetchone()
-        print(f"30. Last 18 months: Appointments OR Procedures (union): {result30.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 30. Last 18 months: Appointments OR Procedures (union)")
         
         # Test 31: Maybe PBN uses a different date - what if it's "as of end of 2024"?
         query31 = """
@@ -623,7 +623,7 @@ def test_hygiene_combinations():
             AND appointment_date <= '2024-12-31'
         """
         result31 = db.execute(text(query31)).fetchone()
-        print(f"31. Calendar year 2024: {result31.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 31. Calendar year 2024")
         
         # Test 32: Maybe PBN counts patients with hygiene procedures linked to appointments (even without hygienist_id)?
         query32 = """
@@ -649,7 +649,7 @@ def test_hygiene_combinations():
         FULL OUTER JOIN appointments_with_hygienist ah ON ahp.patient_id = ah.patient_id
         """
         result32 = db.execute(text(query32), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"32. Appointments with hygienist_id OR appointments with hygiene procedures: {result32.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 32. Appointments with hygienist_id OR appointments with hygiene procedures")
         
         # Test 33: Check what date range from 2025 would give us 2073
         # Maybe it's not full year, but a specific period?
@@ -672,7 +672,7 @@ def test_hygiene_combinations():
                 AND appointment_date <= '{ed}'
             """
             result33 = db.execute(text(query33)).fetchone()
-            print(f"    {label}: {result33.unique_patients}")
+            print("   [count omitted] diagnostic count")
             if result33.unique_patients == 2073:
                 print(f"    *** FOUND IT! {label} gives exactly 2073!")
         
@@ -704,7 +704,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures_2025) as total
         """
         result34 = db.execute(text(query34), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"34. Appointments (excl broken) + procedures (no X-rays, not in appointments): {result34.total} (PBN: 2073)")
+        print("   [count omitted] 34. Appointments (excl broken) + procedures (no X-rays, not in appointments)")
         
         # Test 35: Maybe PBN counts patients with hygiene procedures linked to ANY appointment (even without hygienist_id)?
         query35 = """
@@ -732,7 +732,7 @@ def test_hygiene_combinations():
         FROM all_hygiene_patients
         """
         result35 = db.execute(text(query35), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"35. Appointments with hygienist_id OR appointments with hygiene procedures: {result35.unique_patients} (PBN: 2073)")
+        print("   [count omitted] 35. Appointments with hygienist_id OR appointments with hygiene procedures")
         
         # Test 36: Maybe PBN counts unique patients per procedure code and sums? (wrong but let's check)
         query36 = """
@@ -750,7 +750,7 @@ def test_hygiene_combinations():
         ) subq
         """
         result36 = db.execute(text(query36), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"36. Sum of unique patients per procedure code (wrong method, but testing): {result36.total} (PBN: 2073)")
+        print("   [count omitted] 36. Sum of unique patients per procedure code (wrong method, but testing)")
         
         # Test 37: Maybe PBN uses "as of a specific date" - test different end dates in 2025
         print(f"\n37. Testing 'year to date' as of different dates in 2025:")
@@ -786,7 +786,7 @@ def test_hygiene_combinations():
                 (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures) as total
             """
             result37 = db.execute(text(query37)).fetchone()
-            print(f"    {label}: {result37.total}")
+            print("   [count omitted] diagnostic count")
             if result37.total == 2073:
                 print(f"    *** FOUND IT! {label} gives exactly 2073!")
         
@@ -826,7 +826,7 @@ def test_hygiene_combinations():
                 (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures) as total
             """
             result38 = db.execute(text(query38)).fetchone()
-            print(f"    {label}: {result38.total}")
+            print("   [count omitted] diagnostic count")
             if result38.total == 2073:
                 print(f"    *** FOUND IT! {label} gives exactly 2073!")
         
@@ -861,7 +861,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures) as total
         """
         result39a = db.execute(text(query39a)).fetchone()
-        print(f"    39a. June 27, exclude broken: {result39a.total}")
+        print("   [count omitted] 39a. June 27, exclude broken")
         
         # 39b: Include only completed procedures
         query39b = f"""
@@ -890,7 +890,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures) as total
         """
         result39b = db.execute(text(query39b)).fetchone()
-        print(f"    39b. June 27, completed procedures only: {result39b.total}")
+        print("   [count omitted] 39b. June 27, completed procedures only")
         
         # 39c: Maybe PBN uses June 27 but with a slightly different date range (like June 27 23:59:59)?
         # Or maybe it's "through June 27" meaning including all of June 27
@@ -920,7 +920,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM hygiene_procedures) as total
         """
         result39c = db.execute(text(query39c)).fetchone()
-        print(f"    39c. June 27 (using < June 28): {result39c.total}")
+        print("   [count omitted] 39c. June 27 (using < June 28)")
         
         # 39d: Maybe PBN counts patients who had hygiene procedures in appointments (even without hygienist_id)
         query39d = f"""
@@ -948,7 +948,7 @@ def test_hygiene_combinations():
         FROM all_hygiene_patients
         """
         result39d = db.execute(text(query39d)).fetchone()
-        print(f"    39d. June 27, appointments with hygienist_id OR appointments with hygiene procedures: {result39d.unique_patients}")
+        print("   [count omitted] 39d. June 27, appointments with hygienist_id OR appointments with hygiene procedures")
         
         if result39a.total == 2073 or result39b.total == 2073 or result39c.total == 2073 or result39d.unique_patients == 2073:
             print(f"    *** FOUND IT! One of the filters gives exactly 2073!")
@@ -1000,7 +1000,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM procedures_not_in_any_appt) as total
         """
         result40 = db.execute(text(query40)).fetchone()
-        print(f"    40. June 27, appointments (hygienist_id) + appointments (hygiene procs) + procedures (no appt): {result40.total}")
+        print("   [count omitted] 40. June 27, appointments (hygienist_id) + appointments (hygiene procs) + procedures (no appt)")
         
         # Test 41: Maybe the 3 missing patients are from a specific date range or status?
         # Let's check what changed between June 27 (2070) and June 30 (2080)
@@ -1026,7 +1026,7 @@ def test_hygiene_combinations():
         WHERE p27.patient_id IS NULL
         """
         result41 = db.execute(text(query41)).fetchone()
-        print(f"    41. New patients between June 28-30 (in appointments only): {result41.new_patients_june28_30}")
+        print("   [count omitted] 41. New patients between June 28-30 (in appointments only)")
         
         # Test 42: Final test - maybe PBN uses June 27 but includes a few more days or uses a different cutoff
         # Let's test June 27 + procedures from June 28-30 that aren't in appointments
@@ -1072,7 +1072,7 @@ def test_hygiene_combinations():
             (SELECT COUNT(DISTINCT patient_id) FROM additional_procedures_june28_30) as total
         """
         result42 = db.execute(text(query42)).fetchone()
-        print(f"    42. June 27 appointments+procedures + procedures from June 28-30: {result42.total}")
+        print("   [count omitted] 42. June 27 appointments+procedures + procedures from June 28-30")
         
         print("\n" + "="*80)
         print("ANALYSIS: Looking for the combination that gives us 2073 patients")
