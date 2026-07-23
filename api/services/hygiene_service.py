@@ -339,13 +339,12 @@ def get_hygiene_retention_summary(
     
     try:
         result = db.execute(text(query), params).fetchone()
-        logger.info(f"Hygiene Retention query executed successfully")
         if result:
-            logger.info(f"Query result: recall_current={result.recall_current_percent}, "
-                       f"hyg_pre_appt={result.hyg_pre_appointment_percent}, "
-                       f"hyg_patients_seen={result.hyg_patients_seen}")
-            # Debug: log all fields
-            logger.info(f"Full result: {dict(result._mapping) if hasattr(result, '_mapping') else result}")
+            logger.info(
+                "Hygiene Retention query ok: recall_current=%s hyg_pre_appt=%s",
+                result.recall_current_percent,
+                result.hyg_pre_appointment_percent,
+            )
         else:
             logger.warning("Query returned no rows!")
     except Exception as e:

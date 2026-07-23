@@ -327,7 +327,8 @@ def _connection_hint(stage: str, host: str, tunnel_db: bool, tunnel_port: int = 
         return None
     if host in ("127.0.0.1", "localhost"):
         return None
-    if ".rds.amazonaws.com" in host.lower():
+    h = host.lower()
+    if h.endswith(".rds.amazonaws.com") or h == "rds.amazonaws.com":
         if not is_local_tcp_port_open("127.0.0.1", tunnel_port):
             return (
                 "Clinic RDS is private. Start `mdc tunnel clinic-db`, then rerun "
@@ -503,7 +504,9 @@ def collect_freshness_report(
 
     host = env.get("POSTGRES_ANALYTICS_HOST", "")
     hint = _connection_hint(stage, host, tunnel_db, tunnel_port)
-    if hint and not tunnel_db and stage == "clinic" and ".rds.amazonaws.com" in host.lower():
+    host_l = host.lower()
+    is_rds = host_l.endswith(".rds.amazonaws.com") or host_l == "rds.amazonaws.com"
+    if hint and not tunnel_db and stage == "clinic" and is_rds:
         return FreshnessReport(
             stage=stage,
             database_label=f"{env.get('POSTGRES_ANALYTICS_DB', '')} @ {host}",

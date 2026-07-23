@@ -56,7 +56,7 @@ def test_api_run_command_registered(
     mock_python,
     mock_run,
 ):
-    mock_load.return_value = {}
+    mock_load.return_value = {"CLINIC_API_KEY": "test-key"}
     mock_python.return_value = Path("api/venv/Scripts/python.exe")
     result = runner.invoke(app, ["api", "run", "--env", "local"])
     assert result.exit_code == 0

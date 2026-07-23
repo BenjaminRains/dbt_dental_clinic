@@ -8,6 +8,8 @@ A modern, comprehensive ETL pipeline ecosystem for extracting data from OpenDent
 
 The pipeline follows a **two-phase architecture** with clear separation between **management/setup** and **nightly ETL execution**. **Airflow** (repo root [`airflow/`](../airflow/)) orchestrates the nightly path: schema refresh → ETL → dbt → optional publish to clinic RDS.
 
+**Sync contract (insert / upsert / delete, orphans):** [`docs/etl/ETL_SYNC_SEMANTICS.md`](../docs/etl/ETL_SYNC_SEMANTICS.md). For CDC options and the replica-fidelity roadmap, see [`docs/etl/`](../docs/etl/).
+
 ### Phase 1: Pipeline Management & Setup
 ```
 ┌─────────────────────┐    ┌─────────────────────┐    ┌─────────────────────┐

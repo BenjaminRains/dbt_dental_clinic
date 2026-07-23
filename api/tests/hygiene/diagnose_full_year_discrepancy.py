@@ -60,11 +60,11 @@ def diagnose_discrepancy():
             UNION
             SELECT DISTINCT patient_id, hygiene_date FROM hygiene_procedures
         )
-        SELECT COUNT(DISTINCT patient_id) as total_patients
+        SELECT COUNT(DISTINCT patient_id) as total_people
         FROM hygiene_patients
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 1 - Current logic (all appointments + procedures): {result1.total_patients}")
+        print(f"Test 1 - Current logic (all appointments + procedures): {result1.total_people}")
         
         # Test 2: Only completed appointments
         query2 = """
@@ -93,11 +93,11 @@ def diagnose_discrepancy():
             UNION
             SELECT DISTINCT patient_id, hygiene_date FROM hygiene_procedures
         )
-        SELECT COUNT(DISTINCT patient_id) as total_patients
+        SELECT COUNT(DISTINCT patient_id) as total_people
         FROM hygiene_patients
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 2 - Only completed appointments: {result2.total_patients}")
+        print(f"Test 2 - Only completed appointments: {result2.total_people}")
         
         # Test 3: Exclude broken/no-show appointments
         query3 = """
@@ -127,11 +127,11 @@ def diagnose_discrepancy():
             UNION
             SELECT DISTINCT patient_id, hygiene_date FROM hygiene_procedures
         )
-        SELECT COUNT(DISTINCT patient_id) as total_patients
+        SELECT COUNT(DISTINCT patient_id) as total_people
         FROM hygiene_patients
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 3 - Exclude broken/no-show: {result3.total_patients}")
+        print(f"Test 3 - Exclude broken/no-show: {result3.total_people}")
         
         # Test 4: Completed + exclude broken/no-show
         query4 = """
@@ -162,26 +162,26 @@ def diagnose_discrepancy():
             UNION
             SELECT DISTINCT patient_id, hygiene_date FROM hygiene_procedures
         )
-        SELECT COUNT(DISTINCT patient_id) as total_patients
+        SELECT COUNT(DISTINCT patient_id) as total_people
         FROM hygiene_patients
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 4 - Completed + exclude broken/no-show: {result4.total_patients}")
+        print(f"Test 4 - Completed + exclude broken/no-show: {result4.total_people}")
         
         # Test 5: Only appointments (no procedures)
         query5 = """
-        SELECT COUNT(DISTINCT fa.patient_id) as total_patients
+        SELECT COUNT(DISTINCT fa.patient_id) as total_people
         FROM raw_marts.fact_appointment fa
         WHERE (fa.hygienist_id IS NOT NULL AND fa.hygienist_id != 0)
             AND fa.appointment_date >= :start_date
             AND fa.appointment_date <= :end_date
         """
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 5 - Only appointments (no procedures): {result5.total_patients}")
+        print(f"Test 5 - Only appointments (no procedures): {result5.total_people}")
         
         # Test 6: Only completed appointments (no procedures)
         query6 = """
-        SELECT COUNT(DISTINCT fa.patient_id) as total_patients
+        SELECT COUNT(DISTINCT fa.patient_id) as total_people
         FROM raw_marts.fact_appointment fa
         WHERE (fa.hygienist_id IS NOT NULL AND fa.hygienist_id != 0)
             AND fa.is_completed = true
@@ -189,16 +189,16 @@ def diagnose_discrepancy():
             AND fa.appointment_date <= :end_date
         """
         result6 = db.execute(text(query6), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 6 - Only completed appointments (no procedures): {result6.total_patients}")
+        print(f"Test 6 - Only completed appointments (no procedures): {result6.total_people}")
         
         # Test 7: Check appointment status breakdown
         query7 = """
         SELECT 
-            COUNT(DISTINCT fa.patient_id) as total_patients,
-            COUNT(DISTINCT CASE WHEN fa.is_completed = true THEN fa.patient_id END) as completed_patients,
-            COUNT(DISTINCT CASE WHEN fa.is_broken = true THEN fa.patient_id END) as broken_patients,
-            COUNT(DISTINCT CASE WHEN fa.is_no_show = true THEN fa.patient_id END) as no_show_patients,
-            COUNT(DISTINCT CASE WHEN fa.is_completed = false AND (fa.is_broken = false OR fa.is_broken IS NULL) AND (fa.is_no_show = false OR fa.is_no_show IS NULL) THEN fa.patient_id END) as scheduled_patients
+            COUNT(DISTINCT fa.patient_id) as total_people,
+            COUNT(DISTINCT CASE WHEN fa.is_completed = true THEN fa.patient_id END) as completed_people,
+            COUNT(DISTINCT CASE WHEN fa.is_broken = true THEN fa.patient_id END) as broken_people,
+            COUNT(DISTINCT CASE WHEN fa.is_no_show = true THEN fa.patient_id END) as no_show_people,
+            COUNT(DISTINCT CASE WHEN fa.is_completed = false AND (fa.is_broken = false OR fa.is_broken IS NULL) AND (fa.is_no_show = false OR fa.is_no_show IS NULL) THEN fa.patient_id END) as scheduled_people
         FROM raw_marts.fact_appointment fa
         WHERE (fa.hygienist_id IS NOT NULL AND fa.hygienist_id != 0)
             AND fa.appointment_date >= :start_date
@@ -206,23 +206,23 @@ def diagnose_discrepancy():
         """
         result7 = db.execute(text(query7), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nAppointment Status Breakdown:")
-        print(f"  Total patients: {result7.total_patients}")
-        print(f"  Completed: {result7.completed_patients}")
-        print(f"  Broken: {result7.broken_patients}")
-        print(f"  No-show: {result7.no_show_patients}")
-        print(f"  Scheduled (not completed): {result7.scheduled_patients}")
+        print(f"  Total people: {result7.total_people}")
+        print(f"  Completed: {result7.completed_people}")
+        print(f"  Broken: {result7.broken_people}")
+        print(f"  No-show: {result7.no_show_people}")
+        print(f"  Scheduled (not completed): {result7.scheduled_people}")
         
         # Test 8: Procedures breakdown
         query8 = """
         SELECT 
-            COUNT(DISTINCT ipc.patient_id) as total_procedure_patients,
+            COUNT(DISTINCT ipc.patient_id) as total_procedure_people,
             COUNT(DISTINCT CASE WHEN EXISTS (
                 SELECT 1 FROM raw_marts.fact_appointment fa
                 WHERE fa.patient_id = ipc.patient_id
                     AND (fa.hygienist_id IS NOT NULL AND fa.hygienist_id != 0)
                     AND fa.appointment_date >= :start_date
                     AND fa.appointment_date <= :end_date
-            ) THEN ipc.patient_id END) as patients_already_in_appointments
+            ) THEN ipc.patient_id END) as people_already_in_appointments
         FROM raw_intermediate.int_procedure_complete ipc
         INNER JOIN raw_marts.dim_procedure pc ON ipc.procedure_code_id = pc.procedure_code_id
         WHERE pc.procedure_code IN ('D0120', 'D0150', 'D1110', 'D1120', 'D0180')
@@ -231,24 +231,24 @@ def diagnose_discrepancy():
         """
         result8 = db.execute(text(query8), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nProcedures Breakdown:")
-        print(f"  Total procedure patients: {result8.total_procedure_patients}")
-        print(f"  Already in appointments: {result8.patients_already_in_appointments}")
-        print(f"  Unique from procedures only: {result8.total_procedure_patients - result8.patients_already_in_appointments}")
+        print(f"  Total procedure patients: {result8.total_procedure_people}")
+        print(f"  Already in appointments: {result8.people_already_in_appointments}")
+        print(f"  Unique from procedures only: {result8.total_procedure_people - result8.people_already_in_appointments}")
         
         print("\n" + "="*80)
         print("ANALYSIS:")
         print("="*80)
         print(f"Target: 2073 patients")
-        print(f"Current: {result1.total_patients} patients")
+        print(f"Current: {result1.total_people} patients")
         print(f"\nClosest matches:")
-        if abs(result2.total_patients - 2073) < abs(result1.total_patients - 2073):
-            print(f"  ✅ Test 2 (completed only): {result2.total_patients} (diff: {abs(result2.total_patients - 2073)})")
-        if abs(result3.total_patients - 2073) < abs(result1.total_patients - 2073):
-            print(f"  ✅ Test 3 (exclude broken/no-show): {result3.total_patients} (diff: {abs(result3.total_patients - 2073)})")
-        if abs(result4.total_patients - 2073) < abs(result1.total_patients - 2073):
-            print(f"  ✅ Test 4 (completed + exclude broken/no-show): {result4.total_patients} (diff: {abs(result4.total_patients - 2073)})")
-        if abs(result6.total_patients - 2073) < abs(result1.total_patients - 2073):
-            print(f"  ✅ Test 6 (only completed appointments, no procedures): {result6.total_patients} (diff: {abs(result6.total_patients - 2073)})")
+        if abs(result2.total_people - 2073) < abs(result1.total_people - 2073):
+            print(f"  ✅ Test 2 (completed only): {result2.total_people} (diff: {abs(result2.total_people - 2073)})")
+        if abs(result3.total_people - 2073) < abs(result1.total_people - 2073):
+            print(f"  ✅ Test 3 (exclude broken/no-show): {result3.total_people} (diff: {abs(result3.total_people - 2073)})")
+        if abs(result4.total_people - 2073) < abs(result1.total_people - 2073):
+            print(f"  ✅ Test 4 (completed + exclude broken/no-show): {result4.total_people} (diff: {abs(result4.total_people - 2073)})")
+        if abs(result6.total_people - 2073) < abs(result1.total_people - 2073):
+            print(f"  ✅ Test 6 (only completed appointments, no procedures): {result6.total_people} (diff: {abs(result6.total_people - 2073)})")
         
     finally:
         db.close()

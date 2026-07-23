@@ -20,7 +20,11 @@ def test_api_run_local_defaults_reload(
     mock_python,
     mock_run,
 ):
-    mock_load.return_value = {"API_HOST": "127.0.0.1", "API_PORT": "9000"}
+    mock_load.return_value = {
+        "API_HOST": "127.0.0.1",
+        "API_PORT": "9000",
+        "CLINIC_API_KEY": "test-key",
+    }
     mock_python.return_value = Path("api/venv/Scripts/python.exe")
 
     result = runner.invoke(app, ["api", "run", "--env", "local"])
@@ -42,7 +46,7 @@ def test_api_run_clinic_no_reload_by_default(
     mock_python,
     mock_run,
 ):
-    mock_load.return_value = {}
+    mock_load.return_value = {"CLINIC_API_KEY": "test-key"}
     mock_python.return_value = Path("api/venv/Scripts/python.exe")
 
     result = runner.invoke(app, ["api", "run", "--env", "clinic"])
@@ -65,6 +69,7 @@ def test_api_run_clinic_tunnel_db_overrides_postgres(
     mock_load.return_value = {
         "POSTGRES_ANALYTICS_HOST": "dental-clinic-analytics.example.rds.amazonaws.com",
         "POSTGRES_ANALYTICS_PORT": "5432",
+        "CLINIC_API_KEY": "test-key",
     }
     mock_python.return_value = Path("api/venv/Scripts/python.exe")
 
@@ -77,6 +82,26 @@ def test_api_run_clinic_tunnel_db_overrides_postgres(
     settings = mock_run.call_args.kwargs["settings"]
     assert settings["POSTGRES_ANALYTICS_HOST"] == "127.0.0.1"
     assert settings["POSTGRES_ANALYTICS_PORT"] == "5433"
+
+
+@patch("mdc_cli.commands.api.run_isolated", return_value=0)
+@patch("mdc_cli.commands.api.require_component_python")
+@patch("mdc_cli.commands.api.load_env_dict_isolated")
+@patch("mdc_cli.commands.api.validate_api_stage", return_value=(True, None))
+def test_api_run_local_refuses_without_portal_secret(
+    mock_validate,
+    mock_load,
+    mock_python,
+    mock_run,
+):
+    mock_load.return_value = {}
+    mock_python.return_value = Path("api/venv/Scripts/python.exe")
+
+    result = runner.invoke(app, ["api", "run", "--env", "local"])
+
+    assert result.exit_code == 2
+    assert "CLINIC_PORTAL_SESSION_SECRET" in result.output
+    mock_run.assert_not_called()
 
 
 @patch("mdc_cli.commands.etl.run_isolated", return_value=0)

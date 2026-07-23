@@ -167,6 +167,8 @@ docs/etl/archive/
 !docs/dbt/**
 !docs/findings/
 !docs/findings/**
+!docs/opendental/
+!docs/opendental/**
 !docs/frontend/
 !docs/frontend/**
 !docs/snowflake/
