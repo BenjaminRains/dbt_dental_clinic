@@ -494,35 +494,35 @@ class TestCLIIntegrationWithFixtures:
     def test_status_command_with_output_file(self, cli_runner, temp_cli_config_file, mock_cli_database_connections):
         """Test status command with output file generation using fixtures."""
         try:
-            # Create temporary output file
-            output_file = tempfile.mktemp(suffix='.json')
-            
-            # Test status command with output file
-            result = cli_runner.invoke(cli, [
-                'status', '--config', temp_cli_config_file,
-                '--format', 'json', '--output', output_file
-            ])
-            
-            if result.exit_code == 0:
-                assert "Status report written to" in result.output
+            fd, output_file = tempfile.mkstemp(suffix='.json')
+            os.close(fd)
+            try:
+                # Test status command with output file
+                result = cli_runner.invoke(cli, [
+                    'status', '--config', temp_cli_config_file,
+                    '--format', 'json', '--output', output_file
+                ])
                 
-                # Check that file was created
-                if os.path.exists(output_file):
-                    with open(output_file, 'r') as f:
-                        content = f.read()
-                        # Should contain valid JSON or error message
-                        if content.strip():
-                            try:
-                                json.loads(content)
-                            except json.JSONDecodeError:
-                                # Might contain error message instead of JSON
-                                assert "error" in content.lower() or "failed" in content.lower()
+                if result.exit_code == 0:
+                    assert "Status report written to" in result.output
                     
-                    # Clean up
+                    # Check that file was created
+                    if os.path.exists(output_file):
+                        with open(output_file, 'r') as f:
+                            content = f.read()
+                            # Should contain valid JSON or error message
+                            if content.strip():
+                                try:
+                                    json.loads(content)
+                                except json.JSONDecodeError:
+                                    # Might contain error message instead of JSON
+                                    assert "error" in content.lower() or "failed" in content.lower()
+                else:
+                    # If command failed, should provide clear error message
+                    assert "Failed" in result.output or "Error" in result.output
+            finally:
+                if os.path.exists(output_file):
                     os.unlink(output_file)
-            else:
-                # If command failed, should provide clear error message
-                assert "Failed" in result.output or "Error" in result.output
                 
         except Exception as e:
             logger.info(f"Analytics database not available: {str(e)}")

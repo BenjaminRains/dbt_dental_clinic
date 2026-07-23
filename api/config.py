@@ -94,7 +94,7 @@ class APIConfig:
 
             password, source = resolve_clinic_analytics_password(password)
             if source != "env_file":
-                logger.info("Clinic analytics password source: %s", source)
+                logger.info("Clinic analytics credentials refreshed from Secrets Manager")
         return {
             "host": db.host,
             "port": db.port,
@@ -115,7 +115,7 @@ class APIConfig:
         explicit = self._settings.sslmode_env
         if explicit:
             sslmode = explicit
-        elif "rds.amazonaws.com" in host:
+        elif host.endswith(".rds.amazonaws.com") or host == "rds.amazonaws.com":
             sslmode = "require"
         else:
             sslmode = "prefer"

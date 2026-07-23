@@ -58,7 +58,7 @@ def check_procedure_codes():
         )
         SELECT 
             COUNT(*) as total_procedures,
-            COUNT(DISTINCT pc.patient_id) as unique_patients,
+            COUNT(DISTINCT pc.patient_id) as unique_people,
             COUNT(DISTINCT pc.appointment_id) as unique_appointments
         FROM raw_intermediate.int_procedure_complete pc
         INNER JOIN hygiene_procedure_codes hpc ON pc.procedure_code_id = hpc.procedure_code_id
@@ -67,7 +67,7 @@ def check_procedure_codes():
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"   Total procedures: {result2.total_procedures}")
-        print(f"   Unique patients: {result2.unique_patients}")
+        print(f"   Unique patients: {result2.unique_people}")
         print(f"   Unique appointments: {result2.unique_appointments}")
         
         # 3. Check common hygiene procedure codes (D0120, D0150, D1110, D1120, etc.)
@@ -78,7 +78,7 @@ def check_procedure_codes():
             pc.description,
             pc.is_hygiene,
             COUNT(*) as procedure_count,
-            COUNT(DISTINCT ipc.patient_id) as unique_patients
+            COUNT(DISTINCT ipc.patient_id) as unique_people
         FROM raw_intermediate.int_procedure_complete ipc
         INNER JOIN raw_marts.dim_procedure pc ON ipc.procedure_code_id = pc.procedure_code_id
         WHERE ipc.procedure_date >= :start_date
@@ -91,7 +91,7 @@ def check_procedure_codes():
         print(f"   Found {len(result3)} hygiene-related procedure codes:")
         for row in result3:
             hygiene_flag = "YES" if row.is_hygiene else "NO" if row.is_hygiene is False else "NULL"
-            print(f"   {row.procedure_code} ({row.description}): {row.procedure_count} procedures, {row.unique_patients} patients, is_hygiene={hygiene_flag}")
+            print(f"   {row.procedure_code} ({row.description}): {row.procedure_count} procedures, {row.unique_people} patients, is_hygiene={hygiene_flag}")
         
         # 4. Check if combining appointments + procedures gets us closer to 2073
         # Since is_hygiene flag is all false, try using common hygiene procedure codes
@@ -115,18 +115,18 @@ def check_procedure_codes():
                 AND ipc.procedure_date <= :end_date
         )
         SELECT 
-            COUNT(DISTINCT COALESCE(ha.patient_id, hp.patient_id)) as total_unique_patients,
-            COUNT(DISTINCT ha.patient_id) as patients_in_appointments,
-            COUNT(DISTINCT hp.patient_id) as patients_in_procedures,
-            COUNT(DISTINCT CASE WHEN ha.patient_id IS NOT NULL AND hp.patient_id IS NOT NULL THEN ha.patient_id END) as patients_in_both
+            COUNT(DISTINCT COALESCE(ha.patient_id, hp.patient_id)) as total_unique_people,
+            COUNT(DISTINCT ha.patient_id) as people_in_appointments,
+            COUNT(DISTINCT hp.patient_id) as people_in_procedures,
+            COUNT(DISTINCT CASE WHEN ha.patient_id IS NOT NULL AND hp.patient_id IS NOT NULL THEN ha.patient_id END) as people_in_both
         FROM hygiene_appointments ha
         FULL OUTER JOIN hygiene_procedures hp ON ha.patient_id = hp.patient_id
         """
         result4a = db.execute(text(query4a), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"   Total unique patients (appointments OR hygiene procedure codes): {result4a.total_unique_patients} (PBN: 2073)")
-        print(f"   Patients in appointments only: {result4a.patients_in_appointments}")
-        print(f"   Patients in procedures only: {result4a.patients_in_procedures}")
-        print(f"   Patients in both: {result4a.patients_in_both}")
+        print(f"   Total unique patients (appointments OR hygiene procedure codes): {result4a.total_unique_people} (PBN: 2073)")
+        print(f"   Patients in appointments only: {result4a.people_in_appointments}")
+        print(f"   Patients in procedures only: {result4a.people_in_procedures}")
+        print(f"   Patients in both: {result4a.people_in_both}")
         
         # 5. Check if maybe PBN counts ALL appointments (not just those with hygienist_id)
         print("\n5. All appointments that might be hygiene (checking appointment types):")
@@ -134,7 +134,7 @@ def check_procedure_codes():
         SELECT 
             iad.appointment_type_name,
             COUNT(*) as appointment_count,
-            COUNT(DISTINCT fa.patient_id) as unique_patients,
+            COUNT(DISTINCT fa.patient_id) as unique_people,
             COUNT(CASE WHEN fa.hygienist_id IS NOT NULL AND fa.hygienist_id != 0 THEN 1 END) as has_hygienist
         FROM raw_marts.fact_appointment fa
         LEFT JOIN raw_intermediate.int_appointment_details iad ON fa.appointment_id = iad.appointment_id
@@ -147,7 +147,7 @@ def check_procedure_codes():
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchall()
         print(f"   Top appointment types:")
         for row in result5:
-            print(f"   {row.appointment_type_name or 'NULL'}: {row.appointment_count} appointments, {row.unique_patients} patients, {row.has_hygienist} with hygienist")
+            print(f"   {row.appointment_type_name or 'NULL'}: {row.appointment_count} appointments, {row.unique_people} patients, {row.has_hygienist} with hygienist")
         
     finally:
         db.close()
