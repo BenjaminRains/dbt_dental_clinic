@@ -32,12 +32,12 @@ def test_updated_service():
         result = get_hygiene_retention_summary(db, start_date, end_date)
         
         print(f"\n{label} ({start_date} to {end_date}):")
-        print(f"  Recall Current %: {result['recall_current_percent']:.2f}% (PBN: 53.4%)")
-        print(f"  Hyg Pre-Appointment %: {result['hyg_pre_appointment_percent']:.2f}% (PBN: 50.7%)")
-        print(f"  Hyg Patients Seen: {result['hyg_patients_seen']} (PBN: 2073)")
-        print(f"  Hyg Pts Re-appntd: {result['hyg_pts_reappntd']} (PBN: 1051)")
-        print(f"  Recall Overdue %: {result['recall_overdue_percent']:.2f}% (PBN: 25.6%)")
-        print(f"  Not on Recall %: {result['not_on_recall_percent']:.2f}% (PBN: 20%)")
+        print("   [count omitted] Recall Current %")
+        print("   [count omitted] Hyg Pre-Appointment %")
+        print("   [count omitted] Hyg Patients Seen")
+        print("   [count omitted] Hyg Pts Re-appntd")
+        print("   [count omitted] Recall Overdue %")
+        print("   [count omitted] Not on Recall %")
 
 if __name__ == "__main__":
     test_updated_service()

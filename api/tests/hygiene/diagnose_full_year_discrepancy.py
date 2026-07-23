@@ -64,7 +64,7 @@ def diagnose_discrepancy():
         FROM hygiene_patients
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 1 - Current logic (all appointments + procedures): {result1.total_people}")
+        print("   [count omitted] Test 1 - Current logic (all appointments + procedures)")
         
         # Test 2: Only completed appointments
         query2 = """
@@ -97,7 +97,7 @@ def diagnose_discrepancy():
         FROM hygiene_patients
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 2 - Only completed appointments: {result2.total_people}")
+        print("   [count omitted] Test 2 - Only completed appointments")
         
         # Test 3: Exclude broken/no-show appointments
         query3 = """
@@ -131,7 +131,7 @@ def diagnose_discrepancy():
         FROM hygiene_patients
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 3 - Exclude broken/no-show: {result3.total_people}")
+        print("   [count omitted] Test 3 - Exclude broken/no-show")
         
         # Test 4: Completed + exclude broken/no-show
         query4 = """
@@ -166,7 +166,7 @@ def diagnose_discrepancy():
         FROM hygiene_patients
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 4 - Completed + exclude broken/no-show: {result4.total_people}")
+        print("   [count omitted] Test 4 - Completed + exclude broken/no-show")
         
         # Test 5: Only appointments (no procedures)
         query5 = """
@@ -177,7 +177,7 @@ def diagnose_discrepancy():
             AND fa.appointment_date <= :end_date
         """
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 5 - Only appointments (no procedures): {result5.total_people}")
+        print("   [count omitted] Test 5 - Only appointments (no procedures)")
         
         # Test 6: Only completed appointments (no procedures)
         query6 = """
@@ -189,7 +189,7 @@ def diagnose_discrepancy():
             AND fa.appointment_date <= :end_date
         """
         result6 = db.execute(text(query6), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 6 - Only completed appointments (no procedures): {result6.total_people}")
+        print("   [count omitted] Test 6 - Only completed appointments (no procedures)")
         
         # Test 7: Check appointment status breakdown
         query7 = """
@@ -206,11 +206,11 @@ def diagnose_discrepancy():
         """
         result7 = db.execute(text(query7), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nAppointment Status Breakdown:")
-        print(f"  Total people: {result7.total_people}")
-        print(f"  Completed: {result7.completed_people}")
-        print(f"  Broken: {result7.broken_people}")
-        print(f"  No-show: {result7.no_show_people}")
-        print(f"  Scheduled (not completed): {result7.scheduled_people}")
+        print("   [count omitted] Total people")
+        print("   [count omitted] Completed")
+        print("   [count omitted] Broken")
+        print("   [count omitted] No-show")
+        print("   [count omitted] Scheduled (not completed)")
         
         # Test 8: Procedures breakdown
         query8 = """
@@ -231,24 +231,24 @@ def diagnose_discrepancy():
         """
         result8 = db.execute(text(query8), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nProcedures Breakdown:")
-        print(f"  Total procedure patients: {result8.total_procedure_people}")
-        print(f"  Already in appointments: {result8.people_already_in_appointments}")
-        print(f"  Unique from procedures only: {result8.total_procedure_people - result8.people_already_in_appointments}")
+        print("   [count omitted] Total procedure patients")
+        print("   [count omitted] Already in appointments")
+        print("   [count omitted] Unique from procedures only")
         
         print("\n" + "="*80)
         print("ANALYSIS:")
         print("="*80)
         print(f"Target: 2073 patients")
-        print(f"Current: {result1.total_people} patients")
+        print("   [count omitted] Current")
         print(f"\nClosest matches:")
         if abs(result2.total_people - 2073) < abs(result1.total_people - 2073):
-            print(f"  ✅ Test 2 (completed only): {result2.total_people} (diff: {abs(result2.total_people - 2073)})")
+            print("   [count omitted] ✅ Test 2 (completed only)")
         if abs(result3.total_people - 2073) < abs(result1.total_people - 2073):
-            print(f"  ✅ Test 3 (exclude broken/no-show): {result3.total_people} (diff: {abs(result3.total_people - 2073)})")
+            print("   [count omitted] ✅ Test 3 (exclude broken/no-show)")
         if abs(result4.total_people - 2073) < abs(result1.total_people - 2073):
-            print(f"  ✅ Test 4 (completed + exclude broken/no-show): {result4.total_people} (diff: {abs(result4.total_people - 2073)})")
+            print("   [count omitted] ✅ Test 4 (completed + exclude broken/no-show)")
         if abs(result6.total_people - 2073) < abs(result1.total_people - 2073):
-            print(f"  ✅ Test 6 (only completed appointments, no procedures): {result6.total_people} (diff: {abs(result6.total_people - 2073)})")
+            print("   [count omitted] ✅ Test 6 (only completed appointments, no procedures)")
         
     finally:
         db.close()

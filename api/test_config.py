@@ -108,17 +108,11 @@ def test_api_config() -> bool:
         print(f"   OK Port: {db_config['port']}")
         print(f"   OK Database: {db_config['database']}")
         print(f"   OK User: {db_config['user']}")
-        print(f"   OK Password: {'*' * len(db_config['password']) if db_config['password'] else 'NOT SET'}")
+        print("   OK Password: [configured]" if "password" in db_config else "   OK Password: NOT SET")
 
         print("\n3. Testing database URL generation...")
-        db_url = config.get_database_url(DatabaseType.ANALYTICS)
-        if "@" in db_url:
-            user_part = db_url.split("@", 1)[0]
-            rest = db_url.split("@", 1)[1]
-            safe_url = f"{user_part.split('://')[0]}://***@{rest}"
-        else:
-            safe_url = db_url
-        print(f"   OK Database URL: {safe_url}")
+        _ = config.get_database_url(DatabaseType.ANALYTICS)
+        print("   OK Database URL: [redacted]")
 
         print("\n" + "=" * 60)
         print("PASS: API CONFIGURATION TEST")

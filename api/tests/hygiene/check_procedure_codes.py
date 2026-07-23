@@ -43,10 +43,10 @@ def check_procedure_codes():
         FROM raw_marts.dim_procedure
         """
         result1 = db.execute(text(query1)).fetchone()
-        print(f"   Total procedure codes: {result1.total_codes}")
-        print(f"   Hygiene codes (is_hygiene = true): {result1.hygiene_codes}")
-        print(f"   Non-hygiene codes: {result1.non_hygiene_codes}")
-        print(f"   Null hygiene flag: {result1.null_hygiene}")
+        print("   [count omitted] Total procedure codes")
+        print("   [count omitted] Hygiene codes (is_hygiene = true)")
+        print("   [count omitted] Non-hygiene codes")
+        print("   [count omitted] Null hygiene flag")
         
         # 2. Check procedures with hygiene codes in the date range
         print("\n2. Procedures with hygiene codes (regardless of is_hygiene flag):")
@@ -66,9 +66,9 @@ def check_procedure_codes():
             AND pc.procedure_date <= :end_date
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"   Total procedures: {result2.total_procedures}")
-        print(f"   Unique patients: {result2.unique_people}")
-        print(f"   Unique appointments: {result2.unique_appointments}")
+        print("   [count omitted] Total procedures")
+        print("   [count omitted] Unique patients")
+        print("   [count omitted] Unique appointments")
         
         # 3. Check common hygiene procedure codes (D0120, D0150, D1110, D1120, etc.)
         print("\n3. Common hygiene procedure codes and their usage:")
@@ -88,10 +88,10 @@ def check_procedure_codes():
         ORDER BY procedure_count DESC
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchall()
-        print(f"   Found {len(result3)} hygiene-related procedure codes:")
+        print("   [count omitted] Found")
         for row in result3:
             hygiene_flag = "YES" if row.is_hygiene else "NO" if row.is_hygiene is False else "NULL"
-            print(f"   {row.procedure_code} ({row.description}): {row.procedure_count} procedures, {row.unique_people} patients, is_hygiene={hygiene_flag}")
+            print("   [count omitted] diagnostic count")
         
         # 4. Check if combining appointments + procedures gets us closer to 2073
         # Since is_hygiene flag is all false, try using common hygiene procedure codes
@@ -123,10 +123,10 @@ def check_procedure_codes():
         FULL OUTER JOIN hygiene_procedures hp ON ha.patient_id = hp.patient_id
         """
         result4a = db.execute(text(query4a), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"   Total unique patients (appointments OR hygiene procedure codes): {result4a.total_unique_people} (PBN: 2073)")
-        print(f"   Patients in appointments only: {result4a.people_in_appointments}")
-        print(f"   Patients in procedures only: {result4a.people_in_procedures}")
-        print(f"   Patients in both: {result4a.people_in_both}")
+        print("   [count omitted] Total unique patients (appointments OR hygiene procedure codes)")
+        print("   [count omitted] Patients in appointments only")
+        print("   [count omitted] Patients in procedures only")
+        print("   [count omitted] Patients in both")
         
         # 5. Check if maybe PBN counts ALL appointments (not just those with hygienist_id)
         print("\n5. All appointments that might be hygiene (checking appointment types):")
@@ -147,7 +147,7 @@ def check_procedure_codes():
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchall()
         print(f"   Top appointment types:")
         for row in result5:
-            print(f"   {row.appointment_type_name or 'NULL'}: {row.appointment_count} appointments, {row.unique_people} patients, {row.has_hygienist} with hygienist")
+            print("   [count omitted] diagnostic count")
         
     finally:
         db.close()
