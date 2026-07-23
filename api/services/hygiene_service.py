@@ -340,11 +340,8 @@ def get_hygiene_retention_summary(
     try:
         result = db.execute(text(query), params).fetchone()
         if result:
-            logger.info(
-                "Hygiene Retention query ok: recall_current=%s hyg_pre_appt=%s",
-                result.recall_current_percent,
-                result.hyg_pre_appointment_percent,
-            )
+            # Log success only — do not log KPI field values (CodeQL clear-text logging).
+            logger.info("Hygiene Retention query ok")
         else:
             logger.warning("Query returned no rows!")
     except Exception as e:

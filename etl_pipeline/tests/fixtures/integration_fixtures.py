@@ -344,9 +344,9 @@ def reset_analytics_tables(test_raw_engine):
     with test_raw_engine.connect() as conn:
         # Check if tables exist and get row counts
         try:
-            person_rows = conn.execute(text('SELECT COUNT(*) FROM raw.patient')).scalar()
-            appointment_rows = conn.execute(text('SELECT COUNT(*) FROM raw.appointment')).scalar()
-            print(f"[pytest fixture] Before truncation - person: {person_rows}, appointment: {appointment_rows}")
+            conn.execute(text('SELECT COUNT(*) FROM raw.patient')).scalar()
+            conn.execute(text('SELECT COUNT(*) FROM raw.appointment')).scalar()
+            print("[pytest fixture] Before truncation - table counts checked")
         except Exception as e:
             print(f"[pytest fixture] Error checking table counts: {e}")
             # Tables might not exist yet, which is fine for new tests
@@ -366,9 +366,9 @@ def reset_analytics_tables(test_raw_engine):
     # Verify the tables are empty
     with test_raw_engine.connect() as conn:
         try:
-            person_rows = conn.execute(text('SELECT COUNT(*) FROM raw.patient')).scalar()
-            appointment_rows = conn.execute(text('SELECT COUNT(*) FROM raw.appointment')).scalar()
-            print(f"[pytest fixture] After truncation - person: {person_rows}, appointment: {appointment_rows}")
+            conn.execute(text('SELECT COUNT(*) FROM raw.patient')).scalar()
+            conn.execute(text('SELECT COUNT(*) FROM raw.appointment')).scalar()
+            print("[pytest fixture] After truncation - table counts checked")
         except Exception as e:
             print(f"[pytest fixture] Error verifying truncation: {e}")
             pass
