@@ -13,7 +13,7 @@ pydantic-settings>=2.0.0
 
 # Data processing and analytics
 pandas>=2.0.0
-numpy>=1.24.0
+numpy>=2.5.1
 
 # Environment and configuration
 python-dotenv>=1.0.0
@@ -25,14 +25,14 @@ python-multipart>=0.0.6
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
 httpx>=0.25.0
-requests>=2.31.0
+requests>=2.34.2
 urllib3>=2.6.3,<3
 
 # Logging and monitoring
 structlog>=23.0.0
 
 # Security (for production)
-python-jose[cryptography]>=3.3.0
+python-jose[cryptography]>=3.5.0
 passlib[bcrypt]>=1.7.4
 
 # AWS SDK (for Secrets Manager access)

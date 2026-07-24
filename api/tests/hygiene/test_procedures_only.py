@@ -42,7 +42,7 @@ def test_procedures_only():
             AND ipc.procedure_date <= :end_date
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 1 - Procedures with is_hygiene = true: {result1.total_patients} (diff: {abs(result1.total_patients - 2073)})")
+        print("   [count omitted] Test 1 - Procedures with is_hygiene = true")
         
         # Test 2: Only procedures with specific codes (our current approach)
         query2 = """
@@ -54,7 +54,7 @@ def test_procedures_only():
             AND ipc.procedure_date <= :end_date
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 2 - Procedures with specific codes: {result2.total_patients} (diff: {abs(result2.total_patients - 2073)})")
+        print("   [count omitted] Test 2 - Procedures with specific codes")
         
         # Test 3: Procedures with is_hygiene = true OR specific codes
         query3 = """
@@ -67,7 +67,7 @@ def test_procedures_only():
             AND ipc.procedure_date <= :end_date
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 3 - Procedures with is_hygiene = true OR specific codes: {result3.total_patients} (diff: {abs(result3.total_patients - 2073)})")
+        print("   [count omitted] Test 3 - Procedures with is_hygiene = true OR specific codes")
         
         # Test 4: Only completed procedures with specific codes (procedure_status = 2)
         query4 = """
@@ -80,7 +80,7 @@ def test_procedures_only():
             AND ipc.procedure_date <= :end_date
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 4 - Completed procedures with specific codes: {result4.total_patients} (diff: {abs(result4.total_patients - 2073)})")
+        print("   [count omitted] Test 4 - Completed procedures with specific codes")
         
         # Test 5: Procedures linked to appointments (any appointment)
         query5 = """
@@ -93,7 +93,7 @@ def test_procedures_only():
             AND ipc.appointment_id IS NOT NULL
         """
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 5 - Procedures linked to appointments: {result5.total_patients} (diff: {abs(result5.total_patients - 2073)})")
+        print("   [count omitted] Test 5 - Procedures linked to appointments")
         
         # Test 6: Procedures linked to completed appointments
         query6 = """
@@ -107,7 +107,7 @@ def test_procedures_only():
             AND fa.is_completed = true  -- Appointment is completed
         """
         result6 = db.execute(text(query6), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 6 - Procedures linked to completed appointments: {result6.total_patients} (diff: {abs(result6.total_patients - 2073)})")
+        print("   [count omitted] Test 6 - Procedures linked to completed appointments")
         
         # Test 7: Breakdown
         query7 = """
@@ -126,11 +126,11 @@ def test_procedures_only():
         """
         result7 = db.execute(text(query7), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nBreakdown:")
-        print(f"  is_hygiene = true: {result7.is_hygiene_true}")
-        print(f"  Specific codes: {result7.specific_codes}")
-        print(f"  Either: {result7.either}")
-        print(f"  With appointment: {result7.with_appointment}")
-        print(f"  Without appointment: {result7.without_appointment}")
+        print("   [count omitted] is_hygiene = true")
+        print("   [count omitted] Specific codes")
+        print("   [count omitted] Either")
+        print("   [count omitted] With appointment")
+        print("   [count omitted] Without appointment")
         
         print("\n" + "="*80)
         print("CLOSEST MATCH:")

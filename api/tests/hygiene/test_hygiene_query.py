@@ -44,9 +44,9 @@ def test_hygiene_appointments():
         
         result = db.execute(text(query), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nHygiene Appointments Test:")
-        print(f"  Count: {result.appointment_count}")
-        print(f"  Unique Patients: {result.unique_patients}")
-        print(f"  Date Range: {result.earliest} to {result.latest}")
+        print("   [count omitted] Count")
+        print("   [count omitted] Unique Patients")
+        print("   [count omitted] Date Range")
         
         # Test hygiene_patients CTE
         query2 = """
@@ -68,8 +68,8 @@ def test_hygiene_appointments():
         
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nHygiene Patients CTE Test:")
-        print(f"  Total Rows: {result2.total_rows}")
-        print(f"  Unique Patients: {result2.unique_patients}")
+        print("   [count omitted] Total Rows")
+        print("   [count omitted] Unique Patients")
         
         # Test the full hygiene_patients_seen_calc
         query3 = """
@@ -114,7 +114,7 @@ def test_hygiene_appointments():
         
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nFull Hygiene Patients Seen Calc Test:")
-        print(f"  Unique Patients: {result3.unique_patients}")
+        print("   [count omitted] Unique Patients")
         
         # Test the FULL query from the service
         print(f"\n{'='*60}")
@@ -129,12 +129,12 @@ def test_hygiene_appointments():
         # For now, let's just call the service function
         result4 = get_hygiene_retention_summary(db, start_date, end_date)
         print(f"Service Function Result:")
-        print(f"  Recall Current %: {result4.get('recall_current_percent', 0)}")
-        print(f"  Hyg Pre-Appointment %: {result4.get('hyg_pre_appointment_percent', 0)}")
-        print(f"  Hyg Patients Seen: {result4.get('hyg_patients_seen', 0)}")
-        print(f"  Hyg Pts Re-appntd: {result4.get('hyg_pts_reappntd', 0)}")
-        print(f"  Recall Overdue %: {result4.get('recall_overdue_percent', 0)}")
-        print(f"  Not on Recall %: {result4.get('not_on_recall_percent', 0)}")
+        print("   [count omitted] Recall Current %")
+        print("   [count omitted] Hyg Pre-Appointment %")
+        print("   [count omitted] Hyg Patients Seen")
+        print("   [count omitted] Hyg Pts Re-appntd")
+        print("   [count omitted] Recall Overdue %")
+        print("   [count omitted] Not on Recall %")
         
     finally:
         db.close()

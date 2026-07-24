@@ -1,10 +1,14 @@
 # ETL replica fidelity roadmap (pre-CDC)
 
-**Context:** [ETL-FND-001](findings/ETL-FND-001-replica-row-drift-procedurelog.md) showed that watermark incremental sync + upsert **misses in-place row updates** when the pipeline’s “change signal” does not advance. `procedurelog` was the first KPI to prove it; insurance, payments, claims, communications, and patient tables are likely in the same class.
+**Architecture (current-state sync contract):** [ETL_SYNC_SEMANTICS.md](ETL_SYNC_SEMANTICS.md)
+
+**Source-system design:** [../opendental/WRITE_LAYER_AND_ETL.md](../opendental/WRITE_LAYER_AND_ETL.md) — OpenDental mutation / soft-delete / timestamp model that this roadmap compensates for.
+
+**Context:** [ETL-FND-001](../findings/ETL-FND-001-replica-row-drift-procedurelog.md) showed that watermark incremental sync + upsert **misses in-place row updates** when the pipeline’s “change signal” does not advance. `procedurelog` was the first KPI to prove it; insurance, payments, claims, communications, and patient tables are likely in the same class.
 
 **Goal:** Close the **implementation gap** between `tables.yml` intent and replicator/loader behavior, add **Layer 0** observability, and use **Sunday full refresh** as a cheap safety net — **before** committing to binlog/CDC.
 
-**Tracking:** [TODO.md](../../TODO.md#etl-fnd-001--replica-row-drift-procedurelog), [ETL-FND-002](findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
+**Tracking:** [TODO.md](../../TODO.md#etl-fnd-001--replica-row-drift-procedurelog), [ETL-FND-002](../findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
 
 ---
 
@@ -13,7 +17,7 @@
 | Phase | Status | Local verification |
 | --- | --- | --- |
 | **1** — Schema analyzer + `tables.yml` v4.1 | **Done** (commit `558e50d7`) | `procedurelog`: `DateTStamp` watermark, `or_logic`, 30-day lookback in config |
-| **1.6** — PK-only `in_place_updates` fix | **Code done, uncommitted** (2026-06-29) | `has_mutation_timestamp_watermark()`; 43 tables → `append_only` after regen; see [ETL-FND-002](findings/ETL-FND-002-sync-profile-pk-only-misclassification.md) |
+| **1.6** — PK-only `in_place_updates` fix | **Code done, uncommitted** (2026-06-29) | `has_mutation_timestamp_watermark()`; 43 tables → `append_only` after regen; see [ETL-FND-002](../findings/ETL-FND-002-sync-profile-pk-only-misclassification.md) |
 | **2** — Replicator + loader alignment | **Done** (commit `6cc4e6f9`) | Incremental ~10,632 rows (~2s replicate + ~1.2 min load) vs ~815k rows pre-fix; drift check PASS; KPI 2026-06-10 PASS (28 codes, 140 / $15,239) |
 | **2.1** — Loader guard (integer PK watermark) | **Not started** | Belt-and-suspenders in `replica_sync_config.py` |
 | **3** — Layer 0 checks (payment, claimproc, adjustment, claim, paysplit) | **Done** (local) | Tier A — 6 checks PASS; lookback on claim/paysplit; phantom purge scripts |
@@ -28,7 +32,7 @@
 
 | Assumption (design) | Reality (code + OD) |
 | --- | --- |
-| `DateTStamp` updates when any column changes | **Unverified** per table; no MySQL triggers in OpenDental |
+| `DateTStamp` updates when any column changes | **Unverified** per table; no triggers — many tables have `ON UPDATE current_timestamp()` but that is not a CDC contract ([OD write layer](../opendental/WRITE_LAYER_AND_ETL.md#25-audit-and-last-modified-columns)) |
 | `primary_incremental_column` drives “what changed” | **`analyze_opendental_schema.py` prefers auto-increment PK** over `DateTStamp` |
 | Replicator honors `incremental_strategy` (`and_logic`) | Replicator uses **`primary_incremental_column` only** → effectively `ProcNum > watermark` for `procedurelog` |
 | Loader matches replicator | Loader applies **`and_logic`** on PK + timestamp — stricter, different shape |
@@ -110,18 +114,20 @@ On clinic EC2 / Airflow the same analyzer runs with `--env clinic` (nightly DAG)
 
 ### 1.5 Spot-edit verification matrix (manual, one-time)
 
+**Protocol (full steps + DBeaver SQL + worksheet):** [INTERACTIVE_WRITE_BEHAVIOR_TESTS.md](../opendental/INTERACTIVE_WRITE_BEHAVIOR_TESTS.md)
+
 Before trusting new config clinic-wide:
 
 | Table | Edit in OD | Re-query `DateTStamp` / `SecDateTEdit` |
 | --- | --- | --- |
-| `procedurelog` | TP → Complete | ? |
-| `payment` | amount / pay date tweak | ? |
-| `claimproc` | status / ins pay change | ? |
-| `adjustment` | amount edit | ? |
-| `patient` | phone / address | ? |
-| `commlog` | status change | ? |
+| `procedurelog` | TP → Complete | ? — test B1 |
+| `payment` | amount / pay date tweak | ? — test C1 |
+| `claimproc` | status / ins pay change | ? — test C3 |
+| `adjustment` | amount edit | ? — test C2 |
+| `patient` | phone / address | ? — test A1 |
+| `commlog` | create then edit | ? — test A2 |
 
-Record results in this doc or ETL-FND-001. If timestamp **never** moves → timestamp watermark alone is insufficient; rely on lookback + Sunday full refresh until CDC.
+Record results in the protocol worksheet (or ETL-FND-001). If timestamp **never** moves → timestamp watermark alone is insufficient; rely on lookback + Sunday full refresh until CDC.
 
 ### 1.6 PK-only `in_place_updates` fix (ETL-FND-002)
 
@@ -147,7 +153,7 @@ mdc etl schema --env local --profile full   # safe during business hours
 - [ ] Reset `raw.etl_load_status` for large PK-only tables
 - [ ] After-hours ETL spot-check `sheetfield`, `procnote`
 
-**Finding:** [ETL-FND-002](findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
+**Finding:** [ETL-FND-002](../findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
 
 ---
 
@@ -369,12 +375,14 @@ flowchart LR
 
 | Doc | Role |
 | --- | --- |
-| [ETL-FND-001](findings/ETL-FND-001-replica-row-drift-procedurelog.md) | First instance + acceptance criteria |
+| [ETL-FND-001](../findings/ETL-FND-001-replica-row-drift-procedurelog.md) | First instance + acceptance criteria |
+| [../opendental/WRITE_LAYER_AND_ETL.md](../opendental/WRITE_LAYER_AND_ETL.md) | Why OD mutates in place; timestamp / delete semantics |
 | [ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md](ETL_CDC_IMPLEMENTATION_AND_OPTIONS.md) | Current watermark design + investigation methods |
-| [CLINIC_ANALYTICS_WORKFLOW.md](../CLINIC_ANALYTICS_WORKFLOW.md) | Local dbt + publish |
+| [ETL_SYNC_SEMANTICS.md](ETL_SYNC_SEMANTICS.md) | Current-state insert / upsert / delete contract |
+| [CLINIC_ANALYTICS_WORKFLOW.md](../deployment/CLINIC_ANALYTICS_WORKFLOW.md) | Local dbt + publish |
 | [airflow/NIGHTLY_RUN.md](../../airflow/NIGHTLY_RUN.md) | Nightly incremental semantics |
 | [schema_analysis_dag.py](../../airflow/dags/schema_analysis_dag.py) | Sunday 2 AM schema regen |
 
 ---
 
-*Document version: 1.1 (2026-06-27). Phase 1–2 implemented locally; clinic deploy and Phase 3–4 pending.*
+*Document version: 1.2 (2026-07-21). Cross-link to OpenDental write-layer notes; related-artifact paths fixed.*

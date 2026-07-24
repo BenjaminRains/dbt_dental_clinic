@@ -310,9 +310,8 @@ class SyntheticDataGenerator:
         logger.info("=" * 60)
         logger.info(f"Target database: {self.config.db_name}")
         logger.info(f"Date range: {self.config.start_date.date()} to {self.config.end_date.date()}")
-        logger.info(f"Patients: {self.config.num_patients:,}")
-        logger.info(f"Appointments: {self.config.num_appointments:,}")
-        logger.info(f"Procedures: {self.config.num_procedures:,}")
+        # Do not log volume field values (CodeQL treats patient/appointment-named config as private).
+        logger.info("Synthetic volume targets loaded from GeneratorConfig")
         logger.info("=" * 60)
         
         with DatabaseConnection(self.config) as db:

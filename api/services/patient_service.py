@@ -195,18 +195,20 @@ def get_top_patient_balances(db: Session, limit: int = 10):
         if 'patient_id' in row_dict and row_dict['patient_id'] is not None:
             # Log the type before conversion for debugging
             original_type = type(row_dict['patient_id']).__name__
-            original_value = row_dict['patient_id']
             
             try:
                 row_dict['patient_id'] = int(row_dict['patient_id'])
-                # Log if conversion was needed
+                # Log type conversion only — never log patient_id values (CodeQL CWE-532).
                 if original_type != 'int':
-                    logger.info(f"Converted patient_id from {original_type} to int: {original_value} -> {row_dict['patient_id']}")
+                    logger.info("Converted patient_id field from %s to int", original_type)
             except (ValueError, TypeError) as e:
-                # Log warning but skip invalid rows
-                logger.error(f"Could not convert patient_id to int: {original_value} (type: {original_type}), error: {e}")
+                logger.error(
+                    "Could not convert patient_id field to int (type: %s): %s",
+                    original_type,
+                    e,
+                )
                 continue
         converted_rows.append(row_dict)
     
-    logger.info(f"Returning {len(converted_rows)} patient balances")
+    logger.info("Returning %s balance rows", len(converted_rows))
     return converted_rows

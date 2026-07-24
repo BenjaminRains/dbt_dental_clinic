@@ -96,6 +96,7 @@ def frontend_dev(
             err=True,
         )
 
+    # Writes local gitignored .env.local for Vite (API key from local PEM).
     env_local.write_text("\n".join(lines) + "\n", encoding="utf-8")
     typer.echo(f"Created/updated {env_local.relative_to(REPO_ROOT)}")
 

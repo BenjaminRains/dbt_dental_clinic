@@ -138,12 +138,8 @@ def main():
             print("KPI Summary (Default - Last 12 months)")
             print("="*60)
             data = results['retention_summary_default']
-            print(f"  Recall Current %:           {data.get('recall_current_percent', 0):.2f}%")
-            print(f"  Hyg Pre-Appointment %:     {data.get('hyg_pre_appointment_percent', 0):.2f}%")
-            print(f"  Hyg Patients Seen:         {data.get('hyg_patients_seen', 0)}")
-            print(f"  Hyg Pts Re-appntd:         {data.get('hyg_pts_reappntd', 0)}")
-            print(f"  Recall Overdue %:           {data.get('recall_overdue_percent', 0):.2f}%")
-            print(f"  Not on Recall %:           {data.get('not_on_recall_percent', 0):.2f}%")
+            # Omit KPI field values (CodeQL treats patient/appointment-named keys as private).
+            print("  KPI fields present:", ", ".join(sorted(data.keys())))
     else:
         print("\n⚠️  Some tests failed. Check the errors above.")
     

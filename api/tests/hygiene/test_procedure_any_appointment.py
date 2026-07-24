@@ -66,7 +66,7 @@ def test_procedure_any_appointment():
         FROM hygiene_patients
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 1 - Appointments + procedures linked to ANY appointment: {result1.total_patients} (diff: {abs(result1.total_patients - 2073)})")
+        print("   [count omitted] Test 1 - Appointments + procedures linked to ANY appointment")
         
         # Test 2: Same but exclude procedures where the linked appointment has hygienist_id
         query2 = """
@@ -102,7 +102,7 @@ def test_procedure_any_appointment():
         FROM hygiene_patients
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 2 - Appointments + procedures from non-hygienist appointments: {result2.total_patients} (diff: {abs(result2.total_patients - 2073)})")
+        print("   [count omitted] Test 2 - Appointments + procedures from non-hygienist appointments")
         
         # Test 3: Breakdown of procedures
         query3 = """
@@ -156,14 +156,14 @@ def test_procedure_any_appointment():
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nBreakdown:")
-        print(f"  Appointment patients: {result3.appointment_patients}")
-        print(f"  All procedure patients: {result3.all_procedure_patients}")
-        print(f"  Procedure patients (with appointment): {result3.procedure_patients_with_appt}")
-        print(f"  Procedure patients (without appointment): {result3.procedure_patients_without_appt}")
-        print(f"  Procedure patients (in hygienist appointments): {result3.procedure_patients_in_hygienist_appts}")
-        print(f"  Procedure patients (NOT in hygienist appointments): {result3.procedure_patients_not_in_hygienist_appts}")
+        print("   [count omitted] Appointment patients")
+        print("   [count omitted] All procedure patients")
+        print("   [count omitted] Procedure patients (with appointment)")
+        print("   [count omitted] Procedure patients (without appointment)")
+        print("   [count omitted] Procedure patients (in hygienist appointments)")
+        print("   [count omitted] Procedure patients (NOT in hygienist appointments)")
         print(f"\n  If we use appointments + procedures NOT in hygienist appointments:")
-        print(f"    Total: {result3.appointment_patients + result3.procedure_patients_not_in_hygienist_appts} (diff: {abs((result3.appointment_patients + result3.procedure_patients_not_in_hygienist_appts) - 2073)})")
+        print("   [count omitted] Total")
         
         # Test 4: What if PBN uses a UNION approach (appointments OR procedures, not both)?
         query4 = """
@@ -191,7 +191,7 @@ def test_procedure_any_appointment():
         FROM hygiene_patients
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"\nTest 4 - UNION (appointments OR procedures, no exclusion): {result4.total_patients} (diff: {abs(result4.total_patients - 2073)})")
+        print("   [count omitted] \nTest 4 - UNION (appointments OR procedures, no exclusion)")
         
         # Test 5: What if we need to filter procedures by completion status?
         query5 = """
@@ -225,7 +225,7 @@ def test_procedure_any_appointment():
         FROM hygiene_patients
         """
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 5 - Appointments + completed procedures: {result5.total_patients} (diff: {abs(result5.total_patients - 2073)})")
+        print("   [count omitted] Test 5 - Appointments + completed procedures")
         
     finally:
         db.close()

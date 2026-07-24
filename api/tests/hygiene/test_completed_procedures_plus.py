@@ -57,7 +57,7 @@ def test_completed_procedures_plus():
         FROM combined
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 1 - Completed procedures + appointments: {result1.total_patients} (diff: {abs(result1.total_patients - 2073)})")
+        print("   [count omitted] Test 1 - Completed procedures + appointments")
         
         # Test 2: Completed procedures + completed appointments only
         query2 = """
@@ -87,7 +87,7 @@ def test_completed_procedures_plus():
         FROM combined
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 2 - Completed procedures + completed appointments: {result2.total_patients} (diff: {abs(result2.total_patients - 2073)})")
+        print("   [count omitted] Test 2 - Completed procedures + completed appointments")
         
         # Test 3: What if we include procedures with status 1 or 6 (treatment planned/ordered)?
         query3 = """
@@ -100,7 +100,7 @@ def test_completed_procedures_plus():
             AND ipc.procedure_date <= :end_date
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 3 - Procedures with status 1, 2, or 6: {result3.total_patients} (diff: {abs(result3.total_patients - 2073)})")
+        print("   [count omitted] Test 3 - Procedures with status 1, 2, or 6")
         
         # Test 4: What if we include additional procedure codes?
         query4 = """
@@ -113,7 +113,7 @@ def test_completed_procedures_plus():
             AND ipc.procedure_date <= :end_date
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 4 - Completed procedures + X-rays: {result4.total_patients} (diff: {abs(result4.total_patients - 2073)})")
+        print("   [count omitted] Test 4 - Completed procedures + X-rays")
         
         # Test 5: Breakdown to see what we're missing
         query5 = """
@@ -146,11 +146,11 @@ def test_completed_procedures_plus():
             (SELECT COUNT(DISTINCT patient_id) FROM appointments_not_in_procedures) as appointments_only_patients
         """
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"\nBreakdown:")
-        print(f"  Completed procedure patients: {result5.completed_procedure_patients}")
-        print(f"  Appointment patients: {result5.appointment_patients}")
-        print(f"  Appointments NOT in procedures: {result5.appointments_only_patients}")
-        print(f"  If we add appointments-only: {result5.completed_procedure_patients + result5.appointments_only_patients} (diff: {abs((result5.completed_procedure_patients + result5.appointments_only_patients) - 2073)})")
+        print("\nBreakdown:")
+        print("   [count omitted] Completed procedure patients")
+        print("   [count omitted] Appointment patients")
+        print("   [count omitted] Appointments NOT in procedures")
+        print("   [count omitted] If we add appointments-only")
         
         # Test 6: What if PBN uses procedures with appointment_id (linked to appointments)?
         query6 = """
@@ -164,7 +164,7 @@ def test_completed_procedures_plus():
             AND ipc.procedure_date <= :end_date
         """
         result6 = db.execute(text(query6), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 6 - Completed procedures linked to appointments: {result6.total_patients} (diff: {abs(result6.total_patients - 2073)})")
+        print("   [count omitted] Test 6 - Completed procedures linked to appointments")
         
         # Test 7: What if we exclude procedures without appointment_id?
         query7 = """
@@ -184,7 +184,7 @@ def test_completed_procedures_plus():
             AND ipc.procedure_date <= :end_date
         """
         result7 = db.execute(text(query7), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 7 - Completed procedures (with appointment_id OR matching hygienist appointment date): {result7.total_patients} (diff: {abs(result7.total_patients - 2073)})")
+        print("   [count omitted] Test 7 - Completed procedures (with appointment_id OR matching hygienist appointment date)")
         
         print("\n" + "="*80)
         print("CLOSEST MATCHES:")

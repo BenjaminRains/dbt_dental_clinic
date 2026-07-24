@@ -18,6 +18,8 @@ Data pipeline and analytics for **OpenDental**: ETL from MySQL into PostgreSQL, 
 
 **What I ran into:** OpenDental’s schema is large and idiosyncratic (TINYINT booleans, sentinel dates, mixed naming). The ETL had to handle schema discovery, incremental loads per table, and batching by size. I separated demo (synthetic data, public) from clinic (PHI, local/IP-only) so the portfolio site never touches real patient data.
 
+**Security:** To report a vulnerability, see [SECURITY.md](SECURITY.md) or the repository [Security](https://github.com/BenjaminRains/dbt_dental_clinic/security) tab (prefer private advisories; do not put PHI or secrets in public issues).
+
 ---
 
 ## Where things live

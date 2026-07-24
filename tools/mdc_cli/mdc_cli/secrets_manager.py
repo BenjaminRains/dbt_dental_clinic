@@ -511,6 +511,7 @@ def update_dotenv_key(path: Path, key: str, value: str) -> bool:
     old_text = "\n".join(lines).rstrip() + ("\n" if lines else "")
     if new_text == old_text:
         return False
+    # Local gitignored .env materialization (CLI sync). Not a remote secret store.
     path.write_text(new_text, encoding="utf-8")
     return True
 
@@ -538,6 +539,7 @@ def force_update_dotenv_key(path: Path, key: str, value: str) -> bool:
         out.append(new_line)
 
     new_text = "\n".join(out).rstrip() + "\n"
+    # Local gitignored .env materialization (CLI sync). Not a remote secret store.
     path.write_text(new_text, encoding="utf-8")
     return True
 

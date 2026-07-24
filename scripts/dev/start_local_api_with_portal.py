@@ -30,7 +30,7 @@ def main() -> int:
         (child.get("CLINIC_PORTAL_SESSION_SECRET") or "").strip()
         or (child.get("CLINIC_API_KEY") or "").strip()
     )
-    print(f"portal_secret_present={has_secret}")
+    print("portal auth preflight: ok" if has_secret else "portal auth preflight: missing")
     if not has_secret:
         print(
             "CLINIC_PORTAL_SESSION_SECRET or CLINIC_API_KEY missing from API local env.",

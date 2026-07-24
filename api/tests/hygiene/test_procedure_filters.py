@@ -66,7 +66,7 @@ def test_procedure_filters():
         FROM hygiene_patients
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 1 - Procedures linked to appointments only: {result1.total_patients} (diff: {abs(result1.total_patients - 2073)})")
+        print("   [count omitted] Test 1 - Procedures linked to appointments only")
         
         # Test 2: Procedures from completed appointments only
         query2 = """
@@ -100,7 +100,7 @@ def test_procedure_filters():
         FROM hygiene_patients
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 2 - Procedures from completed appointments only: {result2.total_patients} (diff: {abs(result2.total_patients - 2073)})")
+        print("   [count omitted] Test 2 - Procedures from completed appointments only")
         
         # Test 3: Only appointments + procedures that match appointment dates
         query3 = """
@@ -139,7 +139,7 @@ def test_procedure_filters():
         ) combined
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 3 - Procedures matching appointment dates: {result3.total_patients} (diff: {abs(result3.total_patients - 2073)})")
+        print("   [count omitted] Test 3 - Procedures matching appointment dates")
         
         # Test 4: Only appointments (no procedures at all)
         query4 = """
@@ -150,7 +150,7 @@ def test_procedure_filters():
             AND fa.appointment_date <= :end_date
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 4 - Only appointments (no procedures): {result4.total_patients} (diff: {abs(result4.total_patients - 2073)})")
+        print("   [count omitted] Test 4 - Only appointments (no procedures)")
         
         # Test 5: Appointments + procedures from appointments with hygienist_id (even if appointment not completed)
         query5 = """
@@ -185,7 +185,7 @@ def test_procedure_filters():
         FROM hygiene_patients
         """
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 5 - Appointments + procedures from hygienist appointments: {result5.total_patients} (diff: {abs(result5.total_patients - 2073)})")
+        print("   [count omitted] Test 5 - Appointments + procedures from hygienist appointments")
         
         # Test 6: Check if PBN might be using a different date range calculation
         # Maybe they count procedures/appointments differently
@@ -217,12 +217,12 @@ def test_procedure_filters():
         """
         result6 = db.execute(text(query6), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nBreakdown:")
-        print(f"  Appointment patients: {result6.appointment_patients}")
-        print(f"  Procedure patients (unique): {result6.procedure_patients}")
-        print(f"  Combined: {result6.combined_total}")
+        print("   [count omitted] Appointment patients")
+        print("   [count omitted] Procedure patients (unique)")
+        print("   [count omitted] Combined")
         print(f"  PBN target: 2073")
-        print(f"  Difference: {result6.combined_total - 2073}")
-        print(f"  If we need {2073 - result6.appointment_patients} from procedures: {2073 - result6.appointment_patients}")
+        print("   [count omitted] Difference")
+        print("   [count omitted] If we need")
         
         # Test 7: What if PBN only counts procedures that are NOT in appointments with hygienist_id?
         # But maybe they use a different matching logic
@@ -256,15 +256,15 @@ def test_procedure_filters():
         FROM hygiene_patients
         """
         result7 = db.execute(text(query7), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"\nTest 7 - Current logic (appointments + procedures not in appointments): {result7.total_patients} (diff: {abs(result7.total_patients - 2073)})")
+        print("   [count omitted] \nTest 7 - Current logic (appointments + procedures not in appointments)")
         
         print("\n" + "="*80)
         print("KEY INSIGHT:")
         print("="*80)
-        print(f"Appointments: {result6.appointment_patients}")
-        print(f"To reach 2073, we need: {2073 - result6.appointment_patients} procedure patients")
-        print(f"Currently getting: {result6.procedure_patients} procedure patients")
-        print(f"Need to reduce procedures by: {result6.procedure_patients - (2073 - result6.appointment_patients)} patients")
+        print("   [count omitted] Appointments")
+        print("   [count omitted] To reach 2073, we need")
+        print("   [count omitted] Currently getting")
+        print("   [count omitted] Need to reduce procedures by")
         
     finally:
         db.close()

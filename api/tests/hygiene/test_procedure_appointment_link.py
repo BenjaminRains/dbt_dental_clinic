@@ -63,7 +63,7 @@ def test_procedure_appointment_link():
         FROM hygiene_patients
         """
         result1 = db.execute(text(query1), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 1 - Appointments + procedures linked to hygienist appointments: {result1.total_patients} (diff from 2073: {abs(result1.total_patients - 2073)})")
+        print("   [count omitted] Test 1 - Appointments + procedures linked to hygienist appointments")
         
         # Test 2: Same but with date matching (procedure date = appointment date)
         query2 = """
@@ -99,7 +99,7 @@ def test_procedure_appointment_link():
         FROM hygiene_patients
         """
         result2 = db.execute(text(query2), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"Test 2 - Same + procedure date = appointment date: {result2.total_patients} (diff from 2073: {abs(result2.total_patients - 2073)})")
+        print("   [count omitted] Test 2 - Same + procedure date = appointment date")
         
         # Test 3: Count breakdown
         query3 = """
@@ -138,12 +138,12 @@ def test_procedure_appointment_link():
         """
         result3 = db.execute(text(query3), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nBreakdown:")
-        print(f"  Appointment patients: {result3.appointment_patients}")
-        print(f"  All procedure patients (linked to hygienist appts): {result3.all_linked_procedure_patients}")
-        print(f"  Unique procedure patients (not in appointments): {result3.unique_procedure_patients}")
-        print(f"  Combined total: {result3.combined_total}")
+        print("   [count omitted] Appointment patients")
+        print("   [count omitted] All procedure patients (linked to hygienist appts)")
+        print("   [count omitted] Unique procedure patients (not in appointments)")
+        print("   [count omitted] Combined total")
         print(f"  PBN target: 2073")
-        print(f"  Difference: {result3.combined_total - 2073}")
+        print("   [count omitted] Difference")
         
         # Test 4: What if we only count procedures on different dates than appointments?
         query4 = """
@@ -179,7 +179,7 @@ def test_procedure_appointment_link():
         FROM hygiene_patients
         """
         result4 = db.execute(text(query4), {"start_date": start_date, "end_date": end_date}).fetchone()
-        print(f"\nTest 4 - Procedures on different dates than appointments: {result4.total_patients} (diff from 2073: {abs(result4.total_patients - 2073)})")
+        print("   [count omitted] \nTest 4 - Procedures on different dates than appointments")
         
         # Test 5: What if PBN only counts appointments, and procedures are a separate count?
         # Maybe they're not combining them at all?
@@ -199,10 +199,10 @@ def test_procedure_appointment_link():
         """
         result5 = db.execute(text(query5), {"start_date": start_date, "end_date": end_date}).fetchone()
         print(f"\nTest 5 - Separate counts (not combined):")
-        print(f"  Appointment patients: {result5.appointment_patients}")
-        print(f"  Procedure patients: {result5.procedure_patients}")
-        print(f"  If PBN uses appointments only: {result5.appointment_patients} (diff: {abs(result5.appointment_patients - 2073)})")
-        print(f"  If PBN uses procedures only: {result5.procedure_patients} (diff: {abs(result5.procedure_patients - 2073)})")
+        print("   [count omitted] Appointment patients")
+        print("   [count omitted] Procedure patients")
+        print("   [count omitted] If PBN uses appointments only")
+        print("   [count omitted] If PBN uses procedures only")
         
     finally:
         db.close()

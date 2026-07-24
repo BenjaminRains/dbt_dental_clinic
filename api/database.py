@@ -20,7 +20,7 @@ def _sslmode_for_config(cfg: dict) -> str:
     explicit = (config._settings.sslmode_env or "").strip()
     if explicit:
         return explicit
-    if "rds.amazonaws.com" in host:
+    if host.endswith(".rds.amazonaws.com") or host == "rds.amazonaws.com":
         return "require"
     return "prefer"
 
