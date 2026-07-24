@@ -49,25 +49,17 @@ def get_top_patient_balances(
         logger.info(f"Fetching top {limit} patient balances")
         balances = patient_service.get_top_patient_balances(db, limit=limit)
         
-        # Log response data for debugging
         if balances:
-            logger.info(f"Returning {len(balances)} patient balances")
-            # Log first item's data types
-            first_item = balances[0]
-            logger.info(f"First balance item types: {[(k, type(v).__name__, v) for k, v in first_item.items()]}")
-            logger.info(f"First balance item patient_id: {first_item.get('patient_id')} (type: {type(first_item.get('patient_id')).__name__})")
-            
-            # Manually validate before returning to catch validation errors early
+            logger.info("Returning %s balance rows", len(balances))
             try:
                 from models.patient import TopPatientBalance
                 validated_balances = [TopPatientBalance(**item) for item in balances]
-                logger.info("Successfully validated all patient balances with Pydantic")
+                logger.info("Successfully validated all balance rows with Pydantic")
                 return [item.model_dump() for item in validated_balances]
             except Exception as validation_error:
-                logger.error(f"Pydantic validation failed: {validation_error}")
-                logger.error(f"First item that failed: {first_item}")
+                logger.error("Pydantic validation failed: %s", validation_error)
                 import traceback
-                logger.error(f"Validation traceback:\n{traceback.format_exc()}")
+                logger.error("Validation traceback:\n%s", traceback.format_exc())
                 raise  # Re-raise to trigger the ValidationError handler
         else:
             logger.warning("No patient balances returned")
@@ -111,5 +103,5 @@ def read_patient(
     except Exception as e:
         import traceback
         error_msg = str(e)
-        logger.error(f"Error fetching patient {patient_id}: {error_msg}", exc_info=True)
+        logger.error("Error fetching patient by id: %s", error_msg, exc_info=True)
         raise HTTPException(status_code=500, detail=f"Error fetching patient: {error_msg}")

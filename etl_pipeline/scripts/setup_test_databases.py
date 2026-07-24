@@ -687,12 +687,14 @@ def setup_mysql_test_database(database_type):
                     insert_sql = f"INSERT INTO procedurelog ({field_names}) VALUES ({placeholders})"
                     conn.execute(text(insert_sql), procedure)
                 
-                # Verify the test data was inserted successfully
-                patient_count = conn.execute(text("SELECT COUNT(*) FROM patient WHERE PatNum IN (1, 2, 3)")).scalar()
-                appointment_count = conn.execute(text("SELECT COUNT(*) FROM appointment WHERE AptNum IN (1, 2, 3)")).scalar()
-                procedure_count = conn.execute(text("SELECT COUNT(*) FROM procedurelog WHERE ProcNum IN (1, 2, 3)")).scalar()
+                # Verify the test data was inserted successfully (do not log counts — CodeQL).
+                assert conn.execute(text("SELECT COUNT(*) FROM patient WHERE PatNum IN (1, 2, 3)")).scalar() == 3
+                assert conn.execute(text("SELECT COUNT(*) FROM appointment WHERE AptNum IN (1, 2, 3)")).scalar() == 3
+                assert conn.execute(text("SELECT COUNT(*) FROM procedurelog WHERE ProcNum IN (1, 2, 3)")).scalar() == 3
                 
-                logger.info(f"SOURCE DATABASE: Inserted {patient_count} test patients, {appointment_count} test appointments, {procedure_count} test procedures")
+                logger.info(
+                    "SOURCE DATABASE: Inserted test rows for patients, appointments, and procedures"
+                )
                 logger.info("Source database is now ready for ETL pipeline testing")
                 
             elif database_type == DatabaseType.REPLICATION:
