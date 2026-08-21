@@ -52,7 +52,7 @@ default_args = {
     'email_on_retry': False,
     'retries': 1,  # Reduced retries for data pipeline (tables can be retried individually)
     'retry_delay': timedelta(minutes=5),
-    'execution_timeout': timedelta(hours=6),  # 6 hour max for full pipeline
+    'execution_timeout': timedelta(hours=12),  # default per-task cap; DAG run is also 12h
 }
 
 # DAG configuration
@@ -64,6 +64,7 @@ dag = DAG(
     schedule='0 21 * * *',  # 9 PM daily (Central if default timezone set)
     start_date=datetime(2025, 1, 1),
     catchup=False,
+    dagrun_timeout=timedelta(hours=12),  # full-refresh runs can exceed the old 6h window
     tags=['etl', 'data-pipeline', 'production', 'nightly'],
     max_active_runs=1,  # Only one run at a time
     params={
@@ -439,7 +440,7 @@ def check_schema_hash(**context):
 # ============================================================================
 
 _CATEGORY_TIMEOUT_SECONDS = {
-    'large': 3 * 3600,
+    'large': 6 * 3600,
     'medium': 2 * 3600,
     'small': 3600,
     'tiny': 30 * 60,
@@ -918,7 +919,7 @@ with dag:
         large_tables = PythonOperator(
             task_id='process_large_tables',
             python_callable=process_large_tables,
-            execution_timeout=timedelta(hours=3),
+            execution_timeout=timedelta(hours=6),
             doc_md="""
             ### Process Large Tables
             
@@ -1248,6 +1249,8 @@ Leave `publish_environment` unset to skip RDS publish (smoke tests). Do **not** 
 | Publish to RDS | varies |
 
 **~32 min** to complete schema + ETL before dbt starts. Full pipeline with dbt + publish often **~1.5–2 hours** from 9 PM Central.
+
+`dagrun_timeout` is **12 hours** so a forced full refresh can finish. Large-table category timeout is 6 hours (mdc invoke + Airflow task).
 
 Legacy category estimates (ETL-only, without schema refresh):
 - **Medium deployment** (1M-10M rows): 30-90 minutes
