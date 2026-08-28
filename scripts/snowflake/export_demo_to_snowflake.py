@@ -245,11 +245,21 @@ def _export_csv(pg_conn, schema: str, table: str, columns: list[dict[str, str]],
     return row_count
 
 
+def _sf_raw_fq(database: str, schema: str, table: str) -> str:
+    """
+    RAW landing FQN for dbt sources.
+
+    dbt compiles source() as unquoted OPENDENTAL_SF.raw.payment → Snowflake RAW.PAYMENT.
+    Column names stay quoted (PayNum) so staging SQL with \"PayNum\" still works.
+    """
+    return f"{database}.{schema.upper()}.{table.upper()}"
+
+
 def _create_snowflake_table(
     sf_cur, database: str, schema: str, table: str, columns: list[dict[str, str]]
 ) -> None:
     col_ddl = ",\n  ".join(f"{_quote_ident(c['name'])} {c['sf_type']}" for c in columns)
-    fq = f"{_quote_ident(database)}.{_quote_ident(schema)}.{_quote_ident(table)}"
+    fq = _sf_raw_fq(database, schema, table)
     sf_cur.execute(f"CREATE OR REPLACE TABLE {fq} (\n  {col_ddl}\n)")
 
 
@@ -263,25 +273,25 @@ def _load_table(
     database = sf_cfg["database"]
     schema = sf_cfg["schema"]
     stage = sf_cfg["stage"]
-    stage_path = f"@{_quote_ident(database)}.{_quote_ident(schema)}.{_quote_ident(stage)}"
-    fq_table = f"{_quote_ident(database)}.{_quote_ident(schema)}.{_quote_ident(table)}"
+    # Stage lives in uppercase RAW (same folding as sources).
+    stage_path = f"@{database}.{schema.upper()}.{stage}"
+    fq_table = _sf_raw_fq(database, schema, table)
     remote_name = f"{table}.csv"
 
     with sf_conn.cursor() as cur:
-        cur.execute(f"USE WAREHOUSE {_quote_ident(sf_cfg['warehouse'])}")
-        cur.execute(f"USE DATABASE {_quote_ident(database)}")
-        cur.execute(f"USE SCHEMA {_quote_ident(schema)}")
+        cur.execute(f"USE WAREHOUSE {sf_cfg['warehouse']}")
+        cur.execute(f"USE DATABASE {database}")
+        cur.execute(f"USE SCHEMA {schema.upper()}")
         _create_snowflake_table(cur, database, schema, table, columns)
         cur.execute(f"REMOVE {stage_path} PATTERN='.*{re.escape(table)}\\.csv.*'")
-        # Keep uncompressed so COPY path matches the local basename.
         put_sql = (
             f"PUT 'file://{csv_path.as_posix()}' {stage_path} "
             "OVERWRITE=TRUE AUTO_COMPRESS=FALSE"
         )
         cur.execute(put_sql)
-        col_list = ", ".join(_quote_ident(c["name"]) for c in columns)
+        # MATCH_BY_COLUMN_NAME cannot be combined with a column list / SELECT transform.
         copy_sql = f"""
-            COPY INTO {fq_table} ({col_list})
+            COPY INTO {fq_table}
             FROM {stage_path}
             FILES = ('{remote_name}')
             FILE_FORMAT = (

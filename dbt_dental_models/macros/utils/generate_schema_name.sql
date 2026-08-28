@@ -25,6 +25,7 @@
         {#- Use custom schema name directly without prefixing with target schema -#}
         {#- This prevents schemas like raw_staging, raw_int, raw_marts -#}
         {#- Instead creates: staging, int, marts -#}
+        {#- Keep lowercase to match dbt_project.yml quoting: true (Snowflake "staging"). -#}
         {{ custom_schema_name | trim }}
 
     {%- endif -%}

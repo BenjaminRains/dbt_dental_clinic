@@ -49,7 +49,8 @@ Creates:
 |--------|---------|
 | `WH_DEMO_XS` | X-Small warehouse, auto-suspend 60s |
 | `OPENDENTAL_SF` database | Snowflake mini warehouse (not Postgres `opendental_analytics`) |
-| Schemas `RAW`, `STAGING`, `INT`, `MARTS`, `DBT` | Aligns with dbt `generate_schema_name` |
+| Schema `RAW` (unquoted) | Export landing — matches dbt `source()` folding to `RAW.PAYMENT` |
+| Schemas `"staging"`, `"int"`, `"marts"`, `"dbt"` | Lowercase quoted — matches `dbt_project.yml` `quoting: true` for models |
 | Stage `RAW.DEMO_EXPORT` | Internal stage for COPY INTO |
 | Role `TRANSFORMER` | dbt + load |
 | Role `ANALYST` | Read marts |
@@ -94,10 +95,16 @@ Also ensure local `dbt_dental_models/profiles.yml` includes the `snowflake` outp
 ## 5. Python / dbt packages
 
 ```powershell
+# Export / bootstrap scripts (connector + dotenv)
 pip install -r scripts/snowflake/requirements.txt
+
+# dbt adapter into the dbt Pipenv (mdc uses this venv — not system Python)
+cd dbt_dental_models
+pipenv install "dbt-snowflake~=1.10.0"
+cd ..
 ```
 
-Use the same dbt Core major you already run (1.7.x). `dbt-snowflake` must match.
+`dbt-snowflake` must match `dbt-core` major/minor in `dbt_dental_models/Pipfile` (currently 1.10.x).
 
 ## 5. Verify connectivity
 
