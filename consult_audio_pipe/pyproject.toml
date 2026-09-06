@@ -68,8 +68,16 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = [
+test = [
     "pytest>=8.0.0",
+    "markdown2>=2.4.10",
+    "reportlab>=4.0.7",
+    "python-dotenv>=1.2.2",
+    "requests>=2.32.3",
+    "openai>=1.12.0",
+]
+dev = [
+    "dental-consultation-pipeline[test]",
     "pytest-cov>=2.0",
     "black>=21.0",
     "flake8>=3.8",
@@ -92,8 +100,12 @@ Documentation = "https://dental-consultation-pipeline.readthedocs.io/"
 Repository = "https://github.com/yourusername/dental-consultation-pipeline"
 "Bug Tracker" = "https://github.com/yourusername/dental-consultation-pipeline/issues"
 
-[tool.setuptools.packages.find]
-where = ["."]
+[tool.setuptools]
+packages = ["consult_audio_pipe", "dental_consultation_pipeline"]
+
+[tool.setuptools.package-dir]
+consult_audio_pipe = "consult_audio_pipe"
+dental_consultation_pipeline = "consult_audio_pipe"
 
 [tool.setuptools.package-data]
 "*" = ["*.json", "*.md", "*.txt"]
@@ -103,4 +115,7 @@ testpaths = ["tests"]
 python_files = ["test_*.py"]
 python_classes = ["Test*"]
 python_functions = ["test_*"]
-addopts = "-v --tb=short" 
+addopts = ["--tb=short", "-m", "not integration"]
+markers = [
+    "integration: live network / API key tests (deselected by default)",
+] 

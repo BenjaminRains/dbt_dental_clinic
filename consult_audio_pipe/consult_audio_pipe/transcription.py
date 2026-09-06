@@ -6,9 +6,21 @@ Handles audio file transcription using OpenAI Whisper.
 
 import sys
 import os
-import whisper
 from datetime import datetime
 from pathlib import Path
+
+# Populated on first transcribe so cleaning/CI can import this module without torch.
+whisper = None
+
+
+def _require_whisper():
+    """Import openai-whisper on first use."""
+    global whisper
+    if whisper is None:
+        import whisper as whisper_mod
+
+        whisper = whisper_mod
+    return whisper
 
 # === Configuration ===
 # Get the project root directory (parent of dental_consultation_pipeline directory)
@@ -31,8 +43,11 @@ def log_status(message: str):
 
 def transcribe_audio_file(audio_path: str):
     """Transcribe an audio file using OpenAI Whisper"""
+    if not Path(audio_path).is_file():
+        raise FileNotFoundError(f"Audio file not found: {audio_path}")
+
     log_status("Loading Whisper model...")
-    model = whisper.load_model("base")
+    model = _require_whisper().load_model("base")
 
     log_status(f"Starting transcription for {audio_path}...")
     result = model.transcribe(audio_path)

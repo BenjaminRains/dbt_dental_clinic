@@ -20,7 +20,7 @@ existing analytics warehouse.
 | BI / dashboard consumption of scores | `docs/analytics/` | Power BI, Looker, exposures — read scored marts or API |
 | Near-real-time feature refresh | `docs/streaming/EVENT_DRIVEN_ANALYTICS_PROPOSAL.md` | Optional streaming path; not required for batch ML |
 | Lakehouse / Spark ML at scale | [databricks_lakehouse_proposal.md](databricks_lakehouse_proposal.md) | Parallel portfolio path |
-| Consultation audio NLP (Whisper + Claude) | `consult_audio_pipe/README.md` | Separate pipeline; not warehouse-integrated today |
+| Consultation audio NLP (Whisper + Claude) | `consult_audio_pipe/README.md`, [docs/consult_audio/](../consult_audio/) | Separate pipeline; clinic delivery plan is early/rough |
 | Synthetic training sandbox | `etl_pipeline/synthetic_data_generator/` | HIPAA-safe demo data for public experiments |
 
 ## Related code (today)

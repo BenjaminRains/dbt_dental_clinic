@@ -5,6 +5,7 @@
 | [FRONTEND_EVOLUTION_PROPOSAL.md](./FRONTEND_EVOLUTION_PROPOSAL.md) | **Product direction:** role homes, call lists, operational queues (clinic build) |
 | [FRONTEND_SPLIT_PLAN.md](./FRONTEND_SPLIT_PLAN.md) | **Phased refactor:** split portfolio and clinic into two deployable apps |
 | [../../TODO.md](../../TODO.md) | Tracked under **Deployment / Infrastructure → Frontend split** |
+| [../consult_audio/CLINIC_FRONTEND_DELIVERY_PLAN.md](../consult_audio/CLINIC_FRONTEND_DELIVERY_PLAN.md) | Early plan: consult summaries in the clinic app (review later) |
 | [../ENVIRONMENT_FILES.md](../ENVIRONMENT_FILES.md) | Env files, `VITE_*` vars, `mdc deploy frontend` |
 | [../../frontend/README.md](../../frontend/README.md) | Local dev setup, Vite scripts |
 
