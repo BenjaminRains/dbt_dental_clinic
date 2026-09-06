@@ -39,7 +39,7 @@ class TestCompletePipeline:
                 f.write(b"dummy audio data for testing")
             
             # Step 2: Mock transcription
-            with patch('dental_consultation_pipeline.transcription.whisper.load_model') as mock_load_model:
+            with patch('dental_consultation_pipeline.transcription._require_whisper') as mock_require_whisper:
                 mock_model = MagicMock()
                 mock_model.transcribe.return_value = {
                     "text": "Hello, this is a dental consultation. The patient has a cavity and needs a root kanal treatment.",
@@ -49,7 +49,9 @@ class TestCompletePipeline:
                     ],
                     "language": "en"
                 }
-                mock_load_model.return_value = mock_model
+                mock_whisper = MagicMock()
+                mock_whisper.load_model.return_value = mock_model
+                mock_require_whisper.return_value = mock_whisper
                 
                 # Transcribe audio - use correct function signature
                 result = transcribe_audio_file(str(audio_file))
@@ -146,8 +148,10 @@ class TestCompletePipeline:
             temp_path = Path(temp_dir)
             
             # Test transcription error handling
-            with patch('dental_consultation_pipeline.transcription.whisper.load_model') as mock_load_model:
-                mock_load_model.side_effect = Exception("Model loading failed")
+            with patch('dental_consultation_pipeline.transcription._require_whisper') as mock_require_whisper:
+                mock_whisper = MagicMock()
+                mock_whisper.load_model.side_effect = Exception("Model loading failed")
+                mock_require_whisper.return_value = mock_whisper
                 
                 audio_file = temp_path / "test.wav"
                 audio_file.touch()
@@ -250,8 +254,8 @@ class TestCompletePipeline:
                 assert dir_path.is_dir()
     
     @patch('dental_consultation_pipeline.analysis.requests.post')
-    @patch('dental_consultation_pipeline.transcription.whisper.load_model')
-    def test_pipeline_with_realistic_data(self, mock_load_model, mock_post):
+    @patch('dental_consultation_pipeline.transcription._require_whisper')
+    def test_pipeline_with_realistic_data(self, mock_require_whisper, mock_post):
         """Test pipeline with realistic dental consultation data"""
         # Mock transcription
         mock_model = MagicMock()
@@ -268,7 +272,9 @@ class TestCompletePipeline:
             ],
             "language": "en"
         }
-        mock_load_model.return_value = mock_model
+        mock_whisper = MagicMock()
+        mock_whisper.load_model.return_value = mock_model
+        mock_require_whisper.return_value = mock_whisper
         
         # Mock LLM responses
         mock_response = MagicMock()

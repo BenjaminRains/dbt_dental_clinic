@@ -1,0 +1,46 @@
+# Consult audio unit tests. No Whisper checkpoint or torch CUDA download.
+name: consult_audio_pipe
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - ".github/workflows/consult_audio_pipe.yml"
+      - "consult_audio_pipe/**"
+  pull_request:
+    paths:
+      - ".github/workflows/consult_audio_pipe.yml"
+      - "consult_audio_pipe/**"
+
+permissions:
+  contents: read
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: consult_audio_pipe
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v7
+
+      - name: Set up Python
+        uses: actions/setup-python@v7
+        with:
+          python-version: "3.11"
+
+      - name: Install test extras (no Whisper / torch)
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements-test.txt
+          pip install -e . --no-deps
+
+      - name: Pytest (Phase 0 gate; skip live API and stale modules)
+        run: >
+          pytest -q --tb=short
+          tests/test_import_without_whisper.py
+          tests/test_transcription_comprehensive.py
+          tests/test_package.py
+          tests/test_cleaning_comprehensive.py

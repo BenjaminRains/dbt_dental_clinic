@@ -77,6 +77,7 @@ desktop.ini
 *.xml
 *.txt
 !requirements.txt
+!requirements-test.txt
 !requirements-airflow.txt
 !requirements-airflow-native.txt
 !mdc_process_flow_diagram.txt
@@ -173,6 +174,8 @@ docs/etl/archive/
 !docs/frontend/**
 !docs/snowflake/
 !docs/snowflake/**
+!docs/consult_audio/
+!docs/consult_audio/**
 
 # Non-sensitive frontend design notes (under the app tree)
 !frontend/docs/

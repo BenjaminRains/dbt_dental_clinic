@@ -53,8 +53,8 @@ class TestTranscriptionModule:
             result = get_available_audio_files()
             assert result == []
     
-    @patch('dental_consultation_pipeline.transcription.whisper.load_model')
-    def test_transcribe_audio_file_success(self, mock_load_model):
+    @patch('dental_consultation_pipeline.transcription._require_whisper')
+    def test_transcribe_audio_file_success(self, mock_require_whisper):
         """Test successful audio transcription"""
         # Mock whisper model
         mock_model = MagicMock()
@@ -64,7 +64,9 @@ class TestTranscriptionModule:
                 {"start": 0.0, "end": 2.0, "text": "This is a test transcription."}
             ]
         }
-        mock_load_model.return_value = mock_model
+        mock_whisper = MagicMock()
+        mock_whisper.load_model.return_value = mock_model
+        mock_require_whisper.return_value = mock_whisper
         
         # Create a temporary audio file
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
@@ -89,15 +91,15 @@ class TestTranscriptionModule:
     
     def test_transcribe_audio_file_nonexistent(self):
         """Test transcription with non-existent audio file"""
-        # This should raise an error or return None
-        with pytest.raises(Exception):
+        with pytest.raises(FileNotFoundError):
             transcribe_audio_file("nonexistent.wav")
     
-    @patch('dental_consultation_pipeline.transcription.whisper.load_model')
-    def test_transcribe_audio_file_whisper_error(self, mock_load_model):
+    @patch('dental_consultation_pipeline.transcription._require_whisper')
+    def test_transcribe_audio_file_whisper_error(self, mock_require_whisper):
         """Test transcription with whisper error"""
-        # Mock whisper to raise an error
-        mock_load_model.side_effect = Exception("Whisper model error")
+        mock_whisper = MagicMock()
+        mock_whisper.load_model.side_effect = Exception("Whisper model error")
+        mock_require_whisper.return_value = mock_whisper
         
         # Create a temporary audio file
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
@@ -212,8 +214,8 @@ class TestTranscriptionModule:
                 assert "audio7.pdf" not in result
                 assert "audio8.doc" not in result
     
-    @patch('dental_consultation_pipeline.transcription.whisper.load_model')
-    def test_transcription_output_formats(self, mock_load_model):
+    @patch('dental_consultation_pipeline.transcription._require_whisper')
+    def test_transcription_output_formats(self, mock_require_whisper):
         """Test that transcription creates multiple output formats"""
         # Mock whisper model with detailed output
         mock_model = MagicMock()
@@ -226,7 +228,9 @@ class TestTranscriptionModule:
             ],
             "language": "en"
         }
-        mock_load_model.return_value = mock_model
+        mock_whisper = MagicMock()
+        mock_whisper.load_model.return_value = mock_model
+        mock_require_whisper.return_value = mock_whisper
         
         # Create a temporary audio file
         with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
@@ -253,9 +257,11 @@ class TestTranscriptionModule:
         # This test verifies that the model loading path is correct
         # We'll mock the whisper.load_model function to see if it's called correctly
         
-        with patch('dental_consultation_pipeline.transcription.whisper.load_model') as mock_load_model:
+        with patch('dental_consultation_pipeline.transcription._require_whisper') as mock_require_whisper:
             mock_model = MagicMock()
-            mock_load_model.return_value = mock_model
+            mock_whisper = MagicMock()
+            mock_whisper.load_model.return_value = mock_model
+            mock_require_whisper.return_value = mock_whisper
             
             # Create a temporary audio file
             with tempfile.NamedTemporaryFile(suffix='.wav', delete=False) as f:
@@ -267,7 +273,7 @@ class TestTranscriptionModule:
                 transcribe_audio_file(audio_file)
                 
                 # Should call whisper.load_model
-                mock_load_model.assert_called_once()
+                mock_whisper.load_model.assert_called_once()
                 
             finally:
                 os.unlink(audio_file) 

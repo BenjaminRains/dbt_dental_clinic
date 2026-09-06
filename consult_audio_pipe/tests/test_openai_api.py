@@ -1,7 +1,10 @@
 import os
+import pytest
 import requests
 from pathlib import Path
 from dotenv import load_dotenv
+
+pytestmark = pytest.mark.integration
 
 _env_file = Path(__file__).resolve().parent.parent / ".env"
 load_dotenv(_env_file, override=False)
