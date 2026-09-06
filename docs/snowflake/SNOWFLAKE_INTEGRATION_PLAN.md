@@ -42,7 +42,7 @@ v1 ships a thin payments slice. The **rails** are built so expansion is additive
 | Rail | Why it scales |
 |------|----------------|
 | One dbt project + `--target snowflake` | Full warehouse = more models on the same target, not a fork |
-| `OPENDENTAL_SF` + `RAW` / `STAGING` / `INT` / `MARTS` | Same layout as Postgres; new domains just land more tables |
+| `OPENDENTAL_SF` + quoted `"raw"` / `"staging"` / `"int"` / `"marts"` | Same layout as Postgres (`quoting: true`); new domains just land more tables |
 | Sources use `schema: raw`, DB from profile | No per-target source rewrites for new tables |
 | Export introspects Postgres columns | Adding a table ≠ hand-writing Snowflake DDL |
 | `mdc dbt --env snowflake` | Env pattern stays stable as the project grows |
@@ -109,7 +109,7 @@ Snowflake internal stage
         │
         │  COPY INTO
         ▼
-Snowflake OPENDENTAL_SF.RAW.<table>
+Snowflake "OPENDENTAL_SF"."raw".<table>
         │
         ▼
 dbt --target snowflake --select tag:snowflake
@@ -161,12 +161,12 @@ Wave 2 adds payment detail (`fact_payment` via `int_payment_split`) for a richer
 
 - [x] Export script: [`scripts/snowflake/export_demo_to_snowflake.py`](../../scripts/snowflake/export_demo_to_snowflake.py)
   - Reads from `opendental_demo.raw` only (hard refuse clinic DB names)
-  - `PUT` → internal stage → `COPY INTO RAW`
+  - `PUT` → internal stage → `COPY INTO "raw"`
 - [ ] Run export for Wave 1: `payment`, `claimpayment`
 - [ ] Optional Wave 1: `definition` (PayType labels for docs/UI)
 - [ ] Document refresh cadence (manual / on-demand for portfolio; not nightly clinic)
 
-**Exit criteria:** Row counts in Snowflake `RAW` match demo Postgres for exported tables.
+**Exit criteria:** Row counts in Snowflake `"raw"` match demo Postgres for exported tables.
 
 ### Phase 3 — dbt Snowflake target + Wave 1 tag
 

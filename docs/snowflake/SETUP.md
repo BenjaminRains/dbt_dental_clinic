@@ -49,12 +49,18 @@ Creates:
 |--------|---------|
 | `WH_DEMO_XS` | X-Small warehouse, auto-suspend 60s |
 | `OPENDENTAL_SF` database | Snowflake mini warehouse (not Postgres `opendental_analytics`) |
-| Schema `RAW` (unquoted) | Export landing — matches dbt `source()` folding to `RAW.PAYMENT` |
+| Schema `"raw"` (quoted) | Export landing — matches dbt `source()` with `quoting: true` (`"raw"."payment"`) |
 | Schemas `"staging"`, `"int"`, `"marts"`, `"dbt"` | Lowercase quoted — matches `dbt_project.yml` `quoting: true` for models |
-| Stage `RAW.DEMO_EXPORT` | Internal stage for COPY INTO |
+| Stage `"raw".DEMO_EXPORT` | Internal stage for COPY INTO |
 | Role `TRANSFORMER` | dbt + load |
 | Role `ANALYST` | Read marts |
 | Resource monitor | Credit guardrail |
+
+If this account already has unquoted `RAW` (from an earlier bootstrap), run
+[`sql/03_recreate_raw_quoted.sql`](sql/03_recreate_raw_quoted.sql) then re-export.
+`dbt_project.yml` `quoting: true` compiles `source('opendental', 'payment')` as
+`"raw"."payment"`, which is not the same object as `RAW.PAYMENT`. Also set
+`SNOWFLAKE_SCHEMA=raw` in `.env_snowflake`.
 
 ## 3. Key-pair auth for scripts / dbt (required with passkey login)
 

@@ -191,6 +191,8 @@ def test_load_dbt_env_dict_snowflake(tmp_path, monkeypatch, clean_dbt_os_env):
     assert data["SNOWFLAKE_PRIVATE_KEY_PATH"] == "C:/keys/rsa_key.p8"
     assert data["SNOWFLAKE_WAREHOUSE"] == "WH_DEMO_XS"
     assert data["SNOWFLAKE_DATABASE"] == "OPENDENTAL_SF"
+    assert data["SNOWFLAKE_SCHEMA"] == "raw"
+    assert data["SNOWFLAKE_SCHEMA_DBT"] == "dbt"
 
 
 def test_load_dbt_env_dict_snowflake_missing_file(tmp_path, monkeypatch):

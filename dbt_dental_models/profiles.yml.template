@@ -104,7 +104,7 @@ dbt_dental_models:
       role: "{{ env_var('SNOWFLAKE_ROLE', 'TRANSFORMER') }}"
       database: "{{ env_var('SNOWFLAKE_DATABASE', 'OPENDENTAL_SF') }}"
       warehouse: "{{ env_var('SNOWFLAKE_WAREHOUSE', 'WH_DEMO_XS') }}"
-      schema: "{{ env_var('SNOWFLAKE_SCHEMA_DBT', 'DBT') }}"
+      schema: "{{ env_var('SNOWFLAKE_SCHEMA_DBT', 'dbt') }}"
       threads: 4
       client_session_keep_alive: False
       query_tag: dbt_dental_snowflake
