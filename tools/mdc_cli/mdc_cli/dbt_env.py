@@ -168,8 +168,8 @@ def load_dbt_env_dict(stage: str) -> dict[str, str]:
             "SNOWFLAKE_ROLE": "TRANSFORMER",
             "SNOWFLAKE_WAREHOUSE": "WH_DEMO_XS",
             "SNOWFLAKE_DATABASE": "OPENDENTAL_SF",
-            "SNOWFLAKE_SCHEMA": "RAW",
-            "SNOWFLAKE_SCHEMA_DBT": "DBT",
+            "SNOWFLAKE_SCHEMA": "raw",
+            "SNOWFLAKE_SCHEMA_DBT": "dbt",
             "SNOWFLAKE_STAGE": "DEMO_EXPORT",
         }
         merged.update(file_vals)

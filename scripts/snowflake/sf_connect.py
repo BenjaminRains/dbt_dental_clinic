@@ -9,6 +9,13 @@ from typing import Any
 import snowflake.connector
 
 
+def _quote_session_ident(name: str) -> str:
+    """Quote a Snowflake identifier so it is not folded to uppercase."""
+    if name.startswith('"'):
+        return name
+    return '"' + name.replace('"', '""') + '"'
+
+
 def connect_snowflake(**overrides: Any):
     """
     Connect using env loaded by caller.
@@ -33,7 +40,8 @@ def connect_snowflake(**overrides: Any):
     if database:
         kwargs["database"] = database
     if schema:
-        kwargs["schema"] = schema
+        # Landing schema is quoted lowercase ("raw") to match dbt source quoting.
+        kwargs["schema"] = _quote_session_ident(schema.lower())
 
     key_path = (os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or "").strip()
     if key_path:

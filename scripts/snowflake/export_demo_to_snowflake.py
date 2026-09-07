@@ -1,5 +1,5 @@
 """
-Export Wave 1 payments tables from demo Postgres → Snowflake RAW.
+Export Wave 1 payments tables from demo Postgres → Snowflake quoted "raw".
 
 Safety:
   - Refuses non-demo Postgres database names (no clinic PHI path).
@@ -145,7 +145,7 @@ def _sf_config() -> dict[str, str]:
         "role": os.environ.get("SNOWFLAKE_ROLE", "TRANSFORMER"),
         "warehouse": os.environ.get("SNOWFLAKE_WAREHOUSE", "WH_DEMO_XS"),
         "database": os.environ.get("SNOWFLAKE_DATABASE", "OPENDENTAL_SF"),
-        "schema": os.environ.get("SNOWFLAKE_SCHEMA", "RAW"),
+        "schema": os.environ.get("SNOWFLAKE_SCHEMA", "raw"),
         "stage": os.environ.get("SNOWFLAKE_STAGE", "DEMO_EXPORT"),
     }
 
@@ -245,11 +245,30 @@ def _export_csv(pg_conn, schema: str, table: str, columns: list[dict[str, str]],
     return row_count
 
 
+def _sf_raw_fq(database: str, schema: str, table: str) -> str:
+    """
+    RAW landing FQN for dbt sources.
+
+    dbt_project.yml sets quoting: true, so source('opendental', 'payment') compiles
+    to "OPENDENTAL_SF"."raw"."payment". Unquoted RAW.PAYMENT is a different object.
+    Column names stay quoted (PayNum) so staging SQL with \"PayNum\" still works.
+    """
+    return (
+        f"{_quote_ident(database)}.{_quote_ident(schema.lower())}."
+        f"{_quote_ident(table.lower())}"
+    )
+
+
+def _sf_stage_fq(database: str, schema: str, stage: str) -> str:
+    """Internal stage FQN inside the quoted landing schema."""
+    return f"@{_quote_ident(database)}.{_quote_ident(schema.lower())}.{_quote_ident(stage)}"
+
+
 def _create_snowflake_table(
     sf_cur, database: str, schema: str, table: str, columns: list[dict[str, str]]
 ) -> None:
     col_ddl = ",\n  ".join(f"{_quote_ident(c['name'])} {c['sf_type']}" for c in columns)
-    fq = f"{_quote_ident(database)}.{_quote_ident(schema)}.{_quote_ident(table)}"
+    fq = _sf_raw_fq(database, schema, table)
     sf_cur.execute(f"CREATE OR REPLACE TABLE {fq} (\n  {col_ddl}\n)")
 
 
@@ -263,25 +282,24 @@ def _load_table(
     database = sf_cfg["database"]
     schema = sf_cfg["schema"]
     stage = sf_cfg["stage"]
-    stage_path = f"@{_quote_ident(database)}.{_quote_ident(schema)}.{_quote_ident(stage)}"
-    fq_table = f"{_quote_ident(database)}.{_quote_ident(schema)}.{_quote_ident(table)}"
+    stage_path = _sf_stage_fq(database, schema, stage)
+    fq_table = _sf_raw_fq(database, schema, table)
     remote_name = f"{table}.csv"
 
     with sf_conn.cursor() as cur:
-        cur.execute(f"USE WAREHOUSE {_quote_ident(sf_cfg['warehouse'])}")
+        cur.execute(f"USE WAREHOUSE {sf_cfg['warehouse']}")
         cur.execute(f"USE DATABASE {_quote_ident(database)}")
-        cur.execute(f"USE SCHEMA {_quote_ident(schema)}")
+        cur.execute(f"USE SCHEMA {_quote_ident(schema.lower())}")
         _create_snowflake_table(cur, database, schema, table, columns)
         cur.execute(f"REMOVE {stage_path} PATTERN='.*{re.escape(table)}\\.csv.*'")
-        # Keep uncompressed so COPY path matches the local basename.
         put_sql = (
             f"PUT 'file://{csv_path.as_posix()}' {stage_path} "
             "OVERWRITE=TRUE AUTO_COMPRESS=FALSE"
         )
         cur.execute(put_sql)
-        col_list = ", ".join(_quote_ident(c["name"]) for c in columns)
+        # MATCH_BY_COLUMN_NAME cannot be combined with a column list / SELECT transform.
         copy_sql = f"""
-            COPY INTO {fq_table} ({col_list})
+            COPY INTO {fq_table}
             FROM {stage_path}
             FILES = ('{remote_name}')
             FILE_FORMAT = (
@@ -422,7 +440,10 @@ def main(argv: list[str] | None = None) -> int:
                     continue
                 assert sf_conn is not None and sf_cfg is not None
                 loaded = _load_table(sf_conn, sf_cfg, table, columns, csv_path)
-                print(f"  {table}: loaded {loaded:,} rows into Snowflake RAW")
+                print(
+                    f"  {table}: loaded {loaded:,} rows into "
+                    f"{_sf_raw_fq(sf_cfg['database'], sf_cfg['schema'], table)}"
+                )
                 if loaded != row_count:
                     print(
                         f"  warning: row count mismatch export={row_count} snowflake={loaded}",

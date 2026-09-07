@@ -1,4 +1,4 @@
-# Tables exported from demo Postgres → Snowflake OPENDENTAL_SF.RAW
+# Tables exported from demo Postgres → Snowflake "OPENDENTAL_SF"."raw"
 #
 # Grow this list as domains are enabled on Snowflake. The export script
 # introspects columns from Postgres — no DDL duplication here.

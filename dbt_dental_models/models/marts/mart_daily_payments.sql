@@ -39,25 +39,28 @@ patient_daily as (
     select
         payment_date,
 
-        round(coalesce(sum(payment_amount) filter (where payment_amount <> 0), 0), 2)
+        -- CASE WHEN (not FILTER) for Postgres + Snowflake portability
+        round(coalesce(sum(case when payment_amount <> 0 then payment_amount end), 0), 2)
             as patient_payment_amount,
 
-        round(coalesce(sum(payment_amount) filter (
-            where payment_amount <> 0
+        round(coalesce(sum(case
+            when payment_amount <> 0
               and payment_type_id not in (69, 70, 71, 391, 412, 417, 574, 634, 676)
-        ), 0), 2) as patient_other_type_amount,
+            then payment_amount
+        end), 0), 2) as patient_other_type_amount,
 
-        round(coalesce(sum(payment_amount) filter (where payment_amount > 0), 0), 2)
+        round(coalesce(sum(case when payment_amount > 0 then payment_amount end), 0), 2)
             as patient_income_amount,
 
-        round(coalesce(sum(payment_amount) filter (where payment_amount < 0), 0), 2)
+        round(coalesce(sum(case when payment_amount < 0 then payment_amount end), 0), 2)
             as patient_refund_amount,
 
-        count(*) filter (where payment_amount <> 0) as patient_payment_count,
-        count(*) filter (
-            where payment_amount <> 0
+        count(case when payment_amount <> 0 then 1 end) as patient_payment_count,
+        count(case
+            when payment_amount <> 0
               and payment_type_id not in (69, 70, 71, 391, 412, 417, 574, 634, 676)
-        ) as patient_other_type_count
+            then 1
+        end) as patient_other_type_count
 
     from patient_payments
     group by payment_date
@@ -69,10 +72,10 @@ insurance_daily as (
 
         round(coalesce(sum(check_amount::numeric), 0), 2) as insurance_payment_amount,
 
-        round(coalesce(sum(check_amount::numeric) filter (where check_amount > 0), 0), 2)
+        round(coalesce(sum(case when check_amount > 0 then check_amount::numeric end), 0), 2)
             as insurance_income_amount,
 
-        round(coalesce(sum(check_amount::numeric) filter (where check_amount < 0), 0), 2)
+        round(coalesce(sum(case when check_amount < 0 then check_amount::numeric end), 0), 2)
             as insurance_refund_amount,
 
         count(*) as insurance_payment_count

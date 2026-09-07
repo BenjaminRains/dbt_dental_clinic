@@ -107,6 +107,18 @@ def _user_grants(user: str) -> list[str]:
     ]
 
 
+def _is_user_role_grant_statement(stmt: str) -> bool:
+    """True for GRANT ROLE … TO USER / ALTER USER … DEFAULT_* (must come from env)."""
+    compact = " ".join(stmt.upper().split())
+    if compact.startswith("GRANT ROLE ") and " TO USER " in compact:
+        return True
+    if compact.startswith("ALTER USER ") and (
+        " DEFAULT_ROLE " in compact or " DEFAULT_WAREHOUSE " in compact
+    ):
+        return True
+    return False
+
+
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument(
@@ -142,9 +154,23 @@ def main(argv: list[str] | None = None) -> int:
         raise SystemExit(f"SQL file not found: {args.sql}")
 
     statements = _split_statements(args.sql.read_text(encoding="utf-8"))
+    # Drop any leftover hardcoded "TO USER …" / "ALTER USER …" from older SQL copies.
+    # User grants always come from SNOWFLAKE_USER (unless --skip-user-grants).
+    statements = [
+        s
+        for s in statements
+        if not _is_user_role_grant_statement(s)
+    ]
+
     user = os.environ.get("SNOWFLAKE_USER", "").strip()
-    if user and not args.skip_user_grants:
+    if not args.skip_user_grants:
+        if not user:
+            raise SystemExit(
+                "SNOWFLAKE_USER is required for role grants "
+                "(or pass --skip-user-grants)."
+            )
         statements.extend(_user_grants(user))
+        print(f"Will attach TRANSFORMER/ANALYST to user {user}")
 
     print(f"Statements to run: {len(statements)}")
     if args.dry_run:

@@ -1,6 +1,6 @@
 # Snowflake mini warehouse scripts
 
-Export synthetic demo Postgres tables into Snowflake `OPENDENTAL_SF.RAW` for the
+Export synthetic demo Postgres tables into Snowflake `"OPENDENTAL_SF"."raw"` for the
 payments/collections portfolio slice.
 
 ## Environment (repo convention)

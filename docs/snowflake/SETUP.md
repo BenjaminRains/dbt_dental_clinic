@@ -49,11 +49,18 @@ Creates:
 |--------|---------|
 | `WH_DEMO_XS` | X-Small warehouse, auto-suspend 60s |
 | `OPENDENTAL_SF` database | Snowflake mini warehouse (not Postgres `opendental_analytics`) |
-| Schemas `RAW`, `STAGING`, `INT`, `MARTS`, `DBT` | Aligns with dbt `generate_schema_name` |
-| Stage `RAW.DEMO_EXPORT` | Internal stage for COPY INTO |
+| Schema `"raw"` (quoted) | Export landing — matches dbt `source()` with `quoting: true` (`"raw"."payment"`) |
+| Schemas `"staging"`, `"int"`, `"marts"`, `"dbt"` | Lowercase quoted — matches `dbt_project.yml` `quoting: true` for models |
+| Stage `"raw".DEMO_EXPORT` | Internal stage for COPY INTO |
 | Role `TRANSFORMER` | dbt + load |
 | Role `ANALYST` | Read marts |
 | Resource monitor | Credit guardrail |
+
+If this account already has unquoted `RAW` (from an earlier bootstrap), run
+[`sql/03_recreate_raw_quoted.sql`](sql/03_recreate_raw_quoted.sql) then re-export.
+`dbt_project.yml` `quoting: true` compiles `source('opendental', 'payment')` as
+`"raw"."payment"`, which is not the same object as `RAW.PAYMENT`. Also set
+`SNOWFLAKE_SCHEMA=raw` in `.env_snowflake`.
 
 ## 3. Key-pair auth for scripts / dbt (required with passkey login)
 
@@ -64,9 +71,12 @@ Snowsight passkeys do not work from Python/dbt. Use RSA key-pair:
    - `set_rsa_public_key.sql` — one statement to run in Snowsight
 2. In Snowsight as **ACCOUNTADMIN**, run the statement in `set_rsa_public_key.sql`
 3. Confirm `.env_snowflake` has:
-   - `SNOWFLAKE_USER=CONCRETE1866`
+   - `SNOWFLAKE_USER=<your Snowsight login>` (example: `CONCRETE1866`)
    - `SNOWFLAKE_PRIVATE_KEY_PATH=.../dbt_dental_models/.snowflake/rsa_key.p8`
-4. Then from repo root:
+4. Attach roles to **that same user** (bootstrap SQL does not hardcode a username):
+   - Preferred: `python scripts/snowflake/bootstrap_snowflake.py` (uses `SNOWFLAKE_USER`), or
+   - In Snowsight: uncomment/adapt the four `GRANT`/`ALTER USER` lines in section 8 of `01_bootstrap.sql`
+5. Then from repo root:
 
 ```powershell
 python -c "from pathlib import Path; from dotenv import load_dotenv; import sys; sys.path.insert(0,'scripts/snowflake'); load_dotenv('dbt_dental_models/.env_snowflake', interpolate=False); from sf_connect import connect_snowflake; c=connect_snowflake(); cur=c.cursor(); cur.execute('select current_user(), current_role()'); print(cur.fetchone()); c.close()"
@@ -91,10 +101,16 @@ Also ensure local `dbt_dental_models/profiles.yml` includes the `snowflake` outp
 ## 5. Python / dbt packages
 
 ```powershell
+# Export / bootstrap scripts (connector + dotenv)
 pip install -r scripts/snowflake/requirements.txt
+
+# dbt adapter into the dbt Pipenv (mdc uses this venv — not system Python)
+cd dbt_dental_models
+pipenv install "dbt-snowflake~=1.10.0"
+cd ..
 ```
 
-Use the same dbt Core major you already run (1.7.x). `dbt-snowflake` must match.
+`dbt-snowflake` must match `dbt-core` major/minor in `dbt_dental_models/Pipfile` (currently 1.10.x).
 
 ## 5. Verify connectivity
 
