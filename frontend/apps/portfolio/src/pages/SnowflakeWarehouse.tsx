@@ -31,13 +31,13 @@ import { MermaidDiagram } from '@mdc/ui-common';
 const GITHUB = 'https://github.com/BenjaminRains/dbt_dental_clinic';
 const GITHUB_SF = `${GITHUB}/blob/feature/snowflake-wave1-reload`;
 
-const ARCHITECTURE_CHART = `flowchart LR
-  PG["Demo Postgres<br/>opendental_demo.raw"]
-  EXP["Export<br/>PUT + COPY INTO"]
-  RAW["Snowflake RAW<br/>payment · claimpayment"]
-  STG["dbt staging<br/>numeric amounts"]
-  MART["mart_daily_payments<br/>one row per date"]
-
+const ARCHITECTURE_CHART = `%%{init: {"themeVariables": {"fontSize": "22px"}, "flowchart": {"htmlLabels": false, "padding": 28, "nodeSpacing": 32, "rankSpacing": 64}}}%%
+flowchart TB
+  PG["Demo Postgres · opendental_demo.raw"]
+  EXP["Export · PUT and COPY INTO"]
+  RAW["Snowflake RAW · payment and claimpayment"]
+  STG["dbt staging · numeric amounts"]
+  MART["mart_daily_payments · one row per date"]
   PG --> EXP --> RAW --> STG --> MART
 `;
 
@@ -153,9 +153,15 @@ const SnowflakeWarehouse: React.FC = () => {
                                 sx={{
                                     bgcolor: 'grey.50',
                                     borderRadius: 2,
-                                    p: { xs: 2, md: 4 },
-                                    overflowX: 'auto',
-                                    minHeight: { xs: 280, md: 360 },
+                                    px: { xs: 1, md: 3 },
+                                    py: { xs: 3, md: 4 },
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    '& iframe': {
+                                        width: 'min(100%, 560px) !important',
+                                        height: '580px !important',
+                                        border: 0,
+                                    },
                                 }}
                             >
                                 <MermaidDiagram id="snowflake-wave1-architecture" chart={ARCHITECTURE_CHART} />
