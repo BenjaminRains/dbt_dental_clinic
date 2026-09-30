@@ -156,6 +156,8 @@ models:
               config:
                 severity: warn
                 description: "Value 0 is a valid placeholder for claim payments not yet linked to payment batch (661 records)"
+                # int_claim_payments is not on Snowflake in Wave 1; selected only because it refs claimpayment.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: patient_id
         description: >

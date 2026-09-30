@@ -29,6 +29,7 @@ import {
     ShareOutlined as ReferralIcon,
     HelpOutline as HelpIcon,
     Verified as VerifiedIcon,
+    AcUnit as SnowflakeIcon,
 } from '@mui/icons-material';
 import { useNavigate, useLocation } from 'react-router-dom';
 import SyntheticDataBanner from './SyntheticDataBanner';
@@ -44,6 +45,7 @@ const menuItems = [
     { text: 'Dashboard', icon: <DashboardIcon />, path: '/dashboard' },
     { text: 'KPI Definitions', icon: <HelpIcon />, path: '/kpi-definitions' },
     { text: 'KPI Validation', icon: <VerifiedIcon />, path: '/kpi-validation' },
+    { text: 'Snowflake', icon: <SnowflakeIcon />, path: '/snowflake' },
     { text: 'Revenue', icon: <RevenueIcon />, path: '/revenue' },
     { text: 'AR Aging', icon: <ARIcon />, path: '/ar-aging' },
     { text: 'Treatment Acceptance', icon: <TreatmentAcceptanceIcon />, path: '/treatment-acceptance' },

@@ -388,6 +388,8 @@ models:
       - no_problematic_income_transfers:
           config:
             severity: error
+            # Joins paysplit and procedurelog, which Wave 1 does not build on Snowflake.
+            enabled: "{{ target.type != 'snowflake' }}"
             description: |
               Income transfers must follow strict rules:
               - Type 0: Incoming transfers (positive amounts)
@@ -397,6 +399,8 @@ models:
       # Transfer Balance Validations (using the custom test)
       - transfer_balance_validation:
           config:
+            # Joins paysplit, which Wave 1 does not build on Snowflake.
+            enabled: "{{ target.type != 'snowflake' }}"
             severity: error
             description: |
               Transfer balances must have matching pairs:

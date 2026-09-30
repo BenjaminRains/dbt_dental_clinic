@@ -2,11 +2,29 @@
 
 | Attribute | Value |
 |-----------|--------|
-| **Status** | In progress — Phase 1/2 scaffolding |
-| **Branch** | `feature/snowflake-payments-warehouse` |
-| **Date** | 2026-07-17 |
+| **Status** | Wave 1 loaded and matched (2026-09-30); `/snowflake` page in the portfolio app; demo-host deploy still open |
+| **Branch** | `feature/snowflake-wave1-reload` |
+| **Decisions locked** | 2026-07-17 |
+| **Last updated** | 2026-09-30 |
 | **Priority** | Tier 4 #1 — hiring differentiator |
 | **Scope** | Portfolio / demo only — not clinic production |
+| **Live checklist** | `TODO.md` → Snowflake Integration |
+
+---
+
+## Current state (2026-09-30)
+
+Wave 1 rails are on `main` ([PR #79](https://github.com/BenjaminRains/dbt_dental_clinic/pull/79), squash `43e442bf`). Work since then is on `feature/snowflake-wave1-reload`.
+
+Done on the account:
+
+- RSA key-pair for `CONCRETE1866`. `mdc dbt validate --env snowflake` reconfirmed 2026-09-30 (`WH_DEMO_XS`, `OPENDENTAL_SF`)
+- Wave 1 export: `RAW.PAYMENT` 21,279 rows, `RAW.CLAIMPAYMENT` 1,817 rows. This account folds quoted identifiers to uppercase, so dbt's `"raw"."payment"` is that table. Do not run `sql/03_recreate_raw_quoted.sql` — it drops the live load
+- `mdc dbt invoke --env snowflake -- build --select tag:snowflake` → `PASS=76 WARN=1 ERROR=0`. The warning is `claimpayment.bank_branch` (1,817 nulls; the generator inserts `''`). Relationship tests to models outside the wave, and `not_null` on `payment_type_id` / `sec_user_num_entry`, run only when `target.type != 'snowflake'`
+- `PayAmt`, `MerchantFee`, and `CheckAmt` are `numeric(18, 2)`. Float casts made daily sums differ by cents to a few dollars
+- [`scripts/snowflake/compare_mart_daily_payments.py`](../../scripts/snowflake/compare_mart_daily_payments.py) matches all 61 dates against local demo Postgres and against the EC2 tunnel. Sample: 2025-11-13 `45473.55` / 372 payments; 2026-01-12 `39676.25` / 334 payments. EC2 `raw.payment` and `raw.claimpayment` were copied from the local generation before that rebuild; other EC2 raw tables were not
+
+**Next:** Deploy `@mdc/portfolio` to the demo host so `/snowflake` is public. Then Phase 6 `fact_payment`.
 
 ---
 
@@ -72,6 +90,8 @@ Do **not** create a second dbt project for Snowflake.
 ### Portability rule (avoid a rewrite cliff)
 
 When enabling a model on Snowflake, fix dialect issues **in that model’s dependency cone** (adapter-aware config/macros), not a big-bang rewrite of 200 models. Common Postgres-only traps: `indexes=`, `ON CONFLICT`, `::double precision`, freshness on missing `_loaded_at`.
+
+Wave 1 already applied this rule: ID macros and the daily-payments aggregate were made adapter-aware, the Postgres tracking upsert is skipped on this target, and payment money columns are `numeric(18, 2)` instead of `double precision`. Do not add source freshness until exported tables have `_loaded_at`.
 
 ### Export manifest
 
@@ -142,67 +162,64 @@ Wave 2 adds payment detail (`fact_payment` via `int_payment_split`) for a richer
 
 ### Phase 0 — Branch & docs (this document)
 
-- [x] Feature branch: `feature/snowflake-payments-warehouse`
+- [x] Feature branch (scaffold `feature/snowflake-payments-warehouse`; rails merged via PR #79)
 - [x] Plan doc under `docs/snowflake/`
-- [x] Align `todo.md` Tier 4 Snowflake section with this plan (local `todo.md`; gitignored)
+- [x] `TODO.md` Tier 4 Snowflake section tracks this plan
 
 ### Phase 1 — Snowflake sandbox
 
 - [x] Bootstrap SQL + setup guide in-repo ([SETUP.md](SETUP.md), [sql/01_bootstrap.sql](sql/01_bootstrap.sql))
+- [x] Quoted landing for existing accounts: [sql/03_recreate_raw_quoted.sql](sql/03_recreate_raw_quoted.sql) (drops unquoted `RAW`, creates `"raw"`)
 - [x] Env aligned with [ENVIRONMENT_FILES.md](../deployment/ENVIRONMENT_FILES.md): `dbt_dental_models/.env_snowflake` + `mdc dbt --env snowflake`
-- [ ] Create Snowflake trial/dev account (AWS region preferred) — **you do this in browser**
-- [ ] Run bootstrap SQL in Snowsight (XS, auto-suspend 60s, resource monitor, roles, schemas)
-- [ ] Fill `dbt_dental_models/.env_snowflake` from template
-- [ ] `mdc dbt validate --env snowflake` / `mdc dbt invoke --env snowflake -- debug` succeeds
+- [x] Grants use `SNOWFLAKE_USER` (no hardcoded Snowsight user)
+- [x] Snowflake account created; RSA key-pair (Snowsight passkey blocks password auth from Python/dbt)
+- [x] Bootstrap run in Snowsight (XS, auto-suspend 60s, roles, schemas)
+- [x] Local `dbt_dental_models/.env_snowflake` filled from the template (gitignored)
+- [x] `mdc dbt validate --env snowflake` reconfirmed 2026-09-30
 
-**Exit criteria:** Can connect from local machine; warehouse suspends when idle; zero clinic credentials involved.
+**Exit criteria:** Can connect from local machine; warehouse suspends when idle; zero clinic credentials involved. Met.
 
-### Phase 2 — Export from demo Postgres → Snowflake RAW
+### Phase 2 — Export from demo Postgres → Snowflake `"raw"`
 
 - [x] Export script: [`scripts/snowflake/export_demo_to_snowflake.py`](../../scripts/snowflake/export_demo_to_snowflake.py)
   - Reads from `opendental_demo.raw` only (hard refuse clinic DB names)
-  - `PUT` → internal stage → `COPY INTO "raw"`
-- [ ] Run export for Wave 1: `payment`, `claimpayment`
-- [ ] Optional Wave 1: `definition` (PayType labels for docs/UI)
-- [ ] Document refresh cadence (manual / on-demand for portfolio; not nightly clinic)
+  - `PUT` → internal stage → `COPY INTO` quoted `"OPENDENTAL_SF"."raw"."<table>"` (`MATCH_BY_COLUMN_NAME`)
+- [x] Wave 1 (`payment`, `claimpayment`) is loaded. On this account the quoted names are stored as `RAW.PAYMENT` / `RAW.CLAIMPAYMENT`, and dbt reads them. Do not drop `RAW`
+- [x] Refresh cadence: manual / on-demand for the portfolio demo, not a nightly clinic job. PayType `definition` is in `wave2_payment_detail`, not Wave 1
 
 **Exit criteria:** Row counts in Snowflake `"raw"` match demo Postgres for exported tables.
 
 ### Phase 3 — dbt Snowflake target + Wave 1 tag
 
 - [x] Add `snowflake` target to `profiles.yml.template` (+ local `profiles.yml`)
+- [x] `dbt-snowflake~=1.10` in the dbt Pipfile
 - [x] `mdc` stage: `DBT_STAGES` + `dbt_env.py` load `dbt_dental_models/.env_snowflake`
 - [x] Tag Wave 1 models with `snowflake`:
   - `stg_opendental__payment`
   - `stg_opendental__claimpayment`
   - `mart_daily_payments`
 - [x] Skip Postgres ETL tracking hooks on Snowflake target
-- [ ] Fix any Postgres-only SQL/macros that break on Snowflake for these models
-- [ ] Run: `mdc dbt invoke --env snowflake -- build --select tag:snowflake`
+- [x] Wave 1 cone dialect fixes: Snowflake `transform_id_columns`; `mart_daily_payments` aggregates without Postgres `FILTER`
+- [x] `mdc dbt invoke --env snowflake -- build --select tag:snowflake` → `PASS=76 WARN=1 ERROR=0` (2026-09-30)
+- [x] Wave 1 test scope: relationship tests to models outside the wave, and `not_null` on `claimpayment.payment_type_id` / `sec_user_num_entry`, are enabled only when `target.type != 'snowflake'`. `bank_branch` stays `severity: warn`
 
-**Exit criteria:** `mart_daily_payments` builds on Snowflake; basic tests pass.
+**Exit criteria:** `mart_daily_payments` builds on Snowflake from the live `RAW` landing; tests in the Wave 1 scope pass. Met.
 
 ### Phase 4 — Parity proof
 
-- [ ] Compare `mart_daily_payments` on demo Postgres vs Snowflake for 2–3 sample dates (totals + counts)
-- [ ] Document results in this folder (short validation note)
-- [ ] Note known dialect / type differences if any
+- [x] Compare `mart_daily_payments` on demo Postgres vs Snowflake (`net_collections_amount`, `payment_count`) via [`scripts/snowflake/compare_mart_daily_payments.py`](../../scripts/snowflake/compare_mart_daily_payments.py). Exit 0 on 2026-09-30 for local demo and for the EC2 tunnel: all 61 dates match
+- [x] Results recorded here and in `TODO.md` (sample: 2025-11-13 `45473.55` / 372; 2025-12-13 `83152.80` / 401; 2026-01-12 `39676.25` / 334)
+- [x] Known type difference: summing `double precision` payment amounts diverged by cents to a few dollars. Staging now casts `PayAmt`, `MerchantFee`, and `CheckAmt` to `numeric(18, 2)` before the mart sums them
 
-**Exit criteria:** Collections totals match within agreed tolerance (same spirit as KPI registry: tight $/%).
+**Exit criteria:** Collections totals match within agreed tolerance (same spirit as KPI registry: tight $/%). Met — exact cents on every date.
 
 ### Phase 5 — Portfolio UI (max visibility)
 
-- [ ] Capability tile on portfolio home (`Portfolio.tsx` pattern)
-- [ ] Dedicated page (route under `@mdc/portfolio`), including:
-  - Architecture diagram (demo PG → stage/COPY → Snowflake → dbt → mart)
-  - Domain story: payments / net collections
-  - Synthetic-only banner (reuse `SyntheticDataBanner` pattern)
-  - Proof summary (parity note + links)
-  - Cost / RBAC callouts (XS, auto-suspend, roles) — hiring signal
-  - Links to this plan + repo paths
-- [ ] Nav / evidence section entry so the piece is discoverable
+- [x] Capability tile on portfolio home (`Portfolio.tsx` evidence card + Additional Projects)
+- [x] Dedicated page at `/snowflake` (`SnowflakeWarehouse.tsx`): architecture diagram, payments domain, synthetic banner from the portfolio layout, parity table, XS / key-pair / role callouts, links to this plan and the export, parity, and mart files
+- [x] Nav entry in the portfolio drawer and on `/agent-profile`
 
-**Exit criteria:** Live portfolio tile + page on demo frontend; no clinic data exposed.
+**Exit criteria:** Live portfolio tile + page on demo frontend; no clinic data exposed. Code is in `@mdc/portfolio`. The public host updates on the next demo frontend deploy.
 
 ### Phase 6 — Wave 2 payment detail (same domain)
 
@@ -289,8 +306,9 @@ Trial credits (~$400 / ~30 days typical) should cover build + parity if warehous
 | Path | Role |
 |------|------|
 | `docs/snowflake/SNOWFLAKE_INTEGRATION_PLAN.md` | This plan |
+| `docs/snowflake/sql/03_recreate_raw_quoted.sql` | One-time drop of unquoted `RAW` → quoted `"raw"` |
 | `docs/deployment/ENVIRONMENT_FILES.md` | Env file SoT (`dbt_dental_models/.env_snowflake`) |
-| `todo.md` → Tier 4 Snowflake | Roadmap pointer |
+| `TODO.md` → Tier 4 Snowflake | Live checklist |
 | `etl_pipeline/synthetic_data_generator/` | Demo row source (+ `.env_demo` for export) |
 | `dbt_dental_models/.env_snowflake.template` | Snowflake secrets template |
 | `dbt_dental_models/models/marts/mart_daily_payments.sql` | Hero mart |
