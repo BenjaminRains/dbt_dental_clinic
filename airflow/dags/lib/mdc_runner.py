@@ -92,6 +92,44 @@ def parse_dbt_run_summary(stdout: str) -> dict[str, Any]:
     return summary
 
 
+_REGISTRY_FAILURE_MARKERS = (
+    "External connection exception occurred",
+    "ConnectionResetError",
+    "WinError 10054",
+    "Connection aborted",
+    "Max retries exceeded",
+)
+
+
+def dbt_registry_connection_failed(output: str) -> bool:
+    """True when dbt deps failed talking to hub.getdbt.com rather than a package error."""
+    return any(marker in (output or "") for marker in _REGISTRY_FAILURE_MARKERS)
+
+
+def locked_dbt_packages_present(dbt_project_dir: Path) -> bool:
+    """
+    True when every package named in package-lock.yml is already unpacked.
+
+    dbt deps always calls the Hub even when dbt_packages is complete. A TLS reset
+    to hub.getdbt.com should not block build/publish if those packages are on disk.
+    """
+    lock_path = dbt_project_dir / "package-lock.yml"
+    packages_dir = dbt_project_dir / "dbt_packages"
+    if not lock_path.is_file() or not packages_dir.is_dir():
+        return False
+
+    names: list[str] = []
+    for line in lock_path.read_text(encoding="utf-8").splitlines():
+        stripped = line.strip()
+        if stripped.startswith("name:"):
+            name = stripped.split(":", 1)[1].strip().strip("'\"")
+            if name:
+                names.append(name)
+    if not names:
+        return False
+    return all((packages_dir / name / "dbt_project.yml").is_file() for name in names)
+
+
 def run_mdc(
     mdc_args: list[str],
     *,
