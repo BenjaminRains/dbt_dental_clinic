@@ -331,8 +331,6 @@ def send_notification(**context):
     - WARNING: Changes detected (new tables, updated config)
     - CRITICAL: Breaking changes (removed tables, removed columns)
     """
-    from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-    
     logging.info("Preparing notification")
     
     # Get results from previous tasks
@@ -395,6 +393,8 @@ def send_notification(**context):
     try:
         slack_webhook_url = Variable.get('slack_webhook_url', default=None)
         if slack_webhook_url:
+            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+
             slack = SlackWebhookHook(http_conn_id='slack_webhook')
             slack.send(text=f"{level}\n{message}")
             logging.info("Slack notification sent")
