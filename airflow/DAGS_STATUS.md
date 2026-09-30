@@ -101,9 +101,10 @@ Preflight: WireGuard on; `mdc tunnel clinic-db` (port 5433). See [`NIGHTLY_RUN.m
 ```bash
 copy .env.template .env
 copy etl_pipeline\.env_test.template etl_pipeline\.env_test
-docker-compose build airflow-webserver airflow-scheduler
-docker-compose --profile init run --rm airflow-init
-docker-compose up -d postgres mysql airflow-webserver airflow-scheduler
+docker compose build airflow-api-server airflow-scheduler airflow-dag-processor
+docker compose --profile init run --rm airflow-init
+docker compose up -d postgres mysql airflow-api-server airflow-scheduler airflow-dag-processor
+# UI: http://localhost:8081
 ```
 
 Variables: `etl_environment=test`, `dbt_target=local`, `project_root=/opt/airflow/dbt_dental_clinic`.

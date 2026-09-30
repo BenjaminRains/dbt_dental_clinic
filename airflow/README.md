@@ -183,9 +183,9 @@ Set `AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago` in the environment or `air
 Not used for clinic nightly runs. See `docker-compose.yml` comments and [`DEPLOYMENT_STRATEGY.md`](DEPLOYMENT_STRATEGY.md).
 
 ```bash
-docker-compose --profile init run --rm airflow-init
-docker-compose up -d postgres mysql airflow-webserver airflow-scheduler
-# UI: http://localhost:8080
+docker compose --profile init run --rm airflow-init
+docker compose up -d postgres mysql airflow-api-server airflow-scheduler airflow-dag-processor
+# UI: http://localhost:8081  (8080 stays free for native Airflow on the Windows host)
 ```
 
 ### Production paths (deferred)

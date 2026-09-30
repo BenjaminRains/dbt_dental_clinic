@@ -43,7 +43,7 @@ Docker is **not** the clinic production path. It remains useful for **isolated D
 
 | Role | What Docker does |
 |------|-------------------|
-| **Reproducible lab** | Airflow webserver + scheduler + optional Compose postgres/mysql in one `docker-compose up` |
+| **Reproducible lab** | Linux containers: api-server + scheduler + dag-processor, plus optional Compose postgres/mysql |
 | **Dependency isolation** | Image from `Dockerfile.airflow` + `requirements-airflow.txt` — same deps as native venv |
 | **DAG iteration** | Mount `./airflow/dags`, `./etl_pipeline`, `./dbt_dental_models` without touching clinic env |
 
@@ -52,9 +52,10 @@ Docker does **not** run OpenDental or clinic RDS — only the orchestrator (and 
 **When to use:** Phase A smoke test with `etl_pipeline/.env_test`; trying DAG changes without a native venv. **When not to use:** nightly clinic runs with `.env_clinic` as-is.
 
 ```bash
-docker-compose build airflow-webserver airflow-scheduler
-docker-compose --profile init run --rm airflow-init
-docker-compose up -d postgres mysql airflow-webserver airflow-scheduler
+docker compose build airflow-api-server airflow-scheduler airflow-dag-processor
+docker compose --profile init run --rm airflow-init
+docker compose up -d postgres mysql airflow-api-server airflow-scheduler airflow-dag-processor
+# UI: http://localhost:8081
 ```
 
 Root `/.env` supplies Airflow metadata DB credentials and Fernet key for Compose only. ETL/dbt vars are **not** injected into Airflow containers. See [`docs/deployment/ENVIRONMENT_FILES.md`](../docs/deployment/ENVIRONMENT_FILES.md) §4.4.
