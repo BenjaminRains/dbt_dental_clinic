@@ -1,7 +1,7 @@
 # Airflow Orchestration Roadmap
 
-**Status:** Phase A nearly complete — UI live, both DAGs loaded (paused); smoke test + Phase B next  
-**Last updated:** 2026-06-19  
+**Status:** Phase A closed on the clinic path. Phase B is blocked on native `publish_analytics`. Phase C has not started.  
+**Last updated:** 2026-09-30  
 **Goal:** Move beyond manual ETL pulls (`etl-run` / `mdc etl run`) and manual dbt runs (`run_dbt_on_ec2.ps1`) to scheduled, unattended nightly orchestration.
 
 **Source discussion:** [Airflow wiring review](30475cd5-d66b-42f7-84a3-3ae3466c2e9b) (2026-06-17)
@@ -20,7 +20,7 @@ The **DAG code is largely complete**. What remains is **deployment, environment 
 | Native Windows bootstrap | ✅ Done | `init-airflow-native.ps1`, `start-airflow-native.ps1`, POSIX stubs; two-terminal start |
 | Docker sandbox | ✅ Scaffolded | Optional — `Dockerfile.airflow`, `docker-compose.yml`; **not** used for clinic nightly |
 | Production deployment | 🔄 Option A (dev laptop) | **Native Airflow** (Python venv) + WireGuard VPN; no EC2 orchestrator |
-| End-to-end validation | ⏳ Next | Unpause `etl_pipeline`; manual trigger outside business hours (6 AM–8:59 PM Central blocked) |
+| End-to-end validation | 🔄 Phase B | Clinic nights complete through `dbt build`. `publish_analytics` has not succeeded in the DAG |
 
 ---
 
@@ -191,11 +191,11 @@ The nightly run must execute on a host that can reach **client OpenDental MySQL*
 - [x] Set Airflow Variables: `etl_environment=test`, `dbt_target=local`, `project_root=<repo root>`
 - [x] Windows native bootstrap: POSIX stubs, `run_airflow.py`, scheduler + dag-processor + api-server
 - [x] Confirm DAGs load in UI — `etl_pipeline` + `schema_analysis` visible at http://localhost:8080
-- [ ] **Unpause `etl_pipeline`** in UI (leave `schema_analysis` paused unless testing change reports)
-- [ ] Confirm `etl_pipeline/.env_test` exists; `mdc etl validate --env test --profile full`
-- [ ] Trigger `etl_pipeline` manually **outside** business hours (after 9 PM Central)
-- [ ] Confirm: validation → ETL → Layer 0 → `dbt_build` completes
-- [ ] `pytest airflow/tests/ -v`
+- [x] **Unpause `etl_pipeline`** — scheduled runs fired June–September 2026 (`schema_analysis` stays paused)
+- [x] `etl_pipeline/.env_test` exists. A full green ETL against the tiny test OpenDental database was not pursued; clinic runs are the proof instead
+- [x] Runs **outside** business hours — nightly `0 21 * * *`, including the 2026-09-29 catch-up (started 12:14 AM Central; logical date `scheduled__2026-09-30T02:00:00+00:00`)
+- [x] Clinic nights 2026-07-18, 07-21, 07-22, 08-28, 08-29, 08-30: validation → ETL → Layer 0 → `dbt deps` → `dbt build` completed. dbt tests reported errors (4 on 07-18, 14 on 08-30) and did not fail the task
+- [x] `pytest airflow/tests/ -v` (7 passed 2026-07-15)
 
 **Start commands (Windows, from repo root):**
 
@@ -216,18 +216,21 @@ Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing
 
 - [x] **Decide orchestration host** → Option A (dev machine over VPN)
 - [x] **Env model** → native Airflow; single `etl_pipeline/.env_clinic` (no duplicates, no Compose overrides)
-- [ ] WireGuard auto-connect or pre-run checklist (VPN up before 9 PM)
-- [ ] Set Airflow Variables: `etl_environment=clinic`, `dbt_target=local`, `project_root=<repo root>`
-- [ ] `mdc etl validate --env clinic --profile full` with VPN on
-- [ ] First manual DAG trigger outside business hours; confirm schema refresh (~7 min) → ETL (~25 min) → dbt → publish → notify
-- [ ] SSM tunnel running before publish task (`mdc tunnel clinic-db` → port 5433 open)
+- [ ] WireGuard auto-connect or a written pre-run checklist (VPN is still manual)
+- [x] Airflow Variables on the clinic nights: `etl_environment=clinic`, `dbt_target=local`, `publish_environment=clinic`, `project_root=<repo root>`
+- [x] Clinic connection check — 2026-09-29 DAG `validate_database_connections` succeeded
+- [x] Schema refresh → ETL → `dbt build` on the July/August clinic nights above. `send_completion_notification` returned success on those runs; that did not mean publish succeeded
+- [ ] **`publish_analytics` on native Windows.** July/August attempts ran in Compose (`/home/airflow/.local/bin/mdc`, cwd `/opt/airflow/dbt_dental_clinic`) and failed both retries: `Publish script not found: scripts/publish/publish_analytics_to_rds.ps1`. The 2026-09-29 native run stopped at `dbt deps` (Hub TLS reset, `WinError 10054`) and never started publish
+- [ ] SSM tunnel confirmed by a successful publish task. `--ensure-tunnel` has not completed inside the DAG
+
+**Next step:** one native after-hours run, not Compose. WireGuard up, scheduler + dag-processor + api-server running, `etl_pipeline` unpaused, and `dbt_packages/` already installed (done 2026-09-30). Success is `publish_analytics` using the Windows `mdc` and finishing `publish_analytics_to_rds.ps1` over the SSM tunnel. Do not run between 6 AM and 8:59 PM Central.
 
 ### Phase C — Production cutover on laptop (1 day)
 
-- [ ] Enable nightly schedule (already `0 21 * * *` with `America/Chicago`)
-- [ ] Configure Slack (`slack_webhook_url` Variable) and/or SMTP alerts on failure
-- [ ] Airflow UI (localhost:8080) — no public exposure; laptop-only
-- [ ] Monitor 2–3 consecutive nightly runs (VPN + **tunnel terminal open** + native Airflow up)
+- [x] Nightly schedule is `0 21 * * *` (`America/Chicago`) and has fired when Airflow is up and `etl_pipeline` is unpaused. The 2026-09-29 slot waited until Airflow was started at 12:14 AM Central
+- [ ] Configure Slack (`slack_webhook_url`) and/or SMTP (`smtp_default`). Failure email currently logs `SMTP connection is not found`. The completion task used to crash importing Slack (`aiohttp` missing) even when no webhook was set; that import is deferred on `feature/airflow-phase-c`
+- [x] Airflow UI stays on the laptop (native http://localhost:8080, Compose http://localhost:8081) — no public exposure
+- [ ] Monitor 2–3 consecutive nightly runs that include a **successful native publish** (VPN up, native Airflow up). No such night yet
 - [ ] Document break-glass: manual `mdc etl run`, `mdc dbt run`, `mdc publish analytics`
 - [ ] (Later) Long-lived tunnel Scheduled Task for debugging only — publish auto-starts tunnel by default
 
@@ -258,7 +261,7 @@ Record answers here as they are made.
 
 These are small but prevent confusion:
 
-- [ ] Update placeholder email in DAG `default_args` (`data-team@example.com`)
+- [x] DAG `default_args` email is `rains.bp@gmail.com` (placeholder removed). `email_on_failure` still needs an `smtp_default` connection before mail is delivered
 - [ ] Confirm `project_root` Variable works on EC2 without code changes (already supported)
 - [x] Windows native start scripts (`init-airflow-native.ps1`, `start-airflow-native.ps1`, POSIX stubs)
 - [x] Align `scripts/airflow/init-airflow.sh` with root `.env` (was `config/.env`)
@@ -268,7 +271,7 @@ These are small but prevent confusion:
 
 ## Related TODO items
 
-- **Fix EC2 dbt Database Connection Credentials** — blocks dbt on EC2/RDS from Airflow or manual runs
+- **Fix EC2 dbt Database Connection Credentials** — shipped 2026-07-09 (live Secrets Manager password). Not a blocker for Option A laptop nightly
 - **Optimize mart_patient_retention Performance** — affects nightly dbt duration if using full `dbt build`
 - **Client deployment Phase 3** — schema-based multi-tenancy may affect ETL routing later
 
