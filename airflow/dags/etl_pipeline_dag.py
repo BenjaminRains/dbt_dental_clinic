@@ -41,7 +41,13 @@ from airflow.providers.standard.operators.python import (
 from airflow.exceptions import AirflowException, AirflowSkipException
 from airflow.task.trigger_rule import TriggerRule
 
-from lib.mdc_runner import parse_dbt_run_summary, run_mdc, run_mdc_etl_invoke
+from lib.mdc_runner import (
+    dbt_registry_connection_failed,
+    locked_dbt_packages_present,
+    parse_dbt_run_summary,
+    run_mdc,
+    run_mdc_etl_invoke,
+)
 
 # Default arguments for all tasks
 default_args = {
@@ -108,8 +114,31 @@ def _run_mdc_cmd(
 
 
 def run_dbt_deps(**context):
-    """Install dbt packages via mdc (loads dbt env for DBT_TARGET)."""
-    _run_mdc_cmd(['dbt', 'invoke', '--env', DBT_TARGET, '--', 'deps'])
+    """
+    Install dbt packages via mdc (loads dbt env for DBT_TARGET).
+
+    hub.getdbt.com TLS resets (WinError 10054) must not skip dbt build and
+    publish when package-lock.yml packages are already in dbt_packages.
+    """
+    result = _run_mdc_cmd(
+        ['dbt', 'invoke', '--env', DBT_TARGET, '--', 'deps'],
+        check=False,
+    )
+    if result.returncode == 0:
+        return True
+
+    combined = (result.stdout or "") + "\n" + (result.stderr or "")
+    if dbt_registry_connection_failed(combined) and locked_dbt_packages_present(DBT_PROJECT_DIR):
+        logging.warning(
+            "dbt deps could not reach the package registry (exit %s). "
+            "Locked packages are already in dbt_packages; continuing to dbt build and publish.",
+            result.returncode,
+        )
+        return "deps_skipped_registry_unavailable"
+
+    raise AirflowException(
+        f"mdc command failed (exit {result.returncode}): dbt deps"
+    )
 
 
 def run_dbt_build(**context):
@@ -727,10 +756,9 @@ def send_completion_notification(**context):
     - Processing statistics
     - Failed tables (if any)
     - dbt test summary (errors noted, do not fail the run)
+    - Whether dbt and publish actually finished
     - Recommendations
     """
-    from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-    
     logging.info("Sending pipeline completion notification")
     
     try:
@@ -738,7 +766,7 @@ def send_completion_notification(**context):
         ti = context['task_instance']
         report = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_report')
         pipeline_success = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_success')
-        dbt_tests = ti.xcom_pull(task_ids='dbt_build.dbt_build', key='dbt_test_summary') or {}
+        dbt_tests = ti.xcom_pull(task_ids='dbt_build.dbt_build', key='dbt_test_summary')
         
         if not report:
             logging.warning("No report available for notification")
@@ -748,10 +776,20 @@ def send_completion_notification(**context):
         total_processed = report['processing_results']['total_processed']
         total_success = report['processing_results']['total_success']
         total_failed = report['processing_results']['total_failed']
+        dbt_tests = dbt_tests or {}
+        dbt_finished = bool(dbt_tests)
         dbt_test_errors = int(dbt_tests.get('error') or 0)
         dbt_test_warns = int(dbt_tests.get('warn') or 0)
+        publish_configured = bool((PUBLISH_ENVIRONMENT or '').strip())
+        publish_ok = ti.xcom_pull(task_ids='publish_analytics', key='publish_success')
         
-        if pipeline_success and dbt_test_errors == 0:
+        if pipeline_success and not dbt_finished:
+            level = "⚠️  ETL OK, DBT DID NOT FINISH"
+            status = "ETL succeeded; dbt build did not finish, so publish did not run"
+        elif pipeline_success and publish_configured and not publish_ok:
+            level = "⚠️  DBT OK, PUBLISH DID NOT FINISH"
+            status = "ETL and dbt finished; publish to clinic RDS did not"
+        elif pipeline_success and dbt_test_errors == 0:
             level = "✅ SUCCESS"
             status = "completed successfully"
         elif pipeline_success and dbt_test_errors > 0:
@@ -806,17 +844,24 @@ def send_completion_notification(**context):
         if report['configuration']['schema_drift_detected']:
             message += f"\n⚠️  Schema drift detected. Recommend running Schema Analysis DAG.\n"
 
-        publish_ok = ti.xcom_pull(task_ids='publish_analytics', key='publish_success')
         if publish_ok:
             message += "\n✅ Analytics published to clinic RDS.\n"
+        elif publish_configured:
+            message += "\n⚠️  Publish did not complete. Clinic RDS marts were not updated.\n"
+        if pipeline_success and not dbt_finished:
+            message += "\n⚠️  dbt deps/build did not finish. Local marts were not rebuilt.\n"
         
         # Log message
         logging.info(f"\n{level}\n{message}")
         
-        # Send Slack notification if configured
+        # Import only when a webhook is set. The provider imports aiohttp at
+        # module load, which is not installed in .venv-airflow and was failing
+        # this task before the message was logged.
         try:
             slack_webhook_url = Variable.get('slack_webhook_url', default=None)
             if slack_webhook_url:
+                from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+
                 slack = SlackWebhookHook(http_conn_id='slack_webhook')
                 slack.send(text=f"{level}\n{message}")
                 logging.info("Slack notification sent")
@@ -1063,7 +1108,13 @@ with dag:
         dbt_deps = PythonOperator(
             task_id='dbt_deps',
             python_callable=run_dbt_deps,
-            doc_md=f"Install dbt package dependencies (mdc dbt invoke --env {DBT_TARGET}).",
+            doc_md=f"""
+            Install dbt package dependencies (`mdc dbt invoke --env {DBT_TARGET} -- deps`).
+
+            If hub.getdbt.com resets the connection and every package in
+            `package-lock.yml` is already under `dbt_packages/`, the task warns
+            and continues so `dbt build` and publish still run.
+            """,
         )
         dbt_build = PythonOperator(
             task_id='dbt_build',

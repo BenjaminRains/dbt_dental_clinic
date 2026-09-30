@@ -140,6 +140,9 @@ models:
           - relationships:
               to: ref('stg_opendental__payment')
               field: payment_id
+              config:
+                # int_payment_split is not on Snowflake in Wave 1; selected only because it refs payment.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: patient_id
         description: |

@@ -40,6 +40,7 @@ import {
     OpenInNew,
     ArrowForward,
     Verified,
+    AcUnit,
 } from '@mui/icons-material';
 
 const GITHUB = 'https://github.com/BenjaminRains/dbt_dental_clinic';
@@ -161,6 +162,14 @@ const PRODUCTION_CAPABILITIES: CapabilityLink[] = [
         icon: <Verified />,
         href: '/kpi-validation',
         linkLabel: 'Validation methodology',
+        external: false,
+    },
+    {
+        title: 'Snowflake payments warehouse',
+        desc: 'Same dbt project on an XS Snowflake warehouse. Daily net collections match the synthetic demo on every date.',
+        icon: <AcUnit />,
+        href: '/snowflake',
+        linkLabel: 'Warehouse write-up',
         external: false,
     },
 ];
@@ -522,6 +531,19 @@ const PortfolioV4: React.FC = () => {
                                 </Box>
                                 <Typography variant="body2" color="text.secondary">
                                     SQLAlchemy introspection across 450+ tables—tables.yml generation and drift detection.
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <Card component={RouterLink} to="/snowflake" variant="outlined" sx={{ height: '100%', textDecoration: 'none', color: 'inherit', display: 'block', '&:hover': { boxShadow: 3 } }}>
+                            <CardContent>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                    <AcUnit sx={{ color: '#5e7086' }} />
+                                    <Typography variant="subtitle2" fontWeight="bold">Snowflake Warehouse</Typography>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    Dual-warehouse dbt for daily payments. Synthetic demo only; totals match Postgres.
                                 </Typography>
                             </CardContent>
                         </Card>

@@ -161,6 +161,8 @@ models:
               config:
                 severity: error
                 description: "Payment ID must reference valid source payment record for data integrity"
+                # fact_payment is Wave 2; this test is selected in Wave 1 because it refs payment.
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: patient_id
         description: >

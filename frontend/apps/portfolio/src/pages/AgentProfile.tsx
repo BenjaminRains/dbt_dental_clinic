@@ -187,7 +187,7 @@ Parallel pipeline – Consult Audio Whisper Pipeline:
                     7. Key Skills in Practice
                 </Typography>
                 <Typography variant="body1" component="ul" sx={{ pl: 3 }}>
-                    <li>Data Engineering: dbt, SQL, PostgreSQL, MySQL, ELT/ETL, dimensional modeling</li>
+                    <li>Data Engineering: dbt, SQL, PostgreSQL, Snowflake, MySQL, ELT/ETL, dimensional modeling</li>
                     <li>Core Technologies: Python, TypeScript, SQLAlchemy, FastAPI, React</li>
                     <li>Analytics &amp; Frontend: Material-UI, Recharts, Zustand, dashboard design and KPIs</li>
                     <li>Tools &amp; Cloud: AWS, Docker, Git, CI/CD, Airflow, environment management automation</li>
@@ -210,6 +210,12 @@ Parallel pipeline – Consult Audio Whisper Pipeline:
                         KPI Validation showcase:{' '}
                         <Link href="https://dbtdentalclinic.com/kpi-validation" target="_blank" rel="noopener noreferrer">
                             https://dbtdentalclinic.com/kpi-validation
+                        </Link>
+                    </li>
+                    <li>
+                        Snowflake payments warehouse:{' '}
+                        <Link href="https://dbtdentalclinic.com/snowflake" target="_blank" rel="noopener noreferrer">
+                            https://dbtdentalclinic.com/snowflake
                         </Link>
                     </li>
                     <li>
