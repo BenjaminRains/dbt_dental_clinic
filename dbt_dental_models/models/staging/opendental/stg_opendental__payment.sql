@@ -22,8 +22,8 @@ renamed_columns as (
 
         -- Payment details
         "PayDate" as payment_date,
-        "PayAmt"::double precision as payment_amount,
-        coalesce("MerchantFee", 0.0)::double precision as merchant_fee,
+        "PayAmt"::numeric(18, 2) as payment_amount,
+        coalesce("MerchantFee", 0)::numeric(18, 2) as merchant_fee,
         nullif(trim("CheckNum"), '') as check_number,
         nullif(trim("BankBranch"), '') as bank_branch,
         nullif(trim("ExternalId"), '') as external_id,

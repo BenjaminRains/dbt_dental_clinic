@@ -49,6 +49,19 @@ Table lists: [`export_tables.yml`](export_tables.yml) (add waves as the warehous
 The script **refuses** clinic / analytics database names. Source DB must match
 `opendental_demo*`.
 
+## Parity: demo Postgres vs Snowflake
+
+Compares `mart_daily_payments` (`net_collections_amount`, `payment_count`) for every payment date.
+Default Postgres is the EC2 database through the tunnel (`localhost:5434`). `--source local` uses `.env_demo` (usually port 5432).
+
+```powershell
+mdc tunnel demo-db
+python scripts/snowflake/compare_mart_daily_payments.py
+python scripts/snowflake/compare_mart_daily_payments.py --source local
+```
+
+Exit 0 when every date matches. Exit 1 lists the dates that differ.
+
 ## Then dbt
 
 ```powershell

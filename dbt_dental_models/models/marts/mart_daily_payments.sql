@@ -70,12 +70,12 @@ insurance_daily as (
     select
         check_date::date as payment_date,
 
-        round(coalesce(sum(check_amount::numeric), 0), 2) as insurance_payment_amount,
+        round(coalesce(sum(check_amount::numeric(18, 2)), 0), 2) as insurance_payment_amount,
 
-        round(coalesce(sum(case when check_amount > 0 then check_amount::numeric end), 0), 2)
+        round(coalesce(sum(case when check_amount > 0 then check_amount::numeric(18, 2) end), 0), 2)
             as insurance_income_amount,
 
-        round(coalesce(sum(case when check_amount < 0 then check_amount::numeric end), 0), 2)
+        round(coalesce(sum(case when check_amount < 0 then check_amount::numeric(18, 2) end), 0), 2)
             as insurance_refund_amount,
 
         count(*) as insurance_payment_count

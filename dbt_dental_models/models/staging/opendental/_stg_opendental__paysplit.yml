@@ -224,6 +224,8 @@ models:
               field: payment_id
               config:
                 severity: warn
+                # paysplit is not built on Snowflake in Wave 1, but this test is selected because it refs payment.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: patient_id
         description: "Foreign key to the patient associated with this payment split (maps to PatNum in OpenDental)"

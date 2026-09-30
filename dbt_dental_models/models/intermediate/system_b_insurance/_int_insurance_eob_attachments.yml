@@ -22,6 +22,8 @@ models:
               field: claim_payment_id
               config:
                 severity: warn
+                # int_insurance_eob_attachments is not on Snowflake in Wave 1; selected only because it refs claimpayment.
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: file_name
         description: Name of the attached file
