@@ -102,7 +102,7 @@ def mock_postgres_loader_instance():
     
     mock_loader.get_table_config = MagicMock(side_effect=get_table_config_side_effect)
     mock_loader.target_schema = 'raw'  # Used by query building methods
-    mock_loader._update_load_status = MagicMock(return_value=True)
+    mock_loader._update_load_status_timestamp_only = MagicMock(return_value=True)
     mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
     mock_loader.load_table = MagicMock(return_value=(True, {}))
     

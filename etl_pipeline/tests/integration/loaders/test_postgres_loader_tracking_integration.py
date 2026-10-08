@@ -51,7 +51,7 @@ class TestPostgresLoaderTrackingIntegration:
             created = loader._ensure_tracking_record_exists('test_table')
             
             # Act - Update tracking record with primary column value using hybrid method
-            updated = loader._update_load_status_hybrid(
+            updated = loader._update_load_status_with_primary_value(
                 'test_table', 1000,
                 load_status='success',
                 last_primary_value='2024-01-01 00:00:00',
@@ -151,7 +151,7 @@ class TestPostgresLoaderTrackingIntegration:
             created = loader._ensure_tracking_record_exists('test_table')
             
             # Act - Update tracking record
-            updated = loader._update_load_status_hybrid(
+            updated = loader._update_load_status_with_primary_value(
                 'test_table', 500,
                 load_status='success',
                 last_primary_value='2024-01-01 00:00:00',
@@ -159,7 +159,7 @@ class TestPostgresLoaderTrackingIntegration:
             )
             
             # Act - Update again with different values
-            updated_again = loader._update_load_status_hybrid(
+            updated_again = loader._update_load_status_with_primary_value(
                 'test_table', 1000,
                 load_status='success',
                 last_primary_value='2024-01-02 00:00:00',
@@ -187,7 +187,7 @@ class TestPostgresLoaderTrackingIntegration:
             created = loader._ensure_tracking_record_exists('test_table')
             
             # Act - Update with failure status
-            failed = loader._update_load_status_hybrid(
+            failed = loader._update_load_status_with_primary_value(
                 'test_table', 0,
                 load_status='failed',
                 primary_column_name='DateTStamp'

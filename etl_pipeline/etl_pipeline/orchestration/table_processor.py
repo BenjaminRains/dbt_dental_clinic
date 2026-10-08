@@ -627,8 +627,8 @@ class TableProcessor:
                     schema_adapter=schema_adapter,
                 )
                 
-                # Use _update_load_status_hybrid for tracking with primary column values
-                success = loader._update_load_status_hybrid(
+                # Use _update_load_status_with_primary_value for tracking with primary column values
+                success = loader._update_load_status_with_primary_value(
                     table_name=table_name,
                     rows_loaded=rows_processed,
                     load_status=status,
@@ -744,8 +744,8 @@ class TableProcessor:
                     return self._impl._check_analytics_needs_updating(table_name)
 
                 def _update_load_status(self, table_name: str, rows_loaded: int, load_status: str, last_primary_value=None, primary_column_name=None):
-                    # Delegate to loader's standard updater (preserves 0-row timestamp behavior)
-                    return self._impl._update_load_status(table_name, rows_loaded, load_status)
+                    # Adapter name stays for compatibility. The impl method is timestamp-only.
+                    return self._impl._update_load_status_timestamp_only(table_name, rows_loaded, load_status)
 
                 def load_table(self, table_name: str, force_full: bool = False):
                     return self._impl.load_table(table_name, force_full)
