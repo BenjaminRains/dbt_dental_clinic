@@ -114,7 +114,7 @@ class TestConfigReaderIntegration:
         for table_name, config in tables.items():
             assert isinstance(config, dict), f"Table config for {table_name} should be dict"
             assert 'extraction_strategy' in config, f"Missing extraction_strategy for {table_name}"
-            assert 'table_importance' in config, f"Missing table_importance for {table_name}"
+            assert 'sync_profile' in config, f"Missing sync_profile for {table_name}"
             assert 'batch_size' in config, f"Missing batch_size for {table_name}"
 
     @pytest.mark.integration
@@ -147,15 +147,16 @@ class TestConfigReaderIntegration:
             if config:  # Table exists in configuration
                 # Validate ETL-specific configuration fields
                 assert 'extraction_strategy' in config, f"Missing extraction_strategy for {table_name}"
-                assert 'table_importance' in config, f"Missing table_importance for {table_name}"
+                assert 'sync_profile' in config, f"Missing sync_profile for {table_name}"
+                assert 'primary_incremental_column' in config, f"Missing primary_incremental_column for {table_name}"
                 assert 'batch_size' in config, f"Missing batch_size for {table_name}"
                 assert 'estimated_size_mb' in config, f"Missing estimated_size_mb for {table_name}"
                 
                 # Validate configuration values
                 assert config['extraction_strategy'] in ['incremental', 'full_table', 'incremental_chunked'], \
                     f"Invalid extraction_strategy for {table_name}: {config['extraction_strategy']}"
-                assert config['table_importance'] in ['important', 'audit', 'standard'], \
-                    f"Invalid table_importance for {table_name}: {config['table_importance']}"
+                assert config['sync_profile'] in ['append_only', 'in_place_updates'], \
+                    f"Invalid sync_profile for {table_name}: {config['sync_profile']}"
                 assert isinstance(config['batch_size'], int), \
                     f"batch_size should be int for {table_name}: {type(config['batch_size'])}"
                 assert config['batch_size'] > 0, \
@@ -382,7 +383,7 @@ class TestConfigReaderIntegration:
         
         # Validate summary structure
         required_fields = [
-            'total_tables', 'importance_levels', 'extraction_strategies',
+            'total_tables', 'extraction_strategies',
             'size_ranges', 'monitored_tables', 'modeled_tables', 'last_loaded'
         ]
         
@@ -391,7 +392,6 @@ class TestConfigReaderIntegration:
         
         # Validate summary values
         assert summary['total_tables'] > 0, "Should have at least one table"
-        assert isinstance(summary['importance_levels'], dict), "importance_levels should be dict"
         assert isinstance(summary['extraction_strategies'], dict), "extraction_strategies should be dict"
         assert isinstance(summary['size_ranges'], dict), "size_ranges should be dict"
         assert summary['monitored_tables'] >= 0, "monitored_tables should be non-negative"
@@ -406,7 +406,6 @@ class TestConfigReaderIntegration:
         # Log summary for monitoring
         print(f"Configuration Summary:")
         print(f"  Total tables: {summary['total_tables']}")
-        print(f"  Importance levels: {summary['importance_levels']}")
         print(f"  Extraction strategies: {summary['extraction_strategies']}")
         print(f"  Size ranges: {summary['size_ranges']}")
         print(f"  Monitored tables: {summary['monitored_tables']}")
@@ -437,7 +436,7 @@ class TestConfigReaderIntegration:
         
         # Validate issues structure
         required_issue_types = [
-            'missing_batch_size', 'missing_extraction_strategy', 'missing_importance',
+            'missing_batch_size', 'missing_extraction_strategy',
             'invalid_batch_size', 'large_tables_without_monitoring'
         ]
         
@@ -595,7 +594,7 @@ class TestConfigReaderIntegration:
             # Validate ETL-specific configuration fields
             assert 'extraction_strategy' in patient_config, "Missing extraction_strategy for ETL"
             assert 'batch_size' in patient_config, "Missing batch_size for ETL"
-            assert 'table_importance' in patient_config, "Missing table_importance for ETL"
+            assert 'sync_profile' in patient_config, "Missing sync_profile for ETL"
         
         # Test PipelineOrchestrator integration pattern
         # ConfigReader should support dependency resolution
@@ -657,14 +656,14 @@ class TestConfigReaderIntegration:
                 
                 # Validate dental clinic specific configuration patterns
                 assert 'extraction_strategy' in config, f"Missing extraction_strategy for {table_name}"
-                assert 'table_importance' in config, f"Missing table_importance for {table_name}"
+                assert 'sync_profile' in config, f"Missing sync_profile for {table_name}"
                 assert 'batch_size' in config, f"Missing batch_size for {table_name}"
                 
                 # Validate dental clinic specific values
                 assert config['extraction_strategy'] in ['incremental', 'full_table', 'incremental_chunked'], \
                     f"Invalid extraction_strategy for {table_name}"
-                assert config['table_importance'] in ['important', 'audit', 'standard'], \
-                    f"Invalid table_importance for {table_name}"
+                assert config['sync_profile'] in ['append_only', 'in_place_updates'], \
+                    f"Invalid sync_profile for {table_name}"
                 assert config['batch_size'] > 0, f"Invalid batch_size for {table_name}"
         
         # Validate that we found some dental clinic tables

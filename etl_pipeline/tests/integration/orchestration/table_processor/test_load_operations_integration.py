@@ -96,12 +96,21 @@ class TestTableProcessorLoadOperationsIntegration:
             assert hasattr(table_processor, '_load_to_analytics')
             
             # Validate PostgresLoader can be imported and initialized
-            loader = PostgresLoader()
+            from etl_pipeline.core.postgres_schema import PostgresSchema as PostgresSchemaAdapter
+            from etl_pipeline.config import PostgresSchema as ConfigPostgresSchema
+            loader = PostgresLoader(
+                replication_engine=ConnectionFactory.get_replication_connection(test_settings_with_file_provider),
+                analytics_engine=ConnectionFactory.get_analytics_raw_connection(test_settings_with_file_provider),
+                settings=test_settings_with_file_provider,
+                schema_adapter=PostgresSchemaAdapter(
+                    postgres_schema=ConfigPostgresSchema.RAW,
+                    settings=test_settings_with_file_provider,
+                ),
+            )
             assert loader is not None
             
             # Validate database connections for load operations
             # Note: PostgresLoader handles its own connections using Settings injection
-            from etl_pipeline.core.connections import ConnectionFactory
             analytics_engine = ConnectionFactory.get_analytics_raw_connection(test_settings_with_file_provider)
             assert analytics_engine is not None
             
@@ -149,7 +158,7 @@ class TestTableProcessorLoadOperationsIntegration:
                     logger.info(f"Using standard loading for {table_name} ({context.estimated_size_mb}MB)")
                     
                     # Perform load operation
-                    success = table_processor._load_to_analytics(table_name, force_full=False)
+                    success, _metadata = table_processor._load_to_analytics(table_name, force_full=False)
                     
                     # Validate load operation
                     assert success is True, f"Standard load operation failed for {table_name}"
@@ -205,7 +214,7 @@ class TestTableProcessorLoadOperationsIntegration:
                     batch_size = context.config.get('batch_size', 5000)
                     
                     # Perform chunked load operation
-                    success = table_processor._load_to_analytics(table_name, force_full=False)
+                    success, _metadata = table_processor._load_to_analytics(table_name, force_full=False)
                     
                     # Validate load operation
                     assert success is True, f"Chunked load operation failed for {table_name}"
@@ -261,7 +270,7 @@ class TestTableProcessorLoadOperationsIntegration:
                     conn.commit()
                 
                 # Perform load operation with force full
-                success = table_processor._load_to_analytics(table_name, force_full=True)
+                success, _metadata = table_processor._load_to_analytics(table_name, force_full=True)
                 
                 # Validate load operation
                 assert success is True, f"Full refresh load operation failed for {table_name}"
@@ -313,7 +322,7 @@ class TestTableProcessorLoadOperationsIntegration:
                 
                 # Perform load operation and measure performance
                 start_time = time.time()
-                success = table_processor._load_to_analytics(table_name, force_full=False)
+                success, _metadata = table_processor._load_to_analytics(table_name, force_full=False)
                 end_time = time.time()
                 
                 # Validate load operation success
@@ -371,7 +380,7 @@ class TestTableProcessorLoadOperationsIntegration:
             invalid_table = 'invalid_table_that_does_not_exist'
             logger.info(f"Testing error handling for invalid table: {invalid_table}")
             
-            success = table_processor._load_to_analytics(invalid_table, force_full=False)
+            success, _metadata = table_processor._load_to_analytics(invalid_table, force_full=True)
             
             # Validate error handling
             assert success is False, "Should fail for invalid table"
@@ -383,7 +392,7 @@ class TestTableProcessorLoadOperationsIntegration:
             unknown_table = 'unknown_table_without_config'
             logger.info(f"Testing error handling for table without config: {unknown_table}")
             
-            success = table_processor._load_to_analytics(unknown_table, force_full=False)
+            success, _metadata = table_processor._load_to_analytics(unknown_table, force_full=True)
             
             # Validate error handling
             assert success is False, "Should fail for table without configuration"
@@ -434,7 +443,7 @@ class TestTableProcessorLoadOperationsIntegration:
                     conn.commit()
                 
                 # Perform load operation
-                success = table_processor._load_to_analytics(table_name, force_full=False)
+                success, _metadata = table_processor._load_to_analytics(table_name, force_full=False)
                 
                 # Validate load operation success
                 assert success is True, f"Load operation failed for {table_name}"
@@ -505,7 +514,7 @@ class TestTableProcessorLoadOperationsIntegration:
                 expected_strategy = 'chunked' if expected_size_mb >= 100 else 'standard'
                 
                 # Perform load operation
-                success = table_processor._load_to_analytics(table_name, force_full=False)
+                success, _metadata = table_processor._load_to_analytics(table_name, force_full=False)
                 
                 # Validate load operation success
                 assert success is True, f"Load operation failed for {table_name}"
@@ -575,7 +584,7 @@ class TestTableProcessorLoadOperationsIntegration:
                                f"{estimated_size_mb}MB <= 100MB, batch_size={batch_size}")
                 
                 # Perform load operation
-                success = table_processor._load_to_analytics(table_name, force_full=False)
+                success, _metadata = table_processor._load_to_analytics(table_name, force_full=False)
                 
                 # Validate load operation success
                 assert success is True, f"Load operation failed for {table_name}"
