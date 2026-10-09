@@ -50,7 +50,7 @@ class TestPostgresLoaderTrackingIntegration:
             # Act - Create tracking record
             created = loader._ensure_tracking_record_exists('test_table')
             
-            # Act - Update tracking record with primary column value using hybrid method
+            # Act - Update tracking record with the primary-value load-status method
             updated = loader._update_load_status_with_primary_value(
                 'test_table', 1000,
                 load_status='success',

@@ -743,8 +743,7 @@ class TableProcessor:
                 def _check_analytics_needs_updating(self, table_name: str):
                     return self._impl._check_analytics_needs_updating(table_name)
 
-                def _update_load_status(self, table_name: str, rows_loaded: int, load_status: str, last_primary_value=None, primary_column_name=None):
-                    # Adapter name stays for compatibility. The impl method is timestamp-only.
+                def _update_load_status_timestamp_only(self, table_name: str, rows_loaded: int, load_status: str):
                     return self._impl._update_load_status_timestamp_only(table_name, rows_loaded, load_status)
 
                 def load_table(self, table_name: str, force_full: bool = False):

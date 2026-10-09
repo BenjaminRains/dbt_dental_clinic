@@ -1263,7 +1263,7 @@ class PostgresLoader:
                 self._update_load_status_timestamp_only(
                     table_name=table_name,
                     rows_loaded=load_result.rows_loaded,
-                    status='success' if load_result.success else 'failed'
+                    load_status='success' if load_result.success else 'failed'
                 )
             
             # ============================================================
@@ -2371,7 +2371,7 @@ class PostgresLoader:
             logger.error(f"Error updating load status with primary value for {table_name}: {str(e)}")
             return False
     
-    def _update_load_status_timestamp_only(self, table_name: str, rows_loaded: int, status: str):
+    def _update_load_status_timestamp_only(self, table_name: str, rows_loaded: int, load_status: str):
         """
         Update load status with a timestamp-only strategy.
 
@@ -2395,7 +2395,7 @@ class PostgresLoader:
                     """), {
                         "table_name": table_name,
                         "rows_loaded": rows_loaded,
-                        "load_status": status
+                        "load_status": load_status
                     })
                     conn.commit()
                 else:
@@ -2417,7 +2417,7 @@ class PostgresLoader:
                     """), {
                         "table_name": table_name,
                         "rows_loaded": rows_loaded,
-                        "load_status": status
+                        "load_status": load_status
                     })
                     conn.commit()
             return True
