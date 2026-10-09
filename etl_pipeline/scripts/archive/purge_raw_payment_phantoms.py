@@ -1,5 +1,8 @@
 #!/usr/bin/env python3
-"""Remove payment rows from raw when confirmed deleted in OpenDental (phantom cleanup)."""
+"""ARCHIVED. Use etl_pipeline/scripts/purge_raw_phantoms.py with table name payment.
+
+Remove payment rows from raw when confirmed deleted in OpenDental (phantom cleanup).
+"""
 from __future__ import annotations
 
 import argparse

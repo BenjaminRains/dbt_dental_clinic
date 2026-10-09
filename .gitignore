@@ -226,6 +226,9 @@ TODO.md
 # Legacy portfolio assets at repo root (do not ignore frontend/apps/portfolio)
 /portfolio/
 
+# Workload sampler output (scripts/utils/monitor_workflow.ps1)
+/workload_monitor_logs/
+
 # any log files:
 *.log
 *.log.*

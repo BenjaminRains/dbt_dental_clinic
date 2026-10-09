@@ -1,3 +1,4 @@
+# ARCHIVED. One-time demo IAM tightening. Path: scripts/archive/detach_demo_role_secrets_manager.ps1
 # Detach the broad SecretsManagerReadWrite policy from the demo API role (dental-clinic-api-role).
 # Optionally add a narrow inline policy that allows GetSecretValue only on a specific secret.
 #

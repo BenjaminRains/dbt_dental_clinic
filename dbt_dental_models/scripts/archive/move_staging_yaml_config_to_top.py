@@ -1,4 +1,7 @@
-"""Move model-level config blocks to immediately after the model name line."""
+"""ARCHIVED. One-time migration, finished 2026-07-10.
+
+Move model-level config blocks to immediately after the model name line.
+"""
 from __future__ import annotations
 
 import re

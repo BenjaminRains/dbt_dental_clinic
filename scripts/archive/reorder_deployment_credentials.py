@@ -1,3 +1,7 @@
+"""ARCHIVED. Wrote deployment_credentials_ordered.json, which nothing read.
+
+Canonical credentials file: deployment_credentials.json
+"""
 import json
 from pathlib import Path
 

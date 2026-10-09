@@ -1,4 +1,7 @@
-"""Migrate stg_opendental SQL {{ config() }} into YAML model config, then strip SQL config."""
+"""ARCHIVED. One-time migration, finished 2026-07-10.
+
+Migrate stg_opendental SQL {{ config() }} into YAML model config, then strip SQL config.
+"""
 from __future__ import annotations
 
 import re

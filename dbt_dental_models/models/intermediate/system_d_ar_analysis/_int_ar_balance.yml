@@ -498,7 +498,7 @@ models:
               Carrier name must be present when claim exists.
               Note: This is a known data quality issue where some valid claims
               have plan numbers that don't map to carrier records in the system.
-              See stakeholders/insurance_carrier_mapping_issue.md for details.
+              See archive/stakeholders/insurance_carrier_mapping_issue.md for details.
 
     meta:
       business_owners: ["dental_finance_team", "insurance_team"]

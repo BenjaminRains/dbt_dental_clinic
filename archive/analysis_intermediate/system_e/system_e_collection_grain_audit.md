@@ -119,7 +119,7 @@ definition, primary key usage, and potential duplicate data issues.
 
 ## Validation SQL
 
-Validation SQL queries have been provided in the file `analysis/system_e_collection_grain_validation.sql`. These queries should be run in DBeaver to validate the grain, check for duplicates, and verify cross-model relationships.
+Validation SQL queries are in `system_e_collection_grain_validation.sql` in this same folder. These queries should be run in DBeaver to validate the grain, check for duplicates, and verify cross-model relationships.
 
 ## Next Steps
 
