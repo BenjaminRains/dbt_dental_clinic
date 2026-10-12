@@ -5,7 +5,10 @@ from __future__ import annotations
 import json
 import os
 import re
+import secrets
+import subprocess
 from dataclasses import dataclass
+from datetime import date, datetime
 from pathlib import Path
 from typing import Any, Optional
 
@@ -551,6 +554,7 @@ class ClinicEnvSyncResult:
     deployment_credentials_changed: bool
     repaired_json_password: bool
     rds_master_secret_id: Optional[str] = None
+    rotated_on: Optional[str] = None
 
 
 def sync_clinic_env_from_secrets(
@@ -601,9 +605,20 @@ def sync_clinic_env_from_secrets(
             "so the value is the password string only, then re-run: mdc secrets pull clinic"
         )
 
+    rotated_on = None
+    if rds_master_secret_id:
+        rotated_on = fetch_secret_last_rotated_on(rds_master_secret_id)
+    if rotated_on:
+        api_changed |= update_dotenv_key(
+            api_env_file, "POSTGRES_ANALYTICS_PASSWORD_ROTATED_ON", rotated_on
+        )
+
     deployment_credentials_changed = False
     if update_deployment_credentials:
-        deployment_credentials_changed = _update_deployment_credentials_clinic_password(secret)
+        deployment_credentials_changed = _update_deployment_credentials_clinic_password(
+            secret,
+            rotated_on=rotated_on,
+        )
 
     return ClinicEnvSyncResult(
         secret=secret,
@@ -611,10 +626,242 @@ def sync_clinic_env_from_secrets(
         deployment_credentials_changed=deployment_credentials_changed,
         repaired_json_password=repaired_json_password,
         rds_master_secret_id=rds_master_secret_id,
+        rotated_on=rotated_on,
     )
 
 
-def _update_deployment_credentials_clinic_password(secret: ClinicAnalyticsSecret) -> bool:
+@dataclass(frozen=True)
+class DemoPasswordCopyResult:
+    api_env_changed: bool
+    deployment_credentials_changed: bool
+    rotated_on: str
+
+
+def calendar_date(raw: str) -> Optional[str]:
+    """Return YYYY-MM-DD from an ISO timestamp or a date string."""
+    text = raw.strip()
+    if not text:
+        return None
+    if text.endswith("Z"):
+        text = text[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(text).date().isoformat()
+    except ValueError:
+        if len(text) >= 10 and text[4] == "-" and text[7] == "-":
+            return text[:10]
+    return None
+
+
+def fetch_secret_last_rotated_on(
+    secret_id: str,
+    *,
+    region: Optional[str] = None,
+) -> Optional[str]:
+    """Read Secrets Manager LastRotatedDate. Returns None when AWS does not have one."""
+    resolved_region = region or clinic_analytics_secret_region()
+    try:
+        payload = _run_aws_json(
+            [
+                "secretsmanager",
+                "describe-secret",
+                "--secret-id",
+                secret_id,
+                "--region",
+                resolved_region,
+                "--output",
+                "json",
+            ]
+        )
+    except RuntimeError:
+        return None
+    raw = payload.get("LastRotatedDate")
+    if not isinstance(raw, str):
+        return None
+    return calendar_date(raw)
+
+
+def write_demo_password_copies(
+    password: str,
+    *,
+    api_env_file: Path,
+    update_deployment_credentials: bool = True,
+    rotated_on: Optional[str] = None,
+) -> DemoPasswordCopyResult:
+    """Write a demo role password into the env file and both JSON copies."""
+    if not password:
+        raise RuntimeError("Refusing to write an empty demo password.")
+    if not api_env_file.is_file():
+        raise RuntimeError(f"Env file not found: {api_env_file}")
+
+    when = rotated_on or date.today().isoformat()
+    api_changed = force_update_dotenv_key(api_env_file, "DEMO_POSTGRES_PASSWORD", password)
+    api_changed |= update_dotenv_key(api_env_file, "DEMO_POSTGRES_PASSWORD_ROTATED_ON", when)
+    credentials_changed = False
+    if update_deployment_credentials:
+        credentials_changed = _update_deployment_credentials_demo_password(
+            password,
+            rotated_on=when,
+        )
+    return DemoPasswordCopyResult(
+        api_env_changed=api_changed,
+        deployment_credentials_changed=credentials_changed,
+        rotated_on=when,
+    )
+
+
+def _update_deployment_credentials_demo_password(
+    password: str,
+    *,
+    rotated_on: str,
+) -> bool:
+    from mdc_cli.paths import DEPLOYMENT_CREDENTIALS
+
+    if not DEPLOYMENT_CREDENTIALS.is_file():
+        return False
+    old_text = DEPLOYMENT_CREDENTIALS.read_text(encoding="utf-8")
+    data = json.loads(old_text)
+    demo = data.get("demo_database")
+    if not isinstance(demo, dict):
+        raise RuntimeError("demo_database is missing from deployment_credentials.json.")
+
+    for leaf_name in ("postgresql", "database_connection"):
+        leaf = demo.get(leaf_name)
+        if not isinstance(leaf, dict):
+            raise RuntimeError(
+                f"demo_database.{leaf_name} is missing from deployment_credentials.json."
+            )
+        leaf["password"] = password
+        leaf["password_rotated_at"] = rotated_on
+
+    new_text = json.dumps(data, indent=4) + "\n"
+    if new_text == old_text:
+        return False
+    DEPLOYMENT_CREDENTIALS.write_text(new_text, encoding="utf-8")
+    return True
+
+
+def generate_demo_password() -> str:
+    """URL-safe token with no quotes, spaces, or shell metacharacters."""
+    return secrets.token_urlsafe(18)
+
+
+def demo_tunnel_local_port() -> int:
+    """Local port ``mdc tunnel demo-db`` listens on."""
+    raw = os.environ.get("DEMO_POSTGRES_PORT") or "5434"
+    return int(raw)
+
+
+def alter_demo_role_password(
+    *,
+    user: str,
+    database: str,
+    current_password: str,
+    new_password: str,
+    port: Optional[int] = None,
+) -> None:
+    """Change the demo role through the local SSM tunnel. Does not print the password."""
+    from mdc_cli.process_util import find_executable
+    from mdc_cli.run_helper import is_local_tcp_port_open
+
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", user):
+        raise RuntimeError(f"Refusing to alter role name {user!r}.")
+    if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", database):
+        raise RuntimeError(f"Refusing to connect to database name {database!r}.")
+    if any(char in new_password for char in ("'", "\\", "\n", "\r")):
+        raise RuntimeError("Generated demo password contained a character psql cannot quote safely.")
+
+    local_port = port if port is not None else demo_tunnel_local_port()
+    if not is_local_tcp_port_open("127.0.0.1", local_port):
+        raise RuntimeError(
+            f"Demo tunnel is not listening on 127.0.0.1:{local_port}. "
+            "Open another terminal and run: mdc tunnel demo-db"
+        )
+
+    psql = find_executable("psql")
+    if not psql:
+        raise RuntimeError("psql not found on PATH.")
+
+    sql = f"ALTER USER {user} PASSWORD '{new_password}'\n"
+    env = os.environ.copy()
+    env["PGPASSWORD"] = current_password
+    completed = subprocess.run(
+        [
+            psql,
+            "-h",
+            "127.0.0.1",
+            "-p",
+            str(local_port),
+            "-U",
+            user,
+            "-d",
+            database,
+            "-v",
+            "ON_ERROR_STOP=1",
+            "-f",
+            "-",
+        ],
+        check=False,
+        capture_output=True,
+        text=True,
+        input=sql,
+        env=env,
+    )
+    if completed.returncode != 0:
+        detail = (completed.stderr or completed.stdout or "psql failed").strip()
+        redacted = detail.replace(new_password, "***").replace(current_password, "***")
+        raise RuntimeError(redacted.splitlines()[0] if redacted else "psql failed")
+
+
+def rotate_demo_postgres_password(
+    *,
+    api_env_file: Path,
+    update_deployment_credentials: bool = True,
+    new_password: Optional[str] = None,
+) -> DemoPasswordCopyResult:
+    """
+    Change opendental_demo_user, then update the env file and JSON copies.
+
+    The role changes first. Local copies are written only after ALTER USER succeeds.
+    """
+    current_password = _read_dotenv_value_raw(api_env_file, "DEMO_POSTGRES_PASSWORD")
+    if not current_password:
+        raise RuntimeError(f"DEMO_POSTGRES_PASSWORD is missing in {api_env_file}.")
+    user = _read_dotenv_value_raw(api_env_file, "DEMO_POSTGRES_USER") or "opendental_demo_user"
+    database = _read_dotenv_value_raw(api_env_file, "DEMO_POSTGRES_DB") or "opendental_demo"
+    password = new_password or generate_demo_password()
+
+    alter_demo_role_password(
+        user=user,
+        database=database,
+        current_password=current_password,
+        new_password=password,
+    )
+    return write_demo_password_copies(
+        password,
+        api_env_file=api_env_file,
+        update_deployment_credentials=update_deployment_credentials,
+        rotated_on=date.today().isoformat(),
+    )
+
+
+def recorded_rotation_dates() -> dict[str, Optional[str]]:
+    """Dates stored next to clinic and demo passwords. Missing dates are None."""
+    from mdc_cli.credentials import _dig, load_deployment_credentials
+
+    creds = load_deployment_credentials() or {}
+    clinic = _dig(creds, "clinic_database", "postgresql", "password_rotated_at")
+    demo = _dig(creds, "demo_database", "postgresql", "password_rotated_at")
+    return {
+        "clinic": clinic if isinstance(clinic, str) and clinic.strip() else None,
+        "demo": demo if isinstance(demo, str) and demo.strip() else None,
+    }
+
+
+def _update_deployment_credentials_clinic_password(
+    secret: ClinicAnalyticsSecret,
+    *,
+    rotated_on: Optional[str] = None,
+) -> bool:
     from mdc_cli.paths import DEPLOYMENT_CREDENTIALS
 
     if not DEPLOYMENT_CREDENTIALS.is_file():
@@ -657,6 +904,8 @@ def _update_deployment_credentials_clinic_password(secret: ClinicAnalyticsSecret
         if secret.username:
             target["username"] = secret.username
             target["user"] = secret.username
+        if rotated_on:
+            target["password_rotated_at"] = rotated_on
 
     new_text = json.dumps(data, indent=4) + "\n"
     if new_text == old_text:
