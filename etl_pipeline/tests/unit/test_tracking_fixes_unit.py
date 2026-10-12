@@ -155,7 +155,7 @@ class TestTrackingFixes:
              patch.object(mock_loader, '_select_strategy', return_value=LoadStrategyType.STREAMING), \
              patch.object(mock_loader.strategies[LoadStrategyType.STREAMING], 'execute', return_value=failed_result), \
              patch.object(mock_loader, '_ensure_tracking_record_exists'), \
-             patch.object(mock_loader, '_update_load_status_hybrid') as mock_update:
+             patch.object(mock_loader, '_update_load_status_with_primary_value') as mock_update:
             success, _metadata = mock_loader.load_table('test_table')
 
         assert success is False
@@ -208,7 +208,7 @@ class TestTrackingFixes:
                  patch.object(mock_loader, '_select_strategy', return_value=strategy_type), \
                  patch.object(mock_loader.strategies[strategy_type], 'execute', return_value=failed_result), \
                  patch.object(mock_loader, '_ensure_tracking_record_exists'), \
-                 patch.object(mock_loader, '_update_load_status_hybrid') as mock_update:
+                 patch.object(mock_loader, '_update_load_status_with_primary_value') as mock_update:
                 mock_loader.load_table('test_table')
 
             mock_update.assert_called_once()
