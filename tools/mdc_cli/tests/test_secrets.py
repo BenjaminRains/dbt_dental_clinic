@@ -16,6 +16,7 @@ from mdc_cli.secrets_manager import (
     resolve_clinic_rds_password,
     sync_clinic_env_from_secrets,
     update_dotenv_key,
+    _read_dotenv_value_raw,
 )
 
 runner = CliRunner()
@@ -273,6 +274,22 @@ def test_sync_clinic_env_repairs_json_blob_file(mock_master, mock_fetch, _mock_r
     assert "POSTGRES_ANALYTICS_PASSWORD=live" in text
     assert "POSTGRES_ANALYTICS_PASSWORD_ROTATED_ON=2026-10-05" in text
     assert "username" not in text.split("POSTGRES_ANALYTICS_PASSWORD=", 1)[1].splitlines()[0]
+
+
+def test_password_with_leading_hash_roundtrips(tmp_path):
+    env_file = tmp_path / ".env_api_clinic"
+    env_file.write_text("POSTGRES_ANALYTICS_PASSWORD=old\n", encoding="utf-8")
+    secret = "#rotated-secret"
+    assert update_dotenv_key(env_file, "POSTGRES_ANALYTICS_PASSWORD", secret) is True
+    text = env_file.read_text(encoding="utf-8")
+    assert 'POSTGRES_ANALYTICS_PASSWORD="#rotated-secret"' in text
+    assert _read_dotenv_value_raw(env_file, "POSTGRES_ANALYTICS_PASSWORD") == secret
+
+
+def test_unquoted_leading_hash_password_is_not_a_comment(tmp_path):
+    env_file = tmp_path / ".env_api_clinic"
+    env_file.write_text("POSTGRES_ANALYTICS_PASSWORD=#rotated-secret\n", encoding="utf-8")
+    assert _read_dotenv_value_raw(env_file, "POSTGRES_ANALYTICS_PASSWORD") == "#rotated-secret"
 
 
 def test_update_dotenv_key_password_never_quotes_json_like_value(tmp_path):

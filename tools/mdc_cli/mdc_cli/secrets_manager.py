@@ -473,8 +473,9 @@ def _format_dotenv_value(value: str, *, key: str = "") -> str:
     if not value:
         return value
     # Password fields must stay a single opaque token — never re-quote JSON blobs.
+    # A leading # is a dotenv comment unless the value is quoted.
     if key.upper().endswith("PASSWORD"):
-        if any(ch in value for ch in ("\n", "\r")):
+        if any(ch in value for ch in ("\n", "\r", "#", " ", "\t", '"', "'", "\\")):
             escaped = value.replace("\\", "\\\\").replace('"', '\\"')
             return f'"{escaped}"'
         return value
@@ -916,13 +917,12 @@ def _update_deployment_credentials_clinic_password(
 
 def _unwrap_dotenv_value(val: str) -> str:
     text = val.strip()
-    hash_idx = text.find("#")
+    if len(text) >= 2 and text[0] == text[-1] and text[0] in ('"', "'"):
+        return text[1:-1]
+    # Inline comment only. A password may itself start with #.
+    hash_idx = text.find(" #")
     if hash_idx >= 0:
-        text = text[:hash_idx].strip()
-    if text.startswith('"') and text.endswith('"'):
-        return text[1:-1]
-    if text.startswith("'") and text.endswith("'"):
-        return text[1:-1]
+        text = text[:hash_idx].rstrip()
     return text
 
 
