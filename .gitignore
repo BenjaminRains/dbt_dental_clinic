@@ -107,6 +107,7 @@ database_data/
 profiles.yml
 !profiles.yml.template
 credentials.json
+quickbooks_credentials.json
 connection.json
 *.connection
 *.config
@@ -161,6 +162,9 @@ docs/deployment/*
 !docs/deployment-connections/README.md
 !docs/deployment-connections/connections.template.yaml
 !docs/deployment-connections/clinic-portal-users.template.json
+!docs/quickbooks_investigation/
+docs/quickbooks_investigation/*
+!docs/quickbooks_investigation/quickbooks_credentials.json.template
 !docs/etl/
 !docs/etl/**
 docs/etl/archive/
