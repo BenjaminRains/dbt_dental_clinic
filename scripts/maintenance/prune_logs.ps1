@@ -226,7 +226,7 @@ $CategoryDefs = @(
         RelativePath  = "etl_pipeline\logs\schema_analysis\backups"
         RetentionDays = $SchemaBackupDays
         KeepNewest    = $SchemaBackupKeepNewest
-        Note          = "tables.yml backups; tables.yml is gitignored, so these files are the local history"
+        Note          = "Local tables.yml only (schema analyzer output, not in git). These backups are the rollback."
     },
     @{
         Name          = "compare_databases"
