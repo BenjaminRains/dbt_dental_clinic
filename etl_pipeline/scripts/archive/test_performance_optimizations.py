@@ -1,5 +1,7 @@
 #!/usr/bin/env python3
 """
+ARCHIVED. Manual benchmark from an early loader pass. Not part of the nightly pipeline.
+
 Performance Testing Script for ETL Pipeline Optimizations
 
 This script tests the performance optimizations implemented in the ETL pipeline:

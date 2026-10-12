@@ -18,7 +18,7 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | Path | Purpose |
 |------|---------|
 | **airflow/** | Native Airflow bootstrap, start, logs (Windows + Docker init) |
-| **archive/** | Archived Phase 5.5 legacy orchestration (reference only) |
+| **archive/** | Retired scripts (reference only). See [archive/README.md](archive/README.md). |
 | **dbt/** | Local dbt runners (pipenv / shell) |
 | **deployment/** | Deploy code/config to AWS/EC2 |
 | **ec2/** | EC2 dbt runtime, SSM helpers, setup scripts, fixes |
@@ -27,7 +27,7 @@ Project scripts organized by purpose. Run from project root (e.g. `.\scripts\ec2
 | **database/** | Local demo DB setup and queries |
 | **testing/** | API and connection tests |
 | **maintenance/** | Scheduled housekeeping (log pruning) |
-| **utils/** | One-off tools, exports, metadata, audits |
+| **utils/** | Env listing, API key generation, local config backup |
 | **snowflake/** | Demo Postgres → Snowflake export (payments mini warehouse) |
 
 ## Common Workflows
@@ -165,7 +165,7 @@ See `airflow/ORCHESTRATION_ROADMAP.md` for the full orchestration plan.
 ```powershell
 .\scripts\utils\list_env_files.ps1
 .\scripts\utils\generate_api_key.ps1 -Clinic
-.\scripts\utils\backup_dbt_dental_clinic.ps1
+.\scripts\utils\backup_dbt_dental_clinic.ps1   # dated copies of tables.yml, credentials, and .env files
 ```
 
 ### CI

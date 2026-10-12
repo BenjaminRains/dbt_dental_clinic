@@ -381,9 +381,9 @@ After implementation:
 - **Key Information**: Source codes, status values, type IDs
 
 ### 3. **Analysis Documentation** (Business Context)
-- **Location**: `analysis/{table_name}/` directories
-- **Purpose**: Business context and definitions
-- **Examples**: `analysis/appointment/appt_business_logic.md`
+- **Location**: `archive/analysis/{table_name}/` directories
+- **Purpose**: Historical business context from early model development. New validation belongs under `validation/`.
+- **Examples**: `archive/analysis/appointment/appt_business_logic.md`
 
 ### 4. **Validation Documentation** (Investigation Results)
 - **Location**: `validation/{layer}/{model_name}/` directories
@@ -477,7 +477,7 @@ See `validation/kpi/README.md` and `validation/kpi/KPI_VALIDATION_REGISTRY.md`.
 - **Validation Template**: `validation/VALIDATION_TEMPLATE.md` - Starting point for new validations
 - **Business Rules Mapping Example**: `validation/marts/fact_claim/fact_claim_business_rules_to_dbt_tests.md` - Example of mapping validation findings to dbt tests
 - **dbt Tests**: `tests/` - Automated dbt tests
-- **Analysis Queries**: `analysis/` - Exploratory analysis queries
+- **Analysis Queries**: `archive/analysis/` - Historical exploratory queries. New work belongs in `validation/`.
 - **Model Documentation**: `models/{layer}/_{model_name}.yml` - Schema and test definitions
 
 ---

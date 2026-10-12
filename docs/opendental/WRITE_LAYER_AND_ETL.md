@@ -59,7 +59,7 @@ immutable ledgers.
 
 | Observation | Evidence in this repo | Engineering meaning |
 | --- | --- | --- |
-| **MyISAM**, no `FOREIGN KEY` | Captured DDLs under `analysis/*/…_ddl.sql` | Relationships are logical ints + indexes; cascades are app code |
+| **MyISAM**, no `FOREIGN KEY` | Captured DDLs under `archive/analysis/*/…_ddl.sql` | Relationships are logical ints + indexes; cascades are app code |
 | Auto-increment `*Num` PKs | `ProcNum`, `PatNum`, `PayNum`, … in `tables.yml` | Stable PK across edits → ETL upsert is viable |
 | `0` as “no FK” | Staging treats `0` as null link (e.g. appointment) | Pre-nullable / sentinel design |
 | Sentinel empty dates | `0001-01-01`, `1900-01-01` cleaned in dbt macros | .NET / OD default “unset” dates |
@@ -115,7 +115,7 @@ Many mutation tables declare e.g.:
 ```
 
 Same pattern appears on `SecDateTEdit` for payments/claims/etc. (see
-`analysis/procedurelog/procedurelog_ddl.sql`, `payment`, `claim`, …).
+`archive/analysis/procedurelog/procedurelog_ddl.sql`, `payment`, `claim`, …).
 
 On a normal `UPDATE` that changes any column, MySQL can bump that timestamp
 **without the application listing the column**. This is *not* a trigger and *not*
@@ -231,7 +231,7 @@ Keep answers here (or link findings) so ETL decisions stay evidence-based.
 
 | Claim | Where to look |
 | --- | --- |
-| `ON UPDATE` timestamps | `analysis/**/**_ddl.sql` (e.g. `procedurelog.DateTStamp`) |
+| `ON UPDATE` timestamps | `archive/analysis/**/**_ddl.sql` (e.g. `procedurelog.DateTStamp`) |
 | Mutation seed + lookback | `etl_pipeline/scripts/analyze_opendental_schema.py` (`IN_PLACE_UPDATE_TABLES`, `LOOKBACK_RESYNC_BY_TABLE`) |
 | Per-table sync config | `etl_pipeline/etl_pipeline/config/tables.yml` |
 | Missed in-place update (proven) | [ETL-FND-001](../findings/ETL-FND-001-replica-row-drift-procedurelog.md) |

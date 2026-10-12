@@ -21,8 +21,9 @@ Shortcuts into the Production and Income report with preset date ranges:
 | More Options | *(opens report dialog — no export folder)* |
 | Monthly Production Goal | [monthly-production-goal](./monthly-production-goal/) |
 
-Full custom **Production and Income** report uses date-range shortcuts (`today/`, `this-month/`,
-…) — separate from **Daily → Production by Procedure**, which is validated under
+The monthly **Production and Income** grid (This Year and a prior year) is validated under
+[production-and-income](./production-and-income/). Date-range shortcuts (`today/`, `this-month/`,
+…) are the same report. **Daily → Production by Procedure** is a different report, validated under
 [daily-production-by-procedure](./daily-production-by-procedure/).
 
 ---

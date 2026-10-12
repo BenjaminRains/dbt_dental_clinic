@@ -1,3 +1,4 @@
+# ARCHIVED. One-time us-east-2 inventory. Not a scheduled audit.
 # PowerShell script to audit AWS resources in Ohio region (us-east-2)
 # This script helps identify all resources that can potentially be deleted
 

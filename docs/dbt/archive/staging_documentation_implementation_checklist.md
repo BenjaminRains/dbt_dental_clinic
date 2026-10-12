@@ -23,7 +23,7 @@ Use this checklist for each staging model yml file to ensure consistent, compreh
 
 ### ✅ Pre-Implementation Preparation
 - [ ] Review corresponding SQL model file for business logic
-- [ ] Check existing analysis files in `analysis/[table_name]/` for data quality insights
+- [ ] Check existing analysis files in `archive/analysis/[table_name]/` for data quality insights
 - [ ] Review stakeholder reports for known issues
 - [ ] Identify current record count and data scope
 - [ ] Review source table in OpenDental documentation if available

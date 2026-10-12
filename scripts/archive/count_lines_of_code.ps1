@@ -1,3 +1,4 @@
+# ARCHIVED. One-time size snapshot.
 # Count lines of code excluding documentation and dependencies
 #
 # Purpose: This script is used for codebase monitoring and maintenance.

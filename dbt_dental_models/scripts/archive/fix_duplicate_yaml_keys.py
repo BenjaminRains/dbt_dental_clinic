@@ -1,4 +1,7 @@
-"""Merge duplicate model-level YAML keys (tests, meta, config) in schema files."""
+"""ARCHIVED. One-time migration, finished 2026-07-10.
+
+Merge duplicate model-level YAML keys (tests, meta, config) in schema files.
+"""
 from __future__ import annotations
 
 from pathlib import Path
