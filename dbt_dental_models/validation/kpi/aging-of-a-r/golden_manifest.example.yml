@@ -1,0 +1,34 @@
+# Copy to golden_manifest.yml (gitignored). Golden CSVs live under golden/.
+
+version: 1
+
+validation_window:
+  window_id: aging_same_day_snapshot
+  date_from: "2026-07-16"
+  date_to: "2026-07-16"
+
+snapshots:
+  - id: aging_of_a_r_2026-07-16
+    status: pending_export
+    od_report: Aging of A/R
+    od_menu_path: "Reports → Standard → Monthly → Aging of A/R"
+    source_file: od_aging_of_a_r_07162026_07162026.csv
+    exported_at: null
+    parameters:
+      as_of_date: "2026-07-16"
+      grouping: TBD
+      providers: all
+      clinics: all
+    od_totals:
+      total_ar: null
+      bal_0_30: null
+      bal_31_60: null
+      bal_61_90: null
+      bal_over_90: null
+    our_model: mart_ar_summary
+    our_field_or_measure: sum(total_balance) by snapshot_date
+    compare_sql: aging-of-a-r/compare/compare_aging_ar_total.sql
+    tolerance:
+      amount_abs: 50.00
+      pct: 0.005
+    last_result: null
