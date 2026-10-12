@@ -1,0 +1,29 @@
+# Copy to golden_manifest.yml (same folder). golden_manifest.yml is gitignored.
+# Monthly clinic totals for this report live in compare SQL, not in this example.
+
+version: 1
+
+validation_window:
+  window_id: year_2025
+  date_from: "2025-01-01"
+  date_to: "2025-12-31"
+
+snapshots:
+  - id: production_and_income_2025
+    status: source_pass_mart_delta
+    od_report: Production and Income
+    od_menu_path: "Reports → Standard → Production and Income"
+    source_file: null
+    exported_at: "2026-10-08"
+    parameters:
+      date_from: "2025-01-01"
+      date_to: "2025-12-31"
+      providers: all
+      production_date: ProcDate
+      writeoff_date: DateCP
+    our_model: null
+    compare_sql: production-and-income/compare/compare_production_and_income_monthly.sql
+    tolerance:
+      amount_abs: 0.01
+      pct: 0
+    last_result: null
