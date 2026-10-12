@@ -42,6 +42,12 @@ Confirm separately, outside git: RDS automated backups for the analytics databas
 - Delete archived scripts that have sat unused for two quarters (`scripts/archive/README.md`).
 - Banner or move superseded plans into the existing `docs/*/archive/` folders.
 - Confirm RDS and OpenDental backups still match what you expect.
+- Rotate passwords. `mdc secrets pull` lists the rows and waits. `mdc secrets pull clinic` stays a non-interactive sync. Last pass: 2026-10-12.
+  - Clinic RDS `analytics_user` is a sync. Secrets Manager rotates it about every 7 days (last secret date 2026-10-06). `mdc secrets pull clinic` copies it into `api/.env_api_clinic` and `deployment_credentials.json`.
+  - Demo `opendental_demo_user`: `mdc tunnel demo-db`, then `mdc secrets pull demo`, then `mdc deploy api --env demo`. Leaves `etl_pipeline/synthetic_data_generator/.env_demo` alone.
+  - Anthropic: console name `consult_audio_key`. Replace `ANTHROPIC_API_KEY` in `consult_audio_pipe/.env`. It is not in `deployment_credentials.json`.
+  - Airflow admin for native runs is `AIRFLOW_ADMIN_PASSWORD` in `airflow/.env.native`. Generate a 16-character password the same way as `scripts/airflow/init-airflow-native.ps1`, write that line, then `airflow users reset-password --username admin`. If reset fails while decoding the `session` table, delete those rows and retry. Root `.env` is the Compose sandbox password, a different secret. `AIRFLOW_FERNET_KEY` and `AIRFLOW_JWT_SECRET` there are still one shared value; split them the next time Compose is used.
+  - Laptop warehouse `analytics_user` in `dbt_dental_models/.env_local` and `etl_pipeline/.env_local` stays off this list.
 
 ## Left in place on purpose
 
