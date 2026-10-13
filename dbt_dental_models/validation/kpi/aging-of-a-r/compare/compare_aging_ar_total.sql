@@ -13,9 +13,11 @@ WITH params AS (
     SELECT CURRENT_DATE AS snapshot_date  -- lock to OD as-of date
 ),
 od_total AS (
-    -- 2026-07-16 source proxy: live MySQL patient.BalTotal > 0 AND PatStatus IN (0,2)
-    -- Replace with UI Aging of A/R CSV grand total when exported
-    SELECT 240865.22::numeric(18, 2) AS total_ar
+    -- 2026-10-12 source proxy, same-day patient full refresh.
+    -- Live MySQL patient.BalTotal > 0 AND PatStatus IN (0, 2), guarantor rows.
+    -- Printed Aging of A/R CSV is still not exported. Replace this number if that
+    -- grand total differs from stored BalTotal.
+    SELECT 282624.23::numeric(18, 2) AS total_ar
 ),
 mart_total AS (
     SELECT

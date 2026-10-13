@@ -32,7 +32,7 @@ async def get_ar_kpi_summary_endpoint(
     _api_key: dict = Depends(require_api_key),
     db: Session = Depends(get_db)
 ):
-    """Get AR KPI summary for dashboard"""
+    """Stored BalTotal, days-since-procedure buckets, claim.InsPayEst, and patient portion. Not the OpenDental Aging of A/R report."""
     try:
         return get_ar_kpi_summary(db, start_date, end_date)
     except Exception as e:
@@ -46,7 +46,7 @@ async def get_ar_aging_summary_endpoint(
     _api_key: dict = Depends(require_api_key),
     db: Session = Depends(get_db)
 ):
-    """Get AR aging summary by bucket"""
+    """Days since procedure_date, scaled to stored BalTotal. Not the OpenDental Aging of A/R report."""
     try:
         return get_ar_aging_summary(db, snapshot_date, start_date, end_date)
     except Exception as e:

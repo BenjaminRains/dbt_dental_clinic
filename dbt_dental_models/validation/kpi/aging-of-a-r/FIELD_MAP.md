@@ -18,17 +18,32 @@ Fill from the report header / options dialog on the golden as-of day. Defaults b
 
 | Option | Locked value | Notes |
 | --- | --- | --- |
-| As-of / report date | **2026-07-16** (Central) | Matches mart `snapshot_date` from same-day rebuild |
-| Grouping | **Guarantor BalTotal** (source proxy) | Live MySQL: positive `BalTotal` equals guarantor-only sum |
-| Patient status | **Patient + Inactive** (`PatStatus` 0, 2) | Matches mart / `dim_patient` inclusion |
-| Include write-offs / adjustments | _Confirm on UI export_ | Source proxy uses stored `BalTotal` only |
-| Include insurance estimates | _Confirm on UI export_ | Mart splits `patient_responsibility` / `insurance_estimate` |
-| Clinic filter | All (assumed) | |
-| Provider filter | All (assumed) | |
-| Age of account basis | Mart: days since procedure (`int_ar_balance`) | Bucket parity secondary; confirm OD column labels on UI export |
+| As-of / report date | **2026-09-30** | OpenDental rebuilds aging from transactions. It does not read `patient.BalTotal`. |
+| Grouping | **Guarantor `BalTotal`** | Non-guarantor `BalTotal` is 0. Positive sum equals the guarantor sum. |
+| Patient status | **Patient + Inactive** (`PatStatus` 0, 2) | Same inclusion as `dim_patient` / the mart |
+| Balance filter | **`BalTotal > 0`** | Credit families are excluded. Net family total that day was $187,169.37. |
+| Include write-offs / adjustments | Stored `BalTotal` | Printed report can recalculate. This close uses the stored balance. |
+| Include insurance estimates | Not in the total | OD `InsEst` on this population was $114,811.46. Mart `insurance_estimate` was $1,791,482.25. |
+| Clinic / provider | All | Single clinic |
+| Age of account basis | Mart buckets: days since procedure, scaled to `total_balance` | Secondary. Stored OD buckets foot to the same total with a different split. |
 
-**Provisional OD total (source proxy, 2026-07-16):** `$240,865.22` — see [findings/2026-07-16.md](./findings/2026-07-16.md).
-Replace with UI CSV grand total when exported.
+**Report totals from OpenDental's own query, as of 2026-09-30** ([compare/od_aging_report_2026-09-30.sql](./compare/od_aging_report_2026-09-30.sql)):
+
+| Column | Amount |
+| --- | ---: |
+| 0–30 | $83,193.42 |
+| 31–60 | $40,990.62 |
+| 61–90 | $28,564.79 |
+| > 90 | $122,674.50 |
+| Total | $275,423.33 |
+| -Ins Est | $114,829.85 |
+| -W/O Est | $0.00 |
+| Patient | $160,593.48 |
+| Families | 739 |
+
+The four aging columns add up to Total. Patient = Total − Ins Est − W/O Est.
+
+`mart_ar_summary` does not run this query. The 2026-10-12 match to stored `BalTotal` ($282,624.23) is a different number.
 
 ---
 

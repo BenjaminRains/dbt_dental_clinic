@@ -8,12 +8,13 @@ WITH params AS (
     SELECT CURRENT_DATE AS snapshot_date
 ),
 od_buckets AS (
-    -- PENDING: replace with OD column totals from golden export
+    -- 2026-10-12 stored guarantor buckets for the same population as the total
+    -- (PatStatus 0 and 2, BalTotal > 0). Secondary. These are not a printed report.
     SELECT
-        NULL::numeric(18, 2) AS bal_0_30,
-        NULL::numeric(18, 2) AS bal_31_60,
-        NULL::numeric(18, 2) AS bal_61_90,
-        NULL::numeric(18, 2) AS bal_over_90
+        93531.82::numeric(18, 2) AS bal_0_30,
+        38326.36::numeric(18, 2) AS bal_31_60,
+        28388.60::numeric(18, 2) AS bal_61_90,
+        122377.45::numeric(18, 2) AS bal_over_90
 ),
 mart_buckets AS (
     SELECT

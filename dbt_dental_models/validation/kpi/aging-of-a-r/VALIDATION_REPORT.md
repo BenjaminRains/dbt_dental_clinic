@@ -3,9 +3,9 @@
 | Field | Value |
 | --- | --- |
 | **Report ID** | `kpi-aging-of-a-r-001` |
-| **Report date** | 2026-07-16 |
-| **Workflow** | Scaffold + same-day mart rebuild + source-proxy golden; **UI CSV pending** |
-| **Registry status** | `delta_documented` |
+| **Report date** | 2026-10-12 |
+| **Workflow** | Same-day `patient` full refresh, mart rebuild, live `BalTotal` source proxy |
+| **Registry status** | `within_tolerance` (practice total) |
 | **KPI name** | AR total (Aging of A/R) |
 | **Subject model** | `marts.mart_ar_summary` |
 | **Primary measure** | `SUM(total_balance)` / API `total_ar_outstanding` |
@@ -16,45 +16,44 @@
 
 ## 1. Executive summary
 
-We scaffolded the Aging of A/R validation folder, rebuilt `mart_ar_summary` for
-**2026-07-16**, and compared practice total AR to a **live MySQL BalTotal source proxy**
-(UI Aging CSV not yet exported).
+On 2026-10-12 the local warehouse `patient` table was full-refreshed from live OpenDental and `mart_ar_summary` was rebuilt the same day. The practice total matches the locked source proxy exactly.
 
 | Layer | Result |
 | --- | --- |
-| Mart ↔ `dim_patient` (staging reconstruction) | **PASS** (exact $320,427.04) |
-| Mart ↔ live OD `patient.BalTotal` (PatStatus 0,2) | **FAIL** — delta **$79,561.82** (33%) |
-| API ↔ mart (`/ar/kpi-summary`, `/ar/aging-summary`) | Smoke vs mart total (layer 4) |
+| Live MySQL `patient.BalTotal` (PatStatus 0 and 2, `BalTotal > 0`) | **$282,624.23** / 736 |
+| Analytics `raw.patient` (same filter) | **$282,624.23** / 736 |
+| `mart_ar_summary` / `dim_patient` | **$282,624.23** / 736 — **PASS** |
+| Aging buckets vs stored `Bal_0_30` … `BalOver90` | Secondary **FAIL** (different split, same total) |
+| `insurance_estimate` vs `InsEst` | Secondary. Not part of the total. |
+| API smoke | Not re-run this close |
 
-**Root cause:** local analytics `raw.patient` / warehouse BalTotal (**$326,933.40**) does not
-match live OpenDental BalTotal (**$240,865.22**). Mart correctly aggregates warehouse
-`dim_patient`; it cannot match today's OD report until patient ETL is refreshed (then rebuild
-mart + re-compare). This is **not** a mart formula bug.
-
-**Recommendation:** Registry `delta_documented`. After ETL patient refresh + optional UI CSV,
-re-run total compare toward `within_tolerance` (±$50 / ±0.5%).
+The 2026-07-16 fail was warehouse lag ($320,427.04 mart vs $240,865.22 live). That gap is closed. A printed Aging of A/R CSV is still not in `golden/`. This sign-off is the stored guarantor balance OpenDental last wrote, which is what the account module shows. The report itself recalculates when printed.
 
 ---
 
-## 2. Same-day snapshot (2026-07-16)
+## 2. Same-day snapshot (2026-10-12)
 
-| Source | Total AR | Patients |
+Source `DateTStamp` maximum: **2026-10-12 17:47:16**. Mart `snapshot_date`: **2026-10-12**.
+
+| Source | Total AR | Accounts |
 | --- | ---: | ---: |
-| Live MySQL BalTotal > 0, PatStatus ∈ {0,2} | $240,865.22 | 673 |
-| Analytics `raw.patient` BalTotal > 0 | $326,933.40 | 903 |
-| `mart_ar_summary` / `dim_patient` (Patient/Inactive) | $320,427.04 | 884 |
+| Live MySQL, Patient + Inactive, `BalTotal > 0` | $282,624.23 | 736 |
+| `raw.patient` / `mart_ar_summary` | $282,624.23 | 736 |
+| Patient status only (Inactive excluded) | $243,974.72 | — |
+| Patient + Inactive, credits included | $187,169.37 | — |
 
-Buckets (mart only; OD bucket columns pending UI export):
+The mart includes Inactive guarantors and drops credit balances. That is the locked population in [FIELD_MAP.md](./FIELD_MAP.md).
 
-| Bucket | Mart sum |
-| --- | ---: |
-| 0–30 / Current | $38,827.58 |
-| 31–60 | $30,891.87 |
-| 61–90 | $17,973.05 |
-| 90+ | $232,734.54 |
+Stored OD buckets on the locked population foot to $282,624.23. The mart scales procedure-age buckets onto the same total, so the split differs:
 
-Findings: [findings/2026-07-16.md](./findings/2026-07-16.md)  
-Source-proxy snapshot: [golden/snapshots/od_aging_of_a_r_07162026_source_proxy.snapshot.yml](./golden/snapshots/od_aging_of_a_r_07162026_source_proxy.snapshot.yml)
+| Bucket | Stored OD | Mart |
+| --- | ---: | ---: |
+| 0–30 | $93,531.82 | $49,945.21 |
+| 31–60 | $38,326.36 | $25,484.84 |
+| 61–90 | $28,388.60 | $15,742.24 |
+| > 90 | $122,377.45 | $191,451.93 |
+
+Bucket drift does not change the total sign-off.
 
 ---
 
@@ -62,10 +61,10 @@ Source-proxy snapshot: [golden/snapshots/od_aging_of_a_r_07162026_source_proxy.s
 
 Documented in [FIELD_MAP.md](./FIELD_MAP.md):
 
-- Primary = practice sum of outstanding balances (`BalTotal` / `total_balance`)
-- Same-day `snapshot_date` only (mart rebuilds as of today)
-- Buckets secondary (scaled from `int_ar_balance`)
-- DSO / collection-rate / priority-queue **out of scope**
+- Primary = sum of positive guarantor `BalTotal` for Patient and Inactive
+- Same-day `snapshot_date` only
+- Buckets secondary
+- DSO, collection rate, and the priority queue are out of scope
 
 ---
 
@@ -77,7 +76,11 @@ Documented in [FIELD_MAP.md](./FIELD_MAP.md):
 | `GET /ar/kpi-summary` | `total_ar_outstanding` |
 | `GET /ar/aging-summary` | Bucket amounts |
 
-Smoke: `python api/tests/kpi/verify_aging_ar.py --expected-total 320427.04`
+Smoke when the API is up:
+
+```bash
+python api/tests/kpi/verify_aging_ar.py --expected-total 282624.23
+```
 
 ---
 
@@ -86,18 +89,17 @@ Smoke: `python api/tests/kpi/verify_aging_ar.py --expected-total 320427.04`
 | Item | Notes |
 | --- | --- |
 | Historical as-of goldens | Mart has no historical aging store |
-| Simplified DSO | Registry known_delta |
-| Insurance Aging / Custom Aging | Separate registry rows |
-| UI validated chip | Defer until total `within_tolerance` |
+| Simplified DSO | Still a known difference in exposures |
+| Insurance Aging / Custom Aging | Separate reports |
+| Practice Manager Home allowlist | Aging is not a home-card KPI |
 
 ---
 
 ## 6. Sign-off checklist
 
-- [x] Folder scaffold (`README`, `FIELD_MAP`, compare SQL, gitignores)
-- [x] Same-day `mart_ar_summary` rebuild; totals recorded
-- [x] Source-proxy golden + findings (UI CSV still recommended)
-- [x] Staging compare PASS; OD total FAIL documented
-- [x] Registry → `delta_documented`
-- [ ] UI Aging of A/R CSV + option screenshot
-- [ ] ETL refresh → re-compare → `within_tolerance`
+- [x] Folder scaffold (`README`, `FIELD_MAP`, compare SQL)
+- [x] `patient` full refresh and same-day `mart_ar_summary` rebuild
+- [x] Live MySQL, `raw`, and mart total agree ($282,624.23 / 736)
+- [x] Staging compare: mart total equals `dim_patient`
+- [x] Registry → `within_tolerance`
+- [ ] Printed Aging of A/R CSV, if the on-screen grand total should replace stored `BalTotal`
