@@ -146,6 +146,9 @@ deployment/logs/
 
 # Documentation with sensitive business info.
 docs/
+# The QuickBooks project keeps its own notes. Re-include that directory only.
+!quickbooks/docs/
+!quickbooks/docs/**
 !/docs/
 /docs/*
 !docs/deployment/
@@ -162,9 +165,6 @@ docs/deployment/*
 !docs/deployment-connections/README.md
 !docs/deployment-connections/connections.template.yaml
 !docs/deployment-connections/clinic-portal-users.template.json
-!docs/quickbooks_investigation/
-docs/quickbooks_investigation/*
-!docs/quickbooks_investigation/quickbooks_credentials.json.template
 !docs/etl/
 !docs/etl/**
 docs/etl/archive/
