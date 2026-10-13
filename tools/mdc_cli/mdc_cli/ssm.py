@@ -172,7 +172,127 @@ def _start_port_forward_background(
     return subprocess.Popen(cmd, **popen_kwargs)
 
 
+def _windows_descendant_pids(root_pid: int) -> list[int]:
+    """PIDs whose parent chain reaches ``root_pid``. Empty when the snapshot fails."""
+    if sys.platform != "win32":
+        return []
+    try:
+        root = int(root_pid)
+    except (TypeError, ValueError):
+        return []
+    if root <= 0:
+        return []
+
+    import ctypes
+    from ctypes import wintypes
+
+    th32cs_snapprocess = 0x00000002
+
+    class PROCESSENTRY32W(ctypes.Structure):
+        _fields_ = [
+            ("dwSize", wintypes.DWORD),
+            ("cntUsage", wintypes.DWORD),
+            ("th32ProcessID", wintypes.DWORD),
+            ("th32DefaultHeapID", ctypes.c_size_t),
+            ("th32ModuleID", wintypes.DWORD),
+            ("cntThreads", wintypes.DWORD),
+            ("th32ParentProcessID", wintypes.DWORD),
+            ("pcPriClassBase", ctypes.c_long),
+            ("dwFlags", wintypes.DWORD),
+            ("szExeFile", wintypes.WCHAR * 260),
+        ]
+
+    kernel32 = ctypes.WinDLL("kernel32", use_last_error=True)
+    kernel32.CreateToolhelp32Snapshot.argtypes = [wintypes.DWORD, wintypes.DWORD]
+    kernel32.CreateToolhelp32Snapshot.restype = wintypes.HANDLE
+    kernel32.Process32FirstW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32FirstW.restype = wintypes.BOOL
+    kernel32.Process32NextW.argtypes = [wintypes.HANDLE, ctypes.POINTER(PROCESSENTRY32W)]
+    kernel32.Process32NextW.restype = wintypes.BOOL
+    kernel32.CloseHandle.argtypes = [wintypes.HANDLE]
+    kernel32.CloseHandle.restype = wintypes.BOOL
+
+    snapshot = kernel32.CreateToolhelp32Snapshot(th32cs_snapprocess, 0)
+    invalid = ctypes.c_void_p(-1).value
+    if not snapshot or snapshot == invalid:
+        logger.warning("Could not snapshot processes to stop the SSM plugin (pid %s)", root)
+        return []
+
+    children_of: dict[int, list[int]] = {}
+    entry = PROCESSENTRY32W()
+    entry.dwSize = ctypes.sizeof(PROCESSENTRY32W)
+    try:
+        ok = kernel32.Process32FirstW(snapshot, ctypes.byref(entry))
+        while ok:
+            parent = int(entry.th32ParentProcessID)
+            pid = int(entry.th32ProcessID)
+            children_of.setdefault(parent, []).append(pid)
+            ok = kernel32.Process32NextW(snapshot, ctypes.byref(entry))
+    finally:
+        kernel32.CloseHandle(snapshot)
+
+    descendants: list[int] = []
+    stack = list(children_of.get(root, []))
+    seen: set[int] = set()
+    while stack:
+        pid = stack.pop()
+        if pid in seen or pid == root:
+            continue
+        seen.add(pid)
+        descendants.append(pid)
+        stack.extend(children_of.get(pid, []))
+    return descendants
+
+
+def _taskkill(pid: int, *, tree: bool) -> None:
+    if pid <= 0:
+        return
+    cmd = ["taskkill", "/F"]
+    if tree:
+        cmd.append("/T")
+    cmd.extend(["/PID", str(pid)])
+    subprocess.run(cmd, capture_output=True, text=True, check=False)
+
+
+def _remember_port_forward_children(proc: subprocess.Popen[str]) -> None:
+    """Record plugin PIDs while the aws parent is still alive.
+
+    ``aws ssm start-session`` can exit and reparent ``session-manager-plugin``.
+    A snapshot taken only at cleanup then misses the process still bound to the
+    local port.
+    """
+    if sys.platform != "win32":
+        return
+    try:
+        proc._mdc_descendant_pids = _windows_descendant_pids(proc.pid)  # type: ignore[attr-defined]
+    except Exception:
+        logger.warning("Could not record SSM child PIDs for pid %s", getattr(proc, "pid", None), exc_info=True)
+
+
 def _stop_port_forward_process(proc: subprocess.Popen[str]) -> None:
+    """Stop the aws session and, on Windows, session-manager-plugin children.
+
+    ``Popen.terminate()`` only signals the parent. The plugin keeps listening
+    on the local forward port, and the next publish treats that port as a
+    live tunnel instead of starting a new one.
+    """
+    if sys.platform == "win32":
+        saved = [int(pid) for pid in (getattr(proc, "_mdc_descendant_pids", []) or []) if int(pid) > 0]
+        live = _windows_descendant_pids(proc.pid)
+        # Parent may already have exited. taskkill on a dead PID is a no-op.
+        _taskkill(proc.pid, tree=True)
+        for pid in dict.fromkeys([*saved, *live]):
+            _taskkill(pid, tree=True)
+        try:
+            proc.wait(timeout=5)
+        except subprocess.TimeoutExpired:
+            proc.kill()
+            try:
+                proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                logger.warning("SSM port-forward process %s did not exit", proc.pid)
+        return
+
     if proc.poll() is not None:
         return
     proc.terminate()
@@ -240,6 +360,7 @@ def managed_clinic_db_tunnel(
                 f"{stderr.strip()}"
             )
         logger.info("Clinic DB tunnel ready on 127.0.0.1:%s", port)
+        _remember_port_forward_children(proc)
         yield "started"
     finally:
         _stop_port_forward_process(proc)
