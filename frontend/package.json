@@ -27,7 +27,7 @@
   "dependencies": {
     "@emotion/react": "^11.14.0",
     "@emotion/styled": "^11.14.0",
-    "@mui/icons-material": "^6.4.7",
+    "@mui/icons-material": "^9.2.0",
     "@mui/material": "^6.4.7",
     "axios": "^1.18.1",
     "mermaid": "^10.9.6",
