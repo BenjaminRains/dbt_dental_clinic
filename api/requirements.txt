@@ -12,7 +12,7 @@ pydantic>=2.0.0
 pydantic-settings>=2.0.0
 
 # Data processing and analytics
-pandas>=2.0.0
+pandas>=3.0.5
 numpy>=2.5.1
 
 # Environment and configuration
