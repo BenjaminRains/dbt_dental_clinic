@@ -1,0 +1,34 @@
+# Copy to golden_manifest.yml (gitignored). Golden CSVs live under golden/.
+
+version: 1
+
+validation_window:
+  window_id: aging_same_day_snapshot
+  date_from: "2026-10-12"
+  date_to: "2026-10-12"
+
+snapshots:
+  - id: aging_of_a_r_2026-10-12
+    status: within_tolerance
+    od_report: Aging of A/R
+    od_menu_path: "Reports → Standard → Monthly → Aging of A/R"
+    source_file: null
+    exported_at: "2026-10-12"
+    parameters:
+      as_of_date: "2026-10-12"
+      grouping: guarantor BalTotal > 0, PatStatus Patient and Inactive
+      providers: all
+      clinics: all
+    od_totals:
+      total_ar: 282624.23
+      bal_0_30: 93531.82
+      bal_31_60: 38326.36
+      bal_61_90: 28388.60
+      bal_over_90: 122377.45
+    our_model: mart_ar_summary
+    our_field_or_measure: sum(total_balance) by snapshot_date
+    compare_sql: aging-of-a-r/compare/compare_aging_ar_total.sql
+    tolerance:
+      amount_abs: 50.00
+      pct: 0.005
+    last_result: null

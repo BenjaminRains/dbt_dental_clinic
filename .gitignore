@@ -107,6 +107,7 @@ database_data/
 profiles.yml
 !profiles.yml.template
 credentials.json
+quickbooks_credentials.json
 connection.json
 *.connection
 *.config
@@ -145,6 +146,9 @@ deployment/logs/
 
 # Documentation with sensitive business info.
 docs/
+# The QuickBooks project keeps its own notes. Re-include that directory only.
+!quickbooks/docs/
+!quickbooks/docs/**
 !/docs/
 /docs/*
 !docs/deployment/
@@ -225,6 +229,9 @@ TODO.md
 
 # Legacy portfolio assets at repo root (do not ignore frontend/apps/portfolio)
 /portfolio/
+
+# Workload sampler output (scripts/utils/monitor_workflow.ps1)
+/workload_monitor_logs/
 
 # any log files:
 *.log

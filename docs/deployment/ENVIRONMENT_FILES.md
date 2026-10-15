@@ -76,6 +76,9 @@ Every env file has a **unique name** = path from repo root. The same basename (e
 | **ETL pipeline** | `etl_pipeline/.env_local` | `etl_pipeline/.env_local.template` | `settings_v2` via `mdc etl … --env local` |
 | **ETL pipeline** | `etl_pipeline/.env_clinic` | `etl_pipeline/.env_clinic.template` | `settings_v2` via `mdc etl … --env clinic` |
 | **ETL pipeline** | `etl_pipeline/.env_test` | `etl_pipeline/.env_test.template` | `settings_v2` via `mdc etl … --env test` |
+| **QuickBooks** | `quickbooks/.env_local` | `quickbooks/.env_local.template` | `quickbooks/quickbooks/credentials.py` when `QUICKBOOKS_ENVIRONMENT=local` |
+| **QuickBooks** | `quickbooks/.env_clinic` | `quickbooks/.env_clinic.template` | `quickbooks/quickbooks/credentials.py` when `QUICKBOOKS_ENVIRONMENT=clinic` |
+| **QuickBooks** | `quickbooks/.env_test` | `quickbooks/.env_test.template` | `quickbooks/quickbooks/credentials.py` when `QUICKBOOKS_ENVIRONMENT=test` |
 | **dbt local** | `dbt_dental_models/.env_local` | `dbt_dental_models/.env_local.template` | `mdc_cli/dbt_env.py` via `mdc dbt … --env local` |
 | **dbt clinic** | `dbt_dental_models/.env_clinic` (optional) | `etl_pipeline/.env_clinic.template` | `mdc_cli/dbt_env.py` + `deployment_credentials.json` |
 | **dbt demo** | (no file) | — | `mdc_cli/dbt_env.py` from `deployment_credentials.json` |
@@ -124,13 +127,13 @@ Use a single vocabulary so stages stay consistent across API, ETL, dbt, and depl
      (synthetic export only)
 ```
 
-| **Name** | **Meaning** | **API** | **ETL** | **dbt** |
-|----------|-------------|---------|---------|---------|
-| `local` | Local dev (localhost) | ✅ | ✅ | ✅ |
-| `demo` | Portfolio/demo (synthetic data, public) — **not** production | ✅ | — | ✅ (from JSON) |
-| `clinic` | Real clinic (PHI, IP‑restricted) — **this is production** | ✅ | ✅ | ✅ |
-| `test` | Test DBs (CI/integration, localhost) | ✅ | ✅ | — |
-| `snowflake` | Portfolio Snowflake mini warehouse (synthetic only) | — | — | ✅ (from `.env_snowflake`) |
+| **Name** | **Meaning** | **API** | **ETL** | **dbt** | **QuickBooks** |
+|----------|-------------|---------|---------|---------|----------------|
+| `local` | Local dev (localhost) | ✅ | ✅ | ✅ | ✅ Intuit sandbox |
+| `demo` | Portfolio/demo (synthetic data, public) — **not** production | ✅ | — | ✅ (from JSON) | — |
+| `clinic` | Real clinic (PHI, IP‑restricted) — **this is production** | ✅ | ✅ | ✅ | ✅ Intuit production API |
+| `test` | Test DBs (CI/integration, localhost) | ✅ | ✅ | — | ✅ Intuit sandbox |
+| `snowflake` | Portfolio Snowflake mini warehouse (synthetic only) | — | — | ✅ (from `.env_snowflake`) | — |
 
 **`prod` / `production`:** Not a separate `mdc` stage. Prefer `clinic` in code and env drivers (`API_ENVIRONMENT=clinic`). `prod` / `production` are acceptable only as **AWS resource** naming aliases for clinic infra (e.g. S3 bucket suffixes). Never use `production` to mean the public demo API — that was renamed to `demo` (see [archive/ENVIRONMENT_NAMING_CONVENTION.md](archive/ENVIRONMENT_NAMING_CONVENTION.md)).
 
@@ -148,6 +151,7 @@ Use a single vocabulary so stages stay consistent across API, ETL, dbt, and depl
 - **Root**: `/.env` (Docker Compose sandbox only); `/.env.template` committed; `/.env_ec2` source for EC2 deploy.
 - **API**: `api/.env_api_<env>` — e.g. `api/.env_api_local`, `api/.env_api_demo`, `api/.env_api_clinic`, `api/.env_api_test`. On EC2, systemd uses `api/.env` (contents from one of the `api/.env_api_*` files).
 - **ETL**: `etl_pipeline/.env_<env>` — e.g. `etl_pipeline/.env_local`, `etl_pipeline/.env_clinic`, `etl_pipeline/.env_test`. **No project-root fallback** (ETL loader reads only from `etl_pipeline/`).
+- **QuickBooks**: `quickbooks/.env_<env>` — `quickbooks/.env_local`, `quickbooks/.env_clinic`, `quickbooks/.env_test`. Loaded by `python -m quickbooks --env <stage>`. `clinic` is the real company (Intuit production API). `local` and `test` use the Intuit sandbox. No `demo` stage and no `production` stage name. Process environment wins over the file.
 - **dbt:** `dbt_dental_models/.env_local`, `dbt_dental_models/.env_clinic`, `dbt_dental_models/.env_snowflake`; demo/clinic from `deployment_credentials.json` via `mdc_cli/dbt_env.py`. No project-root fallback.
 - **Frontend**: `frontend/.env`, `frontend/.env.local`, `frontend/.env.production` (Vite; see frontend README).
 - **Consult audio pipe**: `consult_audio_pipe/.env`; template `consult_audio_pipe/.env.template`.

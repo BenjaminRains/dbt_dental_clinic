@@ -448,6 +448,11 @@ def _serialize_value_for_copy_csv(value: Any) -> str:
     """
     if value is None:
         return ""
+    # bool is a subclass of int. MySQL TINYINT often arrives as bool, and
+    # str(False) is "False", which PostgreSQL rejects for smallint. 0/1 is
+    # valid for both integer and boolean COPY targets.
+    if isinstance(value, bool):
+        return "1" if value else "0"
     if isinstance(value, (datetime, date)):
         return value.isoformat()
     return "" if value == "" else str(value)

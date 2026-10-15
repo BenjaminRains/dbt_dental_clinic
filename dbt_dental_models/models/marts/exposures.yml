@@ -934,9 +934,9 @@ exposures:
       ## Key Features:
       
       ### KPI Summary Cards:
-      - **Total AR Outstanding**: Complete outstanding balance with patient vs insurance breakdown
-      - **Current (0-30 days)**: Current AR amount and percentage of total
-      - **90 Day Overdue**: Seriously overdue balance (>90 days) with percentage indicator
+      - **Total AR Outstanding**: Sum of stored `patient.BalTotal` for PatStatus Patient and Inactive with a positive balance. Not the OpenDental Aging of A/R family ledger.
+      - **Current (0-30 days)**: Procedures dated 0–30 days before the snapshot, scaled so the four buckets sum to `BalTotal`
+      - **90 Day Overdue**: Procedures dated more than 90 days before the snapshot, plus any `BalTotal` with no procedure rows, scaled to `BalTotal`
       - **AR Days (DSO)**: Days Sales Outstanding metric with collection rate display
       - **AR Ratio**: Current month collections to production ratio
       - **High Risk Count**: Number and dollar amount of high-risk accounts requiring immediate attention
@@ -986,36 +986,39 @@ exposures:
       ## Metric Definitions & Calculations:
       
       ### Total AR Outstanding:
-      **Definition**: Complete sum of all outstanding accounts receivable balances from all patients and providers.
+      **Definition**: Sum of stored guarantor balances. This is `patient.BalTotal` for PatStatus Patient and Inactive with a positive balance. It is not OpenDental Reports → Standard → Monthly → Aging of A/R, which rebuilds a family ledger from transactions as of a chosen date.
       
       **Calculation**: 
-      - Source: `mart_ar_summary.total_balance`
-      - Sum of all `total_balance` values where `total_balance > 0` (excludes zero balances and credits)
-      - Aggregated at patient-provider level, then summed across all accounts
+      - Source: `mart_ar_summary.total_balance`, copied from `dim_patient.total_balance` / `patient.BalTotal` on the guarantor
+      - Sum of `total_balance` where `total_balance > 0`
+      - Grain: patient × primary provider. Snapshot date is `current_date` at dbt build.
+      - Excludes NonPatient, Archived, Deceased, Deleted, zero balances, and credit balances
       
-      **Breakdown**:
-      - **Patient AR**: Sum of `patient_responsibility` field (patient's direct financial obligation)
-      - **Insurance AR**: Sum of `insurance_estimate` field (estimated amount expected from insurance carriers)
+      **Related columns (not added into the total)**:
+      - **Patient portion**: `greatest(total_balance − insurance_estimate, 0)` on each row (`patient_responsibility`). This is not the Aging of A/R Patient column (report Total − Ins Est − W/O Est).
+      - **Insurance estimate**: `claim.InsPayEst` on procedures that still have a balance, minus insurance already paid on those procedures (`insurance_estimate`). This is not Aging of A/R -Ins Est, which uses open `claimproc.InsPayEst` only.
+      - **Write-off estimate**: no column. Aging of A/R -W/O Est is `claimproc.WriteOff` on those open lines.
       
-      **Data Source**: Latest snapshot from `mart_ar_summary` table per patient-provider combination
+      **Data Source**: Latest snapshot from `mart_ar_summary`
       
       ---
       
       ### AR Aging Buckets:
-      **Definition**: Distribution of outstanding balances by age (time since service was provided).
+      **Definition**: Days since `procedure_date`, scaled so the four buckets sum to stored `BalTotal`. This is not the OpenDental Aging of A/R waterfall, which applies credits to the oldest charges first inside fixed TranDate windows.
       
       **Bucket Definitions**:
-      - **Current (0-30 days)**: Balance aged 0-30 days (`balance_0_30_days`)
-      - **30 Day (31-60 days)**: Balance aged 31-60 days (`balance_31_60_days`)
-      - **60 Day (61-90 days)**: Balance aged 61-90 days (`balance_61_90_days`)
-      - **90 Day (90+ days)**: Balance aged over 90 days (`balance_over_90_days`)
+      - **0–30 days** (`balance_0_30_days`): procedures dated 0–30 days before the snapshot, then scaled to `BalTotal`
+      - **31–60 days** (`balance_31_60_days`): procedures dated 31–60 days before the snapshot, then scaled to `BalTotal`
+      - **61–90 days** (`balance_61_90_days`): procedures dated 61–90 days before the snapshot, then scaled to `BalTotal`
+      - **Over 90 days** (`balance_over_90_days`): procedures dated more than 90 days before the snapshot, plus any `BalTotal` with no procedure rows, then scaled to `BalTotal`
       
       **Calculation**:
-      - Each bucket is calculated as a percentage: `(bucket_amount / total_balance) × 100`
-      - Buckets must sum to 100% of total balance (within rounding tolerance)
-      - Source: `mart_ar_summary` aging bucket fields, aggregated by patient-provider, then summed
+      - Age is `CURRENT_DATE` minus `procedure_date` in `int_ar_balance`
+      - Procedure status Completed (2) or In Progress (8), last 18 months, positive remaining procedure balance only
+      - Display percentage: `(bucket_amount / total_balance) × 100`
+      - Source: `mart_ar_summary` bucket fields, aggregated by patient × primary provider, then summed
       
-      **Business Context**: Aging analysis helps identify collection risk and prioritize follow-up activities
+      **Business Context**: Use these buckets for the AR worklist. Use the OpenDental Aging of A/R query when the number must match that report.
       
       ---
       

@@ -1,6 +1,6 @@
 # ETL Schema Update Command Feature
 
-> **Status (2026-06-26):** **Shipped (v1).** CLI command `update-schema` and nightly Airflow `refresh_schema_configuration` are live. Change reporting is simplified; `--dry-run`, rollback CLI, and dedicated tests remain deferred. See [§ Status](#status-2026-06).
+> **Status (2026-06-26):** **Shipped (v1).** CLI command `update-schema` and nightly Airflow `refresh_schema_configuration` are live. Change reporting is simplified; rollback CLI and dedicated tests remain deferred. **`update-schema --dry-run` was dropped 2026-10-08** (nightly refresh already backs up `tables.yml`). `python -m etl_pipeline run --dry-run` is a different command and stays. See [§ Status](#status-2026-06).
 
 ## Overview
 
@@ -55,7 +55,7 @@ Add an ETL **`update-schema`** command (original name in this doc: `etl-update-s
 ### Phase 1: Command Structure ✅
 
 1. **CLI command:** `update_schema` in `etl_pipeline/etl_pipeline/cli/commands.py`; registered in `cli/main.py`
-2. **Options:** `--backup`, `--force`, `--output-dir`, `--log-level` — **`--dry-run` not implemented**
+2. **Options:** `--backup`, `--force`, `--output-dir`, `--log-level`. **`update-schema --dry-run` dropped 2026-10-08.**
 3. **Environment:** `get_settings()`, `ConnectionFactory` pre-flight
 4. **Error handling:** `click.ClickException`, connection failure path matches spec
 
@@ -250,7 +250,7 @@ Configuration unchanged.
 | Change notifications (email/Slack) | ❌ Pending |
 | Pre-ETL schema validation | ⚠️ Partial (`check-schema-drift`) |
 | Rollback command | ❌ Pending (manual backup restore) |
-| `--dry-run` | ❌ Not implemented |
+| `update-schema --dry-run` | Dropped 2026-10-08. Backup-before-overwrite is the safety. `etl run --dry-run` stays. |
 
 ### Advanced Features
 
@@ -277,7 +277,6 @@ Configuration unchanged.
 
 ### Deferred
 
-- `--dry-run` flag
 - `restore-schema` / rollback CLI
 - Rich column-level diff in CLI output (analyzer changelog is the detailed source)
 - Dedicated pytest suite for `update_schema`

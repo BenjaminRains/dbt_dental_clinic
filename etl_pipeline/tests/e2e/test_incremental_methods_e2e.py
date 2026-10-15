@@ -422,18 +422,18 @@ class TestIncrementalMethodsE2E:
         logger.info("Starting primary incremental column functionality E2E test")
         
         # Test tables with different primary incremental column configurations
-        # NOTE: Primary column is the table's primary key (e.g., AptNum for appointment, PatNum for patient)
-        # Incremental columns are timestamp columns used for incremental loading (e.g., DateTStamp)
+        # Watermark column from tables.yml (replicator_watermark_column), not the primary key.
+        # in_place_updates tables use DateTStamp so edits are copied, not only new PKs.
         test_cases = [
             {
                 'table_name': 'appointment',
-                'expected_primary_column': 'AptNum',  # Primary key, not DateTStamp
-                'description': 'Table with valid primary key column'
+                'expected_primary_column': 'DateTStamp',
+                'description': 'In-place table watermark'
             },
             {
                 'table_name': 'patient',
-                'expected_primary_column': 'PatNum',  # Primary key, not DateTStamp
-                'description': 'Table with primary key column'
+                'expected_primary_column': 'DateTStamp',
+                'description': 'In-place table watermark'
             },
             {
                 'table_name': 'appointmenttype',
