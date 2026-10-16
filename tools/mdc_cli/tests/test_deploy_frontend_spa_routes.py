@@ -13,6 +13,8 @@ def test_portfolio_keys_include_showcase_not_clinic_homes():
     assert "agent-profile" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "environment-manager" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "schema-discovery" in PORTFOLIO_SPA_ROUTE_KEYS
+    assert "kpi-validation" in PORTFOLIO_SPA_ROUTE_KEYS
+    assert "snowflake" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "dashboard" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "login" not in PORTFOLIO_SPA_ROUTE_KEYS
     assert "home/owner" not in PORTFOLIO_SPA_ROUTE_KEYS

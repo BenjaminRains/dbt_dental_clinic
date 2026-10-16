@@ -5,6 +5,7 @@ models:
     config:
       materialized: incremental
       unique_key: procedure_id
+      tags: ['staging', 'opendental', 'procedure', 'snowflake']
 
     description: >
       Staging model for OpenDental procedure log data. Contains detailed information 
@@ -172,6 +173,8 @@ models:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: provider_id
         description: "Foreign key to provider - Identifies the dental provider who performed or is assigned to perform the procedure. Distribution shows ~16 unique providers across all procedures."
@@ -182,6 +185,7 @@ models:
               config:
                 severity: warn
                 where: "provider_id is not null"
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: appointment_id
         description: >
@@ -200,6 +204,7 @@ models:
               config:
                 severity: warn
                 where: "appointment_id is not null and appointment_id != 0 and procedure_date >= '2023-01-01'"
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: clinic_id
         description: "Foreign key to clinic - Identifies the clinic location where the procedure was performed or is planned to be performed."
@@ -250,6 +255,7 @@ models:
               config:
                 severity: warn
                 where: "planned_appointment_id is not null and planned_appointment_id != 0 and procedure_status = 1"
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: procedure_lab_id
         description: "Foreign key to laboratory procedure - Links to associated lab work for prosthetic or specialized procedures."
@@ -276,6 +282,7 @@ models:
               config:
                 severity: warn
                 where: "statement_id is not null and statement_id != 0 and procedure_date <= current_date"
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: repeat_charge_id
         description: "Foreign key to repeat charge - Links to recurring billing setup for procedures that repeat regularly."

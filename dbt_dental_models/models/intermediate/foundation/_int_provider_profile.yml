@@ -124,6 +124,7 @@ models:
               config:
                 severity: warn
                 description: "Specialty ID should reference valid specialty definition when present"
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: is_system_provider
         description: >

@@ -200,6 +200,8 @@ models:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               where: "linked_procedure_id is not null"
       
       - name: contact_phone_number

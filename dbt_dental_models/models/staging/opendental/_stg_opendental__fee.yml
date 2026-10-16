@@ -5,7 +5,7 @@ models:
     config:
       materialized: incremental
       unique_key: fee_id
-      tags: ['staging', 'opendental', 'fee']
+      tags: ['staging', 'opendental', 'fee', 'snowflake']
 
     description: >
       Staging model for OpenDental fee data. Contains standardized fee information including 

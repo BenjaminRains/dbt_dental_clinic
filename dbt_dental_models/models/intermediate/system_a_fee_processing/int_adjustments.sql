@@ -7,7 +7,7 @@
         {'columns': ['adjustment_id'], 'unique': true},
         {'columns': ['patient_id']},
         {'columns': ['_updated_at']}
-    ]) }}
+    ] if target.type == 'postgres' else []) }}
 
 /*
     Intermediate model for adjustments

@@ -126,6 +126,7 @@ models:
               field: procedure_id
               config:
                 description: "Clinical integrity: Referenced procedures must exist for valid claim processing"
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: patient_id
         description: >

@@ -21,7 +21,7 @@ waves:
       - claimpayment
 
   wave2_payment_detail:
-    description: fact_payment lineage (add when Wave 2 starts)
+    description: fact_payment lineage (int_payment_split + int_procedure_complete + int_adjustments)
     tables:
       - payment
       - claimpayment
@@ -32,6 +32,14 @@ waves:
       - provider
       - userod
       - definition
+      # Required by int_procedure_complete
+      - procedurecode
+      - procnote
+      - fee
+      - feesched
+      # Referenced in stg_opendental__procedurelog filter subqueries
+      - insbluebook
+      - procgroupitem
 
   # Future: all generator-populated demo tables (~34), then fuller OD shell as needed
   # demo_core:

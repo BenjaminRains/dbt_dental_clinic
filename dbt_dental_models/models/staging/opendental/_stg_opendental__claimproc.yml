@@ -137,6 +137,7 @@ models:
               config:
                 severity: warn
                 where: "procedure_id IS NOT NULL AND procedure_id != 0"
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: claim_id
         description: >

@@ -249,19 +249,17 @@ def _sf_raw_fq(database: str, schema: str, table: str) -> str:
     """
     RAW landing FQN for dbt sources.
 
-    dbt_project.yml sets quoting: true, so source('opendental', 'payment') compiles
-    to "OPENDENTAL_SF"."raw"."payment". Unquoted RAW.PAYMENT is a different object.
+    On this account, unquoted identifiers fold to uppercase (RAW.PAYMENT). That is
+    what dbt compiles for sources (`OPENDENTAL_SF.raw.payment`). Quoted \"raw\" is a
+    different, non-existent schema here — do not quote database/schema/table names.
     Column names stay quoted (PayNum) so staging SQL with \"PayNum\" still works.
     """
-    return (
-        f"{_quote_ident(database)}.{_quote_ident(schema.lower())}."
-        f"{_quote_ident(table.lower())}"
-    )
+    return f"{database}.{schema}.{table}"
 
 
 def _sf_stage_fq(database: str, schema: str, stage: str) -> str:
-    """Internal stage FQN inside the quoted landing schema."""
-    return f"@{_quote_ident(database)}.{_quote_ident(schema.lower())}.{_quote_ident(stage)}"
+    """Internal stage FQN inside the landing schema."""
+    return f"@{database}.{schema}.{stage}"
 
 
 def _create_snowflake_table(
@@ -288,8 +286,8 @@ def _load_table(
 
     with sf_conn.cursor() as cur:
         cur.execute(f"USE WAREHOUSE {sf_cfg['warehouse']}")
-        cur.execute(f"USE DATABASE {_quote_ident(database)}")
-        cur.execute(f"USE SCHEMA {_quote_ident(schema.lower())}")
+        cur.execute(f"USE DATABASE {database}")
+        cur.execute(f"USE SCHEMA {schema}")
         _create_snowflake_table(cur, database, schema, table, columns)
         cur.execute(f"REMOVE {stage_path} PATTERN='.*{re.escape(table)}\\.csv.*'")
         put_sql = (

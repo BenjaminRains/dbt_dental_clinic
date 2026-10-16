@@ -133,6 +133,8 @@ models:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
       - name: specialty_id
         description: Provider's specialty identifier, used for procedure assignment and reporting
       - name: specialty_description

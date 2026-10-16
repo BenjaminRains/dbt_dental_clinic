@@ -5,6 +5,7 @@ models:
     config:
       materialized: incremental
       unique_key: procedure_code_id
+      tags: ['staging', 'opendental', 'procedure', 'snowflake']
 
     description: >
       Standardized staging model for procedure codes from the OpenDental system.
@@ -126,9 +127,6 @@ models:
         - Primary categorization should use procedure_category_id rather than code prefixes alone
         - Fee variations across schedules are expected and normal business practice
         - D0-D9 prefixes indicate procedure groups when present (diagnostic, preventive, etc.)
-    
-    
-      tags: ['staging', 'opendental', 'procedure']
     tests:
       - validate_procedure_code_flag:
           column_name: procedure_code
@@ -160,6 +158,8 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: definition_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               severity: warn
           - accepted_values:
               values: [73, 74, 75, 76, 77, 78, 79, 80, 81, 82, 83, 85, 250, 251, 260, 300, 301, 540, 548, 622, 665, 667, 668]

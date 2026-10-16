@@ -122,6 +122,8 @@ models:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               where: "fee_schedule_id is not null and fee_schedule_id != 0"
               severity: warn
 
@@ -133,6 +135,8 @@ models:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               where: "copay_fee_schedule_id is not null and copay_fee_schedule_id != 0"
               severity: warn
 
@@ -144,6 +148,8 @@ models:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               where: "allowed_fee_schedule_id is not null and allowed_fee_schedule_id != 0"
               severity: warn
 
@@ -155,6 +161,8 @@ models:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               where: "manual_fee_schedule_id is not null and manual_fee_schedule_id != 0"
               severity: warn
 

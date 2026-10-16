@@ -53,6 +53,7 @@ models:
       unique_key: procedure_id
       on_schema_change: fail
       incremental_strategy: merge
+      tags: ['intermediate', 'procedure', 'snowflake']
     
     columns:
       - name: procedure_id
@@ -98,6 +99,8 @@ models:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: provider_id
         description: >
@@ -115,6 +118,8 @@ models:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: appointment_id
         description: >

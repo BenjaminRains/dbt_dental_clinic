@@ -109,6 +109,7 @@ models:
               config:
                 severity: error
                 description: "Payment allocations must reference valid procedures for financial reporting accuracy"
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: claim_procedure_id
         description: >

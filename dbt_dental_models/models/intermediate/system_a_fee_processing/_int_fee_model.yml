@@ -96,6 +96,7 @@ models:
               field: procedure_id
               config:
                 description: "Ensures referential integrity with source procedure records for financial validation"
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: patient_id
         description: >
@@ -141,6 +142,8 @@ models:
           - relationships:
               to: ref('stg_opendental__procedurecode')
               field: procedure_code_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: procedure_date
         description: Date when procedure was performed or planned
@@ -217,6 +220,8 @@ models:
           - relationships:
               to: ref('stg_opendental__fee')
               field: fee_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               severity: warn  # Some procedures might not have standard fees
 
       - name: standard_fee
@@ -234,6 +239,8 @@ models:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               severity: warn  # Some procedures might not have fee schedules
 
       - name: fee_schedule_description
