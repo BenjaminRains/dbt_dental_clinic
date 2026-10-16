@@ -83,6 +83,8 @@ models:
           - relationships:
               to: ref('stg_opendental__procedurecode')
               field: procedure_code_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               severity: warn
               where: "code_id is not null"
       

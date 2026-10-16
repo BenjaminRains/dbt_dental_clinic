@@ -10,7 +10,7 @@
             {'columns': ['provider_id']},
             {'columns': ['payment_date']},
             {'columns': ['_updated_at']}
-        ]
+        ] if target.type == 'postgres' else []
     )
 }}
 
@@ -88,6 +88,16 @@ payment_splits as (
         max(check_number) as check_number,
         max(bank_branch) as bank_branch,
         max(payment_external_id) as payment_external_id,
+        {% if target.type == 'snowflake' %}
+        boolor_agg(payment_source) as payment_source,
+        max(payment_notes) as payment_notes,
+        boolor_agg(payment_status) as payment_status,
+        boolor_agg(process_status) as process_status,
+        boolor_agg(is_split) as is_split,
+        boolor_agg(is_recurring_cc) as is_recurring_cc,
+        max(merchant_fee) as merchant_fee,
+        boolor_agg(is_cc_completed) as is_cc_completed,
+        {% else %}
         bool_or(payment_source) as payment_source,  -- Boolean field
         max(payment_notes) as payment_notes,
         bool_or(payment_status) as payment_status,  -- Boolean field
@@ -96,20 +106,29 @@ payment_splits as (
         bool_or(is_recurring_cc) as is_recurring_cc,  -- Boolean field
         max(merchant_fee) as merchant_fee,
         bool_or(is_cc_completed) as is_cc_completed,  -- Boolean field
+        {% endif %}
         max(recurring_charge_date) as recurring_charge_date,
         
         -- Aggregated split information
         count(*) as split_count,
         sum(split_amount) as total_split_amount,
+        {% if target.type == 'snowflake' %}
+        array_agg(distinct case when provider_id is not null then provider_id::varchar end) within group (order by case when provider_id is not null then provider_id::varchar end) as split_provider_ids,
+        array_agg(distinct case when procedure_id is not null then procedure_id::varchar end) within group (order by case when procedure_id is not null then procedure_id::varchar end) as split_procedure_ids,
+        array_agg(distinct patient_id::varchar) within group (order by patient_id::varchar) as split_patient_ids,
+        sum(case when split_type = 'DISCOUNT' then 1 else 0 end) as discount_split_count,
+        sum(case when split_type = 'UNEARNED_REVENUE' then 1 else 0 end) as unearned_split_count,
+        sum(case when split_type = 'TREATMENT_PLAN_PREPAYMENT' then 1 else 0 end) as treatment_plan_split_count,
+        sum(case when split_type = 'INCOME_TRANSFER' then 1 else 0 end) as transfer_split_count,
+        {% else %}
         array_agg(distinct provider_id::text order by provider_id::text) filter (where provider_id is not null) as split_provider_ids,
         array_agg(distinct procedure_id::text order by procedure_id::text) filter (where procedure_id is not null) as split_procedure_ids,
         array_agg(distinct patient_id::text order by patient_id::text) as split_patient_ids,
-        
-        -- Split type aggregations
         count(*) filter (where split_type = 'DISCOUNT') as discount_split_count,
         count(*) filter (where split_type = 'UNEARNED_REVENUE') as unearned_split_count,
         count(*) filter (where split_type = 'TREATMENT_PLAN_PREPAYMENT') as treatment_plan_split_count,
         count(*) filter (where split_type = 'INCOME_TRANSFER') as transfer_split_count,
+        {% endif %}
         
         -- Metadata
         max(_loaded_at) as _loaded_at,
@@ -144,7 +163,11 @@ payment_calculated as (
         extract(year from ps.payment_date) as payment_year,
         extract(month from ps.payment_date) as payment_month,
         extract(quarter from ps.payment_date) as payment_quarter,
+        {% if target.type == 'snowflake' %}
+        dayofweek(ps.payment_date) - 1 as payment_day_of_week,
+        {% else %}
         extract(dow from ps.payment_date) as payment_day_of_week,
+        {% endif %}
 
         -- Payment details (OD DefCat 10 ItemName)
         coalesce(

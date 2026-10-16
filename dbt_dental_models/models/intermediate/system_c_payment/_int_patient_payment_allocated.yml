@@ -157,6 +157,7 @@ models:
               config:
                 severity: error
                 description: "Non-zero procedure ID must exist in stg_opendental__procedurelog for payments after 2023-01-01 and procedures that meet the inclusion criteria (2021 onwards)"
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: adjustment_id
         description: Foreign key to the adjustment
@@ -170,6 +171,7 @@ models:
               config:
                 severity: warn
                 description: "Adjustment ID must exist in stg_opendental__adjustment, except for administrative entries (ID 0 or payment_type_id = 0) or adjustments from before 2023"
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: split_amount
         description: Amount allocated in this payment
@@ -232,6 +234,7 @@ models:
               config:
                 severity: error
                 description: "Payment type ID must exist in stg_opendental__definition, except for administrative entries (type 0)"
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: payment_source
         description: Source of the payment

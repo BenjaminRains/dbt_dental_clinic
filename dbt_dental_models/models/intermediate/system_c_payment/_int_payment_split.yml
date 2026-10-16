@@ -96,6 +96,7 @@ models:
       materialized: incremental
       unique_key: paysplit_id
       schema: int
+      tags: ['intermediate', 'payment', 'snowflake']
     
     meta:
       owner: "billing-team@mdc-analytics.com"
@@ -140,9 +141,6 @@ models:
           - relationships:
               to: ref('stg_opendental__payment')
               field: payment_id
-              config:
-                # int_payment_split is not on Snowflake in Wave 1; selected only because it refs payment.
-                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: patient_id
         description: |
@@ -153,6 +151,8 @@ models:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: clinic_id
         description: |
@@ -177,6 +177,7 @@ models:
               config:
                 severity: warn
                 description: "Non-zero provider ID must exist in stg_opendental__provider when payment date is after 2023-01-01. Note: Unearned revenue splits (unearned_type = 288) require a provider assignment."
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: procedure_id
         description: |
@@ -370,6 +371,8 @@ models:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: procedure_code
         description: Code of the associated procedure

@@ -147,6 +147,8 @@ models:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: split_amount
         description: Amount allocated in this payment
@@ -189,6 +191,8 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: definition_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: check_number
         description: Check number for the payment (nullable — blank for EFT/electronic and some check payments)

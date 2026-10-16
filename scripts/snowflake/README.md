@@ -62,6 +62,17 @@ python scripts/snowflake/compare_mart_daily_payments.py --source local
 
 Exit 0 when every date matches. Exit 1 lists the dates that differ.
 
+## Snowsight UI (from the terminal)
+
+```powershell
+mdc snowflake open            # open browser to Snowsight (passkey / SSO in UI)
+mdc snowflake open --print    # print URL only
+mdc snowflake status          # account / role / db / UI URL
+mdc snowflake status --check  # also validate key-pair connect via dbt env
+```
+
+Optional override in `.env_snowflake`: `SNOWFLAKE_UI_URL=https://…`
+
 ## Then dbt
 
 ```powershell

@@ -8,7 +8,7 @@
         {'columns': ['procedure_id'], 'unique': true},
         {'columns': ['patient_id']},
         {'columns': ['_updated_at']}
-    ]) }}
+    ] if target.type == 'postgres' else []) }}
 
 /*
     Intermediate model for procedure_complete
@@ -116,7 +116,11 @@ fee_statistics as (
 procedure_notes_aggregated as (
     SELECT 
         procedure_id,
+        {% if target.type == 'snowflake' %}
+        LISTAGG(note, ' | ') WITHIN GROUP (ORDER BY entry_timestamp) AS procedure_notes,
+        {% else %}
         STRING_AGG(note, ' | ' ORDER BY entry_timestamp) AS procedure_notes,
+        {% endif %}
         COUNT(*) AS note_count,
         MAX(entry_timestamp) AS last_note_timestamp
     FROM {{ ref('stg_opendental__procnote') }}

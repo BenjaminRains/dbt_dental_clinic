@@ -106,6 +106,8 @@ models:
           - relationships:
               to: ref('stg_opendental__procedurelog')
               field: procedure_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               severity: warn
       
       - name: clinic_id

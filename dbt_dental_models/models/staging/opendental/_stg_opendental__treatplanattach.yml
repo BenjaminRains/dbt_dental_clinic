@@ -125,6 +125,7 @@ models:
                 description: >
                   49% of procedure references are orphaned.
                   These are likely historical procedures that have been removed from the system.
+                enabled: "{{ target.type != 'snowflake' }}"
       
       # Business Columns
       - name: priority

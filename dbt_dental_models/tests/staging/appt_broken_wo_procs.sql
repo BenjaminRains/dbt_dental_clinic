@@ -1,4 +1,7 @@
-{{ config(severity = 'warn') }}
+{{ config(
+    severity = 'warn',
+    enabled = (target.type != 'snowflake')
+) }}
 
 -- Test for broken/missed appointments without procedure descriptions
 -- Note: username field removed for PII compliance - use patient_id for identification

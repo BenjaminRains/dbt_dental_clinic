@@ -76,6 +76,7 @@ models:
               config:
                 description: >
                   Some referral attachments have procedure_id = 0, indicating they are not linked to specific procedures. This is expected behavior for certain referral types.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: provider_id
         description: >
