@@ -410,6 +410,8 @@ models:
               config:
                 severity: warn
                 description: "Validates surface codes follow standard dental notation or numeric codes for odontoplasty"
+                # Macro uses Postgres ~ regex. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: tooth_number
         description: "Tooth number using standard dental numbering (1-32 for permanent teeth, A-T for primary teeth). May be null for procedures not specific to individual teeth."
@@ -417,6 +419,8 @@ models:
           - valid_tooth_number:
               config:
                 severity: warn
+                # Macro uses Postgres ~ regex. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: tooth_range
         description: "Range of teeth involved in the procedure (e.g., '1-3' for multiple adjacent teeth). Used for procedures affecting multiple teeth."

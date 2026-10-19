@@ -60,6 +60,8 @@ models:
               where: "procedure_id > 0"  # Only validate relationships for actual procedures
               config:
                 severity: warn  # Change to warning since financial transactions are valid
+                # AR models are not on the Snowflake wave; inbound test would scan a missing table.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: patient_id
         description: Unique identifier for the patient

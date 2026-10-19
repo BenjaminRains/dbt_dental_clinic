@@ -87,6 +87,8 @@ models:
               config:
                 severity: error
                 description: "Procedure execution must exist in intermediate procedure data"
+                # fact_procedure is not on the Snowflake wave; inbound test would scan a missing table.
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: date_id
         description: >

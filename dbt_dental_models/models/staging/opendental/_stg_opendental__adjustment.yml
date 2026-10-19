@@ -209,7 +209,10 @@ models:
       - name: _created_at
         description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry column."
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator leaves DateEntry null on adjustments. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: _updated_at
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit column."

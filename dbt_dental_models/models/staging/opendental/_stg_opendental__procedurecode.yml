@@ -193,7 +193,10 @@ models:
           - not_null
           - unique
           - validate_procedure_code_prefixes
-          - validate_procedure_code_format
+          - validate_procedure_code_format:
+              config:
+                # Macro uses Postgres ~ regex. Clinic Postgres still enforces format.
+                enabled: "{{ target.type != 'snowflake' }}"
           - warn_new_procedure_codes:
               severity: warn
               config:

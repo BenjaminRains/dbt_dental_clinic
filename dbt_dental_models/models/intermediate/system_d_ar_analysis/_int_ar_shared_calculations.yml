@@ -68,6 +68,8 @@ models:
               where: "procedure_id > 0"
               config:
                 severity: warn
+                # AR models are not on the Snowflake wave; inbound test would scan a missing table.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: transaction_date
         description: >
