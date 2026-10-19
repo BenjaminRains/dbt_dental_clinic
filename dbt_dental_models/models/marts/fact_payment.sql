@@ -164,7 +164,7 @@ payment_calculated as (
         extract(month from ps.payment_date) as payment_month,
         extract(quarter from ps.payment_date) as payment_quarter,
         {% if target.type == 'snowflake' %}
-        dayofweek(ps.payment_date) - 1 as payment_day_of_week,
+        dayofweek(ps.payment_date) as payment_day_of_week,
         {% else %}
         extract(dow from ps.payment_date) as payment_day_of_week,
         {% endif %}
