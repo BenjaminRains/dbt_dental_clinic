@@ -128,9 +128,9 @@ for each route:
 
 ---
 
-### Step 3 – Integrate prerender into `demo-frontend-deploy`
+### Step 3 – Integrate prerender into `mdc deploy frontend`
 
-Update `scripts/environment_manager.ps1` (inside `Deploy-Frontend`) with an extra step **after** `npm run build` and **before** S3 upload.
+Update `tools/mdc_cli/mdc_cli/deploy_frontend.py` (demo/portfolio target) with an extra step **after** `npm run build` and **before** S3 upload. Do not extend archived `environment_manager.ps1`.
 
 **3.1. Current simplified flow (demo mode)**
 
@@ -225,11 +225,11 @@ Confirm:
    - Static server for `dist`.
    - Playwright logic to render `/` and `/agent-profile`.
    - Write HTML into `dist/index.html` and `dist/agent-profile/index.html`.
-3. **Update `environment_manager.ps1` (Deploy-Frontend)**:
+3. **Update `mdc deploy frontend` (`deploy_frontend.py`)**:
    - After `npm run build`, run `npm run prerender`.
    - Fail deploy if prerender fails.
 4. **Test locally**:
    - `npm run build && npm run prerender`.
    - Verify `curl` against local preview.
-5. **Run `demo-frontend-deploy`** and verify with `curl` against production URLs.
+5. **Run `mdc deploy frontend --target demo`** and verify with `curl` against production URLs.
 
