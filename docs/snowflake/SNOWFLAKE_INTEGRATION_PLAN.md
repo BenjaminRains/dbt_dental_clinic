@@ -24,7 +24,7 @@ Done on the account:
 - `PayAmt`, `MerchantFee`, and `CheckAmt` are `numeric(18, 2)`. Float casts made daily sums differ by cents to a few dollars
 - [`scripts/snowflake/compare_mart_daily_payments.py`](../../scripts/snowflake/compare_mart_daily_payments.py) matches all 61 dates against local demo Postgres and against the EC2 tunnel. Sample: 2025-11-13 `45473.55` / 372 payments; 2026-01-12 `39676.25` / 334 payments. EC2 `raw.payment` and `raw.claimpayment` were copied from the local generation before that rebuild; other EC2 raw tables were not
 
-**Next:** Phase 6 `fact_payment`. The portfolio page is public at https://dbtdentalclinic.com/snowflake.
+**Next:** Phase 6 polish — clean `tag:snowflake` build, then merge [PR #84](https://github.com/BenjaminRains/dbt_dental_clinic/pull/84). Portfolio page is public at https://dbtdentalclinic.com/snowflake (Wave 2 detail copy on the PR branch).
 
 ---
 
@@ -223,12 +223,13 @@ Wave 2 adds payment detail (`fact_payment` via `int_payment_split`) for a richer
 
 ### Phase 6 — Wave 2 payment detail (same domain)
 
-- [ ] Export additional raw tables as required by lineage: e.g. `paysplit`, `adjustment`, `procedurelog`, `patient`, `provider`, `userod`
-- [ ] Tag `int_payment_split`, `fact_payment`, and required upstream staging/int models
-- [ ] Remove or gate Postgres-only `indexes=` (and similar) via adapter-aware config
-- [ ] Rebuild `tag:snowflake`; extend parity notes
+- [x] Export additional raw tables as required by lineage: e.g. `paysplit`, `adjustment`, `procedurelog`, fee/code tables (patient/provider/userod stay untagged off-warehouse)
+- [x] Tag `int_payment_split`, `fact_payment`, and required upstream staging/int models
+- [x] Remove or gate Postgres-only `indexes=` (and similar) via adapter-aware config
+- [x] Portfolio page mentions Wave 2 `fact_payment` detail layer ([PR #84](https://github.com/BenjaminRains/dbt_dental_clinic/pull/84))
+- [ ] Rebuild clean `tag:snowflake` (remaining demo/Snowflake test gates); merge + deploy
 
-**Exit criteria:** `fact_payment` builds on Snowflake; portfolio page mentions detail layer.
+**Exit criteria:** `fact_payment` builds on Snowflake; portfolio page mentions detail layer. Models + page copy met on branch; clean build + deploy still open.
 
 ### Deferred (explicitly out of v1)
 
