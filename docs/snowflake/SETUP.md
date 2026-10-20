@@ -35,7 +35,7 @@ Typical trial: ~$400 credits / ~30 days. Enough to build Wave 1–2 if the wareh
 
 Password-based scripts often fail when you sign in with a **passkey**. Do Phase 1 in the UI:
 
-1. Open https://igpxtll-rwc63998.snowflakecomputing.com and sign in (passkey OK)
+1. Open Snowsight (`mdc snowflake open`, or https://igpxtll-rwc63998.snowflakecomputing.com) and sign in (passkey OK)
 2. Switch role to **ACCOUNTADMIN** (top-right / role selector)
 3. **Projects → Worksheets → +** new SQL worksheet
 4. Open [`sql/01_bootstrap.sql`](sql/01_bootstrap.sql) from the repo, paste into the worksheet

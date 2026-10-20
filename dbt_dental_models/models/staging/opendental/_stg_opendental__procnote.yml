@@ -5,7 +5,7 @@ models:
     config:
       materialized: incremental
       unique_key: procnote_id
-      tags: ['staging', 'opendental', 'clinical']
+      tags: ['staging', 'opendental', 'clinical', 'snowflake']
 
     description: >
       Standardized procedure notes from the OpenDental dental practice management system.
@@ -93,6 +93,8 @@ models:
               to: ref('stg_opendental__patient')
               field: patient_id
               severity: error
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: procedure_id
         description: |
@@ -105,6 +107,7 @@ models:
               field: procedure_id
               config:
                 severity: warn
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: user_id
         description: "Foreign key to user - identifies the dental professional who created this clinical note. May reference historical users no longer active in the system."

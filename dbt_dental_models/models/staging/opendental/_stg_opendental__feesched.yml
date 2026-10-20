@@ -4,7 +4,7 @@ models:
   - name: stg_opendental__feesched
     config:
       materialized: view
-      tags: ['staging', 'opendental', 'feesched']
+      tags: ['staging', 'opendental', 'feesched', 'snowflake']
 
     description: >
       Fee schedule data from OpenDental dental practice management system.

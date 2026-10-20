@@ -29,16 +29,19 @@ import {
 import { MermaidDiagram } from '@mdc/ui-common';
 
 const GITHUB = 'https://github.com/BenjaminRains/dbt_dental_clinic';
-const GITHUB_SF = `${GITHUB}/blob/feature/snowflake-wave1-reload`;
+const GITHUB_SF = `${GITHUB}/blob/feature/snowflake-wave2-fact-payment`;
 
-const ARCHITECTURE_CHART = `flowchart LR
-  PG["Demo Postgres<br/>opendental_demo.raw"]
-  EXP["Export<br/>PUT + COPY INTO"]
-  RAW["Snowflake RAW<br/>payment · claimpayment"]
-  STG["dbt staging<br/>numeric amounts"]
-  MART["mart_daily_payments<br/>one row per date"]
-
-  PG --> EXP --> RAW --> STG --> MART
+const ARCHITECTURE_CHART = `%%{init: {"themeVariables": {"fontSize": "20px"}, "flowchart": {"htmlLabels": false, "padding": 28, "nodeSpacing": 28, "rankSpacing": 56}}}%%
+flowchart TB
+  PG["Demo Postgres · opendental_demo.raw"]
+  EXP["Export · PUT and COPY INTO"]
+  RAW["Snowflake RAW · payment, paysplit, procedurelog, fee"]
+  STG["dbt staging · tag:snowflake"]
+  DAILY["Wave 1 · mart_daily_payments"]
+  DETAIL["Wave 2 · fact_payment via int_payment_split"]
+  PG --> EXP --> RAW --> STG
+  STG --> DAILY
+  STG --> DETAIL
 `;
 
 const PROOF_ROWS = [
@@ -65,8 +68,13 @@ const ARTIFACT_LINKS = [
     },
     {
         title: 'Daily payments mart',
-        desc: 'Same model on Postgres and Snowflake. One row per payment date.',
+        desc: 'Wave 1 hero — one row per payment date on both engines.',
         href: `${GITHUB_SF}/dbt_dental_models/models/marts/mart_daily_payments.sql`,
+    },
+    {
+        title: 'Payment detail fact',
+        desc: 'Wave 2 — paysplit-grain fact_payment on the same Snowflake target.',
+        href: `${GITHUB_SF}/dbt_dental_models/models/marts/fact_payment.sql`,
     },
 ];
 
@@ -105,8 +113,9 @@ const SnowflakeWarehouse: React.FC = () => {
                         Snowflake payments warehouse
                     </Typography>
                     <Typography variant="h6" sx={{ opacity: 0.95, maxWidth: '800px' }}>
-                        The same dbt project builds daily net collections on Postgres and on a
-                        small Snowflake warehouse. The load is synthetic demo data only.
+                        The same dbt project builds daily net collections and paysplit-grain
+                        payment detail on Postgres and on a small Snowflake warehouse. Synthetic
+                        demo data only.
                     </Typography>
                 </Container>
             </Box>
@@ -117,18 +126,20 @@ const SnowflakeWarehouse: React.FC = () => {
                         Domain
                     </Typography>
                     <Typography variant="body1" paragraph sx={{ fontSize: '1.1rem', lineHeight: 1.8 }}>
-                        Wave 1 is payments and collections. Patient payment headers and insurance
-                        check totals roll up to <code>mart_daily_payments</code>: one row per
-                        calendar date, with <code>net_collections_amount</code> and{' '}
-                        <code>payment_count</code>. Clinic Postgres stays the system of record.
-                        Snowflake is a portfolio warehouse beside it, grown by tagging more models
-                        rather than forking the project.
+                        Wave 1 rolls patient payment headers and insurance check totals into{' '}
+                        <code>mart_daily_payments</code>: one row per calendar date, with{' '}
+                        <code>net_collections_amount</code> and <code>payment_count</code>. Wave 2
+                        adds the detail layer — <code>fact_payment</code> at paysplit grain via{' '}
+                        <code>int_payment_split</code>, with procedure and fee context from the same
+                        tagged cone. Clinic Postgres stays the system of record. Snowflake grows by
+                        tagging more models, not by forking the project.
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
                         {[
                             'Synthetic demo only',
                             'One dbt project',
                             'tag:snowflake',
+                            'Wave 1 + Wave 2',
                             'RSA key-pair',
                             'XS auto-suspend',
                         ].map((label) => (
@@ -144,8 +155,8 @@ const SnowflakeWarehouse: React.FC = () => {
                         Architecture
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 720 }}>
-                        Demo Postgres is exported into Snowflake, then the existing staging and
-                        mart models run on that target.
+                        Demo Postgres is exported into Snowflake in waves, then the existing staging
+                        and mart models run on that target under <code>tag:snowflake</code>.
                     </Typography>
                     <Card elevation={2}>
                         <CardContent>
@@ -153,26 +164,32 @@ const SnowflakeWarehouse: React.FC = () => {
                                 sx={{
                                     bgcolor: 'grey.50',
                                     borderRadius: 2,
-                                    p: { xs: 2, md: 4 },
-                                    overflowX: 'auto',
-                                    minHeight: { xs: 280, md: 360 },
+                                    px: { xs: 1, md: 3 },
+                                    py: { xs: 3, md: 4 },
+                                    display: 'flex',
+                                    justifyContent: 'center',
+                                    '& iframe': {
+                                        width: 'min(100%, 640px) !important',
+                                        height: '640px !important',
+                                        border: 0,
+                                    },
                                 }}
                             >
-                                <MermaidDiagram id="snowflake-wave1-architecture" chart={ARCHITECTURE_CHART} />
+                                <MermaidDiagram id="snowflake-wave2-architecture" chart={ARCHITECTURE_CHART} />
                             </Box>
                             <Grid container spacing={2} sx={{ mt: 2 }}>
                                 {[
                                     {
                                         title: 'Landing',
-                                        desc: '21,279 payment rows and 1,817 claim-payment rows in OPENDENTAL_SF.RAW.',
+                                        desc: 'Wave 1 payment / claimpayment plus Wave 2 paysplit (21,279), procedurelog (23,692), and fee tables in OPENDENTAL_SF.RAW.',
                                     },
                                     {
                                         title: 'Same SQL',
-                                        desc: 'Money columns are numeric(18, 2). Daily sums match across both engines.',
+                                        desc: 'Money columns are numeric(18, 2). Postgres-only indexes and dialects stay gated so the cone is portable.',
                                     },
                                     {
-                                        title: 'Wave 1 models',
-                                        desc: 'stg_opendental__payment, stg_opendental__claimpayment, and mart_daily_payments.',
+                                        title: 'Two marts',
+                                        desc: 'Wave 1 mart_daily_payments (61 dates, parity matched). Wave 2 fact_payment at paysplit grain on the same warehouse.',
                                     },
                                 ].map(({ title, desc }) => (
                                     <Grid item xs={12} md={4} key={title}>
@@ -200,9 +217,10 @@ const SnowflakeWarehouse: React.FC = () => {
                     <Typography variant="body1" paragraph sx={{ maxWidth: 720 }}>
                         <code>compare_mart_daily_payments.py</code> checks every payment date.
                         On 2026-09-30 both the local demo database and the EC2 demo database
-                        matched Snowflake on all 61 dates. The dbt build for{' '}
-                        <code>tag:snowflake</code> finished PASS=76, WARN=1, ERROR=0. The warning
-                        is an empty bank branch on every synthetic claim payment.
+                        matched Snowflake on all 61 dates. Wave 1{' '}
+                        <code>tag:snowflake</code> finished PASS=76, WARN=1, ERROR=0 (empty bank
+                        branch on synthetic claim payments). Wave 2 builds{' '}
+                        <code>fact_payment</code> on the same target with matching paysplit counts.
                     </Typography>
                     <Table size="small" sx={{ maxWidth: 480, mb: 2 }}>
                         <TableHead>
@@ -272,8 +290,9 @@ const SnowflakeWarehouse: React.FC = () => {
                                     </Typography>
                                 </Box>
                                 <Typography variant="body2" color="text.secondary">
-                                    Postgres-only tests stay off this target. The next slice is{' '}
-                                    <code>fact_payment</code>, using the same database and tag.
+                                    Postgres-only tests stay off this target.{' '}
+                                    <code>fact_payment</code> is on the same database and tag as
+                                    Wave 1; grow coverage by tagging more models.
                                 </Typography>
                             </Paper>
                         </Grid>
@@ -321,8 +340,16 @@ const SnowflakeWarehouse: React.FC = () => {
                     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 3 }}>
                         <AcUnit sx={{ color: '#29b6f6' }} />
                         <Typography variant="body2" color="text.secondary">
-                            Links point at <code>feature/snowflake-wave1-reload</code> until that
-                            branch is on main.
+                            Links point at <code>feature/snowflake-wave2-fact-payment</code> (
+                            <Link
+                                href={`${GITHUB}/pull/84`}
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                underline="hover"
+                            >
+                                PR #84
+                            </Link>
+                            ) until that branch is on main.
                         </Typography>
                     </Box>
                 </Box>

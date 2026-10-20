@@ -38,13 +38,20 @@ $expected = @(
     @{ Path = "etl_pipeline\.env_local.template";    Desc = "ETL local template (committed)"; Template = $null; Deprecated = $false },
     @{ Path = "etl_pipeline\.env_clinic.template";   Desc = "ETL clinic template (committed)"; Template = $null; Deprecated = $false },
     @{ Path = "etl_pipeline\.env_test.template";     Desc = "ETL test template (committed)"; Template = $null; Deprecated = $false },
+    # QuickBooks
+    @{ Path = "quickbooks\.env_local";  Desc = "QuickBooks local (Intuit sandbox)"; Template = "quickbooks\.env_local.template"; Deprecated = $false },
+    @{ Path = "quickbooks\.env_clinic"; Desc = "QuickBooks clinic (Intuit production API)"; Template = "quickbooks\.env_clinic.template"; Deprecated = $false },
+    @{ Path = "quickbooks\.env_test";   Desc = "QuickBooks test (Intuit sandbox)"; Template = "quickbooks\.env_test.template"; Deprecated = $false },
+    @{ Path = "quickbooks\.env_local.template";  Desc = "QuickBooks local template (committed)"; Template = $null; Deprecated = $false },
+    @{ Path = "quickbooks\.env_clinic.template"; Desc = "QuickBooks clinic template (committed)"; Template = $null; Deprecated = $false },
+    @{ Path = "quickbooks\.env_test.template";   Desc = "QuickBooks test template (committed)"; Template = $null; Deprecated = $false },
     # dbt
     @{ Path = "dbt_dental_models\.env_local"; Desc = "dbt local warehouse (canonical local POSTGRES_ANALYTICS_*)"; Template = "dbt_dental_models\.env_local.template"; Deprecated = $false },
     @{ Path = "dbt_dental_models\.env_local.template"; Desc = "dbt local template (committed)"; Template = $null; Deprecated = $false },
     @{ Path = "dbt_dental_models\.env_snowflake"; Desc = "dbt Snowflake portfolio mini warehouse (SNOWFLAKE_*; key-pair via SNOWFLAKE_PRIVATE_KEY_PATH; synthetic only)"; Template = "dbt_dental_models\.env_snowflake.template"; Deprecated = $false },
     @{ Path = "dbt_dental_models\.env_snowflake.template"; Desc = "dbt Snowflake template (committed)"; Template = $null; Deprecated = $false },
     @{ Path = "dbt_dental_models\.snowflake\rsa_key.p8"; Desc = "Snowflake private key file (gitignored; path referenced by .env_snowflake)"; Template = $null; Deprecated = $false },
-    @{ Path = "dbt_dental_models\.env_clinic"; Desc = "DEPRECATED — use deployment_credentials.json + Secrets Manager"; Template = $null; Deprecated = $true },
+    @{ Path = "dbt_dental_models\.env_clinic"; Desc = "DEPRECATED - use deployment_credentials.json + Secrets Manager"; Template = $null; Deprecated = $true },
     # Frontend
     @{ Path = "frontend\.env";        Desc = "Frontend default"; Template = $null; Deprecated = $false },
     @{ Path = "frontend\.env.local";  Desc = "Frontend local dev"; Template = $null; Deprecated = $false },

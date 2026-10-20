@@ -463,7 +463,8 @@ Use these to create local/env-specific files; never commit the filled-in files. 
 - [ ] **API test:** `api/.env_api_test.template` → copy to `api/.env_api_test` and fill in test DB credentials.
 - [ ] **Consult audio:** `consult_audio_pipe/.env.template` → copy to `consult_audio_pipe/.env`.
 - [ ] **Synthetic data:** `etl_pipeline/synthetic_data_generator/.env_demo.template` → copy to `etl_pipeline/synthetic_data_generator/.env_demo`.
-- **API demo / Frontend:** No committed templates yet for `api/.env_api_demo` or `frontend/.env`; create from component READMEs or copy from team docs.
+- [ ] **QuickBooks:** `quickbooks/.env_local.template`, `quickbooks/.env_clinic.template`, `quickbooks/.env_test.template` → copy to `quickbooks/.env_<stage>` as needed.
+- **API demo / Frontend:** No committed templates yet for `api/.env_api_demo` or `frontend/.env`; create from component READMEs or copy from team docs. Inventory script: `scripts/utils/list_env_files.ps1`.
 
 ---
 
@@ -485,6 +486,7 @@ This lists known env file paths and reports Present / Missing. See script header
 - **Setup cheat sheet (incl. Snowflake):** [ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md)
 - **Environment modernization (phase history, archived):** [archive/ENVIRONMENT_HANDLING_REVIEW.md](archive/ENVIRONMENT_HANDLING_REVIEW.md)
 - **Env naming history (`production` → `demo`/`clinic`, archived):** [archive/ENVIRONMENT_NAMING_CONVENTION.md](archive/ENVIRONMENT_NAMING_CONVENTION.md)
+- **`environment_manager` → Docker plan (archived, superseded by `mdc`):** [archive/ENVIRONMENT_MANAGER_TO_DOCKER_ACTION_PLAN.md](archive/ENVIRONMENT_MANAGER_TO_DOCKER_ACTION_PLAN.md)
 - **Snowflake portfolio warehouse:** [docs/snowflake/SETUP.md](../snowflake/SETUP.md), [SNOWFLAKE_INTEGRATION_PLAN.md](../snowflake/SNOWFLAKE_INTEGRATION_PLAN.md)
 - **API env in detail:** [docs/api/API_ENV_FILE_EXPLANATION.md](../api/API_ENV_FILE_EXPLANATION.md)
 - **EC2 env file rename/setup:** [EC2_ENV_FILE_RENAME_GUIDE.md](EC2_ENV_FILE_RENAME_GUIDE.md), [EC2_ENV_FILE_RENAME_COMMANDS.md](EC2_ENV_FILE_RENAME_COMMANDS.md)

@@ -40,8 +40,8 @@ def connect_snowflake(**overrides: Any):
     if database:
         kwargs["database"] = database
     if schema:
-        # Landing schema is quoted lowercase ("raw") to match dbt source quoting.
-        kwargs["schema"] = _quote_session_ident(schema.lower())
+        # Unquoted: this account folds to uppercase (RAW). Quoted "raw" does not exist.
+        kwargs["schema"] = schema
 
     key_path = (os.environ.get("SNOWFLAKE_PRIVATE_KEY_PATH") or "").strip()
     if key_path:

@@ -96,6 +96,7 @@ models:
       materialized: incremental
       unique_key: paysplit_id
       schema: int
+      tags: ['intermediate', 'payment', 'snowflake']
     
     meta:
       owner: "billing-team@mdc-analytics.com"
@@ -140,9 +141,6 @@ models:
           - relationships:
               to: ref('stg_opendental__payment')
               field: payment_id
-              config:
-                # int_payment_split is not on Snowflake in Wave 1; selected only because it refs payment.
-                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: patient_id
         description: |
@@ -153,6 +151,8 @@ models:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: clinic_id
         description: |
@@ -177,6 +177,7 @@ models:
               config:
                 severity: warn
                 description: "Non-zero provider ID must exist in stg_opendental__provider when payment date is after 2023-01-01. Note: Unearned revenue splits (unearned_type = 288) require a provider assignment."
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: procedure_id
         description: |
@@ -346,7 +347,10 @@ models:
       - name: entry_date
         description: Date when the record was entered
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator leaves paysplit DateEntry null. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
           - dbt_expectations.expect_column_values_to_be_between:
               min_value: "'2023-01-01'::date"
               max_value: "current_date"
@@ -370,6 +374,8 @@ models:
           - relationships:
               to: ref('stg_opendental__userod')
               field: user_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: procedure_code
         description: Code of the associated procedure
@@ -495,7 +501,10 @@ models:
           Source: stg_opendental__paysplit._created_at
           Purpose: Business timeline analysis and audit trails
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator leaves paysplit DateEntry null. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: _updated_at
         description: |
@@ -511,7 +520,10 @@ models:
           Source: stg_opendental__paysplit._created_by
           Purpose: User attribution and audit trails
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator often leaves SecUserNumEntry null. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: _transformed_at
         description: |

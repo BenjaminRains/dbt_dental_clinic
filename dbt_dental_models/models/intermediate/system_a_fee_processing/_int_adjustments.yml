@@ -48,6 +48,7 @@ models:
       materialized: table
       schema: int
       unique_key: adjustment_id
+      tags: ['intermediate', 'adjustment', 'snowflake']
     
     columns:
       - name: adjustment_id
@@ -91,6 +92,8 @@ models:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: procedure_id
         description: >
@@ -111,6 +114,8 @@ models:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: clinic_id
         description: Clinic where adjustment was made
@@ -195,6 +200,7 @@ models:
               field: item_name
               config:
                 severity: warn
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: adjustment_type_value
         description: >
@@ -207,6 +213,7 @@ models:
               field: item_value
               config:
                 severity: warn
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: adjustment_category_type
         description: >
@@ -222,6 +229,7 @@ models:
               field: category_id
               config:
                 severity: warn
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: procedure_code
         description: ADA procedure code from linked procedure
@@ -417,7 +425,10 @@ models:
           - Represents: When the adjustment was originally created in OpenDental
           - Usage: Business timeline analysis and audit trail tracking
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator leaves adjustment SecDateEntry null. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: _updated_at
         description: >

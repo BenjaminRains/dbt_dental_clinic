@@ -90,6 +90,7 @@ models:
               config:
                 severity: error
                 description: "Fee schedule must exist in source staging table for data integrity"
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: fee_schedule_description
         description: >

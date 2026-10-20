@@ -57,6 +57,8 @@ models:
               field: procedure_id
               config:
                 severity: error
+                # AR models are not on the Snowflake wave; inbound test would scan a missing table.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: patient_id
         description: Unique identifier for the patient

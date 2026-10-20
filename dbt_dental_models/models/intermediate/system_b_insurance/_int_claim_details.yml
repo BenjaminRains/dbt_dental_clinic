@@ -126,6 +126,7 @@ models:
               config:
                 severity: warn
                 description: "Non-zero procedure_id should exist in procedurelog; orphans retained for claimproc audit"
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: claim_procedure_id
         description: >

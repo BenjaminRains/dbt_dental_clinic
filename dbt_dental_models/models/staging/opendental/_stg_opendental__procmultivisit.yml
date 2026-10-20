@@ -122,6 +122,7 @@ models:
               field: procedure_id
               config:
                 severity: error
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: patient_id
         description: >

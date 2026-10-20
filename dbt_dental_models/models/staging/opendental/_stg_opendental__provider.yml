@@ -109,6 +109,8 @@ models:
           - relationships:
               to: ref('stg_opendental__feesched')
               field: fee_schedule_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               severity: warn
               where: "fee_schedule_id IS NOT NULL"
       

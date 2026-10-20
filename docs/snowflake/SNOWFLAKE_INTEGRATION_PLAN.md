@@ -2,7 +2,7 @@
 
 | Attribute | Value |
 |-----------|--------|
-| **Status** | Wave 1 loaded and matched (2026-09-30); `/snowflake` page in the portfolio app; demo-host deploy still open |
+| **Status** | Wave 1 loaded and matched (2026-09-30); `/snowflake` is live at https://dbtdentalclinic.com/snowflake |
 | **Branch** | `feature/snowflake-wave1-reload` |
 | **Decisions locked** | 2026-07-17 |
 | **Last updated** | 2026-09-30 |
@@ -24,7 +24,7 @@ Done on the account:
 - `PayAmt`, `MerchantFee`, and `CheckAmt` are `numeric(18, 2)`. Float casts made daily sums differ by cents to a few dollars
 - [`scripts/snowflake/compare_mart_daily_payments.py`](../../scripts/snowflake/compare_mart_daily_payments.py) matches all 61 dates against local demo Postgres and against the EC2 tunnel. Sample: 2025-11-13 `45473.55` / 372 payments; 2026-01-12 `39676.25` / 334 payments. EC2 `raw.payment` and `raw.claimpayment` were copied from the local generation before that rebuild; other EC2 raw tables were not
 
-**Next:** Deploy `@mdc/portfolio` to the demo host so `/snowflake` is public. Then Phase 6 `fact_payment`.
+**Next:** Merge [PR #84](https://github.com/BenjaminRains/dbt_dental_clinic/pull/84) and redeploy the portfolio. Clean `tag:snowflake` build is on the branch (PASS=430 WARN=10 ERROR=0, 2026-10-19). Portfolio page is public at https://dbtdentalclinic.com/snowflake (Wave 2 detail copy on the PR branch until deploy).
 
 ---
 
@@ -219,16 +219,18 @@ Wave 2 adds payment detail (`fact_payment` via `int_payment_split`) for a richer
 - [x] Dedicated page at `/snowflake` (`SnowflakeWarehouse.tsx`): architecture diagram, payments domain, synthetic banner from the portfolio layout, parity table, XS / key-pair / role callouts, links to this plan and the export, parity, and mart files
 - [x] Nav entry in the portfolio drawer and on `/agent-profile`
 
-**Exit criteria:** Live portfolio tile + page on demo frontend; no clinic data exposed. Code is in `@mdc/portfolio`. The public host updates on the next demo frontend deploy.
+**Exit criteria:** Live portfolio tile + page on the demo frontend; no clinic data exposed. Met 2026-09-30: https://dbtdentalclinic.com/snowflake. Mermaid `securityLevel` is `strict` so the home Platform Architecture chart renders.
 
 ### Phase 6 — Wave 2 payment detail (same domain)
 
-- [ ] Export additional raw tables as required by lineage: e.g. `paysplit`, `adjustment`, `procedurelog`, `patient`, `provider`, `userod`
-- [ ] Tag `int_payment_split`, `fact_payment`, and required upstream staging/int models
-- [ ] Remove or gate Postgres-only `indexes=` (and similar) via adapter-aware config
-- [ ] Rebuild `tag:snowflake`; extend parity notes
+- [x] Export additional raw tables as required by lineage: e.g. `paysplit`, `adjustment`, `procedurelog`, fee/code tables (patient/provider/userod stay untagged off-warehouse)
+- [x] Tag `int_payment_split`, `fact_payment`, and required upstream staging/int models
+- [x] Remove or gate Postgres-only `indexes=` (and similar) via adapter-aware config
+- [x] Portfolio page mentions Wave 2 `fact_payment` detail layer ([PR #84](https://github.com/BenjaminRains/dbt_dental_clinic/pull/84))
+- [x] Rebuild clean `tag:snowflake` — PASS=430 WARN=10 ERROR=0 (demo null-date / Postgres-`~` / inbound relationship tests gated)
+- [ ] Merge PR #84 + deploy portfolio
 
-**Exit criteria:** `fact_payment` builds on Snowflake; portfolio page mentions detail layer.
+**Exit criteria:** `fact_payment` builds on Snowflake; portfolio page mentions detail layer. Met on branch; merge + deploy still open.
 
 ### Deferred (explicitly out of v1)
 

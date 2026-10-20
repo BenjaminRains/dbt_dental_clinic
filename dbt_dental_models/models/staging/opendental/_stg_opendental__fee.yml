@@ -5,7 +5,7 @@ models:
     config:
       materialized: incremental
       unique_key: fee_id
-      tags: ['staging', 'opendental', 'fee']
+      tags: ['staging', 'opendental', 'fee', 'snowflake']
 
     description: >
       Staging model for OpenDental fee data. Contains standardized fee information including 
@@ -211,12 +211,18 @@ models:
       - name: _created_by
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator does not populate fee.SecUserNumEntry. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: sec_user_num_entry
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator does not populate fee.SecUserNumEntry. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
 
 tests:
       # Unique combination test for business logic

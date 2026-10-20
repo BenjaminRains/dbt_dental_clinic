@@ -166,7 +166,7 @@ const PRODUCTION_CAPABILITIES: CapabilityLink[] = [
     },
     {
         title: 'Snowflake payments warehouse',
-        desc: 'Same dbt project on an XS Snowflake warehouse. Daily net collections match the synthetic demo on every date.',
+        desc: 'Same dbt project on an XS Snowflake warehouse. Daily net collections plus paysplit-grain fact_payment on the synthetic demo.',
         icon: <AcUnit />,
         href: '/snowflake',
         linkLabel: 'Warehouse write-up',
@@ -543,7 +543,7 @@ const PortfolioV4: React.FC = () => {
                                     <Typography variant="subtitle2" fontWeight="bold">Snowflake Warehouse</Typography>
                                 </Box>
                                 <Typography variant="body2" color="text.secondary">
-                                    Dual-warehouse dbt for daily payments. Synthetic demo only; totals match Postgres.
+                                    Dual-warehouse dbt for daily payments and payment detail. Synthetic demo only; Wave 1 totals match Postgres.
                                 </Typography>
                             </CardContent>
                         </Card>

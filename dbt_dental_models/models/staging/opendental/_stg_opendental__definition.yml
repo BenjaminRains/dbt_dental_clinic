@@ -4,7 +4,7 @@ models:
   - name: stg_opendental__definition
     config:
       materialized: view
-      tags: ['staging', 'opendental', 'definition']
+      tags: ['staging', 'opendental', 'definition', 'snowflake']
 
     description: >
       Staging model for OpenDental definitions table. Contains system configuration definitions 
@@ -53,6 +53,9 @@ models:
       - dbt_expectations.expect_table_row_count_to_be_between:
           min_value: 100
           max_value: 10000
+          config:
+            # Demo Snowflake export has a thin definition slice (~22 rows).
+            enabled: "{{ target.type != 'snowflake' }}"
       - dbt_utils.expression_is_true:
           expression: "item_order is null or item_order >= 0"
       - dbt_utils.expression_is_true:
