@@ -8,8 +8,7 @@ for the ETL pipeline. It should be run:
 - When schema changes are detected
 - On-demand when troubleshooting
 
-The DAG detects schema changes, generates configuration, and notifies
-the team if breaking changes are detected.
+The DAG detects schema changes and generates configuration. Results stay in the task logs.
 """
 
 from datetime import datetime, timedelta
@@ -25,8 +24,7 @@ from airflow.exceptions import AirflowException
 default_args = {
     'owner': 'benjamin-rains',
     'depends_on_past': False,
-    'email': ['rains.bp@gmail.com'],
-    'email_on_failure': True,
+    'email_on_failure': False,
     'email_on_retry': False,
     'retries': 2,
     'retry_delay': timedelta(minutes=5),
@@ -317,93 +315,6 @@ def validate_new_config(**context):
         raise AirflowException(f"Configuration validation failed: {e}")
 
 
-def send_notification(**context):
-    """
-    Send notification about schema analysis results.
-    
-    Notifies the team via:
-    - Airflow email (if configured)
-    - Slack (if webhook configured)
-    - Or logs for manual review
-    
-    Different notification levels:
-    - INFO: No changes detected
-    - WARNING: Changes detected (new tables, updated config)
-    - CRITICAL: Breaking changes (removed tables, removed columns)
-    """
-    logging.info("Preparing notification")
-    
-    # Get results from previous tasks
-    has_changes = context['task_instance'].xcom_pull(
-        task_ids='analyze_schema_changes',
-        key='has_changes'
-    )
-    
-    has_breaking_changes = context['task_instance'].xcom_pull(
-        task_ids='analyze_schema_changes',
-        key='has_breaking_changes'
-    )
-    
-    total_tables = context['task_instance'].xcom_pull(
-        task_ids='validate_new_config',
-        key='total_tables'
-    )
-    
-    # Compose notification message
-    if not has_changes:
-        level = "✅ INFO"
-        message = f"Schema Analysis Completed - No Changes\n\n"
-        message += f"Environment: {ENVIRONMENT}\n"
-        message += f"Tables analyzed: {total_tables}\n"
-        message += f"Schema hash: Unchanged\n"
-        message += f"\nNo action required."
-        
-    elif has_breaking_changes:
-        level = "🚨 CRITICAL"
-        change_details = context['task_instance'].xcom_pull(
-            task_ids='analyze_schema_changes',
-            key='change_details'
-        )
-        message = f"Schema Analysis - BREAKING CHANGES DETECTED\n\n"
-        message += f"Environment: {ENVIRONMENT}\n"
-        message += f"Tables analyzed: {total_tables}\n"
-        message += f"\n{change_details.get('change_summary', 'See logs for details')}\n"
-        message += f"\n⚠️  ACTION REQUIRED:\n"
-        message += f"  1. Review schema changelog in logs\n"
-        message += f"  2. Update ETL pipeline if needed\n"
-        message += f"  3. Test pipeline with new configuration\n"
-        message += f"  4. Update dbt models for removed tables\n"
-        
-    else:
-        level = "⚠️  WARNING"
-        change_details = context['task_instance'].xcom_pull(
-            task_ids='analyze_schema_changes',
-            key='change_details'
-        )
-        message = f"Schema Analysis - Changes Detected\n\n"
-        message += f"Environment: {ENVIRONMENT}\n"
-        message += f"Tables analyzed: {total_tables}\n"
-        message += f"\n{change_details.get('change_summary', 'See logs for details')}\n"
-        message += f"\nReview changes and test ETL pipeline.\n"
-    
-    # Log the notification
-    logging.info(f"\n{level}\n{message}")
-    
-    # Send Slack notification if webhook configured
-    try:
-        slack_webhook_url = Variable.get('slack_webhook_url', default=None)
-        if slack_webhook_url:
-            from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
-
-            slack = SlackWebhookHook(http_conn_id='slack_webhook')
-            slack.send(text=f"{level}\n{message}")
-            logging.info("Slack notification sent")
-    except Exception as e:
-        logging.warning(f"Failed to send Slack notification: {e}")
-    
-    return True
-
-
 # ============================================================================
 # Task Definitions
 # ============================================================================
@@ -481,30 +392,12 @@ with dag:
         """,
     )
     
-    # Task 6: Send notification
-    notify = PythonOperator(
-        task_id='send_notification',
-        python_callable=send_notification,
-        trigger_rule='all_done',  # Run even if previous tasks fail
-        doc_md="""
-        ### Send Notification
-        
-        Notifies the team about schema analysis results:
-        - INFO: No changes
-        - WARNING: Changes detected
-        - CRITICAL: Breaking changes
-        
-        Sends via Slack (if configured) and email.
-        """,
-    )
-    
     # ========================================================================
     # Task Dependencies
     # ========================================================================
     
     validate_source >> backup_config >> analyze_schema
     analyze_schema >> [analyze_changes, validate_config]
-    [analyze_changes, validate_config] >> notify
 
 
 # ============================================================================
@@ -547,14 +440,6 @@ Run this DAG:
 - **Reports**: `etl_pipeline/logs/schema_analysis/reports/schema_analysis_TIMESTAMP.json`
 - **Changelog**: `etl_pipeline/logs/schema_analysis/reports/schema_changelog_TIMESTAMP.md`
 
-## Notifications
-
-The DAG sends notifications with different severity levels:
-
-- ✅ **INFO**: No changes detected - all is well
-- ⚠️ **WARNING**: Changes detected (new tables, updated config) - review and test
-- 🚨 **CRITICAL**: Breaking changes (removed tables) - requires immediate action
-
 ## Integration with ETL Pipeline DAG
 
 After this DAG completes successfully:
@@ -567,7 +452,6 @@ After this DAG completes successfully:
 
 Set these Airflow Variables:
 - `etl_environment`: 'clinic' or 'test' (default: 'clinic')
-- `slack_webhook_url`: Slack webhook for notifications (optional)
 
 ## Dependencies
 

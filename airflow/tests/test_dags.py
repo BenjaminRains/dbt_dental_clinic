@@ -61,15 +61,16 @@ def test_etl_pipeline_dag_has_schema_refresh(dag_bag):
     assert "refresh_schema_configuration" in task_ids
 
 
-def test_etl_pipeline_dag_has_publish_and_notify(dag_bag):
-    """etl_pipeline DAG publishes to RDS (when configured) and notifies last."""
+def test_etl_pipeline_dag_has_publish(dag_bag):
+    """etl_pipeline DAG publishes to RDS when configured. No Slack or email task."""
     if "etl_pipeline" not in dag_bag.dags:
         pytest.skip("etl_pipeline DAG not loaded")
     dag = dag_bag.dags["etl_pipeline"]
     task_ids = [t.task_id for t in dag.tasks]
     assert "publish_analytics" in task_ids
-    assert "send_completion_notification" in task_ids
     assert "should_run_publish" in task_ids
+    assert "write_execution_report" in task_ids
+    assert "send_completion_notification" not in task_ids
 
 
 def test_etl_pipeline_dag_has_layer0_replica_checks(dag_bag):

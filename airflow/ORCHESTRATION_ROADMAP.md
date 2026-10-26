@@ -53,11 +53,10 @@ etl_pipeline (nightly 9 PM Central)
        ├── verify / report
        └── on ETL success:
                ├── dbt_build (dbt_target via mdc)
-               ├── publish_analytics (publish_environment via mdc)
-               └── notify
+               └── publish_analytics (publish_environment via mdc)
 
 schema_analysis DAG (optional, manual trigger)
-       └── Same analyzer + change reports / Slack — not required for nightly runs
+       └── Same analyzer + change reports — not required for nightly runs
 ```
 
 dbt is **not** a third DAG. It is a task group inside `airflow/dags/etl_pipeline_dag.py` (see `should_run_dbt`, `dbt_build` group).
@@ -108,7 +107,6 @@ Inside a container, `localhost` in `etl_pipeline/.env_clinic` points at the **co
 | `publish_environment` | `clinic` |
 | `publish_tunnel_port` | `5433` (optional) |
 | `publish_ensure_tunnel` | `true` (default — auto-start SSM tunnel for publish) |
-| `slack_webhook_url` | optional |
 
 Leave `publish_environment` **unset** for Phase A smoke tests (skips publish). Do **not** set `dbt_target=clinic` until dbt can build directly against RDS safely.
 
@@ -219,13 +217,13 @@ Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing
 - [ ] WireGuard auto-connect or pre-run checklist (VPN up before 9 PM)
 - [ ] Set Airflow Variables: `etl_environment=clinic`, `dbt_target=local`, `project_root=<repo root>`
 - [ ] `mdc etl validate --env clinic --profile full` with VPN on
-- [ ] First manual DAG trigger outside business hours; confirm schema refresh (~7 min) → ETL (~25 min) → dbt → publish → notify
+- [ ] First manual DAG trigger outside business hours; confirm schema refresh (~7 min) → ETL (~25 min) → dbt → publish
 - [ ] SSM tunnel running before publish task (`mdc tunnel clinic-db` → port 5433 open)
 
 ### Phase C — Production cutover on laptop (1 day)
 
 - [ ] Enable nightly schedule (already `0 21 * * *` with `America/Chicago`)
-- [ ] Configure Slack (`slack_webhook_url` Variable) and/or SMTP alerts on failure
+- [x] Slack and email alerts — not wanted (2026-10-26). Runs are checked in the Airflow UI and task logs.
 - [ ] Airflow UI (localhost:8080) — no public exposure; laptop-only
 - [ ] Monitor 2–3 consecutive nightly runs (VPN + **tunnel terminal open** + native Airflow up)
 - [ ] Document break-glass: manual `mdc etl run`, `mdc dbt run`, `mdc publish analytics`
@@ -282,6 +280,5 @@ These are small but prevent confusion:
 | `etl_environment` | `test` | `clinic` |
 | `dbt_target` | `local` | `local` |
 | `publish_environment` | *(unset)* | `clinic` |
-| `slack_webhook_url` | optional | recommended |
 
 See [`README.md`](README.md) and [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) for schedule and run semantics.

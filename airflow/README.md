@@ -36,10 +36,9 @@ airflow/
 3. Run schema analysis
 4. Analyze schema changes
 5. Validate new configuration
-6. Send notification
 
 **When to Run**:
-- Before OpenDental upgrades (when you want a changelog/Slack report)
+- Before OpenDental upgrades (when you want a changelog in the task log)
 - Troubleshooting schema drift with detailed severity output
 - **Not required nightly** — `etl_pipeline` runs `refresh_schema_configuration` every run
 
@@ -60,10 +59,9 @@ airflow/
 0. **Schema refresh** — `refresh_schema_configuration` (backup + `analyze_opendental_schema.py`)
 1. **Validation** — config freshness, DB connections, optional schema drift check
 2. **ETL** — large → medium → small → tiny
-3. **Verification & reporting** — verify loads, execution report, notify
+3. **Verification & reporting** — verify loads, execution report in the task log
 4. **dbt** — only when ETL succeeded (`should_run_dbt` → `dbt_deps` → `dbt_build`)
 5. **Publish** — `mdc publish analytics` when `publish_environment` is set
-6. **Final notification**
 
 **Integration**:
 - **Schema**: Regenerated every run before ETL (no dependency on `schema_analysis` DAG)
@@ -107,7 +105,7 @@ airflow/
 │ ETL PIPELINE DAG (Nightly 9 PM Central)                                 │
 ├────────────────────────────────────────────────────────────────────────┤
 │ guard → schema refresh → validation → ETL → report                     │
-│ → (if success) dbt_build → publish_analytics → notify                  │
+│ → (if success) dbt_build → publish_analytics                           │
 ├────────────────────────────────────────────────────────────────────────┤
 │ Output: fresh tables.yml, raw schema loaded, marts built, RDS publish  │
 └────────────────────────────────────────────────────────────────────────┘
@@ -115,13 +113,13 @@ airflow/
 ┌────────────────────────────────────────────────────────────────────────┐
 │ SCHEMA ANALYSIS DAG (optional, manual)                                │
 ├────────────────────────────────────────────────────────────────────────┤
-│ Same analyzer + change reports / Slack — not required for nightly runs │
+│ Same analyzer + change reports — not required for nightly runs         │
 └────────────────────────────────────────────────────────────────────────┘
 
 FAILURE HANDLING:
 ━━━━━━━━━━━━━━━━
 • Schema refresh fails: Run stops before ETL (no stale-config load)
-• ETL fails: dbt/publish skipped; report/notify still run
+• ETL fails: dbt/publish skipped; the execution report still runs
 • dbt/publish fails: ETL data remains in raw schema
 
 See ORCHESTRATION_ROADMAP.md for deployment status and open decisions.
@@ -143,20 +141,6 @@ publish_environment = 'clinic'
 # Phase A test (native or Docker sandbox)
 # etl_environment = 'test'
 # project_root = '/opt/airflow/dbt_dental_clinic'  # Docker sandbox mount path only
-
-# Optional
-slack_webhook_url = 'https://hooks.slack.com/services/...'
-```
-
-### Airflow Connections
-
-Configure these connections in Airflow UI (Admin → Connections):
-
-```python
-# Slack notifications (optional)
-slack_webhook
-  Type: HTTP
-  Host: https://hooks.slack.com/services/...
 ```
 
 ### Environment Variables
@@ -231,27 +215,7 @@ response = requests.post(
 )
 ```
 
-## Monitoring & Alerts
-
-### Email Notifications
-
-Configure SMTP in `airflow.cfg` or docker-compose.yml:
-
-```bash
-AIRFLOW__SMTP__SMTP_HOST=smtp.gmail.com
-AIRFLOW__SMTP__SMTP_PORT=587
-AIRFLOW__SMTP__SMTP_USER=your-email@gmail.com
-AIRFLOW__SMTP__SMTP_PASSWORD=your-app-password
-AIRFLOW__SMTP__SMTP_MAIL_FROM=airflow@example.com
-```
-
-### Slack Notifications
-
-1. Create Slack webhook: https://api.slack.com/messaging/webhooks
-2. Set Airflow Variable: `slack_webhook_url`
-3. Notifications sent automatically on DAG completion
-
-### Logs
+## Logs
 
 View logs in:
 - **Airflow UI**: Task Instance → Logs
@@ -265,7 +229,7 @@ View logs in:
 ```bash
 # Typical workflow:
 1. Schema Analysis DAG runs weekly (scheduled)
-2. Review notification email/Slack
+2. Review the task log and changelog
 3. If changes detected:
    a. Review changelog in etl_pipeline/logs/schema_analysis/reports/
    b. Test ETL pipeline in test environment
