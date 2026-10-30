@@ -160,3 +160,155 @@ def _patch_airflow_log_paths() -> None:
 
 
 _patch_airflow_log_paths()
+
+
+def _win_subprocess_entry(requests, child_stdout, child_stderr, log_sock, target_mod, target_qualname):
+    """Child entry for Airflow's supervisor when os.fork is unavailable.
+
+    Socket handles are passed by multiprocessing spawn. Windows cannot dup2 a
+    Winsock handle onto stdin, and CommsDecoder does ``socket(fileno=0)``, so
+    that constructor is redirected at the requests socket.
+    """
+    import importlib
+
+    import airflow.sdk.execution_time.comms as comms
+    import airflow.sdk.execution_time.supervisor as supervisor
+
+    real_socket = comms.socket
+
+    def _socket(*args, **kwargs):
+        fileno = kwargs.get("fileno")
+        if fileno == 0:
+            return requests
+        if fileno == 1:
+            return child_stdout
+        if fileno == 2:
+            return child_stderr
+        return real_socket(*args, **kwargs)
+
+    comms.socket = _socket
+    supervisor._win_log_sock = log_sock
+    obj = importlib.import_module(target_mod)
+    for part in target_qualname.split("."):
+        obj = getattr(obj, part)
+    supervisor._fork_main(requests, child_stdout, child_stderr, log_sock.fileno(), obj)
+
+
+def _patch_windows_selector() -> None:
+    """select() on Windows rejects an empty fd list; Airflow polls that when idle."""
+    import selectors
+    import time
+
+    selector_cls = selectors.SelectSelector
+    if getattr(selector_cls._select, "_win_empty_ok", False):
+        return
+    original = selector_cls._select
+
+    def _select(self, r, w, _, timeout=None):
+        if not r and not w:
+            if timeout:
+                time.sleep(timeout)
+            return [], [], []
+        return original(self, r, w, _, timeout)
+
+    _select._win_empty_ok = True  # type: ignore[attr-defined]
+    selector_cls._select = _select  # type: ignore[method-assign]
+
+
+def _patch_windows_supervisor_spawn() -> None:
+    """Replace fork-based WatchedSubprocess.start with multiprocessing spawn."""
+    import multiprocessing as mp
+    import time
+    from typing import cast
+
+    import psutil
+    import structlog
+    from socket import socketpair
+
+    import airflow.sdk.execution_time.supervisor as supervisor
+
+    if getattr(supervisor.WatchedSubprocess.start, "_win_spawn", False):
+        return
+
+    def _reopen_std_io_handles(child_stdin, child_stdout, child_stderr):
+        import io
+
+        # Winsock handles are not CRT fds; os.dup2 raises EBADF. makefile works.
+        for handle_name, sock, mode in (
+            ("stdin", child_stdin, "w"),
+            ("stdout", child_stdout, "w"),
+            ("stderr", child_stderr, "w"),
+        ):
+            binary = sock.makefile(mode + "b", buffering=0)
+            setattr(sys, handle_name, io.TextIOWrapper(binary, line_buffering=True))
+
+    def _configure_logs_over_json_channel(log_fd: int):
+        from airflow.sdk.log import configure_logging, reset_logging
+
+        log_sock = getattr(supervisor, "_win_log_sock", None)
+        if log_sock is None:
+            log_io = os.fdopen(log_fd, "wb", buffering=0)
+        else:
+            log_io = log_sock.makefile("wb", buffering=0)
+        reset_logging()
+        configure_logging(json_output=True, output=log_io, sending_to_supervisor=True)
+
+    supervisor._reopen_std_io_handles = _reopen_std_io_handles
+    supervisor._configure_logs_over_json_channel = _configure_logs_over_json_channel
+
+    spawned: list = []
+
+    @classmethod
+    def start(cls, *, target=supervisor._subprocess_main, logger=None, use_exec=False, **constructor_kwargs):
+        del use_exec  # fork+exec is POSIX-only; spawn always starts a fresh interpreter
+        child_stdout, read_stdout = socketpair()
+        child_stderr, read_stderr = socketpair()
+        child_requests, read_requests = socketpair()
+        child_logs, read_logs = socketpair()
+
+        ctx = mp.get_context("spawn")
+        proc_mp = ctx.Process(
+            target=_win_subprocess_entry,
+            args=(
+                child_requests,
+                child_stdout,
+                child_stderr,
+                child_logs,
+                target.__module__,
+                target.__qualname__,
+            ),
+        )
+        proc_mp.daemon = False
+        proc_mp.start()
+        spawned.append(proc_mp)
+
+        # Match the fork parent: drop the child ends we do not read.
+        # Keep child_requests open, same as WatchedSubprocess.start on POSIX.
+        cls._close_unused_sockets(child_stdout, child_stderr, child_logs)
+
+        logger = logger or cast(
+            "structlog.typing.FilteringBoundLogger",
+            structlog.get_logger(logger_name="task").bind(),
+        )
+        proc = cls(
+            pid=proc_mp.pid,
+            stdin=read_requests,
+            process=psutil.Process(proc_mp.pid),
+            process_log=logger,
+            start_time=time.monotonic(),
+            **constructor_kwargs,
+        )
+        proc._register_pipe_readers(
+            stdout=read_stdout,
+            stderr=read_stderr,
+            requests=read_requests,
+            logs=read_logs,
+        )
+        return proc
+
+    start._win_spawn = True  # type: ignore[attr-defined]
+    supervisor.WatchedSubprocess.start = start  # type: ignore[method-assign]
+
+
+_patch_windows_selector()
+_patch_windows_supervisor_spawn()
