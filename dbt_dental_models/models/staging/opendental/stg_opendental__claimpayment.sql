@@ -26,7 +26,7 @@ renamed_columns as (
         {{ clean_opendental_date('"DateIssued"') }} as date_issued,
         
         -- Amount and Identification Fields
-        "CheckAmt" as check_amount,
+        "CheckAmt"::numeric(18, 2) as check_amount,
         "CheckNum" as check_number,
         "BankBranch" as bank_branch,
         

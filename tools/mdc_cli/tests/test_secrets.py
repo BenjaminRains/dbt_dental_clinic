@@ -16,6 +16,7 @@ from mdc_cli.secrets_manager import (
     resolve_clinic_rds_password,
     sync_clinic_env_from_secrets,
     update_dotenv_key,
+    _read_dotenv_value_raw,
 )
 
 runner = CliRunner()
@@ -176,6 +177,30 @@ def test_status_includes_credential_sync(mock_check):
     mock_check.assert_called_once()
 
 
+def test_secrets_pull_without_target_changes_nothing():
+    result = runner.invoke(app, ["secrets", "pull"])
+    assert result.exit_code == 0
+    assert "Clinic RDS" in result.stdout
+    assert "Anthropic" in result.stdout
+    assert "Nothing was changed" in result.stdout
+    assert "mdc secrets pull clinic" in result.stdout
+
+
+def test_secrets_pull_rejects_all():
+    result = runner.invoke(app, ["secrets", "pull", "all"])
+    assert result.exit_code == 2
+    assert "clinic or demo" in result.stdout or "clinic or demo" in result.stderr
+
+
+@patch("mdc_cli.commands.secrets.rotate_demo_postgres_password")
+def test_secrets_pull_demo_requires_confirmation(mock_rotate):
+    result = runner.invoke(app, ["secrets", "pull", "demo"], input="n\n")
+    assert result.exit_code == 0
+    assert "Nothing was changed" in result.stdout
+    assert "opendental_demo_user" in result.stdout
+    mock_rotate.assert_not_called()
+
+
 @patch("mdc_cli.commands.secrets.sync_clinic_env_from_secrets")
 @patch("mdc_cli.commands.secrets.clinic_rds_master_secret_id", return_value=RDS_MASTER_ARN)
 def test_secrets_pull_clinic(mock_master_id, mock_sync):
@@ -213,9 +238,10 @@ def test_plain_clinic_password_extracts_from_json_password_field():
     assert plain_clinic_password(blob, raw_secret=blob) == "secret-value"
 
 
+@patch("mdc_cli.secrets_manager.fetch_secret_last_rotated_on", return_value="2026-10-05")
 @patch("mdc_cli.secrets_manager.fetch_live_clinic_rds_secret")
 @patch("mdc_cli.secrets_manager.fetch_rds_master_user_secret_arn", return_value=RDS_MASTER_ARN)
-def test_sync_clinic_env_repairs_json_blob_file(mock_master, mock_fetch, tmp_path):
+def test_sync_clinic_env_repairs_json_blob_file(mock_master, mock_fetch, _mock_rotated, tmp_path):
     api_env = tmp_path / ".env_api_clinic"
     api_env.write_text(
         'POSTGRES_ANALYTICS_PASSWORD={\\"username\\":\\"analytics_user\\",'
@@ -243,9 +269,27 @@ def test_sync_clinic_env_repairs_json_blob_file(mock_master, mock_fetch, tmp_pat
 
     assert result.repaired_json_password is True
     assert result.rds_master_secret_id == RDS_MASTER_ARN
+    assert result.rotated_on == "2026-10-05"
     text = api_env.read_text(encoding="utf-8")
     assert "POSTGRES_ANALYTICS_PASSWORD=live" in text
+    assert "POSTGRES_ANALYTICS_PASSWORD_ROTATED_ON=2026-10-05" in text
     assert "username" not in text.split("POSTGRES_ANALYTICS_PASSWORD=", 1)[1].splitlines()[0]
+
+
+def test_password_with_leading_hash_roundtrips(tmp_path):
+    env_file = tmp_path / ".env_api_clinic"
+    env_file.write_text("POSTGRES_ANALYTICS_PASSWORD=old\n", encoding="utf-8")
+    secret = "#rotated-secret"
+    assert update_dotenv_key(env_file, "POSTGRES_ANALYTICS_PASSWORD", secret) is True
+    text = env_file.read_text(encoding="utf-8")
+    assert 'POSTGRES_ANALYTICS_PASSWORD="#rotated-secret"' in text
+    assert _read_dotenv_value_raw(env_file, "POSTGRES_ANALYTICS_PASSWORD") == secret
+
+
+def test_unquoted_leading_hash_password_is_not_a_comment(tmp_path):
+    env_file = tmp_path / ".env_api_clinic"
+    env_file.write_text("POSTGRES_ANALYTICS_PASSWORD=#rotated-secret\n", encoding="utf-8")
+    assert _read_dotenv_value_raw(env_file, "POSTGRES_ANALYTICS_PASSWORD") == "#rotated-secret"
 
 
 def test_update_dotenv_key_password_never_quotes_json_like_value(tmp_path):
@@ -302,6 +346,14 @@ def test_normalize_clinic_password_extracts_json_blob():
     assert clinic_password_value_is_json_blob(blob) is True
 
 
+def test_calendar_date_reads_secrets_manager_timestamp():
+    from mdc_cli.secrets_manager import calendar_date
+
+    assert calendar_date("2026-10-05T18:22:33.123000+00:00") == "2026-10-05"
+    assert calendar_date("2026-10-05") == "2026-10-05"
+    assert calendar_date("") is None
+
+
 def test_normalize_clinic_password_plain_value():
     assert normalize_clinic_password_value("plain-secret") == "plain-secret"
     assert clinic_password_value_is_json_blob("plain-secret") is False
@@ -334,3 +386,102 @@ def test_check_clinic_credential_sync_warns_on_json_blob(mock_fetch, _mock_maste
     assert report.api_password_malformed is True
     assert report.rows[0].status == "warn"
     assert "JSON secret" in report.rows[0].note
+
+
+def test_write_demo_password_copies_updates_env_and_both_json_fields(tmp_path, monkeypatch):
+    from mdc_cli import secrets_manager as sm
+
+    api_env = tmp_path / ".env_api_demo"
+    api_env.write_text(
+        "DEMO_POSTGRES_USER=opendental_demo_user\nDEMO_POSTGRES_PASSWORD=old\n",
+        encoding="utf-8",
+    )
+    creds = tmp_path / "deployment_credentials.json"
+    creds.write_text(
+        """
+        {
+          "demo_database": {
+            "postgresql": {"user": "opendental_demo_user", "password": "old"},
+            "database_connection": {"host": "10.0.0.1", "password": "old"}
+          }
+        }
+        """,
+        encoding="utf-8",
+    )
+    monkeypatch.setattr(sm, "DEPLOYMENT_CREDENTIALS", creds)
+    monkeypatch.setattr("mdc_cli.paths.DEPLOYMENT_CREDENTIALS", creds)
+
+    result = sm.write_demo_password_copies(
+        "new-secret",
+        api_env_file=api_env,
+        update_deployment_credentials=True,
+        rotated_on="2026-10-12",
+    )
+
+    assert result.api_env_changed is True
+    assert result.deployment_credentials_changed is True
+    assert result.rotated_on == "2026-10-12"
+    env_text = api_env.read_text(encoding="utf-8")
+    assert "DEMO_POSTGRES_PASSWORD=new-secret" in env_text
+    assert "DEMO_POSTGRES_PASSWORD_ROTATED_ON=2026-10-12" in env_text
+    saved = creds.read_text(encoding="utf-8")
+    assert saved.count('"password": "new-secret"') == 2
+    assert saved.count('"password_rotated_at": "2026-10-12"') == 2
+    assert "old" not in saved
+
+
+@patch("mdc_cli.secrets_manager.alter_demo_role_password")
+def test_rotate_demo_writes_copies_only_after_alter(mock_alter, tmp_path, monkeypatch):
+    from mdc_cli import secrets_manager as sm
+
+    api_env = tmp_path / ".env_api_demo"
+    api_env.write_text(
+        "DEMO_POSTGRES_USER=opendental_demo_user\n"
+        "DEMO_POSTGRES_DB=opendental_demo\n"
+        "DEMO_POSTGRES_PASSWORD=current\n",
+        encoding="utf-8",
+    )
+    creds = tmp_path / "deployment_credentials.json"
+    creds.write_text(
+        '{"demo_database": {"postgresql": {"password": "current"}, '
+        '"database_connection": {"password": "current"}}}',
+        encoding="utf-8",
+    )
+    monkeypatch.setattr("mdc_cli.paths.DEPLOYMENT_CREDENTIALS", creds)
+
+    sm.rotate_demo_postgres_password(
+        api_env_file=api_env,
+        new_password="rotated-value",
+    )
+
+    mock_alter.assert_called_once()
+    kwargs = mock_alter.call_args.kwargs
+    assert kwargs["current_password"] == "current"
+    assert kwargs["new_password"] == "rotated-value"
+    assert kwargs["user"] == "opendental_demo_user"
+    assert "DEMO_POSTGRES_PASSWORD=rotated-value" in api_env.read_text(encoding="utf-8")
+
+
+@patch("mdc_cli.secrets_manager.subprocess.run")
+@patch("mdc_cli.process_util.find_executable", return_value="psql")
+@patch("mdc_cli.run_helper.is_local_tcp_port_open", return_value=True)
+def test_alter_demo_role_sends_sql_on_stdin(mock_open, _mock_psql, mock_run):
+    from mdc_cli.secrets_manager import alter_demo_role_password
+
+    mock_run.return_value.returncode = 0
+    mock_run.return_value.stderr = ""
+    mock_run.return_value.stdout = ""
+    alter_demo_role_password(
+        user="opendental_demo_user",
+        database="opendental_demo",
+        current_password="current",
+        new_password="rotated-value",
+        port=5434,
+    )
+    args = mock_run.call_args.args[0]
+    assert "-c" not in args
+    assert mock_run.call_args.kwargs["input"] == (
+        "ALTER USER opendental_demo_user PASSWORD 'rotated-value'\n"
+    )
+    assert mock_run.call_args.kwargs["env"]["PGPASSWORD"] == "current"
+    mock_open.assert_called_once()

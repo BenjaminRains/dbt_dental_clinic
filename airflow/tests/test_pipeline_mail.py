@@ -15,6 +15,7 @@ if str(_DAGS) not in sys.path:
 
 from lib.pipeline_mail import (  # noqa: E402
     PipelineMailSettings,
+    deliver_nightly_success,
     email_nightly_success,
     nightly_run_succeeded,
 )
@@ -155,6 +156,44 @@ def test_failed_publish_does_not_open_smtp(monkeypatch):
         pipeline_success=True,
         publish_configured=True,
         publish_ok=None,
+    )
+    assert sent is False
+
+
+def test_deliver_swallows_smtp_errors(monkeypatch):
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_HOST", "127.0.0.1")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_PORT", "1")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_STARTTLS", "false")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_USER", "rains.bp@gmail.com")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_PASSWORD", "local-test-secret")
+    monkeypatch.setenv("PIPELINE_MAIL_MAIL_FROM", "rains.bp@gmail.com")
+    monkeypatch.setenv("PIPELINE_MAIL_MAIL_TO", "rains.bp@gmail.com")
+
+    sent = deliver_nightly_success(
+        environment="clinic",
+        body="ETL finished\n",
+        pipeline_success=True,
+        publish_configured=True,
+        publish_ok=True,
+    )
+    assert sent is False
+
+
+def test_deliver_swallows_missing_settings(monkeypatch):
+    for name in (
+        "PIPELINE_MAIL_SMTP_USER",
+        "PIPELINE_MAIL_SMTP_PASSWORD",
+        "PIPELINE_MAIL_MAIL_FROM",
+        "PIPELINE_MAIL_MAIL_TO",
+    ):
+        monkeypatch.delenv(name, raising=False)
+
+    sent = deliver_nightly_success(
+        environment="clinic",
+        body="ETL finished\n",
+        pipeline_success=True,
+        publish_configured=True,
+        publish_ok=True,
     )
     assert sent is False
 

@@ -110,3 +110,31 @@ def email_nightly_success(
         return False
     send_pipeline_email(settings, success_subject(environment), body)
     return True
+
+
+def deliver_nightly_success(
+    *,
+    environment: str,
+    body: str,
+    pipeline_success: object,
+    publish_configured: bool,
+    publish_ok: object,
+) -> bool:
+    """Send the success email. Missing settings or SMTP errors do not raise."""
+    try:
+        settings = PipelineMailSettings()
+    except Exception:
+        logger.exception("Nightly email not sent: mail settings could not be loaded")
+        return False
+    try:
+        return email_nightly_success(
+            settings,
+            environment=environment,
+            body=body,
+            pipeline_success=pipeline_success,
+            publish_configured=publish_configured,
+            publish_ok=publish_ok,
+        )
+    except Exception:
+        logger.exception("Nightly email was not sent")
+        return False

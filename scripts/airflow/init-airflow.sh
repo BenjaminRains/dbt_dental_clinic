@@ -23,5 +23,6 @@ mkdir -p airflow/dags airflow/logs airflow/plugins airflow/scripts
 
 docker-compose --profile init run --rm airflow-init
 
-echo "Airflow initialization complete. Start with:"
-echo "  docker-compose up -d postgres mysql airflow-webserver airflow-scheduler" 
+echo "Airflow initialization complete. Start the Linux containers with:"
+echo "  docker compose up -d postgres mysql airflow-api-server airflow-scheduler airflow-dag-processor"
+echo "  UI: http://localhost:8081" 

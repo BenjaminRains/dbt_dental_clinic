@@ -53,11 +53,10 @@ etl_pipeline (nightly 9 PM Central)
        ├── verify / report
        └── on ETL success:
                ├── dbt_build (dbt_target via mdc)
-               ├── publish_analytics (publish_environment via mdc)
-               └── notify
+               └── publish_analytics (publish_environment via mdc)
 
 schema_analysis DAG (optional, manual trigger)
-       └── Same analyzer + change reports / Slack — not required for nightly runs
+       └── Same analyzer + change reports — not required for nightly runs
 ```
 
 dbt is **not** a third DAG. It is a task group inside `airflow/dags/etl_pipeline_dag.py` (see `should_run_dbt`, `dbt_build` group).
@@ -108,7 +107,6 @@ Inside a container, `localhost` in `etl_pipeline/.env_clinic` points at the **co
 | `publish_environment` | `clinic` |
 | `publish_tunnel_port` | `5433` (optional) |
 | `publish_ensure_tunnel` | `true` (default — auto-start SSM tunnel for publish) |
-| `slack_webhook_url` | optional |
 
 Leave `publish_environment` **unset** for Phase A smoke tests (skips publish). Do **not** set `dbt_target=clinic` until dbt can build directly against RDS safely.
 
@@ -219,18 +217,15 @@ Both DAGs load **paused** by default — toggle `etl_pipeline` on before testing
 - [ ] WireGuard auto-connect or a written pre-run checklist (VPN is still manual)
 - [x] Airflow Variables on the clinic nights: `etl_environment=clinic`, `dbt_target=local`, `publish_environment=clinic`, `project_root=<repo root>`
 - [x] Clinic connection check — 2026-09-29 DAG `validate_database_connections` succeeded
-- [x] Schema refresh → ETL → `dbt build` on the July/August clinic nights above. `send_completion_notification` returned success on those runs; that did not mean publish succeeded
-- [ ] **`publish_analytics` on native Windows.** July/August attempts ran in Compose (`/home/airflow/.local/bin/mdc`, cwd `/opt/airflow/dbt_dental_clinic`) and failed both retries: `Publish script not found: scripts/publish/publish_analytics_to_rds.ps1`. The 2026-09-29 native run stopped at `dbt deps` (Hub TLS reset, `WinError 10054`) and never started publish
-- [ ] SSM tunnel confirmed by a successful publish task. `--ensure-tunnel` has not completed inside the DAG
-
-**Next step:** one native after-hours run, not Compose. WireGuard up, scheduler + dag-processor + api-server running, `etl_pipeline` unpaused, and `dbt_packages/` already installed (done 2026-09-30). Success is `publish_analytics` using the Windows `mdc` and finishing `publish_analytics_to_rds.ps1` over the SSM tunnel. Do not run between 6 AM and 8:59 PM Central.
+- [x] Schema refresh → ETL → `dbt build` on the July/August clinic nights above
+- [x] **`publish_analytics` on native Windows.** Clinic runs for 2026-10-27 through 2026-10-30 finished `publish_analytics` with the Windows `mdc` and the SSM tunnel
 
 ### Phase C — Production cutover on laptop (1 day)
 
-- [x] Nightly schedule is `0 21 * * *` (`America/Chicago`) and has fired when Airflow is up and `etl_pipeline` is unpaused. The 2026-09-29 slot waited until Airflow was started at 12:14 AM Central
-- [ ] Configure Slack (`slack_webhook_url`) and/or SMTP (`smtp_default`). Failure email currently logs `SMTP connection is not found`. The completion task used to crash importing Slack (`aiohttp` missing) even when no webhook was set; that import is deferred on `feature/airflow-phase-c`
-- [x] Airflow UI stays on the laptop (native http://localhost:8080, Compose http://localhost:8081) — no public exposure
-- [ ] Monitor 2–3 consecutive nightly runs that include a **successful native publish** (VPN up, native Airflow up). No such night yet
+- [x] Nightly schedule is `0 21 * * *` (`America/Chicago`) and has fired when Airflow is up and `etl_pipeline` is unpaused
+- [x] Slack stays off. `write_execution_report` emails the run report on success through `PIPELINE_MAIL_*` in `airflow/.env.native`. A mail failure does not fail the task. Airflow `email_on_failure` stays off
+- [x] Airflow UI stays on the laptop (native http://localhost:8080) — no public exposure
+- [ ] One nightly run after this hook, so the inbox gets the success report. The 2026-10-27 through 2026-10-30 publishes finished before the DAG called the mailer
 - [ ] Document break-glass: manual `mdc etl run`, `mdc dbt run`, `mdc publish analytics`
 - [ ] (Later) Long-lived tunnel Scheduled Task for debugging only — publish auto-starts tunnel by default
 
@@ -285,6 +280,5 @@ These are small but prevent confusion:
 | `etl_environment` | `test` | `clinic` |
 | `dbt_target` | `local` | `local` |
 | `publish_environment` | *(unset)* | `clinic` |
-| `slack_webhook_url` | optional | recommended |
 
 See [`README.md`](README.md) and [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) for schedule and run semantics.

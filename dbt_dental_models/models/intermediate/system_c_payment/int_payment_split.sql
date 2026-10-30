@@ -6,7 +6,7 @@
         "CREATE INDEX IF NOT EXISTS {{ this.name }}_patient_id_idx ON {{ this }} (patient_id)",
         "CREATE INDEX IF NOT EXISTS {{ this.name }}_payment_date_idx ON {{ this }} (payment_date)",
         "CREATE INDEX IF NOT EXISTS {{ this.name }}_patient_payment_date_idx ON {{ this }} (patient_id, payment_date)"
-    ]
+    ] if target.type == 'postgres' else []
 ) }}
 
 /*
@@ -39,7 +39,7 @@ split_definitions AS (
 ),
 
 -- Get payment information for split validation
-payment_info AS MATERIALIZED (
+payment_info AS {% if target.type == 'postgres' %}MATERIALIZED {% endif %}(
     SELECT DISTINCT
         p.payment_id,
         p.payment_type_id,
@@ -75,7 +75,7 @@ payment_info AS MATERIALIZED (
 ),
 
 -- Get split counts for validation
-split_counts AS MATERIALIZED (
+split_counts AS {% if target.type == 'postgres' %}MATERIALIZED {% endif %}(
     SELECT 
         ps.payment_id,
         COUNT(*) as total_splits,

@@ -76,6 +76,7 @@ models:
               config:
                 severity: error
                 description: "Procedure code must exist in source staging model"
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: procedure_code
         description: >

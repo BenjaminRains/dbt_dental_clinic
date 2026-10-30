@@ -204,7 +204,10 @@ models:
           - 647: Medium refunds (avg -$88)
           - 661: Insurance refunds (avg -$106, range -$196 to -$55) - All 12 records are negative amounts
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator does not populate claimpayment.PayType. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
           - accepted_values:
               values: [0, 69, 70, 71, 72, 261, 303, 391, 412, 417, 464, 465, 466, 467, 469, 574, 634, 645, 646, 647, 661]
               config:
@@ -240,7 +243,10 @@ models:
       - name: sec_user_num_entry
         description: "User who created the record in the source system (OpenDental). Maps to SecUserNumEntry column."
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator does not populate claimpayment.SecUserNumEntry. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
           - dbt_utils.expression_is_true:
                expression: ">= 0"
 

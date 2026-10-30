@@ -198,6 +198,9 @@ models:
               to: ref('stg_opendental__patient')
               field: patient_id
               severity: error
+              config:
+                # Patient staging is not on Snowflake until a later wave.
+                enabled: "{{ target.type != 'snowflake' }}"
       
       - name: clinic_id
         description: "Foreign key to clinics - Identifies which clinic location processed the payment. May be null for older payments before clinic tracking was implemented."

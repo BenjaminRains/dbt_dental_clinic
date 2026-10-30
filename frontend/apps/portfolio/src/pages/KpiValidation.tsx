@@ -338,9 +338,8 @@ const KpiValidation: React.FC = () => {
                             <Chip label="delta_documented" size="small" variant="outlined" />
                         </Box>
                         <Typography variant="body2" color="text.secondary">
-                            Mart vs warehouse checks can pass while live OpenDental BalTotal still
-                            diverges (e.g. patient lag). Documented deltas stay out of the role-home
-                            allowlist until status is <code>within_tolerance</code>.
+                            OpenDental rebuilds this report from transactions as of a chosen date.
+                            The mart matches stored patient balances and does not run that query.
                         </Typography>
                     </Paper>
                 </Box>

@@ -14,22 +14,24 @@ def get_ar_kpi_summary(
     end_date: Optional[date] = None
 ) -> dict:
     """
-    Get AR KPI summary from mart_ar_summary
-    
-    Returns:
-    - Total AR outstanding
-    - Current (0-30) amount and percentage
-    - Over 90 days amount and percentage
-    - DSO (Days Sales Outstanding) - simplified calculation
-    - Collection rate (calculated from ALL procedures and ALL payments for direct-pay practice)
-    - High risk counts and amounts
-    
-    Collection Rate Calculation:
-    - Production: All procedures from fact_procedure (last 365 days) - includes both insurance and direct-pay
-    - Collections: All payments from fact_payment (last 365 days) - includes both insurance and patient payments, excludes refunds
-    - Rate = (Total Collections / Total Production) × 100
-    
-    Now queries mart_ar_summary directly - aging buckets and insurance estimates are calculated in the mart model
+    Get AR KPI summary from mart_ar_summary.
+
+    total_ar_outstanding is the sum of stored patient.BalTotal (PatStatus Patient
+    and Inactive, total_balance > 0). It is not the OpenDental Aging of A/R report.
+
+    current_amount is procedures dated 0-30 days before the snapshot, scaled so
+    the four buckets sum to BalTotal. over_90_amount is procedures dated more
+    than 90 days before the snapshot, plus any BalTotal with no procedure rows,
+    scaled to BalTotal.
+
+    patient_ar is greatest(total_balance - insurance_estimate, 0) on each row.
+    insurance_ar is claim.InsPayEst on procedures that still have a balance,
+    minus insurance already paid on those procedures. There is no write-off
+    estimate column.
+
+    Also returns a simplified DSO, a 365-day collection rate, and high-risk
+    counts. Collection rate is fact_payment income divided by fact_procedure
+    fees over the last 365 days.
     """
     query = """
     WITH latest_snapshots AS (
@@ -206,15 +208,22 @@ def get_ar_aging_summary(
     end_date: Optional[date] = None
 ) -> List[dict]:
     """
-    Get AR aging summary by bucket from mart_ar_summary
-    
-    Returns list of aging buckets with amounts, percentages, patient counts
-    
-    Now queries mart_ar_summary directly - aging buckets are calculated in the mart model
-    
+    Get AR aging buckets from mart_ar_summary.
+
+    Each amount is days since procedure_date, scaled so the four buckets sum
+    to stored BalTotal:
+    - Current: procedures dated 0-30 days before the snapshot
+    - 30 Day: procedures dated 31-60 days before the snapshot
+    - 60 Day: procedures dated 61-90 days before the snapshot
+    - 90 Day: procedures dated more than 90 days before the snapshot, plus
+      any BalTotal with no procedure rows
+
+    These are not OpenDental Aging of A/R TranDate windows, and credits are
+    not applied to the oldest charge first.
+
     If snapshot_date is provided, uses that specific date.
     If start_date/end_date are provided, filters by date range.
-    Otherwise, uses latest snapshot.
+    Otherwise, uses the latest snapshot.
     """
     params = {}
     date_filter = ""

@@ -354,7 +354,7 @@ When OD total is zero and mart is zero, treat as PASS. When OD golden is not yet
 
 | [daily-payments](./daily-payments/) | `mart_daily_payments` | **`within_tolerance` — complete** | [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md) |
 | [daily-production-by-procedure](./daily-production-by-procedure/) | `mart_daily_production_by_procedure` | `within_tolerance` (3/3 PASS) | [VALIDATION_REPORT.md](./daily-production-by-procedure/VALIDATION_REPORT.md) · [README.md](./daily-production-by-procedure/README.md) |
-| [aging-of-a-r](./aging-of-a-r/) | `mart_ar_summary` | Not started | — |
+| [aging-of-a-r](./aging-of-a-r/) | `mart_ar_summary` | **`within_tolerance`** — total PASS 2026-10-12 | [VALIDATION_REPORT.md](./aging-of-a-r/VALIDATION_REPORT.md) |
 
 
 

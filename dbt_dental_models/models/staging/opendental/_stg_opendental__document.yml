@@ -90,6 +90,8 @@ models:
           - relationships:
               to: ref('stg_opendental__definition')
               field: definition_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
               severity: warn
               where: "document_category_id IS NOT NULL"
 

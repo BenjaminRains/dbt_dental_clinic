@@ -1,0 +1,62 @@
+# Reports a QuickBooks Online Plus "View company reports" user can run.
+# Entity queries (Invoice, Payment, Purchase) are outside this role.
+# OpenDental's QuickBooksOnline program is not this source.
+
+metadata:
+  source: qbo_reports_api
+  role: view_company_reports
+  scope: com.intuit.quickbooks.accounting
+  minor_version: 75
+
+defaults:
+  - profit_and_loss
+  - balance_sheet
+  - aged_receivables
+  - customer_income
+
+reports:
+  profit_and_loss:
+    api_name: ProfitAndLoss
+    description: Profit and loss for a date range. Uses the company accounting method.
+    date_param: range
+
+  balance_sheet:
+    api_name: BalanceSheet
+    description: Balance sheet as of a date.
+    date_param: as_of
+
+  aged_receivables:
+    api_name: AgedReceivables
+    description: Accounts receivable aging summary as of a date.
+    date_param: as_of
+
+  aged_receivable_detail:
+    api_name: AgedReceivableDetail
+    description: Accounts receivable aging detail as of a date.
+    date_param: as_of
+    default: false
+
+  customer_income:
+    api_name: CustomerIncome
+    description: Sales by customer for a date range.
+    date_param: range
+
+  customer_balance:
+    api_name: CustomerBalance
+    description: Open customer balances as of a date.
+    date_param: as_of
+    default: false
+
+  cash_flow:
+    api_name: CashFlow
+    description: Statement of cash flows for a date range.
+    date_param: range
+    default: false
+
+  transaction_list:
+    api_name: TransactionList
+    description: >
+      Transaction list for a date range. This is the API stand-in for the
+      Deposit Detail screen once the deposit account id is known.
+    date_param: range
+    default: false

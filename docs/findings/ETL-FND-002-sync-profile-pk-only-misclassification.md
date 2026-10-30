@@ -1,9 +1,9 @@
 # ETL-FND-002 — `sync_profile` PK-only misclassification (sheetfield pattern)
 
 **Type:** Pipeline defect (config generation + loader interaction)  
-**Status:** Analyzer fix **local, uncommitted**; `tables.yml` regen and loader guard **pending**  
+**Status:** ✅ **Closed** (2026-07-16) — on `main` via [PR #38](https://github.com/BenjaminRains/dbt_dental_clinic/pull/38) (`df45f9a1`). Analyzer, loader guard, tests, and regenerated `tables.yml` landed as `7d84dbf0` (pre-rebase hash `f3e11ef2` is not on a branch). Clinic schema regen 2026-09-29: 396 `append_only` / 50 `in_place_updates`. `sheetfield`, `procnote`, `rxnorm`, and `statementprod` are `append_only` on their integer PKs. `procedurelog` stays `in_place_updates` on `DateTStamp`.  
 **Discovered:** 2026-06-29 (parsed `etl_pipeline_run_20260629_205745.log`)  
-**Tracking:** [TODO.md — ETL-FND-002](../../../TODO.md#etl-fnd-002--sync-profile-pk-only-misclassification-sheetfield-pattern)
+**Tracking:** [TODO.md — ETL-FND-002](../../TODO.md#etl-fnd-002--sync-profile-pk-only-misclassification-sheetfield-pattern)
 
 ---
 
@@ -36,33 +36,30 @@ Parsed log: `etl_pipeline/logs/etl_pipeline/etl_pipeline_run_20260629_205745_par
 
 ---
 
-## Scope in current `tables.yml`
+## Scope
 
-**43 modeled tables** would flip `in_place_updates` → `append_only` after regen (PK-only watermark).
+**43 modeled tables** flipped `in_place_updates` → `append_only` (PK-only watermark). Current
+`tables.yml` (clinic regen 2026-09-29) is 396 `append_only` / 50 `in_place_updates`.
 
-**4 large/medium incremental** tables drive nightly runtime: `sheetfield`, `procnote`, `rxnorm`,
-`statementprod` (~501 MB est.).
+**4 large/medium incremental** tables drove nightly runtime: `sheetfield`, `procnote`, `rxnorm`,
+`statementprod`. All four are now `append_only` on their integer PKs.
 
-Tables with real timestamp watermarks (~50 modeled + mutation seed list) are **unchanged**.
+Tables with real timestamp watermarks (~50, including the mutation seed list) are **unchanged**.
 
 ---
 
 ## Fix
 
-### Done (code, not deployed)
+### Done
 
-- `has_mutation_timestamp_watermark()` in `analyze_opendental_schema.py`
-- `determine_sync_profile()` requires non-PK timestamp before `in_place_updates`
-- Unit tests in `test_replica_fidelity_unit.py` (52 tests pass)
-
-### Pending
-
-1. Commit analyzer + tests
-2. `mdc etl schema --env local --profile full` — regen `tables.yml` (safe during business hours)
-3. Loader guard: skip datetime `in_place_updates` branch when watermark is integer PK
-4. Reset `raw.etl_load_status` for large tables with stale `primary_column_name = 'timestamp'`
-5. After-hours spot ETL: `--tables sheetfield procnote` — expect small `rows_loaded`
-6. Deploy to clinic / let nightly DAG pick up regen’d config
+- [x] `has_mutation_timestamp_watermark()` in `analyze_opendental_schema.py`
+- [x] `determine_sync_profile()` requires a non-PK timestamp before `in_place_updates`
+- [x] Unit tests in `test_replica_fidelity_unit.py` (`sheetfield` → `append_only`; `procedurelog` unchanged)
+- [x] Loader guard in `replica_sync_config.py` — datetime `in_place_updates` path only for timestamp watermarks (`test_replica_sync_config_unit.py`)
+- [x] `tables.yml` regen — local 2026-07-09, then clinic 2026-09-29
+- [x] Reset `raw.etl_load_status` for `sheetfield`, `procnote`, `rxnorm`, `statementprod` (2026-07-09)
+- [x] After-hours spot ETL (2026-07-09): `sheetfield` **36** rows (~0.7 min); `procnote` **649** rows (~0.1 min) — was 1.65M / 579k
+- [x] Merged to `main` — PR #38, commit `7d84dbf0`
 
 ---
 
@@ -76,6 +73,6 @@ freshness (e.g. `stg_opendental__sheetfield` joins `sheet.DateTSheetEdited`).
 
 ## Related
 
-- [ETL_REPLICA_FIDELITY_ROADMAP.md](../ETL_REPLICA_FIDELITY_ROADMAP.md) — Phase 1.6
-- [schema_drift_automatic_handling.md](../schema_drift_automatic_handling.md) — `sheetfield` schema example
+- [ETL_REPLICA_FIDELITY_ROADMAP.md](../etl/ETL_REPLICA_FIDELITY_ROADMAP.md) — Phase 1.6
+- [schema_drift_automatic_handling.md](../etl/schema_drift_automatic_handling.md) — `sheetfield` schema example
 - [ETL-FND-001](./ETL-FND-001-replica-row-drift-procedurelog.md) — true mutation tables with timestamps

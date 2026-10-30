@@ -194,7 +194,7 @@ def _env_file_for_stage(stage: Stage) -> Optional[Path]:
     Return the stage .env file to load, or None when OS env is authoritative (Phase 0).
 
     When the analytics host var is already in the process environment (systemd, Docker,
-    environment_manager.ps1), do not read a second on-disk .env_api_* file.
+    or mdc-injected child env), do not read a second on-disk .env_api_* file.
     """
     host_key = HOST_ENV_KEYS[stage.value]
     prefix = STAGE_PREFIX[stage.value]

@@ -258,7 +258,7 @@ patient:
 - Deletes are not captured (same as MDC ETL)
 - `DateTStamp` advancement per table is not guaranteed by Open Dental schema
 - PK-only tables classified as `append_only` may drift on in-place edits until full refresh
-- See [ETL-FND-001](findings/ETL-FND-001-replica-row-drift-procedurelog.md) and [ETL-FND-002](findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
+- See [ETL-FND-001](../findings/ETL-FND-001-replica-row-drift-procedurelog.md) and [ETL-FND-002](../findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
 
 ---
 

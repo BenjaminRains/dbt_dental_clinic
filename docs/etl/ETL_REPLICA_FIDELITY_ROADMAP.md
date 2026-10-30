@@ -17,14 +17,14 @@
 | Phase | Status | Local verification |
 | --- | --- | --- |
 | **1** — Schema analyzer + `tables.yml` v4.1 | **Done** (commit `558e50d7`) | `procedurelog`: `DateTStamp` watermark, `or_logic`, 30-day lookback in config |
-| **1.6** — PK-only `in_place_updates` fix | **Code done, uncommitted** (2026-06-29) | `has_mutation_timestamp_watermark()`; 43 tables → `append_only` after regen; see [ETL-FND-002](../findings/ETL-FND-002-sync-profile-pk-only-misclassification.md) |
+| **1.6** — PK-only `in_place_updates` fix | **Closed** on `main` (PR #38, `7d84dbf0`, 2026-07-16) | `has_mutation_timestamp_watermark()`; clinic `tables.yml` 2026-09-29 is 396 `append_only` / 50 `in_place_updates`; see [ETL-FND-002](../findings/ETL-FND-002-sync-profile-pk-only-misclassification.md) |
 | **2** — Replicator + loader alignment | **Done** (commit `6cc4e6f9`) | Incremental ~10,632 rows (~2s replicate + ~1.2 min load) vs ~815k rows pre-fix; drift check PASS; KPI 2026-06-10 PASS (28 codes, 140 / $15,239) |
-| **2.1** — Loader guard (integer PK watermark) | **Not started** | Belt-and-suspenders in `replica_sync_config.py` |
+| **2.1** — Loader guard (integer PK watermark) | **Closed** with Phase 1.6 (`7d84dbf0`) | `uses_in_place_timestamp_watermark()` in `replica_sync_config.py` |
 | **3** — Layer 0 checks (payment, claimproc, adjustment, claim, paysplit) | **Done** (local) | Tier A — 6 checks PASS; lookback on claim/paysplit; phantom purge scripts |
 | **4** — Sunday scoped full refresh | Not started | — |
 | **1.5** — Spot-edit timestamp matrix | Not started | Required before trusting config clinic-wide |
 
-**Next:** Regen `tables.yml` (ETL-FND-002) → after-hours verify `sheetfield`/`procnote` loads → loader guard → clinic RDS deploy + re-validate KPI #2 golden dates.
+**Next:** Phase 1.5 spot-edit timestamp matrix, then Phase 4 Sunday scoped full refresh. ETL-FND-002 is closed on `main` (PR #38).
 
 ---
 
@@ -131,27 +131,20 @@ Record results in the protocol worksheet (or ETL-FND-001). If timestamp **never*
 
 ### 1.6 PK-only `in_place_updates` fix (ETL-FND-002)
 
-**Status:** Analyzer code **done locally, uncommitted** (2026-06-29). `tables.yml` on disk **still pre-fix**.
+**Status:** ✅ **Closed** on `main` (PR #38, commit `7d84dbf0`, 2026-07-16). Clinic `tables.yml` regen 2026-09-29 confirms the profiles.
 
 **Bug:** v4.1 set `in_place_updates` for all `is_modeled: true` tables. When only PK was in
 `incremental_columns`, loader used datetime WHERE on integer watermark → effective full reload
 (`sheetfield`: 0 extract / 1.65M load / 73 min on 2026-06-29).
 
 **Fix:** `has_mutation_timestamp_watermark()` — `in_place_updates` only when a **non-PK** timestamp
-is in `incremental_columns`.
+is in `incremental_columns`. Loader guard refuses the datetime branch when the watermark is an integer PK.
 
-**Remaining:**
-
-```powershell
-mdc etl schema --env local --profile full   # safe during business hours
-# Review diff: ~43 tables in_place_updates → append_only
-```
-
-- [ ] Commit analyzer + tests
-- [ ] Regen + commit `tables.yml`
-- [ ] Loader guard in `replica_sync_config.py`
-- [ ] Reset `raw.etl_load_status` for large PK-only tables
-- [ ] After-hours ETL spot-check `sheetfield`, `procnote`
+- [x] Commit analyzer + tests (`7d84dbf0`)
+- [x] Regen + commit `tables.yml` (local 2026-07-09; clinic regen 2026-09-29: 396 / 50)
+- [x] Loader guard in `replica_sync_config.py`
+- [x] Reset `raw.etl_load_status` for large PK-only tables (2026-07-09)
+- [x] After-hours ETL spot-check `sheetfield` (36 rows), `procnote` (649 rows)
 
 **Finding:** [ETL-FND-002](../findings/ETL-FND-002-sync-profile-pk-only-misclassification.md)
 
@@ -191,7 +184,7 @@ Plus optional lookback OR union (procedurelog pattern).
 | Builds `and_logic` from `incremental_columns` | Build from **`tables.yml` loader strategy** + same watermark column as replication |
 | Lookback hard-coded for `procedurelog` | Generic `lookback_resync` block |
 | `copy_csv` on large tables breaks upsert | Keep **streaming upsert** when lookback enabled or `sync_profile == in_place_updates` |
-| Integer PK used as datetime watermark (ETL-FND-002) | **Pending:** loader guard — only datetime branch when watermark is non-PK timestamp; regen `tables.yml` via Phase 1.6 |
+| Integer PK used as datetime watermark (ETL-FND-002) | **Closed:** datetime branch only when watermark is a non-PK timestamp; `tables.yml` regenerated |
 
 ### 2.3 Consistency test (automated)
 

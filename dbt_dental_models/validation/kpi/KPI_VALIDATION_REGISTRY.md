@@ -36,7 +36,9 @@ is the check that implemented logic produces the same result as OD on golden dat
 
 | within_tolerance | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `mart_daily_production_by_procedure` | `sum(total_fees)` by `production_date` / code | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **Complete (2026-07-16):** 3 golden dates; layers 0–4; [VALIDATION_REPORT.md](./daily-production-by-procedure/VALIDATION_REPORT.md). DateComplete + status 2; Sundays excluded. |
 
-| not_started | [aging-of-a-r](./aging-of-a-r/) | AR total | `mart_ar_summary` | `total_ar_balance` | Aging of A/R | Reports → Standard → Monthly → Aging of A/R | ±$50 or ±0.5% | Simplified DSO in exposures |
+| delta_documented | [production-and-income](./production-and-income/) | Monthly production and income | *(no mart yet — raw reconstruction)* | Production, adjustments, write-off, patient income, unearned, insurance, total income | Production and Income | Reports → Standard → Production and Income | ±$0.01 on source reconstruction | **Source PASS (2026-10-08):** 2025 full year and 2026 Jan–Sep. ProcDate not DateComplete. Unearned excludes definition ItemValue `X` (Treat Plan Prepayment). Payments mart matches total income only when that type is absent. October 2026 is as-of the export. |
+
+| delta_documented | [aging-of-a-r](./aging-of-a-r/) | AR total | `mart_ar_summary` | `sum(total_balance)` | Aging of A/R | Reports → Standard → Monthly → Aging of A/R | ±$50 or ±0.5% | **Report query (2026-09-30):** Total $275,423.33 / 739 families. OpenDental rebuilds buckets from transactions; it does not read stored `BalTotal`. Mart matches stored balances on 2026-10-12 ($282,624.23) and does not implement this query. |
 
 | not_started | *TBD* | Referral production | `mart_referral_source_kpis` | `production_value_in_period` | *TBD* | *TBD* | ±1.0% | Three `period_basis` slices |
 
@@ -196,6 +198,21 @@ Golden path: `daily-production-by-procedure/golden/`
 
 
 
-Future reports: add compare SQL under `aging-of-a-r/compare/`, etc. Period **Production and Income**
-shortcuts (`today/`, `this-month/`, …) are separate OD exports — not the same as Daily →
-Production by Procedure.
+## Comparison SQL index (production-and-income)
+
+| compare_sql | status |
+| --- | --- |
+| [compare/compare_production_and_income_monthly.sql](./production-and-income/compare/compare_production_and_income_monthly.sql) | Source vs 2025 and 2026 monthly grids. October 2026 is as-of 2026-10-08. |
+
+## Comparison SQL index (aging-of-a-r)
+
+| compare_sql | status |
+| --- | --- |
+| [compare/compare_aging_ar_total.sql](./aging-of-a-r/compare/compare_aging_ar_total.sql) | Total PASS 2026-10-12 — $282,624.23 / 736 |
+| [compare/compare_aging_ar_staging.sql](./aging-of-a-r/compare/compare_aging_ar_staging.sql) | Mart vs `dim_patient` |
+| [compare/compare_aging_ar_buckets.sql](./aging-of-a-r/compare/compare_aging_ar_buckets.sql) | Secondary — stored `Bal_*` vs scaled mart buckets |
+| [compare/compare_aging_ar_api.sql](./aging-of-a-r/compare/compare_aging_ar_api.sql) | API-equivalent SQL vs mart |
+
+Period **Production and Income**
+shortcuts (`today/`, `this-month/`, …) are the same report as
+[production-and-income](./production-and-income/) — not Daily → Production by Procedure.

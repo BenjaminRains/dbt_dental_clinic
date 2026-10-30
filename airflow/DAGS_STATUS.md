@@ -24,10 +24,10 @@ Quick reference for the status of all Airflow DAGs in the OpenDental data pipeli
 
 **What it does:**
 - Same analyzer as nightly `refresh_schema_configuration`
-- Adds change detection, severity reports, and notifications
+- Adds change detection and severity reports in the task log
 
 **When to run:**
-- Manual: before OpenDental upgrades, when you want a changelog/Slack report
+- Manual: before OpenDental upgrades, when you want a changelog in the task log
 - **Not required** for nightly — `etl_pipeline` refreshes `tables.yml` every run
 
 **Outputs:**
@@ -77,7 +77,7 @@ See [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md). Summary:
 
 1. **Phase A/B validation** — native venv smoke test (`test`), then clinic run with VPN
 2. **Laptop ops** — machine on, WireGuard up, SSM tunnel open for publish, native Airflow running at 9 PM Central
-3. **End-to-end run** — schema refresh → ETL → dbt → publish → notify
+3. **End-to-end run** — schema refresh → ETL → dbt → publish
 
 ## Quick Start
 
@@ -101,9 +101,10 @@ Preflight: WireGuard on; `mdc tunnel clinic-db` (port 5433). See [`NIGHTLY_RUN.m
 ```bash
 copy .env.template .env
 copy etl_pipeline\.env_test.template etl_pipeline\.env_test
-docker-compose build airflow-webserver airflow-scheduler
-docker-compose --profile init run --rm airflow-init
-docker-compose up -d postgres mysql airflow-webserver airflow-scheduler
+docker compose build airflow-api-server airflow-scheduler airflow-dag-processor
+docker compose --profile init run --rm airflow-init
+docker compose up -d postgres mysql airflow-api-server airflow-scheduler airflow-dag-processor
+# UI: http://localhost:8081
 ```
 
 Variables: `etl_environment=test`, `dbt_target=local`, `project_root=/opt/airflow/dbt_dental_clinic`.

@@ -42,7 +42,7 @@ Use `.\load_project.ps1` for optional PowerShell aliases (`status`, `api-run`, e
 - `mdc dbt run|test|docs --env <stage> [--tunnel-db] [--tunnel-port 5433] -- [args]`
 - `mdc dbt invoke --env <stage> -- deps` — arbitrary dbt subcommands
 - `mdc publish analytics --env clinic` — local marts → clinic RDS (`--ensure-tunnel` for unattended/Airflow; live Secrets Manager password; see [docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md](../../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md))
-- `mdc secrets pull clinic` — read RDS master secret (`rds!db-...`), sync password into `api/.env_api_clinic` (see [CLINIC_ANALYTICS_WORKFLOW.md](../../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md))
+- `mdc secrets pull` — list clinic, demo, Anthropic, and Airflow, then confirm the rows to run. `mdc secrets pull clinic` stays a non-interactive sync of the RDS master secret into `api/.env_api_clinic` (see [CLINIC_ANALYTICS_WORKFLOW.md](../../docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md)). `mdc secrets pull demo` rotates `opendental_demo_user` after a confirmation.
 
 ### Frontend (workspace apps)
 

@@ -53,6 +53,7 @@ models:
       unique_key: procedure_id
       on_schema_change: fail
       incremental_strategy: merge
+      tags: ['intermediate', 'procedure', 'snowflake']
     
     columns:
       - name: procedure_id
@@ -98,6 +99,8 @@ models:
           - relationships:
               to: ref('stg_opendental__patient')
               field: patient_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: provider_id
         description: >
@@ -115,6 +118,8 @@ models:
           - relationships:
               to: ref('stg_opendental__provider')
               field: provider_id
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: appointment_id
         description: >
@@ -359,7 +364,9 @@ models:
                 name: warn_completed_procedure_fee_mismatch
 
       - name: procedure_notes
-        description: Aggregated clinical notes associated with the procedure
+        description: >
+          Aggregated clinical notes associated with the procedure.
+          Null is valid: completed procedures are not required to have notes.
 
       - name: note_count
         description: Number of notes attached to this procedure
@@ -427,7 +434,9 @@ models:
                 severity: warn
 
       - name: fee_schedule_type_desc
-        description: Human-readable description of the fee schedule type from definitions table
+        description: >
+          Human-readable description of the fee schedule type from the definitions table.
+          Null is valid. This clinic uses only a few fee schedules, so a type id often has no description.
         tests:
           - relationships:
               to: ref('stg_opendental__definition')
@@ -502,19 +511,12 @@ models:
           name: warn_key_procedures_missing_standard_fees
 
       - dbt_utils.expression_is_true:
-          expression: "not (procedure_status = 2 and procedure_notes is null)"
-          severity: warn
-          name: warn_completed_procedures_without_notes
-
-      - dbt_utils.expression_is_true:
           expression: "not (treatment_area_desc is null and treatment_area is not null)"
           severity: warn
           name: warn_missing_treatment_area_description
 
-      - dbt_utils.expression_is_true:
-          expression: "not (fee_schedule_type_desc is null and fee_schedule_type_id is not null)"
-          severity: warn
-          name: warn_missing_fee_schedule_type_description
+      # Notes may be null on completed procedures. Fee-schedule type descriptions
+      # may be null: this clinic uses only a few fee schedules.
 
     meta:
       owner: "clinical_operations_team"

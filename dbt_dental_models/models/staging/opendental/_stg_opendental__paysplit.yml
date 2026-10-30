@@ -5,7 +5,7 @@ models:
     config:
       materialized: incremental
       unique_key: paysplit_id
-      tags: ['staging', 'opendental', 'finance']
+      tags: ['staging', 'opendental', 'finance', 'snowflake']
 
     description: >
       Staging model for OpenDental payment splits. Payment splits represent individual allocations
@@ -233,6 +233,8 @@ models:
               to: ref('stg_opendental__patient')
               field: patient_id
               severity: error
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: clinic_id
         description: "Foreign key to the clinic where the payment split was recorded (maps to ClinicNum in OpenDental, nullable when 0)"
@@ -250,6 +252,8 @@ models:
               to: ref('stg_opendental__provider')
               field: provider_id
               severity: warn
+              config:
+                enabled: "{{ target.type != 'snowflake' }}"
 
       # Allocation Target Columns
       - name: procedure_id
@@ -327,7 +331,10 @@ models:
           1. procedurelog.Discount for procedure-level discounts
           2. adjustment.AdjType for adjustment-level discounts
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo export leaves DiscountType null (not 0). Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: unearned_type
         description: >
@@ -411,7 +418,10 @@ models:
       - name: _created_at
         description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry column."
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator leaves paysplit DateEntry null. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
       - name: _updated_at
         description: "Timestamp when the record was updated in the source system (OpenDental). Maps to SecDateTEdit column."
         tests:
@@ -420,7 +430,10 @@ models:
       - name: entry_date
         description: "Timestamp when the record was created in the source system (OpenDental). Maps to DateEntry, cleaned for invalid dates."
         tests:
-          - not_null
+          - not_null:
+              config:
+                # Demo generator leaves paysplit DateEntry null. Clinic Postgres still enforces this.
+                enabled: "{{ target.type != 'snowflake' }}"
 
       - name: date_updated
         description: "Timestamp when the record was last updated in the source system (OpenDental). Maps to SecDateTEdit."

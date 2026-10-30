@@ -76,6 +76,9 @@ Every env file has a **unique name** = path from repo root. The same basename (e
 | **ETL pipeline** | `etl_pipeline/.env_local` | `etl_pipeline/.env_local.template` | `settings_v2` via `mdc etl … --env local` |
 | **ETL pipeline** | `etl_pipeline/.env_clinic` | `etl_pipeline/.env_clinic.template` | `settings_v2` via `mdc etl … --env clinic` |
 | **ETL pipeline** | `etl_pipeline/.env_test` | `etl_pipeline/.env_test.template` | `settings_v2` via `mdc etl … --env test` |
+| **QuickBooks** | `quickbooks/.env_local` | `quickbooks/.env_local.template` | `quickbooks/quickbooks/credentials.py` when `QUICKBOOKS_ENVIRONMENT=local` |
+| **QuickBooks** | `quickbooks/.env_clinic` | `quickbooks/.env_clinic.template` | `quickbooks/quickbooks/credentials.py` when `QUICKBOOKS_ENVIRONMENT=clinic` |
+| **QuickBooks** | `quickbooks/.env_test` | `quickbooks/.env_test.template` | `quickbooks/quickbooks/credentials.py` when `QUICKBOOKS_ENVIRONMENT=test` |
 | **dbt local** | `dbt_dental_models/.env_local` | `dbt_dental_models/.env_local.template` | `mdc_cli/dbt_env.py` via `mdc dbt … --env local` |
 | **dbt clinic** | `dbt_dental_models/.env_clinic` (optional) | `etl_pipeline/.env_clinic.template` | `mdc_cli/dbt_env.py` + `deployment_credentials.json` |
 | **dbt demo** | (no file) | — | `mdc_cli/dbt_env.py` from `deployment_credentials.json` |
@@ -124,13 +127,13 @@ Use a single vocabulary so stages stay consistent across API, ETL, dbt, and depl
      (synthetic export only)
 ```
 
-| **Name** | **Meaning** | **API** | **ETL** | **dbt** |
-|----------|-------------|---------|---------|---------|
-| `local` | Local dev (localhost) | ✅ | ✅ | ✅ |
-| `demo` | Portfolio/demo (synthetic data, public) — **not** production | ✅ | — | ✅ (from JSON) |
-| `clinic` | Real clinic (PHI, IP‑restricted) — **this is production** | ✅ | ✅ | ✅ |
-| `test` | Test DBs (CI/integration, localhost) | ✅ | ✅ | — |
-| `snowflake` | Portfolio Snowflake mini warehouse (synthetic only) | — | — | ✅ (from `.env_snowflake`) |
+| **Name** | **Meaning** | **API** | **ETL** | **dbt** | **QuickBooks** |
+|----------|-------------|---------|---------|---------|----------------|
+| `local` | Local dev (localhost) | ✅ | ✅ | ✅ | ✅ Intuit sandbox |
+| `demo` | Portfolio/demo (synthetic data, public) — **not** production | ✅ | — | ✅ (from JSON) | — |
+| `clinic` | Real clinic (PHI, IP‑restricted) — **this is production** | ✅ | ✅ | ✅ | ✅ Intuit production API |
+| `test` | Test DBs (CI/integration, localhost) | ✅ | ✅ | — | ✅ Intuit sandbox |
+| `snowflake` | Portfolio Snowflake mini warehouse (synthetic only) | — | — | ✅ (from `.env_snowflake`) | — |
 
 **`prod` / `production`:** Not a separate `mdc` stage. Prefer `clinic` in code and env drivers (`API_ENVIRONMENT=clinic`). `prod` / `production` are acceptable only as **AWS resource** naming aliases for clinic infra (e.g. S3 bucket suffixes). Never use `production` to mean the public demo API — that was renamed to `demo` (see [archive/ENVIRONMENT_NAMING_CONVENTION.md](archive/ENVIRONMENT_NAMING_CONVENTION.md)).
 
@@ -148,6 +151,7 @@ Use a single vocabulary so stages stay consistent across API, ETL, dbt, and depl
 - **Root**: `/.env` (Docker Compose sandbox only); `/.env.template` committed; `/.env_ec2` source for EC2 deploy.
 - **API**: `api/.env_api_<env>` — e.g. `api/.env_api_local`, `api/.env_api_demo`, `api/.env_api_clinic`, `api/.env_api_test`. On EC2, systemd uses `api/.env` (contents from one of the `api/.env_api_*` files).
 - **ETL**: `etl_pipeline/.env_<env>` — e.g. `etl_pipeline/.env_local`, `etl_pipeline/.env_clinic`, `etl_pipeline/.env_test`. **No project-root fallback** (ETL loader reads only from `etl_pipeline/`).
+- **QuickBooks**: `quickbooks/.env_<env>` — `quickbooks/.env_local`, `quickbooks/.env_clinic`, `quickbooks/.env_test`. Loaded by `python -m quickbooks --env <stage>`. `clinic` is the real company (Intuit production API). `local` and `test` use the Intuit sandbox. No `demo` stage and no `production` stage name. Process environment wins over the file.
 - **dbt:** `dbt_dental_models/.env_local`, `dbt_dental_models/.env_clinic`, `dbt_dental_models/.env_snowflake`; demo/clinic from `deployment_credentials.json` via `mdc_cli/dbt_env.py`. No project-root fallback.
 - **Frontend**: `frontend/.env`, `frontend/.env.local`, `frontend/.env.production` (Vite; see frontend README).
 - **Consult audio pipe**: `consult_audio_pipe/.env`; template `consult_audio_pipe/.env.template`.
@@ -459,7 +463,8 @@ Use these to create local/env-specific files; never commit the filled-in files. 
 - [ ] **API test:** `api/.env_api_test.template` → copy to `api/.env_api_test` and fill in test DB credentials.
 - [ ] **Consult audio:** `consult_audio_pipe/.env.template` → copy to `consult_audio_pipe/.env`.
 - [ ] **Synthetic data:** `etl_pipeline/synthetic_data_generator/.env_demo.template` → copy to `etl_pipeline/synthetic_data_generator/.env_demo`.
-- **API demo / Frontend:** No committed templates yet for `api/.env_api_demo` or `frontend/.env`; create from component READMEs or copy from team docs.
+- [ ] **QuickBooks:** `quickbooks/.env_local.template`, `quickbooks/.env_clinic.template`, `quickbooks/.env_test.template` → copy to `quickbooks/.env_<stage>` as needed.
+- **API demo / Frontend:** No committed templates yet for `api/.env_api_demo` or `frontend/.env`; create from component READMEs or copy from team docs. Inventory script: `scripts/utils/list_env_files.ps1`.
 
 ---
 
@@ -481,6 +486,7 @@ This lists known env file paths and reports Present / Missing. See script header
 - **Setup cheat sheet (incl. Snowflake):** [ENVIRONMENT_SETUP.md](ENVIRONMENT_SETUP.md)
 - **Environment modernization (phase history, archived):** [archive/ENVIRONMENT_HANDLING_REVIEW.md](archive/ENVIRONMENT_HANDLING_REVIEW.md)
 - **Env naming history (`production` → `demo`/`clinic`, archived):** [archive/ENVIRONMENT_NAMING_CONVENTION.md](archive/ENVIRONMENT_NAMING_CONVENTION.md)
+- **`environment_manager` → Docker plan (archived, superseded by `mdc`):** [archive/ENVIRONMENT_MANAGER_TO_DOCKER_ACTION_PLAN.md](archive/ENVIRONMENT_MANAGER_TO_DOCKER_ACTION_PLAN.md)
 - **Snowflake portfolio warehouse:** [docs/snowflake/SETUP.md](../snowflake/SETUP.md), [SNOWFLAKE_INTEGRATION_PLAN.md](../snowflake/SNOWFLAKE_INTEGRATION_PLAN.md)
 - **API env in detail:** [docs/api/API_ENV_FILE_EXPLANATION.md](../api/API_ENV_FILE_EXPLANATION.md)
 - **EC2 env file rename/setup:** [EC2_ENV_FILE_RENAME_GUIDE.md](EC2_ENV_FILE_RENAME_GUIDE.md), [EC2_ENV_FILE_RENAME_COMMANDS.md](EC2_ENV_FILE_RENAME_COMMANDS.md)
