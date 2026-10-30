@@ -148,10 +148,11 @@ models:
           - 509/510: Surgical procedures and clearances
           - 614/615: Referrals and specialist communications
           - 636: Treatment plans and financial arrangements
+          - 686: Lab related communications
         tests:
           - not_null
           - accepted_values:
-              values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425]
+              values: [0, 224, 228, 603, 226, 225, 571, 636, 432, 615, 509, 614, 510, 427, 428, 429, 425, 686]
       - name: communication_direction
         description: >
           Direction of communication. Possible values:
