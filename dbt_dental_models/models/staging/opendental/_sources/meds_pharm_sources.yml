@@ -131,9 +131,10 @@ sources:
               - unique_quoted
               - not_null_quoted
           - name: "MedName"
-            description: "Name of the medication"
+            description: "Name of the medication. Null on placeholder rows that OpenDental Database Maintenance creates."
             tests:
-              - not_null_quoted
+              - not_null_quoted:
+                  severity: warn
           - name: "GenericNum"
             description: "Foreign key to the generic medication table"
           - name: "Notes"
