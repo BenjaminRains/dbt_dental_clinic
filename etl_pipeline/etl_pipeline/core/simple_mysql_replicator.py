@@ -70,11 +70,11 @@ from etl_pipeline.core.connections import ConnectionFactory, create_connection_m
 from ..exceptions.database import DatabaseConnectionError, DatabaseQueryError
 from ..exceptions.data import DataExtractionError
 from ..exceptions.configuration import ConfigurationError
+from etl_pipeline.core.cursor import ExtractCursor
 from etl_pipeline.monitoring.replica_sync_config import (
     build_mysql_lookback_predicate,
     get_replicator_watermark_column,
     lookback_resync_enabled,
-    resolve_watermark_cursor,
 )
 
 # Import method tracking for usage analysis
@@ -1700,18 +1700,13 @@ class SimpleMySQLReplicator:
                     return None
 
                 last_primary_value, primary_column_name = result
-                resolved = resolve_watermark_cursor(
-                    table_name,
-                    last_primary_value,
-                    primary_column_name,
-                    expected_watermark,
+                cursor = ExtractCursor(
+                    table_name=table_name,
+                    watermark_column=primary_column_name,
+                    last_value=last_primary_value,
                 )
-                if (
-                    last_primary_value
-                    and primary_column_name
-                    and expected_watermark
-                    and primary_column_name != expected_watermark
-                ):
+                resolved = cursor.resolved_value(expected_watermark)
+                if cursor.column_changed(expected_watermark) and cursor.last_value:
                     logger.info(
                         f"{table_name}: watermark column changed "
                         f"({primary_column_name} → {expected_watermark}), resetting cursor"

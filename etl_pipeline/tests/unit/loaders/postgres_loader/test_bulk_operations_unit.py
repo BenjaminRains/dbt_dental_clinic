@@ -95,7 +95,7 @@ def real_postgres_loader_instance():
     # Mock methods that are called internally but don't need testing
     mock_loader.target_schema = 'raw'  # Used by _build_upsert_sql
     mock_loader._build_load_query = MagicMock(return_value="SELECT * FROM test_table")
-    mock_loader._update_load_status = MagicMock(return_value=True)
+    mock_loader._update_load_status_timestamp_only = MagicMock(return_value=True)
     mock_loader._get_loaded_at_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
     mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
     mock_loader.load_table = MagicMock(return_value=(True, {}))
@@ -169,7 +169,7 @@ def mock_postgres_loader_instance():
     
     mock_loader.get_table_config = MagicMock(side_effect=get_table_config_side_effect)
     mock_loader._build_load_query = MagicMock(return_value="SELECT * FROM test_table")
-    mock_loader._update_load_status = MagicMock(return_value=True)
+    mock_loader._update_load_status_timestamp_only = MagicMock(return_value=True)
     mock_loader._get_loaded_at_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
     mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
     mock_loader.stream_mysql_data = MagicMock(return_value=[[{'id': 1, 'data': 'test'}]])
