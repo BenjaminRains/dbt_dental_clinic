@@ -16,7 +16,7 @@ The pipeline consists of five main stages:
 ### Tech Stack
 
 **Core Technologies:**
-- **Python 3.8+** - Primary programming language
+- **Python 3.11+** - Primary programming language
 - **OpenAI Whisper** - Speech-to-text transcription
 - **Anthropic Claude AI** - LLM analysis and summarization
 - **PyTorch** - Deep learning framework (required by Whisper)
