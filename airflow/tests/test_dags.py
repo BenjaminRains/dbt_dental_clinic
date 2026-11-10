@@ -62,7 +62,7 @@ def test_etl_pipeline_dag_has_schema_refresh(dag_bag):
 
 
 def test_etl_pipeline_dag_has_publish(dag_bag):
-    """etl_pipeline DAG publishes to RDS when configured. No Slack or email task."""
+    """etl_pipeline publishes to RDS and ends by writing the execution report."""
     if "etl_pipeline" not in dag_bag.dags:
         pytest.skip("etl_pipeline DAG not loaded")
     dag = dag_bag.dags["etl_pipeline"]

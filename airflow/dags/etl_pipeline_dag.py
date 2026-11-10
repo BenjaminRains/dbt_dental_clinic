@@ -47,6 +47,7 @@ from lib.mdc_runner import (
     run_mdc,
     run_mdc_etl_invoke,
 )
+from lib.pipeline_mail import deliver_nightly_success
 
 # Default arguments for all tasks
 default_args = {
@@ -747,33 +748,34 @@ def generate_pipeline_report(**context):
 
 def write_execution_report(**context):
     """
-    Write the full run report to etl_pipeline/logs. No email or chat message.
+    Write the full run report to etl_pipeline/logs and email it when the run succeeded.
 
     Runs after publish (or after publish is skipped) so the file includes ETL,
     dbt tests, and publish. The Airflow task log gets the same text.
+    A mail failure is logged and does not fail this task.
     """
-    ti = context['task_instance']
+    ti = context["task_instance"]
     report = ti.xcom_pull(
-        task_ids='reporting.generate_pipeline_report',
-        key='pipeline_report',
+        task_ids="reporting.generate_pipeline_report",
+        key="pipeline_report",
     ) or {}
     pipeline_success = ti.xcom_pull(
-        task_ids='reporting.generate_pipeline_report',
-        key='pipeline_success',
+        task_ids="reporting.generate_pipeline_report",
+        key="pipeline_success",
     )
-    dbt_tests = ti.xcom_pull(task_ids='dbt_build.dbt_build', key='dbt_test_summary') or {}
-    publish_ok = ti.xcom_pull(task_ids='publish_analytics', key='publish_success')
+    dbt_tests = ti.xcom_pull(task_ids="dbt_build.dbt_build", key="dbt_test_summary") or {}
+    publish_ok = ti.xcom_pull(task_ids="publish_analytics", key="publish_success")
     layer0_run = ti.xcom_pull(
-        task_ids='layer0_replica_checks.check_replica_drift_tier_a',
-        key='layer0_checks_run',
+        task_ids="layer0_replica_checks.check_replica_drift_tier_a",
+        key="layer0_checks_run",
     )
     layer0_failed = ti.xcom_pull(
-        task_ids='layer0_replica_checks.check_replica_drift_tier_a',
-        key='layer0_checks_failed',
+        task_ids="layer0_replica_checks.check_replica_drift_tier_a",
+        key="layer0_checks_failed",
     )
-    processing = report.get('processing_results') or {}
-    by_category = processing.get('by_category') or {}
-    publish_configured = bool((PUBLISH_ENVIRONMENT or '').strip())
+    processing = report.get("processing_results") or {}
+    by_category = processing.get("by_category") or {}
+    publish_configured = bool((PUBLISH_ENVIRONMENT or "").strip())
 
     lines = [
         "ETL PIPELINE EXECUTION REPORT",
@@ -790,12 +792,12 @@ def write_execution_report(**context):
         f"  failed: {processing.get('total_failed', 0)}",
         f"  success_rate: {processing.get('success_rate', 'n/a')}",
     ]
-    for category in ('large', 'medium', 'small', 'tiny'):
+    for category in ("large", "medium", "small", "tiny"):
         results = by_category.get(category) or {}
         lines.append(
             f"  {category}: {results.get('success', 0)}/{results.get('total', 0)} successful"
         )
-        failed_tables = results.get('failed_tables') or []
+        failed_tables = results.get("failed_tables") or []
         if failed_tables:
             lines.append(f"    failed: {', '.join(failed_tables[:10])}")
 
@@ -818,7 +820,7 @@ def write_execution_report(**context):
             f"SKIP={dbt_tests.get('skip', 0)} "
             f"exit={dbt_tests.get('exit_code')}"
         )
-        if dbt_tests.get('raw_done_line'):
+        if dbt_tests.get("raw_done_line"):
             lines.append(f"  {dbt_tests['raw_done_line']}")
 
     lines.append("")
@@ -830,8 +832,8 @@ def write_execution_report(**context):
     else:
         lines.append("  did not finish")
 
-    text = "\n".join(lines) + "\n"
-    logging.info("\n%s", text)
+    text_body = "\n".join(lines) + "\n"
+    logging.info("\n%s", text_body)
 
     reports_dir = PROJECT_ROOT / "etl_pipeline" / "logs" / "etl_pipeline"
     reports_dir.mkdir(parents=True, exist_ok=True)
@@ -840,11 +842,18 @@ def write_execution_report(**context):
         ch if ch.isalnum() or ch in ("-", "_") else "-"
         for ch in str(context.get("run_id") or "run")
     )
-    path = reports_dir / f"pipeline_execution_{stamp}_{safe_run}.log"
-    path.write_text(text, encoding="utf-8")
-    logging.info("Wrote execution report: %s", path)
-    ti.xcom_push(key="execution_report_path", value=str(path))
-    return str(path)
+    report_path = reports_dir / f"pipeline_execution_{stamp}_{safe_run}.log"
+    report_path.write_text(text_body, encoding="utf-8")
+    logging.info("Wrote execution report: %s", report_path)
+    ti.xcom_push(key="execution_report_path", value=str(report_path))
+    deliver_nightly_success(
+        environment=ENVIRONMENT,
+        body=text_body,
+        pipeline_success=pipeline_success,
+        publish_configured=publish_configured,
+        publish_ok=publish_ok,
+    )
+    return str(report_path)
 
 
 # ============================================================================
@@ -1141,7 +1150,8 @@ with dag:
 
         Writes `etl_pipeline/logs/etl_pipeline/pipeline_execution_<timestamp>_<run>.log`
         after ETL, dbt, and publish. Same text is in this task's Airflow log.
-        Does not send email or chat messages.
+        When ETL succeeded and publish finished (if publish is configured), emails
+        that report. A mail failure does not fail this task. Slack stays off.
         """,
     )
     [report, publish_analytics_task] >> execution_report
