@@ -26,7 +26,7 @@ if (-not (Test-Path $VenvDir)) {
     python -m venv $VenvDir
 }
 
-Write-Step "Install Airflow 3.2.2 + DAG deps"
+Write-Step "Install Airflow 3.3.2 + DAG deps"
 & $Python -m pip install --upgrade pip | Out-Null
 & $Python -m pip install -r (Join-Path $RepoRoot "requirements-airflow-native.txt")
 
@@ -177,7 +177,7 @@ Write-Step "Verify DAGs parse"
 Write-Step "Run DAG unit tests"
 & $Python -m pytest (Join-Path $RepoRoot "airflow\tests") -v
 
-Write-Host "`nDone. Native Airflow 3.2.2 ready (no DAG run triggered)." -ForegroundColor Green
+Write-Host "`nDone. Native Airflow 3.3.2 ready (no DAG run triggered)." -ForegroundColor Green
 Write-Host "  AIRFLOW_HOME: $AirflowHome"
 Write-Host "  Admin login:  $adminUser / (see airflow\.env.native)"
 Write-Host "  Start UI:     .\scripts\airflow\start-airflow-native.ps1"

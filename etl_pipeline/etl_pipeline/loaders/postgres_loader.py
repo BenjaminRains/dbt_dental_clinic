@@ -1256,7 +1256,7 @@ class PostgresLoader:
                     # Continue without primary value - timestamp tracking will be used as fallback
             
             if load_prep.primary_column:
-                self._update_load_status_hybrid(
+                self._update_load_status_with_primary_value(
                     table_name=table_name,
                     rows_loaded=load_result.rows_loaded,
                     load_status='success' if load_result.success else 'failed',
@@ -1265,10 +1265,10 @@ class PostgresLoader:
                     primary_column_name=load_prep.primary_column
                 )
             else:
-                self._update_load_status(
+                self._update_load_status_timestamp_only(
                     table_name=table_name,
                     rows_loaded=load_result.rows_loaded,
-                    status='success' if load_result.success else 'failed'
+                    load_status='success' if load_result.success else 'failed'
                 )
             
             # ============================================================
@@ -2305,9 +2305,11 @@ class PostgresLoader:
             logger.warning(f"Count query failed, defaulting to 0: {str(e)}")
             return 0
     
-    def _update_load_status_hybrid(self, table_name: str, rows_loaded: int, **kwargs):
+    def _update_load_status_with_primary_value(self, table_name: str, rows_loaded: int, **kwargs):
         """
-        Update tracking with hybrid strategy (primary value tracking).
+        Update load status with primary key value tracking for incremental loading.
+
+        Used when primary_incremental_column is set.
         """
         load_status = kwargs.get('load_status', 'success')
         last_timestamp: Optional[datetime] = kwargs.get('last_timestamp')
@@ -2368,15 +2370,17 @@ class PostgresLoader:
                         "load_status": load_status
                     })
                 conn.commit()
-            logger.info(f"Updated hybrid load status for {table_name}")
+            logger.info(f"Updated load status with primary value tracking for {table_name}")
             return True
         except Exception as e:
-            logger.error(f"Error updating hybrid load status for {table_name}: {str(e)}")
+            logger.error(f"Error updating load status with primary value for {table_name}: {str(e)}")
             return False
     
-    def _update_load_status(self, table_name: str, rows_loaded: int, status: str):
+    def _update_load_status_timestamp_only(self, table_name: str, rows_loaded: int, load_status: str):
         """
-        Update tracking with standard strategy (timestamp only).
+        Update load status with a timestamp-only strategy.
+
+        Used when no primary_incremental_column is configured.
         """
         try:
             with self.analytics_engine.connect() as conn:
@@ -2396,7 +2400,7 @@ class PostgresLoader:
                     """), {
                         "table_name": table_name,
                         "rows_loaded": rows_loaded,
-                        "load_status": status
+                        "load_status": load_status
                     })
                     conn.commit()
                 else:
@@ -2418,7 +2422,7 @@ class PostgresLoader:
                     """), {
                         "table_name": table_name,
                         "rows_loaded": rows_loaded,
-                        "load_status": status
+                        "load_status": load_status
                     })
                     conn.commit()
             return True
@@ -2567,6 +2571,7 @@ PHASE 1: Structure setup ✅
 
 PHASE 2: Helper migration ✅
 - Query building, incremental fallback, schema cache, bulk insert, tracking tables
+  (_update_load_status_with_primary_value, _update_load_status_timestamp_only)
 - Stale-state detection (_check_analytics_needs_updating) and column validation
 
 PHASE 3: Strategy implementation
