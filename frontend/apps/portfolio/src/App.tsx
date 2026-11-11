@@ -19,6 +19,7 @@ const EnvironmentManager = lazy(() => import('./pages/EnvironmentManager'));
 const SchemaDiscovery = lazy(() => import('./pages/SchemaDiscovery'));
 const KpiValidation = lazy(() => import('./pages/KpiValidation'));
 const SnowflakeWarehouse = lazy(() => import('./pages/SnowflakeWarehouse'));
+const MdcCli = lazy(() => import('./pages/MdcCli'));
 
 const PageLoader = () => (
     <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', minHeight: '400px' }}>
@@ -68,6 +69,7 @@ function App() {
             <Route path="/schema-discovery" element={pageShell(withSuspense(<SchemaDiscovery />))} />
             <Route path="/kpi-validation" element={pageShell(withSuspense(<KpiValidation />))} />
             <Route path="/snowflake" element={pageShell(withSuspense(<SnowflakeWarehouse />))} />
+            <Route path="/mdc-cli" element={pageShell(withSuspense(<MdcCli />))} />
 
             <Route path="*" element={<Navigate to="/" replace />} />
         </Routes>

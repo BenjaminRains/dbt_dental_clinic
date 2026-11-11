@@ -265,6 +265,7 @@ PORTFOLIO_SPA_ROUTE_KEYS: tuple[str, ...] = (
     "schema-discovery",
     "kpi-validation",
     "snowflake",
+    "mdc-cli",
 )
 
 CLINIC_SPA_ROUTE_KEYS: tuple[str, ...] = (

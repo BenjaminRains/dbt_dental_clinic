@@ -41,6 +41,7 @@ import {
     ArrowForward,
     Verified,
     AcUnit,
+    Terminal,
 } from '@mui/icons-material';
 
 const GITHUB = 'https://github.com/BenjaminRains/dbt_dental_clinic';
@@ -557,6 +558,19 @@ const PortfolioV4: React.FC = () => {
                                 </Box>
                                 <Typography variant="body2" color="text.secondary">
                                     OpenDental golden-report parity and a clinic UI allowlist for signed-off metrics.
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <Card component={RouterLink} to="/mdc-cli" variant="outlined" sx={{ height: '100%', textDecoration: 'none', color: 'inherit', display: 'block', '&:hover': { boxShadow: 3 } }}>
+                            <CardContent>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                    <Terminal sx={{ color: '#5e7086' }} />
+                                    <Typography variant="subtitle2" fontWeight="bold">mdc CLI</Typography>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    Python CLI that validates each stage&apos;s config and runs the API, ETL, dbt, and deploys in isolated child processes.
                                 </Typography>
                             </CardContent>
                         </Card>
