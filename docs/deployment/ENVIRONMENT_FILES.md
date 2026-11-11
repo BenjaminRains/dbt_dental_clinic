@@ -3,6 +3,7 @@
 This document is the **single source of truth** for how `.env` and related environment files are managed across the dbt_dental_clinic codebase. Use it to onboard, audit, or refactor environment configuration.
 
 **Daily commands:** [`tools/mdc_cli/README.md`](../../tools/mdc_cli/README.md).  
+**Secrets:** [SECRETS.md](SECRETS.md) — how a password is generated and which command writes it.  
 **Phase history (archived):** [archive/ENVIRONMENT_HANDLING_REVIEW.md](archive/ENVIRONMENT_HANDLING_REVIEW.md) — Phases 0–6 complete.
 
 ---
@@ -83,6 +84,7 @@ Every env file has a **unique name** = path from repo root. The same basename (e
 | **dbt clinic** | `dbt_dental_models/.env_clinic` (optional) | `etl_pipeline/.env_clinic.template` | `mdc_cli/dbt_env.py` + `deployment_credentials.json` |
 | **dbt demo** | (no file) | — | `mdc_cli/dbt_env.py` from `deployment_credentials.json` |
 | **dbt snowflake** | `dbt_dental_models/.env_snowflake` | `dbt_dental_models/.env_snowflake.template` | `mdc_cli/dbt_env.py` via `mdc dbt … --env snowflake` (portfolio mini warehouse) |
+| **Power BI / Excel (local)** | `powerbi/.env_local` | `powerbi/.env_local.template` | Typed into Power BI Desktop and the Excel connection dialog. Not loaded by `mdc`. |
 | **Frontend** | `frontend/.env` | (see frontend README) | Vite (dev); build-time for production |
 | **Frontend** | `frontend/.env.local` | — | Vite; `mdc frontend dev` writes API URL/key for local |
 | **Frontend** | `frontend/.env.production` | — | Vite production build (e.g. demo/clinic) |
@@ -153,6 +155,7 @@ Use a single vocabulary so stages stay consistent across API, ETL, dbt, and depl
 - **ETL**: `etl_pipeline/.env_<env>` — e.g. `etl_pipeline/.env_local`, `etl_pipeline/.env_clinic`, `etl_pipeline/.env_test`. **No project-root fallback** (ETL loader reads only from `etl_pipeline/`).
 - **QuickBooks**: `quickbooks/.env_<env>` — `quickbooks/.env_local`, `quickbooks/.env_clinic`, `quickbooks/.env_test`. Loaded by `python -m quickbooks --env <stage>`. `clinic` is the real company (Intuit production API). `local` and `test` use the Intuit sandbox. No `demo` stage and no `production` stage name. Process environment wins over the file.
 - **dbt:** `dbt_dental_models/.env_local`, `dbt_dental_models/.env_clinic`, `dbt_dental_models/.env_snowflake`; demo/clinic from `deployment_credentials.json` via `mdc_cli/dbt_env.py`. No project-root fallback.
+- **Power BI / Excel:** `powerbi/.env_local` holds `POSTGRES_BI_USER` / `POSTGRES_BI_PASSWORD` only. Warehouse host, port, and database stay in `dbt_dental_models/.env_local`. Clinic `bi_user` goes in Secrets Manager. Do not put `POSTGRES_BI_*` in `etl_pipeline/.env_*` or `api/.env_api_*`.
 - **Frontend**: `frontend/.env`, `frontend/.env.local`, `frontend/.env.production` (Vite; see frontend README).
 - **Consult audio pipe**: `consult_audio_pipe/.env`; template `consult_audio_pipe/.env.template`.
 - **Templates**: Only `*.template` (or `.env.template`) are committed. Actual `.env*` (except templates) are gitignored.
@@ -171,6 +174,7 @@ This makes it obvious at a glance which file to edit. Templates and most env fil
 |----------|--------------|
 | `/.env` | DOCKER COMPOSE (variable substitution), AIRFLOW, POSTGRES, MYSQL, DBT containers |
 | `dbt_dental_models/.env_local` | `mdc dbt … --env local`; publish local side; Phase 6 ETL analytics overlay |
+| `powerbi/.env_local` | Power BI Desktop and Excel connection dialogs (`bi_user` only; not loaded by `mdc`) |
 | `dbt_dental_models/.env_snowflake` | `mdc dbt … --env snowflake`; `scripts/snowflake/*.py` (portfolio mini warehouse) |
 | `frontend/.env` | VITE (frontend default env) |
 | `consult_audio_pipe/.env` | CONSULT AUDIO PIPE (LLM analysis pipeline) |
@@ -230,11 +234,13 @@ Each component should have a single config entrypoint that:
 | Clinic API deploy | `api/.env_api_clinic` → EC2 `api/.env` | `mdc deploy api --env clinic`, `mdc secrets pull clinic` |
 | OpenDental source + MySQL replication | `etl_pipeline/.env_clinic` | `mdc etl --env clinic` (source/repl only — **no** `POSTGRES_ANALYTICS_*`) |
 | Snowflake portfolio warehouse | `dbt_dental_models/.env_snowflake` (`SNOWFLAKE_*`; key-pair preferred) | `mdc dbt --env snowflake`; `scripts/snowflake/*.py` |
+| Local BI login (`bi_user`) | `powerbi/.env_local` (`POSTGRES_BI_*`) | Power BI Desktop; Excel daily close |
+| Clinic BI login (`bi_user`) | Secrets Manager (separate from the RDS `analytics_user` secret) | Power BI gateway; Desktop on a VPC path |
 | Demo Postgres (synthetic export source) | `etl_pipeline/synthetic_data_generator/.env_demo` (`DEMO_POSTGRES_*`) | Synthetic generator; Snowflake export script |
 
 **Do not** put Snowflake secrets under `scripts/snowflake/` or repo root. **Do not** duplicate `DEMO_POSTGRES_*` into `.env_snowflake` — keep demo Postgres authority on the generator file.
 
-**Do not** duplicate `POSTGRES_ANALYTICS_*` in `etl_pipeline/.env_clinic`. Use:
+**Do not** duplicate `POSTGRES_ANALYTICS_*` in `etl_pipeline/.env_clinic`. **Do not** put `POSTGRES_BI_*` in an ETL or API env file. `analytics_user` and `bi_user` are different logins. For clinic ETL, use:
 
 ```powershell
 mdc etl run --env clinic --tunnel-db --profile full
@@ -457,6 +463,7 @@ Use these to create local/env-specific files; never commit the filled-in files. 
 - [ ] **Root:** `/.env.template` → copy to `/.env` only if using Docker Compose sandbox.
 - [ ] **ETL:** `etl_pipeline/.env_local.template`, `etl_pipeline/.env_clinic.template`, `etl_pipeline/.env_test.template` → copy to `etl_pipeline/.env_local`, `.env_clinic`, `.env_test` as needed.
 - [ ] **dbt local:** `dbt_dental_models/.env_local.template` → copy to `dbt_dental_models/.env_local`.
+- [ ] **Power BI / Excel:** `powerbi/.env_local.template` → copy to `powerbi/.env_local`. Local `bi_user` only. Clinic password stays in Secrets Manager.
 - [ ] **dbt snowflake:** `dbt_dental_models/.env_snowflake.template` → copy to `dbt_dental_models/.env_snowflake`; set `SNOWFLAKE_PRIVATE_KEY_PATH` to a key under `dbt_dental_models/.snowflake/` (see [docs/snowflake/SETUP.md](../snowflake/SETUP.md)).
 - [ ] **API local:** `api/.env_api_local.template` → copy to `api/.env_api_local`.
 - [ ] **API clinic:** `api/.env_api_clinic.template` → copy to `api/.env_api_clinic`, then `mdc secrets pull clinic` for the RDS password.

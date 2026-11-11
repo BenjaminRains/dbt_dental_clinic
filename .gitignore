@@ -154,6 +154,7 @@ docs/
 !docs/deployment/
 docs/deployment/*
 !docs/deployment/ENVIRONMENT_FILES.md
+!docs/deployment/SECRETS.md
 !docs/deployment/ENVIRONMENT_SETUP.md
 !docs/deployment/CLINIC_ANALYTICS_WORKFLOW.md
 !docs/deployment/CLOUDTRAIL_SETUP.md

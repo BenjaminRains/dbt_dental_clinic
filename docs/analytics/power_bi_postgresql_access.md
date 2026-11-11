@@ -5,9 +5,12 @@
 For skill-building and pilot authoring on a development machine, none of the
 gateway/VPC machinery below applies: Power BI Desktop connects **directly to the local
 PostgreSQL** instance (`localhost:5432`, database `opendental_analytics`) using the same
-least-privilege **`bi_user`** pattern. `bi_user` credentials live in
-`etl_pipeline/.env_local` (`POSTGRES_BI_USER` / `POSTGRES_BI_PASSWORD`, gitignored);
-the grant script is the same [sql/bi_user_marts_grants.sql](sql/bi_user_marts_grants.sql).
+least-privilege **`bi_user`** pattern. Warehouse host, port, and database come from
+`dbt_dental_models/.env_local` (`POSTGRES_ANALYTICS_*`). The BI login is a different
+user: `powerbi/.env_local` (`POSTGRES_BI_USER` / `POSTGRES_BI_PASSWORD`, gitignored;
+template `powerbi/.env_local.template`). `mdc` does not load that file. The grant
+script is the same [sql/bi_user_marts_grants.sql](sql/bi_user_marts_grants.sql).
+See [ENVIRONMENT_FILES.md](../deployment/ENVIRONMENT_FILES.md).
 Step-by-step setup, model guide, and DAX starter measures:
 [powerbi/README.md](../../powerbi/README.md).
 
@@ -98,7 +101,12 @@ Rough **USD** planning bands; verify on [Power BI pricing](https://powerbi.micro
 
 ## Security notes
 
-- Store `bi_user` in a **secret manager**; rotate like other DB service accounts.
+- Generate a new password with `secrets.token_urlsafe(32)`. That is the same call as
+  `generate_demo_password()` and the Airflow admin and JWT secrets. Locally, store
+  `bi_user` in `powerbi/.env_local` only. For clinic Aurora, store it in
+  **Secrets Manager** and rotate it like other DB service accounts. Do not put
+  `POSTGRES_BI_*` in `etl_pipeline/.env_*` or `api/.env_api_*`. `analytics_user`
+  (dbt, ETL, API) and `bi_user` (Power BI, Excel) stay separate logins.
 - Do **not** place the Aurora cluster in a **public** subnet or attach **public** `0.0.0.0/0` ingress on 5432.
 - Prefer **Import** over **DirectQuery** unless you have a strong freshness requirement (Import also reduces open connections to Aurora during report browsing).
 - **RLS** in Power BI only if clinics/providers must be isolated.
