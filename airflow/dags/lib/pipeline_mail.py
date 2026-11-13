@@ -3,6 +3,11 @@
 Credentials are a pydantic settings model loaded from the process environment
 (start-airflow-native.ps1 exports airflow/.env.native). This does not use
 Airflow's smtp connection or email_on_failure.
+
+Gmail app passwords are 16 letters, often pasted with spaces. Those spaces are
+removed before login. Login uses AUTH LOGIN so a rejected password is Gmail's
+535 response. AUTH PLAIN makes Gmail close the socket, which smtplib reports
+as "Connection unexpectedly closed" and hides the 535.
 """
 
 from __future__ import annotations
@@ -46,9 +51,14 @@ class PipelineMailSettings(BaseSettings):
     @field_validator("smtp_password")
     @classmethod
     def _password_not_blank(cls, value: SecretStr) -> SecretStr:
-        if not value.get_secret_value().strip():
+        # Gmail displays app passwords as four groups separated by spaces.
+        text = value.get_secret_value().strip()
+        if len(text) >= 2 and text[0] == text[-1] and text[0] in "\"'":
+            text = text[1:-1].strip()
+        text = text.replace(" ", "")
+        if not text:
             raise ValueError("smtp password is empty")
-        return value
+        return SecretStr(text)
 
 
 def nightly_run_succeeded(
@@ -73,6 +83,20 @@ def success_subject(environment: str) -> str:
     return f"Nightly ETL succeeded ({environment})"
 
 
+def _auth_login(smtp: smtplib.SMTP, user: str, password: str) -> None:
+    """AUTH LOGIN. Raises SMTPAuthenticationError when the server rejects it."""
+
+    def respond(challenge: bytes | None = None) -> str | None:
+        if challenge is None:
+            return None
+        prompt = challenge.decode("ascii", errors="replace").lower()
+        if prompt.startswith("password"):
+            return password
+        return user
+
+    smtp.auth("LOGIN", respond, initial_response_ok=False)
+
+
 def send_pipeline_email(settings: PipelineMailSettings, subject: str, body: str) -> None:
     """Send one plain-text message. Raises if the SMTP conversation fails."""
     message = EmailMessage()
@@ -86,7 +110,7 @@ def send_pipeline_email(settings: PipelineMailSettings, subject: str, body: str)
         if settings.smtp_starttls:
             smtp.starttls()
             smtp.ehlo()
-        smtp.login(settings.smtp_user, settings.smtp_password.get_secret_value())
+        _auth_login(smtp, settings.smtp_user, settings.smtp_password.get_secret_value())
         smtp.send_message(message)
     logger.info("Sent nightly email to %s", settings.mail_to)
 

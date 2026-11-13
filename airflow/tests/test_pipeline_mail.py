@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import base64
+import smtplib
 import socket
 import sys
 import threading
@@ -47,8 +49,10 @@ def test_success_requires_clean_etl_and_publish_when_configured():
 class _LoginSmtpServer(threading.Thread):
     """Minimal SMTP that accepts AUTH LOGIN and records the DATA payload."""
 
-    def __init__(self):
+    def __init__(self, *, reject_password: str | None = None):
         super().__init__(daemon=True)
+        self.reject_password = reject_password
+        self.password_offered = ""
         self._listener = socket.socket()
         self._listener.bind(("127.0.0.1", 0))
         self.port = self._listener.getsockname()[1]
@@ -81,7 +85,14 @@ class _LoginSmtpServer(threading.Thread):
                     send(b"334 VXNlcm5hbWU6")
                     reader.readline()
                     send(b"334 UGFzc3dvcmQ6")
-                    reader.readline()
+                    secret_line = reader.readline()
+                    self.password_offered = base64.b64decode(secret_line.strip()).decode()
+                    if (
+                        self.reject_password is not None
+                        and self.password_offered == self.reject_password
+                    ):
+                        send(b"535 5.7.8 Username and Password not accepted")
+                        break
                     send(b"235 ok")
                 elif upper.startswith("MAIL FROM"):
                     send(b"250 ok")
@@ -117,11 +128,12 @@ def test_success_sends_through_smtp(monkeypatch):
     monkeypatch.setenv("PIPELINE_MAIL_SMTP_PORT", str(server.port))
     monkeypatch.setenv("PIPELINE_MAIL_SMTP_STARTTLS", "false")
     monkeypatch.setenv("PIPELINE_MAIL_SMTP_USER", "rains.bp@gmail.com")
-    monkeypatch.setenv("PIPELINE_MAIL_SMTP_PASSWORD", "local-test-secret")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_PASSWORD", "local test secret")
     monkeypatch.setenv("PIPELINE_MAIL_MAIL_FROM", "rains.bp@gmail.com")
     monkeypatch.setenv("PIPELINE_MAIL_MAIL_TO", "rains.bp@gmail.com")
 
     settings = PipelineMailSettings()
+    assert settings.smtp_password.get_secret_value() == "localtestsecret"
     sent = email_nightly_success(
         settings,
         environment="clinic",
@@ -137,7 +149,43 @@ def test_success_sends_through_smtp(monkeypatch):
     assert "Subject: Nightly ETL succeeded (clinic)" in text
     assert "To: rains.bp@gmail.com" in text
     assert "ETL 446/446" in text
-    assert "local-test-secret" not in text
+    assert "localtestsecret" not in text
+    assert server.password_offered == "localtestsecret"
+
+
+def test_quoted_app_password_is_unwrapped(monkeypatch):
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_USER", "rains.bp@gmail.com")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_PASSWORD", '"abcd efgh ijkl mnop"')
+    monkeypatch.setenv("PIPELINE_MAIL_MAIL_FROM", "rains.bp@gmail.com")
+
+    settings = PipelineMailSettings()
+    assert settings.smtp_password.get_secret_value() == "abcdefghijklmnop"
+
+
+def test_rejected_password_raises_smtp_auth_error(monkeypatch):
+    server = _LoginSmtpServer(reject_password="localtestsecret")
+    server.start()
+    assert server.ready.wait(5)
+
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_HOST", "127.0.0.1")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_PORT", str(server.port))
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_STARTTLS", "false")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_USER", "rains.bp@gmail.com")
+    monkeypatch.setenv("PIPELINE_MAIL_SMTP_PASSWORD", "local test secret")
+    monkeypatch.setenv("PIPELINE_MAIL_MAIL_FROM", "rains.bp@gmail.com")
+    monkeypatch.setenv("PIPELINE_MAIL_MAIL_TO", "rains.bp@gmail.com")
+
+    settings = PipelineMailSettings()
+    with pytest.raises(smtplib.SMTPAuthenticationError, match="535"):
+        email_nightly_success(
+            settings,
+            environment="clinic",
+            body="ETL finished\n",
+            pipeline_success=True,
+            publish_configured=True,
+            publish_ok=True,
+        )
+    assert server.done.wait(5)
 
 
 def test_failed_publish_does_not_open_smtp(monkeypatch):
