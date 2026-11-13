@@ -36,7 +36,8 @@ and [docs/analytics/power_bi_pilot_dataset.md](../docs/analytics/power_bi_pilot_
 ## 2. Create `bi_user` (one-time, superuser required)
 
 The grant script is [docs/analytics/sql/bi_user_marts_grants.sql](../docs/analytics/sql/bi_user_marts_grants.sql)
-(`USAGE` on `marts`, `SELECT` on the four pilot tables only). Run it as the `postgres`
+(`USAGE` on `marts`, `SELECT` on the four pilot tables and the two Excel daily-close
+marts). Run it as the `postgres`
 superuser. The password comes from `powerbi/.env_local`, and the warehouse host and
 database come from `dbt_dental_models/.env_local`. From PowerShell at the repo root:
 

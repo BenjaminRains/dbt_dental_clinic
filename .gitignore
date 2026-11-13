@@ -62,6 +62,7 @@ desktop.ini
 *.csv
 *.parquet
 *.xlsx
+*.xlsm
 *.xls
 *.json
 !dbt_project.json

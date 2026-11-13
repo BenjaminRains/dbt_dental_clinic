@@ -32,6 +32,10 @@ GRANT SELECT ON TABLE marts.mart_provider_performance TO bi_user;
 GRANT SELECT ON TABLE marts.dim_provider TO bi_user;
 GRANT SELECT ON TABLE marts.dim_date TO bi_user;
 
+-- Excel daily close (excel/DailyClose.bas): the two daily KPIs signed off against OpenDental.
+GRANT SELECT ON TABLE marts.mart_daily_payments TO bi_user;
+GRANT SELECT ON TABLE marts.mart_daily_production_by_procedure TO bi_user;
+
 -- When a new table is approved for Power BI, add explicitly, e.g.:
 -- GRANT SELECT ON TABLE marts.mart_ar_summary TO bi_user;
 
