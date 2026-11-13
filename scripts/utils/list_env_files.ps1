@@ -52,6 +52,9 @@ $expected = @(
     @{ Path = "dbt_dental_models\.env_snowflake.template"; Desc = "dbt Snowflake template (committed)"; Template = $null; Deprecated = $false },
     @{ Path = "dbt_dental_models\.snowflake\rsa_key.p8"; Desc = "Snowflake private key file (gitignored; path referenced by .env_snowflake)"; Template = $null; Deprecated = $false },
     @{ Path = "dbt_dental_models\.env_clinic"; Desc = "DEPRECATED - use deployment_credentials.json + Secrets Manager"; Template = $null; Deprecated = $true },
+    # Power BI / Excel (bi_user only; not loaded by mdc)
+    @{ Path = "powerbi\.env_local"; Desc = "Power BI and Excel local bi_user (POSTGRES_BI_*)"; Template = "powerbi\.env_local.template"; Deprecated = $false },
+    @{ Path = "powerbi\.env_local.template"; Desc = "Power BI / Excel local template (committed)"; Template = $null; Deprecated = $false },
     # Frontend
     @{ Path = "frontend\.env";        Desc = "Frontend default"; Template = $null; Deprecated = $false },
     @{ Path = "frontend\.env.local";  Desc = "Frontend local dev"; Template = $null; Deprecated = $false },
