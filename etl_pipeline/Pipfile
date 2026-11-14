@@ -13,6 +13,7 @@ fastparquet = ">=2024.2.0"
 numpy = ">=1.24.0,<2.0.0"
 python-dotenv = ">=1.0.0"
 requests = ">=2.32.4"
+urllib3 = ">=2.8.0"
 certifi = ">=2026.10.18"
 charset-normalizer = ">=3.0.0"
 loguru = ">=0.7.2"
@@ -31,7 +32,6 @@ pydantic = "*"
 pydantic-settings = "*"
 
 [dev-packages]
-black = ">=26.3.1"
 isort = "==5.13.2"
 pylint = "==3.0.3"
 pytest = "*"
@@ -39,6 +39,7 @@ pytest-cov = "*"
 pytest-order = "*"
 pytest-timeout = "*"
 etl_pipeline = {editable = true, path = "."}
+black = ">=26.10.1"
 
 [requires]
 python_version = "3.11"
