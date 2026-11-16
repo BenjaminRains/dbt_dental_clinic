@@ -1,7 +1,7 @@
 # Airflow Orchestration Roadmap
 
-**Status:** Phase A closed on the clinic path. Phase B is blocked on native `publish_analytics`. Phase C has not started.  
-**Last updated:** 2026-09-30  
+**Status:** Phase A closed on the clinic path. Phase B closed: native `publish_analytics` succeeded inside the DAG. Phase C is in progress.  
+**Last updated:** 2026-11-16  
 **Goal:** Move beyond manual ETL pulls (`etl-run` / `mdc etl run`) and manual dbt runs (`run_dbt_on_ec2.ps1`) to scheduled, unattended nightly orchestration.
 
 **Source discussion:** [Airflow wiring review](30475cd5-d66b-42f7-84a3-3ae3466c2e9b) (2026-06-17)
@@ -10,7 +10,7 @@
 
 ## Executive summary
 
-The **DAG code is largely complete**. What remains is **deployment, environment wiring, end-to-end validation, and production cutover** — not greenfield DAG authoring.
+The **DAG code is complete through publish**. Clinic nights have run schema refresh → ETL → dbt → `publish_analytics` inside `etl_pipeline`. What remains is **Phase C cutover** (success mail, break-glass notes) and **Phase D hardening** — not greenfield DAG authoring.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
@@ -20,7 +20,7 @@ The **DAG code is largely complete**. What remains is **deployment, environment 
 | Native Windows bootstrap | ✅ Done | `init-airflow-native.ps1`, `start-airflow-native.ps1`, POSIX stubs; two-terminal start |
 | Docker sandbox | ✅ Scaffolded | Optional — `Dockerfile.airflow`, `docker-compose.yml`; **not** used for clinic nightly |
 | Production deployment | 🔄 Option A (dev laptop) | **Native Airflow** (Python venv) + WireGuard VPN; no EC2 orchestrator |
-| End-to-end validation | 🔄 Phase B | Clinic nights complete through `dbt build`. `publish_analytics` has not succeeded in the DAG |
+| End-to-end validation | ✅ Phase B closed | Clinic runs for 2026-10-27 through 2026-10-30 finished `publish_analytics` inside the DAG (Windows `mdc` + SSM tunnel) |
 
 ---
 
