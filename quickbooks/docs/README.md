@@ -18,6 +18,10 @@ Planning notes for the QuickBooks source. The project root is `quickbooks/`. Cre
 - [ ] Sample reports extracted
 - [ ] OpenDental is not the QuickBooks source: program `QuickBooksOnline` is disabled and its token fields are placeholders
 
+## After the baseline pull works
+
+- [ ] Webhooks. Intuit's production-keys questionnaire is answered No because no webhook endpoint exists yet. Add one after OAuth and the nightly report pull are working: an HTTPS endpoint on the app host, Intuit's signature check, and a refresh of the reports that changed. This is not payment processing. Do not store bank accounts, card numbers, or eChecks, and do not create Charge transactions.
+
 Report catalog: `quickbooks/config/reports.yml`
 
 From the `quickbooks/` directory:
@@ -28,4 +32,4 @@ python -m quickbooks --env clinic status
 
 ---
 
-**Last Updated**: 2026-10-12
+**Last Updated**: 2026-11-16

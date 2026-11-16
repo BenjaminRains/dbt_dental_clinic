@@ -151,7 +151,9 @@ class QuickBooksCredentials:
         return cls(stage, env_file, _merged_values(env_file))
 
     def get(self, key: str) -> str:
-        return self.values.get(key, "")
+        from .token_store import unprotect
+
+        return unprotect(self.values.get(key, ""))
 
     def set_value(self, key: str, value: str) -> None:
         """Remember a rotated token and write it to the stage file."""

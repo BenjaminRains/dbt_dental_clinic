@@ -142,14 +142,19 @@ def test_exchange_stores_realm_without_keeping_callback_in_status(tmp_path: Path
     reloaded = QuickBooksCredentials.load(environment="test", path=credentials.path)
     assert reloaded.get("MDC_QUICKBOOKS_REALM_ID") == "999"
     assert reloaded.get("MDC_QUICKBOOKS_REFRESH_TOKEN") == "refresh-new"
+    assert reloaded.get("MDC_QUICKBOOKS_ACCESS_TOKEN") == ""
+    assert reloaded.values["MDC_QUICKBOOKS_REFRESH_TOKEN"].startswith("dpapi:")
+    assert reloaded.values["MDC_QUICKBOOKS_ACCESS_TOKEN"] == ""
     assert "access-new" not in "\n".join(reloaded.status_lines())
 
 
 def test_pull_refreshes_when_access_token_is_rejected(tmp_path: Path):
     credentials = _load(_write_env(tmp_path / ".env_test"))
-    credentials.values["MDC_QUICKBOOKS_ACCESS_TOKEN"] = "stale"
     catalog = load_report_catalog()
     client = QuickBooksReportsClient(credentials, catalog)
+    from quickbooks.token_store import protect
+
+    client._access_tokens["MDC"] = protect("stale")
     calls = {"n": 0}
 
     def fake_request(url, **kwargs):
@@ -176,7 +181,10 @@ def test_pull_refreshes_when_access_token_is_rejected(tmp_path: Path):
 
     assert written.name == "profit_and_loss_2026-09-01_2026-09-30.json"
     assert json.loads(written.read_text(encoding="utf-8"))["Header"]["ReportName"] == "ProfitAndLoss"
-    assert credentials.get("MDC_QUICKBOOKS_ACCESS_TOKEN") == "fresh"
+    assert credentials.get("MDC_QUICKBOOKS_ACCESS_TOKEN") == ""
+    assert credentials.get("MDC_QUICKBOOKS_REFRESH_TOKEN") == "refresh-2"
+    assert credentials.values["MDC_QUICKBOOKS_ACCESS_TOKEN"] == ""
+    assert credentials.values["MDC_QUICKBOOKS_REFRESH_TOKEN"].startswith("dpapi:")
 
 
 def test_http_error_does_not_include_request_body(tmp_path: Path):

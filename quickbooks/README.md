@@ -4,7 +4,7 @@ QuickBooks Online reports for the clinic. Investigation notes are in `docs/`.
 
 Settings follow the repo stage files. `clinic` is the real company. `local` and `test` use an Intuit sandbox company. A value already in the process environment wins over the file.
 
-The Intuit developer app is **MDC Analytics**. While that app is "In development", its keys are development keys and belong in `.env_local`. `.env_clinic` stays without a client id until **Get production keys** is finished. The App ID on the overview page is not the client id. Client id and client secret are under **Keys and credentials**. The redirect URI on that page must be `http://localhost:8080/callback`.
+The Intuit developer app is **MDC Analytics**. While that app is "In development", its keys are development keys and belong in `.env_local`. `.env_clinic` stays without a client id until **Get production keys** is finished. The App ID on the overview page is not the client id. Client id and client secret are under **Keys and credentials**. The redirect URI on that page must be `http://localhost:8080/callback`. The production-keys form asks for these public pages: `https://dbtdentalclinic.com/eula.html` and `https://dbtdentalclinic.com/privacy.html`. On the same form, the host domain is `dbtdentalclinic.com`, the launch URL is `https://dbtdentalclinic.com/quickbooks-launch.html`, the disconnect URL is `https://dbtdentalclinic.com/quickbooks-disconnect.html`, and the connect/reconnect URL is `https://dbtdentalclinic.com/quickbooks-connect.html`. Those three pages are not the OAuth redirect URI. The redirect URI stays `http://localhost:8080/callback`.
 
 ## Layout
 
