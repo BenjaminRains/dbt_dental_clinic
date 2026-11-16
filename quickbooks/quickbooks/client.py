@@ -11,8 +11,9 @@ from urllib.error import HTTPError
 from urllib.parse import parse_qs, urlencode, urlparse
 from urllib.request import Request, urlopen
 
-from .credentials import QuickBooksConfigError, QuickBooksCredentials
+from .credentials import QuickBooksConfigError, QuickBooksCredentials, company_key
 from .reports import ReportCatalog, ReportSpec
+from .token_store import protect
 
 TOKEN_URL = "https://oauth.platform.intuit.com/oauth2/v1/tokens/bearer"
 
@@ -50,6 +51,7 @@ class QuickBooksReportsClient:
     def __init__(self, credentials: QuickBooksCredentials, catalog: ReportCatalog):
         self.credentials = credentials
         self.catalog = catalog
+        self._access_tokens: dict[str, str] = {}
 
     def exchange_code(self, entity: str, callback_url: str) -> None:
         """Trade the OAuth callback for tokens and store them on the company."""
@@ -117,7 +119,7 @@ class QuickBooksReportsClient:
         output_dir: Path,
     ) -> Path:
         company = self.credentials.require_reports_ready(entity)
-        access_token = company.get("access_token") or self.refresh(entity)
+        access_token = self._access_token(entity) or self.refresh(entity)
         params = spec.query_params(
             start_date=start_date,
             end_date=end_date,
@@ -154,13 +156,23 @@ class QuickBooksReportsClient:
         destination.write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
         return destination
 
-    def _store_tokens(self, entity: str, realm_id: str, tokens: dict[str, Any]) -> None:
-        from .credentials import company_key
+    def _access_token(self, entity: str) -> str:
+        stored = self._access_tokens.get(entity, "")
+        if not stored:
+            return ""
+        from .token_store import unprotect
 
+        return unprotect(stored)
+
+    def _store_tokens(self, entity: str, realm_id: str, tokens: dict[str, Any]) -> None:
         self.credentials.set_value(company_key(entity, "REALM_ID"), realm_id)
-        self.credentials.set_value(company_key(entity, "ACCESS_TOKEN"), tokens["access_token"])
+        self._access_tokens[entity] = protect(tokens["access_token"])
+        self.credentials.set_value(company_key(entity, "ACCESS_TOKEN"), "")
         if tokens.get("refresh_token"):
-            self.credentials.set_value(company_key(entity, "REFRESH_TOKEN"), tokens["refresh_token"])
+            self.credentials.set_value(
+                company_key(entity, "REFRESH_TOKEN"),
+                protect(tokens["refresh_token"]),
+            )
         expires_in = int(tokens.get("expires_in") or 3600)
         self.credentials.set_value(
             company_key(entity, "ACCESS_TOKEN_EXPIRES_AT"),
