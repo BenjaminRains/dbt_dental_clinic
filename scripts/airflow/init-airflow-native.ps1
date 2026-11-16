@@ -93,7 +93,7 @@ if (-not (Test-Path $LocalEnvFile)) {
     }
     $jwtSecret = & $Python -S -c "import secrets; print(secrets.token_urlsafe(32))"
     $adminPass = if ($env:AIRFLOW_ADMIN_PASSWORD) { $env:AIRFLOW_ADMIN_PASSWORD } else {
-        -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
+        & $Python -S -c "import secrets; print(secrets.token_urlsafe(32))"
     }
     @(
         "# Native Airflow local config (Phase A). Not used by mdc/ETL.",

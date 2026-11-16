@@ -1,2 +1,4 @@
 *.sql linguist-detectable=true
 *.sql linguist-language=SQL 
+# The VBA editor imports .bas files with CRLF line endings.
+*.bas text eol=crlf
