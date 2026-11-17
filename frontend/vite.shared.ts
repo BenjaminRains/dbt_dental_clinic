@@ -22,6 +22,10 @@ export function createAppViteConfig(appRoot: string) {
                         replacement: path.resolve(frontendRoot, 'packages/analytics-ui/src/pages'),
                     },
                     {
+                        find: '@mdc/analytics-ui/config',
+                        replacement: path.resolve(frontendRoot, 'packages/analytics-ui/src/config'),
+                    },
+                    {
                         find: '@mdc/analytics-api/clinic',
                         replacement: path.resolve(frontendRoot, 'packages/analytics-api/src/authApi.ts'),
                     },

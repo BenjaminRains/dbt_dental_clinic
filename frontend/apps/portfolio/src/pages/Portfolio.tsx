@@ -472,7 +472,7 @@ const PortfolioV4: React.FC = () => {
             <Box id="dashboards" sx={sectionSx}>
                 <Typography variant="h4" fontWeight="bold" gutterBottom>Dashboard Examples</Typography>
                 <Typography variant="body2" color="text.secondary" sx={{ mb: 3 }}>
-                    Synthetic data—layout and metrics match production. The platform engineering is the primary story; dashboards are the output layer.
+                    The executive dashboard shows measures reconciled to OpenDental. Figures on the demo are synthetic. The other analytics routes are exploratory.
                 </Typography>
                 <Grid container spacing={3}>
                     {[
@@ -491,7 +491,7 @@ const PortfolioV4: React.FC = () => {
                     ))}
                 </Grid>
                 <Button variant="outlined" component={RouterLink} to="/dashboard" sx={{ mt: 3, textTransform: 'none' }}>
-                    Explore live demo dashboards
+                    Validated executive dashboard
                 </Button>
             </Box>
 

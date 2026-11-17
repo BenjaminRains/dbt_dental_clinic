@@ -3,6 +3,7 @@
 | Document | Purpose |
 |----------|---------|
 | [FRONTEND_EVOLUTION_PROPOSAL.md](./FRONTEND_EVOLUTION_PROPOSAL.md) | **Product direction:** role homes, call lists, operational queues (clinic build) |
+| [DEMO_EXECUTIVE_DASHBOARD_PROPOSAL.md](./DEMO_EXECUTIVE_DASHBOARD_PROPOSAL.md) | **Demo `/dashboard`:** allowlist of OpenDental-signed-off KPIs; validation plan for patients, providers, and broken appointments |
 | [FRONTEND_SPLIT_PLAN.md](./FRONTEND_SPLIT_PLAN.md) | **Phased refactor:** split portfolio and clinic into two deployable apps |
 | [../../TODO.md](../../TODO.md) | Tracked under **Deployment / Infrastructure → Frontend split** |
 | [../consult_audio/CLINIC_FRONTEND_DELIVERY_PLAN.md](../consult_audio/CLINIC_FRONTEND_DELIVERY_PLAN.md) | Early plan: consult summaries in the clinic app (review later) |

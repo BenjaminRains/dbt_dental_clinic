@@ -22,6 +22,7 @@ import {
     Lock,
 } from '@mui/icons-material';
 import { MermaidDiagram } from '@mdc/ui-common';
+import { VALIDATED_KPIS } from '@mdc/analytics-ui/config/validatedKpis';
 
 const GITHUB = 'https://github.com/BenjaminRains/dbt_dental_clinic';
 const GITHUB_MAIN = `${GITHUB}/blob/main`;
@@ -42,28 +43,7 @@ const METHODOLOGY_CHART = `flowchart TB
   L3 --> Reg --> Allow --> UI
 `;
 
-/** Portfolio mirror of clinic validatedKpis metadata — do not import from clinic app. */
-const SIGNED_OFF_KPIS = [
-    {
-        name: 'Daily net collections',
-        model: 'mart_daily_payments',
-        field: 'net_collections_amount',
-        odReport: 'Daily Payments',
-        odMenuPath: 'Reports → Standard → Daily → Payments',
-        signedOff: '2026-06-26',
-        reportHref: `${GITHUB_MAIN}/dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md`,
-        walkthroughTo: '/daily-net-collections',
-    },
-    {
-        name: 'Daily production by procedure',
-        model: 'mart_daily_production_by_procedure',
-        field: 'sum(total_fees)',
-        odReport: 'Production by Procedure',
-        odMenuPath: 'Reports → Standard → Daily → Production by Procedure',
-        signedOff: '2026-07-16',
-        reportHref: `${GITHUB_MAIN}/dbt_dental_models/validation/kpi/daily-production-by-procedure/VALIDATION_REPORT.md`,
-    },
-] as const;
+const SIGNED_OFF_KPIS = Object.values(VALIDATED_KPIS);
 
 const ARTIFACT_LINKS = [
     {
@@ -287,7 +267,7 @@ const KpiValidation: React.FC = () => {
                                                 </Typography>
                                             </Box>
                                             <Chip
-                                                label="within_tolerance"
+                                                label={kpi.registryStatus}
                                                 size="small"
                                                 color="success"
                                                 variant="outlined"
@@ -374,10 +354,9 @@ const KpiValidation: React.FC = () => {
                                     </Typography>
                                 </Box>
                                 <Typography variant="body2" color="text.secondary" paragraph>
-                                    The clinic app keeps a hard allowlist of signed-off KPIs (
-                                    <code>validatedKpis.ts</code>). Practice Manager Home only renders
-                                    metrics on that list—unvalidated totals stay on legacy dashboard
-                                    routes.
+                                    Practice Manager Home and the executive dashboard read one allowlist (
+                                    <code>validatedKpis.ts</code> in the shared analytics UI package).
+                                    Both pages render only the metrics on that list.
                                 </Typography>
                                 <Typography variant="body2" color="text.secondary">
                                     UI chips such as &quot;Validated vs OD Daily Payments&quot; make the

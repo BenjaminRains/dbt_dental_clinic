@@ -5,7 +5,7 @@
 > Status: **Active — Phase 0 complete; Phase 1 in progress (validated-KPI gate)**
 > Last updated: **2026-07-15**
 > Audience: Practice Owner, Practice Manager, Insurance Specialist, Platform Maintainer
-> Related: [FRONTEND_SPLIT_PLAN.md](./FRONTEND_SPLIT_PLAN.md), [frontend/README.md](../../frontend/README.md), [OFFICE_KNOWLEDGE_ANALYTICS_PROPOSAL.md](./OFFICE_KNOWLEDGE_ANALYTICS_PROPOSAL.md), [api/](../../api/), [powerbi/README.md](../../powerbi/README.md)
+> Related: [FRONTEND_SPLIT_PLAN.md](./FRONTEND_SPLIT_PLAN.md), [DEMO_EXECUTIVE_DASHBOARD_PROPOSAL.md](./DEMO_EXECUTIVE_DASHBOARD_PROPOSAL.md), [frontend/README.md](../../frontend/README.md), [OFFICE_KNOWLEDGE_ANALYTICS_PROPOSAL.md](./OFFICE_KNOWLEDGE_ANALYTICS_PROPOSAL.md), [api/](../../api/), [powerbi/README.md](../../powerbi/README.md)
 
 ---
 
