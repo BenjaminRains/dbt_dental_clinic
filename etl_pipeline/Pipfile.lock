@@ -1,7 +1,7 @@
 {
     "_meta": {
         "hash": {
-            "sha256": "fe288ae46ff9484e0cb4071059983bc343141ef24c9916f9de92d7ec81de0d05"
+            "sha256": "cda3d40001968ba3f3a6882b69fe15800fcfa19b0cf56501c9ff23670f5b2839"
         },
         "pipfile-spec": 6,
         "requires": {
@@ -462,12 +462,12 @@
         },
         "loguru": {
             "hashes": [
-                "sha256:19480589e77d47b8d85b2c827ad95d49bf31b0dcde16593892eb51dd18706eb6",
-                "sha256:31a33c10c8e1e10422bfd431aeb5d351c7cf7fa671e3c4df004162264b28220c"
+                "sha256:e0fba09d6f76ba2d2f4bd1757122942f5a670c702e988b5efaeab99dacba0069",
+                "sha256:fb3e4623288e37700a0577f6e0ce776cc1860b5d95c657d67f07a2476b304867"
             ],
             "index": "pypi",
-            "markers": "python_version >= '3.5' and python_version < '4.0'",
-            "version": "==0.7.3"
+            "markers": "python_version >= '3.5'",
+            "version": "==0.8.0"
         },
         "mysqlclient": {
             "hashes": [
