@@ -168,6 +168,14 @@ Private Sub WriteReport(ByVal businessDate As Date, ByVal payments As ListObject
 
     Set report = ReportSheet()
     report.Cells.Clear
+    ' Widths before WriteProduction. It wraps descriptions and autofits row
+    ' height; a new sheet is still the default ~8-character width.
+    report.Columns(COL_CODE).ColumnWidth = 12
+    report.Columns(COL_DESCRIPTION).ColumnWidth = 48
+    report.Columns(COL_CATEGORY).ColumnWidth = 22
+    report.Columns(COL_COUNT).ColumnWidth = 8
+    report.Columns(COL_AMOUNT).ColumnWidth = 14
+    report.Columns(COL_AVERAGE).ColumnWidth = 12
 
     With report.Cells(1, COL_CODE)
         .Value = REPORT_SHEET
@@ -181,13 +189,6 @@ Private Sub WriteReport(ByVal businessDate As Date, ByVal payments As ListObject
 
     lastPaymentRow = WritePayments(report, 4, payments)
     lastRow = WriteProduction(report, lastPaymentRow + 2, production, titleRow)
-
-    report.Columns(COL_CODE).ColumnWidth = 12
-    report.Columns(COL_DESCRIPTION).ColumnWidth = 48
-    report.Columns(COL_CATEGORY).ColumnWidth = 22
-    report.Columns(COL_COUNT).ColumnWidth = 8
-    report.Columns(COL_AMOUNT).ColumnWidth = 14
-    report.Columns(COL_AVERAGE).ColumnWidth = 12
 
     SetPrintLayout report, lastRow, titleRow
     report.Activate
