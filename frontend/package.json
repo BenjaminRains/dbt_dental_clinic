@@ -43,7 +43,7 @@
     "lodash-es": "4.18.1",
     "rollup": "^4.59.0",
     "form-data": "^4.0.6",
-    "dompurify": "3.4.11",
+    "dompurify": "3.4.17",
     "uuid": "11.1.1",
     "postcss": "8.5.10",
     "picomatch": "4.0.4",

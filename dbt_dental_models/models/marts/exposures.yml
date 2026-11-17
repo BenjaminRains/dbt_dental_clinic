@@ -1263,7 +1263,7 @@ exposures:
 
       ## Connection:
       - Local development: PostgreSQL `localhost:5432/opendental_analytics`,
-        read-only `bi_user` (SELECT on the four pilot tables only), Import mode
+        read-only `bi_user` (SELECT on named mart tables only), Import mode
       - Deployed design: private Aurora PostgreSQL via on-premises data gateway
         (see docs/analytics/power_bi_postgresql_access.md)
 
@@ -1276,6 +1276,47 @@ exposures:
 
       ## Data Refresh:
       - Import-mode dataset; refresh manually in Desktop after dbt runs
+      - Note: mart rebuilds drop per-table grants; re-run the bi_user GRANT
+        statements after dbt runs (docs/analytics/sql/bi_user_marts_grants.sql)
+
+  - name: excel_daily_close
+    label: "Excel - Daily Close"
+    type: dashboard
+    maturity: low
+    owner:
+      name: Data Engineering & Analytics
+      email: analytics@dentalclinic.com
+
+    depends_on:
+      - ref('mart_daily_payments')
+      - ref('mart_daily_production_by_procedure')
+
+    url: https://github.com/your-org/dbt_dental_clinic/tree/main/excel
+
+    description: >
+      **Excel Daily Close - Payments and Production for One Business Date**
+
+      A one-module VBA workbook that prints the two daily KPIs validated
+      against OpenDental reports (Daily Payments and Daily Production by
+      Procedure) for a date the office manager picks.
+
+      ## Data:
+      - `mart_daily_payments` filtered on `payment_date` (one row)
+      - `mart_daily_production_by_procedure` filtered on `production_date`
+        (one row per procedure code)
+
+      ## Connection:
+      - Power Query over ODBC, read-only `bi_user` (SELECT on these two marts)
+      - Host, port, and database come from a User DSN; the password is entered
+        at the Power Query credential prompt and is not stored in the workbook
+
+      ## Artifacts:
+      - excel/DailyClose.bas - date prompt, parameter, refresh, print layout
+      - excel/queries/*.pq - Power Query text for the parameter and both marts
+      - The .xlsm is assembled locally and is not committed
+
+      ## Data Refresh:
+      - On open or from a button
       - Note: mart rebuilds drop per-table grants; re-run the bi_user GRANT
         statements after dbt runs (docs/analytics/sql/bi_user_marts_grants.sql)
 

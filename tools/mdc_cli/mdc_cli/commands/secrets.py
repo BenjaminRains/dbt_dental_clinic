@@ -94,7 +94,12 @@ def _pull_demo(*, update_deployment_credentials: bool) -> None:
             typer.echo("  Updated deployment_credentials.json demo password fields.")
         else:
             typer.echo("  deployment_credentials.json already had this password.")
-    typer.echo("\nNext: mdc deploy api --env demo")
+    typer.echo(
+        "\nNext: copy api/.env_api_demo to the demo instance and restart dental-clinic-api-demo."
+        "\n  powershell -NoProfile -File scripts\\deployment\\deploy_api_file.ps1 -FilePath api\\.env_api_demo -NoRestart"
+        "\n  Do not use -Clinic or mdc deploy api --env demo."
+        "\n  See scripts/maintenance/README.md."
+    )
 
 
 def _confirm_plan(keys: list[str]) -> bool:

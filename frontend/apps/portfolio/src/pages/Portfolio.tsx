@@ -41,6 +41,8 @@ import {
     ArrowForward,
     Verified,
     AcUnit,
+    Terminal,
+    Payments,
 } from '@mui/icons-material';
 
 const GITHUB = 'https://github.com/BenjaminRains/dbt_dental_clinic';
@@ -166,10 +168,18 @@ const PRODUCTION_CAPABILITIES: CapabilityLink[] = [
     },
     {
         title: 'Snowflake payments warehouse',
-        desc: 'Same dbt project on an XS Snowflake warehouse. Daily net collections plus paysplit-grain fact_payment on the synthetic demo.',
+        desc: 'One dbt project on Postgres and a small Snowflake warehouse. Daily collections match on every date, with payment-line detail.',
         icon: <AcUnit />,
         href: '/snowflake',
         linkLabel: 'Warehouse write-up',
+        external: false,
+    },
+    {
+        title: 'Daily net collections',
+        desc: 'Clinic sign-off of daily net collections against OpenDental Daily Payments. Three golden dates match to the cent.',
+        icon: <Payments />,
+        href: '/daily-net-collections',
+        linkLabel: 'Validation write-up',
         external: false,
     },
 ];
@@ -543,7 +553,20 @@ const PortfolioV4: React.FC = () => {
                                     <Typography variant="subtitle2" fontWeight="bold">Snowflake Warehouse</Typography>
                                 </Box>
                                 <Typography variant="body2" color="text.secondary">
-                                    Dual-warehouse dbt for daily payments and payment detail. Synthetic demo only; Wave 1 totals match Postgres.
+                                    One dbt project for daily collections and payment detail on Postgres and Snowflake. Daily totals match on every date.
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <Card component={RouterLink} to="/daily-net-collections" variant="outlined" sx={{ height: '100%', textDecoration: 'none', color: 'inherit', display: 'block', '&:hover': { boxShadow: 3 } }}>
+                            <CardContent>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                    <Payments sx={{ color: '#5e7086' }} />
+                                    <Typography variant="subtitle2" fontWeight="bold">Daily net collections</Typography>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    Clinic sign-off against OpenDental Daily Payments. Three golden dates match to the cent.
                                 </Typography>
                             </CardContent>
                         </Card>
@@ -557,6 +580,19 @@ const PortfolioV4: React.FC = () => {
                                 </Box>
                                 <Typography variant="body2" color="text.secondary">
                                     OpenDental golden-report parity and a clinic UI allowlist for signed-off metrics.
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <Card component={RouterLink} to="/mdc-cli" variant="outlined" sx={{ height: '100%', textDecoration: 'none', color: 'inherit', display: 'block', '&:hover': { boxShadow: 3 } }}>
+                            <CardContent>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                    <Terminal sx={{ color: '#5e7086' }} />
+                                    <Typography variant="subtitle2" fontWeight="bold">mdc CLI</Typography>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    Python CLI that validates each stage&apos;s config and runs the API, ETL, dbt, and deploys in isolated child processes.
                                 </Typography>
                             </CardContent>
                         </Card>

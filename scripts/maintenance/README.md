@@ -44,7 +44,17 @@ Confirm separately, outside git: RDS automated backups for the analytics databas
 - Confirm RDS and OpenDental backups still match what you expect.
 - Rotate passwords. `mdc secrets pull` lists the rows and waits. `mdc secrets pull clinic` stays a non-interactive sync. Last pass: 2026-10-12.
   - Clinic RDS `analytics_user` is a sync. Secrets Manager rotates it about every 7 days (last secret date 2026-10-06). `mdc secrets pull clinic` copies it into `api/.env_api_clinic` and `deployment_credentials.json`.
-  - Demo `opendental_demo_user`: `mdc tunnel demo-db`, then `mdc secrets pull demo`, then `mdc deploy api --env demo`. Leaves `etl_pipeline/synthetic_data_generator/.env_demo` alone.
+  - Demo `opendental_demo_user`: `mdc tunnel demo-db`, then `mdc secrets pull demo`. That changes the role and writes `api/.env_api_demo` plus `deployment_credentials.json` only. It does not update the demo API instance. `mdc deploy api` accepts `--env clinic` only, so do not use `--env demo`. Leaves `etl_pipeline/synthetic_data_generator/.env_demo` alone.
+    If the portfolio dashboard then fails and `GET https://api.dbtdentalclinic.com/health/db` returns 503 `password authentication failed for user "opendental_demo_user"`, the instance is still on the old file (`/opt/dbt_dental_clinic/api/.env_api_demo`, unit `dental-clinic-api-demo`). A long-running process keeps the previous password until restart. From the repo root, copy the rotated file and restart the real unit (`dental-clinic-api` is not installed on that instance):
+    ```powershell
+    powershell -NoProfile -File scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_demo" -NoRestart
+    aws ssm start-session --target i-0b7013339cf648e0f
+    ```
+    ```bash
+    sudo systemctl restart dental-clinic-api-demo
+    curl -s http://127.0.0.1:8000/health/db
+    ```
+    Do not pass `-Clinic` or `-ClinicEnv`. Expect `{"status":"healthy","database":"connected"}`. Do not run `mdc secrets pull demo` again; that rotates the password a second time.
   - Anthropic: console name `consult_audio_key`. Replace `ANTHROPIC_API_KEY` in `consult_audio_pipe/.env`. It is not in `deployment_credentials.json`.
   - Airflow admin for native runs is `AIRFLOW_ADMIN_PASSWORD` in `airflow/.env.native`. Generate a 16-character password the same way as `scripts/airflow/init-airflow-native.ps1`, write that line, then `airflow users reset-password --username admin`. If reset fails while decoding the `session` table, delete those rows and retry. Root `.env` is the Compose sandbox password, a different secret. `AIRFLOW_FERNET_KEY` and `AIRFLOW_JWT_SECRET` there are still one shared value; split them the next time Compose is used.
   - Laptop warehouse `analytics_user` in `dbt_dental_models/.env_local` and `etl_pipeline/.env_local` stays off this list.

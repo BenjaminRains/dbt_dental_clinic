@@ -5,7 +5,14 @@
 --
 -- Replace:
 --   opendental_analytics     if your analytics database name differs
---   <strong_password>        use secret manager + rotation in production
+--   <strong_password>        local: powerbi/.env_local POSTGRES_BI_PASSWORD
+--                            (see powerbi/README.md). Host, port, and database
+--                            come from dbt_dental_models/.env_local
+--                            (POSTGRES_ANALYTICS_*). This login is bi_user,
+--                            not analytics_user.
+--                            clinic: Secrets Manager, rotated like other DB
+--                            service accounts.
+-- Do not read POSTGRES_BI_* from etl_pipeline/.env_* or api/.env_api_*.
 --
 -- USAGE on schema marts is required to resolve names; SELECT is per-table so bi_user cannot
 -- read other mart objects until you GRANT them explicitly.
@@ -24,6 +31,10 @@ GRANT SELECT ON TABLE marts.mart_revenue_lost TO bi_user;
 GRANT SELECT ON TABLE marts.mart_provider_performance TO bi_user;
 GRANT SELECT ON TABLE marts.dim_provider TO bi_user;
 GRANT SELECT ON TABLE marts.dim_date TO bi_user;
+
+-- Excel daily close (excel/DailyClose.bas): the two daily KPIs signed off against OpenDental.
+GRANT SELECT ON TABLE marts.mart_daily_payments TO bi_user;
+GRANT SELECT ON TABLE marts.mart_daily_production_by_procedure TO bi_user;
 
 -- When a new table is approved for Power BI, add explicitly, e.g.:
 -- GRANT SELECT ON TABLE marts.mart_ar_summary TO bi_user;

@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
     Box,
     Container,
@@ -52,6 +52,7 @@ const SIGNED_OFF_KPIS = [
         odMenuPath: 'Reports → Standard → Daily → Payments',
         signedOff: '2026-06-26',
         reportHref: `${GITHUB_MAIN}/dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md`,
+        walkthroughTo: '/daily-net-collections',
     },
     {
         name: 'Daily production by procedure',
@@ -140,10 +141,11 @@ const KpiValidation: React.FC = () => {
                     >
                         Clinic role homes follow <strong>Design Principle #0</strong>: a metric may
                         appear only after its registry status is <code>within_tolerance</code>. Until
-                        then it stays on legacy report routes. Validation proves{' '}
-                        <strong>logic parity</strong> with OpenDental standard reports—same
-                        definitions, filters, exclusions, and grain—not a soft &quot;looks right&quot;
-                        label.
+                        then it stays on legacy report routes. <code>within_tolerance</code> means the
+                        golden-date totals match the OpenDental report within the registry bar. The
+                        field map is the rule set we claim. A matching total is evidence those rules
+                        produced the same dollars on the exported dates. It is not a reading of the
+                        OpenDental report source.
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
                         {[
@@ -305,17 +307,29 @@ const KpiValidation: React.FC = () => {
                                         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
                                             Signed off {kpi.signedOff}
                                         </Typography>
-                                        <Button
-                                            size="small"
-                                            component={Link}
-                                            href={kpi.reportHref}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            startIcon={<GitHub />}
-                                            sx={{ textTransform: 'none' }}
-                                        >
-                                            Validation report
-                                        </Button>
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                            <Button
+                                                size="small"
+                                                component={Link}
+                                                href={kpi.reportHref}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                startIcon={<GitHub />}
+                                                sx={{ textTransform: 'none' }}
+                                            >
+                                                Validation report
+                                            </Button>
+                                            {'walkthroughTo' in kpi ? (
+                                                <Button
+                                                    size="small"
+                                                    component={RouterLink}
+                                                    to={kpi.walkthroughTo}
+                                                    sx={{ textTransform: 'none' }}
+                                                >
+                                                    Validation write-up
+                                                </Button>
+                                            ) : null}
+                                        </Box>
                                     </CardContent>
                                 </Card>
                             </Grid>

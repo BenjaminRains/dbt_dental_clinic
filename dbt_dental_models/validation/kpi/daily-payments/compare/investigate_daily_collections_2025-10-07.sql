@@ -77,7 +77,8 @@ ORDER BY coalesce(dp.header_total, 0) + coalesce(dc.check_total, 0) DESC;
 
 -- =============================================================================
 -- Query 4: OD golden section totals vs warehouse (od_daily_payments_10072025_10072025.csv)
--- Income Transfer nets to $0.00 in OD — excluded from net_collections_amount.
+-- Income Transfer is $0.00 on this export. The report net below omits that section.
+-- A $0.00 section does not show that the mart filters those rows out.
 -- =============================================================================
 WITH od_sections AS (
     SELECT * FROM (VALUES

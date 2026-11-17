@@ -21,12 +21,21 @@ $Airflow = Join-Path $VenvDir "Scripts\airflow.exe"
 
 function Write-Step($msg) { Write-Host "`n==> $msg" -ForegroundColor Cyan }
 
+# token_urlsafe's alphabet includes '-'. A leading hyphen is an argparse flag
+# when `airflow users create` receives --password and the value as two arguments.
+function New-UrlsafeToken {
+    do {
+        $token = (& $Python -S -c "import secrets; print(secrets.token_urlsafe(32))").Trim()
+    } while ($token.StartsWith('-'))
+    return $token
+}
+
 Write-Step "Create venv (.venv-airflow)"
 if (-not (Test-Path $VenvDir)) {
     python -m venv $VenvDir
 }
 
-Write-Step "Install Airflow 3.2.2 + DAG deps"
+Write-Step "Install Airflow 3.3.2 + DAG deps"
 & $Python -m pip install --upgrade pip | Out-Null
 & $Python -m pip install -r (Join-Path $RepoRoot "requirements-airflow-native.txt")
 
@@ -92,9 +101,7 @@ if (-not (Test-Path $LocalEnvFile)) {
         Write-Host "Using Fernet key from airflow\.env.native (or root .env)."
     }
     $jwtSecret = & $Python -S -c "import secrets; print(secrets.token_urlsafe(32))"
-    $adminPass = if ($env:AIRFLOW_ADMIN_PASSWORD) { $env:AIRFLOW_ADMIN_PASSWORD } else {
-        -join ((48..57) + (65..90) + (97..122) | Get-Random -Count 16 | ForEach-Object { [char]$_ })
-    }
+    $adminPass = if ($env:AIRFLOW_ADMIN_PASSWORD) { $env:AIRFLOW_ADMIN_PASSWORD } else { New-UrlsafeToken }
     @(
         "# Native Airflow local config (Phase A). Not used by mdc/ETL.",
         "AIRFLOW__CORE__FERNET_KEY=$fernet",
@@ -153,15 +160,26 @@ if (-not $adminUser) { $adminUser = "admin" }
 $adminPass = $env:AIRFLOW_ADMIN_PASSWORD
 $adminEmail = if ($env:AIRFLOW_ADMIN_EMAIL) { $env:AIRFLOW_ADMIN_EMAIL } else { "rains.bp@gmail.com" }
 
-& $Airflow users create `
+# One argument (--password=value) so a password that already starts with '-'
+# stays a value. A separate --password argument lets argparse treat it as a flag,
+# and the failure used to be reported as "user may already exist".
+$passwordArg = '--password=' + $adminPass
+$createOutput = & $Airflow users create `
     --username $adminUser `
-    --password $adminPass `
+    $passwordArg `
     --firstname Admin `
     --lastname User `
     --role Admin `
-    --email $adminEmail 2>&1 | Out-Null
-if ($LASTEXITCODE -ne 0) {
-    Write-Host "Admin user may already exist (ok)."
+    --email $adminEmail 2>&1
+$createExit = $LASTEXITCODE
+if ($createExit -ne 0) {
+    $createText = ($createOutput | Out-String)
+    if ($createText -match 'already exist') {
+        Write-Host "Admin user already exists (ok)."
+    } else {
+        if ($createText.Trim()) { Write-Host $createText }
+        throw "airflow users create failed (exit $createExit). The password in airflow\.env.native was not applied."
+    }
 }
 
 Write-Step "Set Phase A Airflow Variables"
@@ -177,7 +195,7 @@ Write-Step "Verify DAGs parse"
 Write-Step "Run DAG unit tests"
 & $Python -m pytest (Join-Path $RepoRoot "airflow\tests") -v
 
-Write-Host "`nDone. Native Airflow 3.2.2 ready (no DAG run triggered)." -ForegroundColor Green
+Write-Host "`nDone. Native Airflow 3.3.2 ready (no DAG run triggered)." -ForegroundColor Green
 Write-Host "  AIRFLOW_HOME: $AirflowHome"
 Write-Host "  Admin login:  $adminUser / (see airflow\.env.native)"
 Write-Host "  Start UI:     .\scripts\airflow\start-airflow-native.ps1"

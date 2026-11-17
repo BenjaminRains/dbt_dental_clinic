@@ -9,6 +9,8 @@ from __future__ import annotations
 
 from typing import Callable, Dict, List, Optional
 
+from etl_pipeline.core.cursor import ExtractCursor
+
 TIMESTAMP_WATERMARK_NAMES = frozenset({
     "DateTStamp",
     "SecDateTEdit",
@@ -126,15 +128,12 @@ def resolve_watermark_cursor(
     expected_watermark: Optional[str],
 ) -> Optional[str]:
     """Ignore stale cursor when watermark column changed (e.g. ProcNum → DateTStamp)."""
-    if last_value is None:
-        return None
-    if (
-        stored_column
-        and expected_watermark
-        and stored_column != expected_watermark
-    ):
-        return None
-    return last_value
+    resolved = ExtractCursor(
+        table_name=table_name,
+        watermark_column=stored_column,
+        last_value=last_value,
+    ).resolved_value(expected_watermark)
+    return None if resolved is None else resolved
 
 
 def build_mysql_loader_where_clause(

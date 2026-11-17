@@ -742,8 +742,12 @@ def _update_deployment_credentials_demo_password(
 
 
 def generate_demo_password() -> str:
-    """URL-safe token with no quotes, spaces, or shell metacharacters."""
-    return secrets.token_urlsafe(18)
+    """Repo standard for a generated password: ``secrets.token_urlsafe(32)``.
+
+    URL-safe alphabet (letters, digits, ``-``, ``_``). No quotes, spaces, or
+    shell metacharacters. Same call as the Airflow JWT and admin password.
+    """
+    return secrets.token_urlsafe(32)
 
 
 def demo_tunnel_local_port() -> int:

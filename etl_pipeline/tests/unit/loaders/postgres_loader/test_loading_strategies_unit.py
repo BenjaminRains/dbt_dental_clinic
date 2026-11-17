@@ -92,7 +92,7 @@ def mock_postgres_loader_instance():
     mock_loader.get_table_config = MagicMock(side_effect=get_table_config_side_effect)
     mock_loader.target_schema = 'raw'  # Used by _build_upsert_sql
     mock_loader._build_load_query = MagicMock(return_value="SELECT * FROM test_table")
-    mock_loader._update_load_status = MagicMock(return_value=True)
+    mock_loader._update_load_status_timestamp_only = MagicMock(return_value=True)
     mock_loader._get_loaded_at_time_max = MagicMock(return_value=datetime(2024, 1, 1, 10, 0, 0))
     mock_loader._ensure_tracking_record_exists = MagicMock(return_value=True)
     # load_table is the main public API - mock it to return success tuple
@@ -255,7 +255,7 @@ class TestPostgresLoaderLoadingStrategies:
             'incremental_columns': ['DateModified']
         }), \
         patch.object(loader, '_ensure_tracking_record_exists', return_value=True), \
-        patch.object(loader, '_update_load_status', return_value=True), \
+        patch.object(loader, '_update_load_status_timestamp_only', return_value=True), \
         patch.object(loader.schema_adapter, 'get_table_schema_from_mysql', return_value={'columns': []}), \
         patch.object(loader.schema_adapter, 'ensure_table_exists', return_value=True), \
         patch.object(loader.schema_adapter, 'convert_row_data_types', return_value={'id': 1, 'name': 'test'}):
@@ -443,7 +443,7 @@ class TestPostgresLoaderLoadingStrategies:
             [{'id': 2, 'data': 'test2'}]
         ]), \
         patch.object(loader, 'bulk_insert_optimized', return_value=True), \
-        patch.object(loader, '_update_load_status', return_value=True), \
+        patch.object(loader, '_update_load_status_timestamp_only', return_value=True), \
         patch.object(loader.schema_adapter, 'get_table_schema_from_mysql', return_value={'columns': []}), \
         patch.object(loader.schema_adapter, 'ensure_table_exists', return_value=True), \
         patch.object(loader.schema_adapter, 'convert_row_data_types', return_value={'id': 1, 'data': 'test'}):

@@ -31,12 +31,6 @@ services:
       - MDC_DBT_EXECUTABLE=/opt/airflow/venvs/dbt
       # Option A laptop: clinic OD source + local warehouse (publish still uses RDS + tunnel)
       - MDC_CLINIC_WAREHOUSE=local
-      # Email Configuration for Monitoring (optional)
-      - SMTP_SERVER=${SMTP_SERVER:-localhost}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - EMAIL_USER=${EMAIL_USER}
-      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
-      - ALERT_RECIPIENTS=${ALERT_RECIPIENTS}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs
@@ -84,12 +78,6 @@ services:
       - MDC_DBT_PYTHON=/opt/airflow/venvs/dbt-python
       - MDC_DBT_EXECUTABLE=/opt/airflow/venvs/dbt
       - MDC_CLINIC_WAREHOUSE=local
-      # Email Configuration for Monitoring (optional)
-      - SMTP_SERVER=${SMTP_SERVER:-localhost}
-      - SMTP_PORT=${SMTP_PORT:-587}
-      - EMAIL_USER=${EMAIL_USER}
-      - EMAIL_PASSWORD=${EMAIL_PASSWORD}
-      - ALERT_RECIPIENTS=${ALERT_RECIPIENTS}
     volumes:
       - ./airflow/dags:/opt/airflow/dags
       - ./airflow/logs:/opt/airflow/logs

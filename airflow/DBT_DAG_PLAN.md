@@ -87,7 +87,7 @@ Source freshness thresholds are defined on OpenDental raw sources (`dbt_dental_m
 
 1. Add `dbt_source_freshness` — `mdc dbt invoke --env {dbt_target} -- source freshness` (fail the DAG on `error` status).
 2. Keep `dbt_deps` → `dbt_build` order; run freshness after deps (packages available) and **before** `build` so stale raw data is caught before transforms.
-3. Optionally align Airflow alerts with dbt freshness results (Slack/email on warn or error).
+3. Leave freshness failures in the Airflow task log. Do not add Slack or email.
 
 **Related:** [`NIGHTLY_RUN.md`](NIGHTLY_RUN.md) (dbt step), [`ORCHESTRATION_ROADMAP.md`](ORCHESTRATION_ROADMAP.md) Phase D, [`dbt_docs/data_quality.md`](../dbt_docs/data_quality.md) (Timeliness).
 

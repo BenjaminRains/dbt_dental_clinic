@@ -8,10 +8,9 @@ What a run is:
 1. Validation: tables.yml exists and is recent; all DB connections OK; optional schema drift check.
 2. ETL: Full pass over all tables by category (large → medium → small → tiny). Default is
    incremental load (force_full_refresh=False); each table uses config from tables.yml.
-3. Reporting: Verify loads, generate execution report.
-4. dbt: When ETL succeeded — mdc dbt deps + build (models hard) + test (soft; noted in notify).
+3. Reporting: Verify loads, then write etl_pipeline/logs/etl_pipeline/pipeline_execution_*.log after publish.
+4. dbt: When ETL succeeded — mdc dbt deps + build (models hard) + test (soft; logged, does not block publish).
 5. Publish: When publish_environment is set (e.g. clinic) — mdc publish analytics to RDS.
-6. Notify: Slack/email summary including dbt test ERROR/WARN counts (after report and publish).
 
 Schedule: Nightly Mon–Sun at 9 PM Central (set AIRFLOW__CORE__DEFAULT_TIMEZONE=America/Chicago).
 Dependencies: Valid tables.yml (from Schema Analysis DAG or manual run).
@@ -48,13 +47,13 @@ from lib.mdc_runner import (
     run_mdc,
     run_mdc_etl_invoke,
 )
+from lib.pipeline_mail import deliver_nightly_success
 
 # Default arguments for all tasks
 default_args = {
     'owner': 'benjamin-rains',
     'depends_on_past': False,
-    'email': ['rains.bp@gmail.com'],
-    'email_on_failure': True,
+    'email_on_failure': False,
     'email_on_retry': False,
     'retries': 1,  # Reduced retries for data pipeline (tables can be retried individually)
     'retry_delay': timedelta(minutes=5),
@@ -190,7 +189,7 @@ def run_dbt_build(**context):
     if summary.get('has_errors') or test_result.returncode != 0:
         logging.warning(
             "dbt tests reported errors (exit=%s, ERROR=%s, WARN=%s, PASS=%s). "
-            "Continuing to publish/notify — see completion notification.",
+            "Continuing to publish — test errors do not fail this task.",
             test_result.returncode,
             summary.get('error'),
             summary.get('warn'),
@@ -747,132 +746,114 @@ def generate_pipeline_report(**context):
         return {'error': str(e), 'pipeline_success': pipeline_success}
 
 
-def send_completion_notification(**context):
+def write_execution_report(**context):
     """
-    Send notification about pipeline execution completion.
-    
-    Sends summary with:
-    - Execution status (success/partial/failed)
-    - Processing statistics
-    - Failed tables (if any)
-    - dbt test summary (errors noted, do not fail the run)
-    - Whether dbt and publish actually finished
-    - Recommendations
+    Write the full run report to etl_pipeline/logs and email it when the run succeeded.
+
+    Runs after publish (or after publish is skipped) so the file includes ETL,
+    dbt tests, and publish. The Airflow task log gets the same text.
+    A mail failure is logged and does not fail this task.
     """
-    logging.info("Sending pipeline completion notification")
-    
-    try:
-        # Get report from previous task
-        ti = context['task_instance']
-        report = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_report')
-        pipeline_success = ti.xcom_pull(task_ids='reporting.generate_pipeline_report', key='pipeline_success')
-        dbt_tests = ti.xcom_pull(task_ids='dbt_build.dbt_build', key='dbt_test_summary')
-        
-        if not report:
-            logging.warning("No report available for notification")
-            return True
-        
-        # Determine status and level
-        total_processed = report['processing_results']['total_processed']
-        total_success = report['processing_results']['total_success']
-        total_failed = report['processing_results']['total_failed']
-        dbt_tests = dbt_tests or {}
-        dbt_finished = bool(dbt_tests)
-        dbt_test_errors = int(dbt_tests.get('error') or 0)
-        dbt_test_warns = int(dbt_tests.get('warn') or 0)
-        publish_configured = bool((PUBLISH_ENVIRONMENT or '').strip())
-        publish_ok = ti.xcom_pull(task_ids='publish_analytics', key='publish_success')
-        
-        if pipeline_success and not dbt_finished:
-            level = "⚠️  ETL OK, DBT DID NOT FINISH"
-            status = "ETL succeeded; dbt build did not finish, so publish did not run"
-        elif pipeline_success and publish_configured and not publish_ok:
-            level = "⚠️  DBT OK, PUBLISH DID NOT FINISH"
-            status = "ETL and dbt finished; publish to clinic RDS did not"
-        elif pipeline_success and dbt_test_errors == 0:
-            level = "✅ SUCCESS"
-            status = "completed successfully"
-        elif pipeline_success and dbt_test_errors > 0:
-            level = "⚠️  SUCCESS WITH DBT TEST ERRORS"
-            status = "completed; dbt tests reported errors (publish not blocked)"
-        elif total_failed > 0 and total_success > 0:
-            level = "⚠️  PARTIAL SUCCESS"
-            status = "completed with some failures"
-        else:
-            level = "❌ FAILED"
-            status = "failed"
-        
-        # Compose message
-        message = f"ETL Pipeline {status}\n\n"
-        message += f"Environment: {ENVIRONMENT}\n"
-        message += f"dbt target: {DBT_TARGET}\n"
-        if (PUBLISH_ENVIRONMENT or '').strip():
-            message += f"Publish: {PUBLISH_ENVIRONMENT.strip()}\n"
-        message += f"Execution: {_format_context_timestamp(context)}\n"
-        message += f"\nResults:\n"
-        message += f"  • Processed: {total_processed} tables\n"
-        message += f"  • Successful: {total_success}\n"
-        message += f"  • Failed: {total_failed}\n"
-        message += f"  • Success Rate: {report['processing_results']['success_rate']}\n"
-        
-        # Add failed tables if any
-        if total_failed > 0:
-            message += f"\nFailed Tables:\n"
-            for category, results in report['processing_results']['by_category'].items():
-                if results['failed_tables']:
-                    message += f"  {category}: {', '.join(results['failed_tables'][:5])}\n"
-        
-        if dbt_tests:
-            message += "\ndbt tests:\n"
-            message += (
-                f"  • PASS={dbt_tests.get('pass', 0)} "
-                f"WARN={dbt_test_warns} ERROR={dbt_test_errors} "
-                f"SKIP={dbt_tests.get('skip', 0)}\n"
-            )
-            if dbt_tests.get('raw_done_line'):
-                message += f"  • {dbt_tests['raw_done_line']}\n"
-            if dbt_test_errors > 0:
-                message += (
-                    "  • Test ERRORs are noted only — they did not stop publish.\n"
-                )
+    ti = context["task_instance"]
+    report = ti.xcom_pull(
+        task_ids="reporting.generate_pipeline_report",
+        key="pipeline_report",
+    ) or {}
+    pipeline_success = ti.xcom_pull(
+        task_ids="reporting.generate_pipeline_report",
+        key="pipeline_success",
+    )
+    dbt_tests = ti.xcom_pull(task_ids="dbt_build.dbt_build", key="dbt_test_summary") or {}
+    publish_ok = ti.xcom_pull(task_ids="publish_analytics", key="publish_success")
+    layer0_run = ti.xcom_pull(
+        task_ids="layer0_replica_checks.check_replica_drift_tier_a",
+        key="layer0_checks_run",
+    )
+    layer0_failed = ti.xcom_pull(
+        task_ids="layer0_replica_checks.check_replica_drift_tier_a",
+        key="layer0_checks_failed",
+    )
+    processing = report.get("processing_results") or {}
+    by_category = processing.get("by_category") or {}
+    publish_configured = bool((PUBLISH_ENVIRONMENT or "").strip())
 
-        # Add recommendations
-        config_age = report['configuration']['config_age_days']
-        if config_age > 30:
-            message += f"\n⚠️  Configuration is {config_age} days old. Consider running Schema Analysis DAG.\n"
-        
-        if report['configuration']['schema_drift_detected']:
-            message += f"\n⚠️  Schema drift detected. Recommend running Schema Analysis DAG.\n"
+    lines = [
+        "ETL PIPELINE EXECUTION REPORT",
+        f"Run: {context.get('run_id')}",
+        f"When: {_format_context_timestamp(context)}",
+        f"Environment: {ENVIRONMENT}",
+        f"dbt target: {DBT_TARGET}",
+        f"Publish: {PUBLISH_ENVIRONMENT.strip() if publish_configured else 'not configured'}",
+        "",
+        "ETL",
+        f"  pipeline_success: {pipeline_success}",
+        f"  processed: {processing.get('total_processed', 0)}",
+        f"  successful: {processing.get('total_success', 0)}",
+        f"  failed: {processing.get('total_failed', 0)}",
+        f"  success_rate: {processing.get('success_rate', 'n/a')}",
+    ]
+    for category in ("large", "medium", "small", "tiny"):
+        results = by_category.get(category) or {}
+        lines.append(
+            f"  {category}: {results.get('success', 0)}/{results.get('total', 0)} successful"
+        )
+        failed_tables = results.get("failed_tables") or []
+        if failed_tables:
+            lines.append(f"    failed: {', '.join(failed_tables[:10])}")
 
-        if publish_ok:
-            message += "\n✅ Analytics published to clinic RDS.\n"
-        elif publish_configured:
-            message += "\n⚠️  Publish did not complete. Clinic RDS marts were not updated.\n"
-        if pipeline_success and not dbt_finished:
-            message += "\n⚠️  dbt deps/build did not finish. Local marts were not rebuilt.\n"
-        
-        # Log message
-        logging.info(f"\n{level}\n{message}")
-        
-        # Import only when a webhook is set. The provider imports aiohttp at
-        # module load, which is not installed in .venv-airflow and was failing
-        # this task before the message was logged.
-        try:
-            slack_webhook_url = Variable.get('slack_webhook_url', default=None)
-            if slack_webhook_url:
-                from airflow.providers.slack.hooks.slack_webhook import SlackWebhookHook
+    lines.append("")
+    lines.append("Layer 0 (warn-only)")
+    if layer0_run is None:
+        lines.append("  not run")
+    else:
+        lines.append(f"  checks: {layer0_failed}/{layer0_run} drifted")
 
-                slack = SlackWebhookHook(http_conn_id='slack_webhook')
-                slack.send(text=f"{level}\n{message}")
-                logging.info("Slack notification sent")
-        except Exception as e:
-            logging.warning(f"Failed to send Slack notification: {e}")
-        
-        return True
-        
-    except Exception as e:
-        logging.error(f"Failed to send notification: {e}")
-        return True
+    lines.append("")
+    lines.append("dbt tests")
+    if not dbt_tests:
+        lines.append("  not run")
+    else:
+        lines.append(
+            f"  PASS={dbt_tests.get('pass', 0)} "
+            f"WARN={dbt_tests.get('warn', 0)} "
+            f"ERROR={dbt_tests.get('error', 0)} "
+            f"SKIP={dbt_tests.get('skip', 0)} "
+            f"exit={dbt_tests.get('exit_code')}"
+        )
+        if dbt_tests.get("raw_done_line"):
+            lines.append(f"  {dbt_tests['raw_done_line']}")
+
+    lines.append("")
+    lines.append("Publish")
+    if not publish_configured:
+        lines.append("  skipped (publish_environment unset)")
+    elif publish_ok:
+        lines.append("  finished")
+    else:
+        lines.append("  did not finish")
+
+    text_body = "\n".join(lines) + "\n"
+    logging.info("\n%s", text_body)
+
+    reports_dir = PROJECT_ROOT / "etl_pipeline" / "logs" / "etl_pipeline"
+    reports_dir.mkdir(parents=True, exist_ok=True)
+    stamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    safe_run = "".join(
+        ch if ch.isalnum() or ch in ("-", "_") else "-"
+        for ch in str(context.get("run_id") or "run")
+    )
+    report_path = reports_dir / f"pipeline_execution_{stamp}_{safe_run}.log"
+    report_path.write_text(text_body, encoding="utf-8")
+    logging.info("Wrote execution report: %s", report_path)
+    ti.xcom_push(key="execution_report_path", value=str(report_path))
+    deliver_nightly_success(
+        environment=ENVIRONMENT,
+        body=text_body,
+        pipeline_success=pipeline_success,
+        publish_configured=publish_configured,
+        publish_ok=publish_ok,
+    )
+    return str(report_path)
 
 
 # ============================================================================
@@ -1096,6 +1077,7 @@ with dag:
     short_circuit_dbt = ShortCircuitOperator(
         task_id='should_run_dbt',
         python_callable=should_run_dbt,
+        ignore_downstream_trigger_rules=False,
         doc_md="Skips dbt when ETL reported failures so we do not transform partial data.",
     )
     report >> short_circuit_dbt
@@ -1126,7 +1108,7 @@ with dag:
             1. `dbt build --exclude-resource-type test --target {DBT_TARGET}` — **hard fail**
                if models/seeds fail (blocks publish).
             2. `dbt test --target {DBT_TARGET}` — **soft fail**: ERROR/WARN are logged and
-               pushed to XCom (`dbt_test_summary`) for the completion notification; they do
+               pushed to XCom (`dbt_test_summary`) for the execution report; they do
                **not** fail this task or block publish.
             """,
         )
@@ -1141,6 +1123,7 @@ with dag:
     short_circuit_publish = ShortCircuitOperator(
         task_id='should_run_publish',
         python_callable=should_run_publish,
+        ignore_downstream_trigger_rules=False,
         doc_md="Skips publish when publish_environment is unset or ETL failed.",
     )
     publish_analytics_task = PythonOperator(
@@ -1157,23 +1140,22 @@ with dag:
     )
     dbt_build >> short_circuit_publish >> publish_analytics_task
 
-    # =======================================================================
-    # NOTIFICATION (always after report; includes publish outcome when run)
-    # =======================================================================
-
-    notify = PythonOperator(
-        task_id='send_completion_notification',
-        python_callable=send_completion_notification,
+    # File under etl_pipeline/logs/etl_pipeline/. Runs even when dbt or publish is skipped.
+    execution_report = PythonOperator(
+        task_id='write_execution_report',
+        python_callable=write_execution_report,
         trigger_rule=TriggerRule.ALL_DONE,
         doc_md="""
-        ### Send Completion Notification
+        ### Execution report
 
-        Sends summary via logs/Slack after ETL report and optional publish step.
+        Writes `etl_pipeline/logs/etl_pipeline/pipeline_execution_<timestamp>_<run>.log`
+        after ETL, dbt, and publish. Same text is in this task's Airflow log.
+        When ETL succeeded and publish finished (if publish is configured), emails
+        that report. A mail failure does not fail this task. Slack stays off.
         """,
     )
-    report >> notify
-    publish_analytics_task >> notify
-    
+    [report, publish_analytics_task] >> execution_report
+
     # =======================================================================
     # DAG FLOW
     # =======================================================================
@@ -1197,9 +1179,10 @@ and loads it into the PostgreSQL analytics database.
 One run = **incremental ETL** (full pass, config-driven) + **dbt build** + **publish to RDS** (when configured).
 
 - **Incremental load**: `force_full_refresh=False` by default; each table uses `tables.yml`.
-- **dbt**: `mdc dbt invoke --env {dbt_target}` → `build --exclude-resource-type test` (hard) then `test` (soft; noted in notify).
+- **dbt**: `mdc dbt invoke --env {dbt_target}` → `build --exclude-resource-type test` (hard) then `test` (soft; logged on the task, does not block publish).
 - **Publish**: `mdc publish analytics --env {publish_environment}` after dbt models when `publish_environment` is set.
-- **Failure handling**: Validation fails fast; dbt/publish skipped when ETL failed; dbt **test** ERRORs do not stop publish; notify runs last.
+- **Report**: `etl_pipeline/logs/etl_pipeline/pipeline_execution_<timestamp>_<run>.log` after publish. No email or chat message.
+- **Failure handling**: Validation fails fast; dbt/publish skipped when ETL failed; dbt **test** ERRORs do not stop publish. The report file is still written.
 
 ## Data Flow
 
@@ -1235,8 +1218,7 @@ Clinic RDS (marts on api-clinic)
 
 ### 4. Verification & Reporting
 - Verifies data loads
-- Generates execution report
-- Sends notifications
+- After publish, writes `etl_pipeline/logs/etl_pipeline/pipeline_execution_*.log`
 
 ### 5. dbt (only when ETL succeeded)
 - `mdc dbt invoke --env {dbt_target}` → deps + build (default target `local`)
@@ -1244,9 +1226,6 @@ Clinic RDS (marts on api-clinic)
 ### 6. Publish (only when ETL succeeded and publish_environment set)
 - `mdc publish analytics --env {publish_environment}` (default `clinic`)
 - Auto-starts SSM tunnel when `publish_ensure_tunnel=true` (default); or run `mdc tunnel clinic-db` manually
-
-### 7. Notification
-- Summary after report and publish (Slack optional)
 
 ## Schedule
 
@@ -1283,7 +1262,6 @@ Override when triggering manually:
 | `publish_environment` | `clinic` | *(unset — skips publish)* |
 | `publish_tunnel_port` | `5433` (optional) | optional |
 | `publish_ensure_tunnel` | `true` (default) | `true` — auto-start SSM tunnel for publish |
-| `slack_webhook_url` | recommended | recommended |
 
 Leave `publish_environment` unset to skip RDS publish (smoke tests). Do **not** set `dbt_target=clinic` until dbt can build safely against RDS directly.
 

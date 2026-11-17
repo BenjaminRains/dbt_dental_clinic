@@ -141,9 +141,12 @@ models:
 
       # Prescription Details
       - name: drug_name
-        description: "Name of the prescribed medication (maps to Drug in OpenDental)"
+        description: >
+          Name of the prescribed medication (maps to Drug in OpenDental).
+          A null name is an empty prescription shell. Severity is warn.
         tests:
-          - not_null
+          - not_null:
+              severity: warn
 
       - name: sig
         description: "Prescription instructions/signatura (maps to Sig in OpenDental)"

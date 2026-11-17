@@ -81,9 +81,12 @@ models:
           Name of the medication as displayed in OpenDental. This is the primary
           medication identifier shown to clinical staff and used in prescriptions.
           May include brand names, generic names, or combination medications.
+          OpenDental Database Maintenance can insert placeholder rows with a null name.
         tests:
-          - not_null
-          - dbt_utils.not_empty_string
+          - not_null:
+              severity: warn
+          - dbt_utils.not_empty_string:
+              severity: warn
 
       - name: notes
         description: >

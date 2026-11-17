@@ -85,7 +85,10 @@ def format_plan(keys: list[str], rotated_on: dict[str, str | None] | None = None
         lines.append(f"- {choice.title} (last rotated {when}): {choice.summary}")
         if key == "demo":
             lines.append("  Tunnel: mdc tunnel demo-db (127.0.0.1:5434 unless DEMO_POSTGRES_PORT is set).")
-            lines.append("  After the files update: mdc deploy api --env demo")
+            lines.append(
+                "  After the files update: deploy_api_file.ps1 -FilePath api\\.env_api_demo -NoRestart, "
+                "then restart dental-clinic-api-demo. See scripts/maintenance/README.md."
+            )
         if key == "clinic":
             lines.append("  After the files update: mdc deploy api --env clinic")
     lines.append("")

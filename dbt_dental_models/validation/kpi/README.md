@@ -21,7 +21,7 @@ evidence the logic is correct, not the goal itself. When numbers diverge, the fi
 
 
 
-**Completed example:** [daily-payments/](./daily-payments/) — first KPI through full workflow (OD → mart → API). See [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md).
+**Completed example:** [daily-payments/](./daily-payments/) — first KPI through the totals workflow (OD export → mart → API). The sign-off is section and net agreement on three dates. It does not compare the OpenDental report query to the mart SQL. See [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md).
 
 
 

@@ -485,3 +485,15 @@ def test_alter_demo_role_sends_sql_on_stdin(mock_open, _mock_psql, mock_run):
     )
     assert mock_run.call_args.kwargs["env"]["PGPASSWORD"] == "current"
     mock_open.assert_called_once()
+
+
+def test_generate_demo_password_is_token_urlsafe_32():
+    import re
+
+    from mdc_cli.secrets_manager import generate_demo_password
+
+    passwords = [generate_demo_password() for _ in range(5)]
+    assert len(set(passwords)) == 5
+    for password in passwords:
+        assert len(password) == 43
+        assert re.fullmatch(r"[A-Za-z0-9_-]+", password)

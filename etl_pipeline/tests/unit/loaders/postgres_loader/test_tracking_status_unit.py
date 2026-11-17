@@ -101,7 +101,7 @@ def mock_postgres_loader_instance():
     
     # Bind real tracking methods that exist in the new architecture
     mock_loader._ensure_tracking_record_exists = PostgresLoader._ensure_tracking_record_exists.__get__(mock_loader, PostgresLoader)
-    mock_loader._update_load_status = PostgresLoader._update_load_status.__get__(mock_loader, PostgresLoader)
+    mock_loader._update_load_status_timestamp_only = PostgresLoader._update_load_status_timestamp_only.__get__(mock_loader, PostgresLoader)
     
     return mock_loader
 
@@ -167,7 +167,7 @@ class TestPostgresLoaderTrackingStatus:
         assert result is True
         assert mock_conn.execute.call_count >= 1  # At least the SELECT
     
-    def test_update_load_status_success(self, mock_postgres_loader_instance):
+    def test_update_load_status_timestamp_only_success(self, mock_postgres_loader_instance):
         """Test successful load status update."""
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
@@ -186,14 +186,14 @@ class TestPostgresLoaderTrackingStatus:
         loader.analytics_engine.connect.return_value = mock_context
         
         # Act - signature: (table_name, rows_loaded, status)
-        result = loader._update_load_status(table_name, rows_loaded, status)
+        result = loader._update_load_status_timestamp_only(table_name, rows_loaded, status)
         
         # Assert
         assert result is True
         assert mock_conn.execute.call_count >= 1  # Should call execute
         mock_conn.commit.assert_called()  # Method calls commit() explicitly
     
-    def test_update_load_status_failure(self, mock_postgres_loader_instance):
+    def test_update_load_status_timestamp_only_failure(self, mock_postgres_loader_instance):
         """Test load status update failure."""
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
@@ -212,7 +212,7 @@ class TestPostgresLoaderTrackingStatus:
         loader.analytics_engine.connect.return_value = mock_context
         
         # Act - signature: (table_name, rows_loaded, status)
-        result = loader._update_load_status(table_name, rows_loaded, status)
+        result = loader._update_load_status_timestamp_only(table_name, rows_loaded, status)
         
         # Assert - method catches exception and returns False
         assert result is False
@@ -282,8 +282,8 @@ class TestPostgresLoaderTrackingStatus:
         result = loader._ensure_tracking_record_exists(table_name)
         assert result is False
     
-    def test_load_status_update_with_transaction_rollback(self, mock_postgres_loader_instance):
-        """Test load status update with error handling."""
+    def test_update_load_status_timestamp_only_rollback(self, mock_postgres_loader_instance):
+        """Test timestamp-only load status update when the database update fails."""
         if not POSTGRES_LOADER_AVAILABLE:
             pytest.skip("PostgresLoader not available")
         
@@ -301,7 +301,7 @@ class TestPostgresLoaderTrackingStatus:
         loader.analytics_engine.connect.return_value = mock_context
         
         # Act & Assert - method should catch exception and return False
-        result = loader._update_load_status(table_name, rows_loaded, status)
+        result = loader._update_load_status_timestamp_only(table_name, rows_loaded, status)
         assert result is False
     
     @pytest.mark.skip(reason="track_performance_metrics is not part of the new architecture - metrics handled internally")

@@ -5,7 +5,15 @@
 # Preferred entry: mdc deploy api --env clinic  (from repo root)
 # Manual: .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -ClinicEnv
 # Restarts systemd unit dental-clinic-api-clinic on clinic EC2 (see api/dental-clinic-api-clinic.service).
-# Demo EC2 uses dental-clinic-api-demo or dental-clinic-api.
+# Demo EC2 unit is dental-clinic-api-demo (dental-clinic-api is not installed).
+# After rotating opendental_demo_user, deploy the env file and restart that unit.
+# Do not use -Clinic / -ClinicEnv, and do not use `mdc deploy api --env demo` (clinic only).
+#   .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_demo" -NoRestart
+#   aws ssm start-session --target i-0b7013339cf648e0f
+#   sudo systemctl restart dental-clinic-api-demo
+#   curl -s http://127.0.0.1:8000/health/db
+# Symptom if skipped: /health is 200 and /health/db is 503 password authentication failed.
+# Full note: scripts/maintenance/README.md (Quarterly).
 # Optional: backend_api.clinic_api.ec2.systemd_service in deployment_credentials.json
 # Skip post-deploy /health/db check: add -SkipHealthCheck
 # Single file (advanced): .\scripts\deployment\deploy_api_file.ps1 -FilePath "api\.env_api_clinic" -Clinic -RemoteFileName ".env"

@@ -26,8 +26,7 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
 
 3. **Reporting** – Always runs (even on partial failure)
    - Verify loads (tracking tables)
-   - Generate execution report (success/fail counts, failed tables)
-   - Send notification (Slack/email)
+   - After publish, write `etl_pipeline/logs/etl_pipeline/pipeline_execution_<timestamp>_<run>.log` (ETL, dbt tests, publish). No email or chat message.
 
 4. **dbt** – Only when ETL succeeded
    - Short-circuit: if `pipeline_success` is False, dbt is skipped.
@@ -39,12 +38,10 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
    - Auto-starts background SSM tunnel to **127.0.0.1:5433** when the port is closed
    - Manual tunnel still works: `mdc tunnel clinic-db` in a separate terminal (reused if already open)
 
-6. **Notification** – After report and publish (when configured).
-
 ## Failure Handling
 
 - **Validation**: Fails fast; no ETL if config or connections are bad.
-- **ETL**: Runs by category; per-table retries; non-large failures don’t stop the run; report/notify still run (trigger rule `ALL_DONE`).
+- **ETL**: Runs by category; per-table retries; non-large failures don’t stop the run; the execution report still runs (trigger rule `ALL_DONE`).
 - **dbt**: Runs only when `pipeline_success` is True (ShortCircuit after report).
 - **Publish**: Runs only when `publish_environment` is set and ETL succeeded; DAG passes `--ensure-tunnel` by default (auto SSM tunnel).
 
@@ -56,7 +53,7 @@ One **nightly run** = one execution of the `etl_pipeline` DAG. It consists of:
 ## How It Runs with Airflow
 
 1. **Scheduler** wakes at 9 PM Central and starts one DAG run.
-2. **Tasks** run in order: guard → schema refresh → validation → ETL → verify → report → (if success) dbt → publish → notify.
+2. **Tasks** run in order: guard → schema refresh → validation → ETL → verify → report → (if success) dbt → publish.
 3. **Paths**: Variable `project_root` = repo root on disk (native Option A).
 
 ## Option A — Native Airflow on laptop

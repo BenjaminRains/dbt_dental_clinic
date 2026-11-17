@@ -26,30 +26,44 @@ and [docs/analytics/power_bi_pilot_dataset.md](../docs/analytics/power_bi_pilot_
   [direct download](https://www.microsoft.com/en-us/download/details.aspx?id=58494).
 - Local PostgreSQL running with the `opendental_analytics` database and a populated
   `marts` schema (`dbt run` completed).
-- The read-only **`bi_user`** role (next section). Credentials live in
-  `etl_pipeline/.env_local` (`POSTGRES_BI_USER` / `POSTGRES_BI_PASSWORD` — gitignored).
+- The read-only **`bi_user`** role (next section). This is a different login from
+  `analytics_user`. Host, port, and database come from
+  [`dbt_dental_models/.env_local`](../docs/deployment/ENVIRONMENT_FILES.md)
+  (`POSTGRES_ANALYTICS_HOST` / `PORT` / `DB`). The BI username and password live in
+  `powerbi/.env_local` (`POSTGRES_BI_USER` / `POSTGRES_BI_PASSWORD`, gitignored;
+  copy from [`.env_local.template`](.env_local.template)). `mdc` does not load that file.
 
 ## 2. Create `bi_user` (one-time, superuser required)
 
 The grant script is [docs/analytics/sql/bi_user_marts_grants.sql](../docs/analytics/sql/bi_user_marts_grants.sql)
-(`USAGE` on `marts`, `SELECT` on the four pilot tables only). Run it as the `postgres`
-superuser with the password substituted from `.env_local`. From PowerShell at the repo root:
+(`USAGE` on `marts`, `SELECT` on the four pilot tables and the two Excel daily-close
+marts). Run it as the `postgres`
+superuser. The password comes from `powerbi/.env_local`, and the warehouse host and
+database come from `dbt_dental_models/.env_local`. From PowerShell at the repo root:
 
 ```powershell
-$bipw = (Select-String etl_pipeline\.env_local -Pattern '^POSTGRES_BI_PASSWORD=(.+)').Matches[0].Groups[1].Value
-$sql  = (Get-Content docs\analytics\sql\bi_user_marts_grants.sql -Raw) -replace '<strong_password>', $bipw
-$sql | & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h localhost -p 5432 -U postgres -d opendental_analytics
+function Get-EnvValue([string]$Path, [string]$Key) {
+    $line = Select-String -Path $Path -Pattern "^$Key=(.+)$" | Select-Object -First 1
+    if (-not $line) { throw "Missing $Key in $Path" }
+    return $line.Matches[0].Groups[1].Value.Trim().Trim('"')
+}
+$pgHost = Get-EnvValue dbt_dental_models\.env_local POSTGRES_ANALYTICS_HOST
+$pgPort = Get-EnvValue dbt_dental_models\.env_local POSTGRES_ANALYTICS_PORT
+$pgDb   = Get-EnvValue dbt_dental_models\.env_local POSTGRES_ANALYTICS_DB
+$bipw   = Get-EnvValue powerbi\.env_local POSTGRES_BI_PASSWORD
+$sql    = (Get-Content docs\analytics\sql\bi_user_marts_grants.sql -Raw) -replace '<strong_password>', $bipw
+$sql | & "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h $pgHost -p $pgPort -U postgres -d $pgDb
 # psql prompts for the postgres superuser password
 ```
 
 Verify least privilege:
 
 ```powershell
-# Should return a count (granted) ...
+# Same PowerShell session as above. Should return a count (granted) ...
 $env:PGPASSWORD = $bipw
-& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h localhost -U bi_user -d opendental_analytics -c "SELECT count(*) FROM marts.mart_revenue_lost;"
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h $pgHost -p $pgPort -U bi_user -d $pgDb -c "SELECT count(*) FROM marts.mart_revenue_lost;"
 # ... and this should fail with "permission denied" (not granted):
-& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h localhost -U bi_user -d opendental_analytics -c "SELECT count(*) FROM marts.mart_ar_summary;"
+& "C:\Program Files\PostgreSQL\17\bin\psql.exe" -h $pgHost -p $pgPort -U bi_user -d $pgDb -c "SELECT count(*) FROM marts.mart_ar_summary;"
 ```
 
 > **Re-grant after dbt runs.** Mart tables are dropped and recreated by
@@ -60,8 +74,11 @@ $env:PGPASSWORD = $bipw
 ## 3. Connect Power BI Desktop (local, no gateway)
 
 1. **Get Data → PostgreSQL database**.
-2. Server: `localhost`  Database: `opendental_analytics`. Data Connectivity mode: **Import**.
-3. Credentials: **Database** tab → `bi_user` + password from `.env_local`.
+2. Server and database from `dbt_dental_models/.env_local`
+   (`POSTGRES_ANALYTICS_HOST`, `POSTGRES_ANALYTICS_DB`). Data Connectivity mode: **Import**.
+3. Credentials: **Database** tab → `POSTGRES_BI_USER` and `POSTGRES_BI_PASSWORD` from
+   `powerbi/.env_local`. Power BI stores that login in the Windows credential manager.
+   The PBIP does not contain the password.
 4. In Navigator select the four pilot tables (schema `marts`):
    `mart_revenue_lost`, `mart_provider_performance`, `dim_provider`, `dim_date`.
 5. **Transform Data** and apply the Power Query cleanups in [model_guide.md](model_guide.md)
@@ -92,6 +109,11 @@ design the warehouse is **Aurora PostgreSQL in a private VPC**, so:
   to that gateway.
 - The same least-privilege `bi_user` (SELECT on named mart tables only) is used in both
   environments, so the model built locally publishes unchanged.
+- The clinic password is a Secrets Manager secret, the same pattern as other database
+  service accounts in [ENVIRONMENT_FILES.md](../docs/deployment/ENVIRONMENT_FILES.md).
+  It does not go in `etl_pipeline/.env_clinic`, `api/.env_api_clinic`, or the PBIP.
+  `analytics_user` remains the dbt and ETL login. Desktop and the gateway receive
+  `bi_user` through the Power BI credential UI.
 
 Details and cost bands: [power_bi_postgresql_access.md](../docs/analytics/power_bi_postgresql_access.md).
 
