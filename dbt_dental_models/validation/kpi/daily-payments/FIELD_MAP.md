@@ -1,7 +1,9 @@
 # Daily Payments — OD Report ↔ Mart Field Map
 
-**Goal:** Same business logic as OpenDental's Daily Payments report — this map is the spec our
-mart should implement; compare SQL and golden totals verify it on specific dates.
+**Goal:** This map is the spec `mart_daily_payments` is written to follow. Compare SQL checks
+section totals and the net on exported dates. Those totals do not show that this spec and the
+OpenDental report query are the same rules. Row-level reconciliation is separate and was not part
+of the 2026-06-26 sign-off.
 
 **Audience:** Clinic secure site validation (VPN / allowlisted). Golden exports retain **full PHI**
 (patient names, check numbers) — required for row-level reconciliation, not just totals.
@@ -27,7 +29,8 @@ Each export is a sequence of **sections** (PayType or carrier name). Within a se
 | Amount | ✓ | ✓ |
 
 Section **subtotal** row (leading empty columns) is the section amount. **Income Transfer** must
-net to **$0.00**; it is not included in `net_collections_amount`.
+total **$0.00** on the report. The compare omits that section from the report net. The mart sums
+every non-zero payment header, so a $0.00 section does not show that those rows were filtered out.
 
 **Grain:** OD detail rows are **provider splits** (and carrier splits for insurance). Mart
 `payment_count` uses **payment / claim headers**, not OD detail row count — see count rules below.
@@ -39,9 +42,9 @@ net to **$0.00**; it is not included in `net_collections_amount`.
 | Mart column | OD / staging source | Validation |
 | --- | --- | --- |
 | `payment_date` | Report date filter | Exact |
-| `patient_payment_amount` | Sum of patient section subtotals (excl. Income Transfer) | = OD `patient_sections_amount` |
+| `patient_payment_amount` | Sum of patient section subtotals. The compare omits Income Transfer from this report total. | = OD `patient_sections_amount` |
 | `insurance_payment_amount` | Sum of insurance/carrier section subtotals | = OD `insurance_sections_amount` |
-| `net_collections_amount` | Patient + insurance sections (Income Transfer excluded) | = OD `net_collections` |
+| `net_collections_amount` | Patient + insurance. The compare omits a $0 Income Transfer section from the report net. | = OD `net_collections` |
 | `total_payment_amount` | Same as net for this mart | = `patient_payment_amount` + `insurance_payment_amount` |
 | `other_payment_amount` | Patient PayTypes not in mapped clinic list (69, 70, 71, 391, …) | = staging unmapped types |
 | `income_amount` | Sum of positive `payment_amount` + positive `check_amount` | Staging-derived; not an OD section total |
@@ -59,7 +62,7 @@ Map each OD section subtotal to staging:
 | --- | --- |
 | Carrier header (`Carrier` column) | `stg_opendental__claimpayment` by `check_date` + `payment_type_id` / definition name |
 | Check, Cash, Credit Card, Cherry, Care Credit, … | `stg_opendental__payment` by `payment_date` + `payment_type_id` |
-| Income Transfer | Must total $0; investigate via paysplit / transfer PayTypes if non-zero |
+| Income Transfer | Report section must total $0. A non-zero section is a mismatch to investigate. A $0 section does not prove the mart filters those rows out. |
 
 ### Golden parser (PHI → snapshot)
 

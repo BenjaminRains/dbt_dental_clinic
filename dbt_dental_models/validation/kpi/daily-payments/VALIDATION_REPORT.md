@@ -16,14 +16,20 @@
 
 ## 1. Executive summary
 
-We validated that **`mart_daily_payments` implements the same business logic** OpenDental uses in
-its Daily Payments report for net collections. Golden CSV exports from OpenDental were compared to
-warehouse totals on three independent dates spanning weekday/weekend activity and patient-only vs
-mixed patient/insurance days.
+We compared `mart_daily_payments` to OpenDental Daily Payments exports on three clinic dates
+(a weekday with insurance, a second weekday after the mart rebuild, and a patient-only Saturday).
+After the 2026-06-24 mart rebuild and an ETL sync, the net, the patient subtotal, the insurance
+subtotal, and the exported section totals match to the cent.
 
-**Conclusion:** All three golden dates **PASS** within tolerance (two exact matches, one exact
-match after mart rebuild and ETL sync). The dbt mart is the validated logic layer. The clinic API
-(`DailyCollectionsKPI`) reads mart columns without additional aggregation or transformation.
+That is output agreement on those dates. [FIELD_MAP.md](./FIELD_MAP.md) is the rule set the mart
+is written to follow. These compares sum the report's Amount column. They do not read the
+OpenDental report query, so they do not show that the mart SQL and that query are the same rules.
+A section that totals $0.00 matches whether or not the mart filters those rows out. Income Transfer
+on 2025-10-07 is that case. Row identity is out of scope: two different rows inside one section can
+still sum to the section total.
+
+**Conclusion:** All three golden dates **PASS** (exact). The clinic API reads one mart row and does
+no further math, so the practice-manager card shows that number.
 
 **Recommendation:** Daily net collections is registered in
 `frontend/src/config/validatedKpis.ts`. Re-run golden compare after material
@@ -33,17 +39,18 @@ changes to `mart_daily_payments.sql`, staging payment models, or ETL scope.
 
 ## 2. Objective
 
-Confirm that our analytics model for **daily net collections** produces the same dollar totals as
-OpenDental's **Amount** field aggregated at section and report level, using the same implicit
-rules for:
+Confirm that `net_collections_amount` equals the OpenDental Daily Payments net on golden dates,
+at section grain where the export has sections.
+
+The field map states the rules the mart is written to follow:
 
 - Which payments and claim checks belong on a calendar date
 - How patient vs insurance sections are grouped
-- Exclusion of Income Transfer from net collections
+- How an Income Transfer section that totals $0.00 is treated
 - Treatment of zero-amount payment headers
 
-Numeric tolerance (±$10 or ±0.5%) is a **verification threshold**, not a substitute for logic
-alignment. See [KPI validation README](../README.md#tolerance).
+The golden compares test the dollars those rules produce on the exported dates. Tolerance (±$10 or
+±0.5%) is the pass bar for that dollar check. See [KPI validation README](../README.md#tolerance).
 
 ---
 
@@ -63,7 +70,7 @@ alignment. See [KPI validation README](../README.md#tolerance).
 
 | Item | Notes |
 | --- | --- |
-| Row-level Amount vs paysplit grain | OD detail rows are provider splits; mart counts payment/claim **headers**. Documented in [FIELD_MAP.md](./FIELD_MAP.md). Optional drill-down: `compare/compare_daily_payments_row_level.sql`. |
+| Row-level Amount vs paysplit grain | OD detail rows are provider splits; mart counts payment/claim **headers**. Not part of this sign-off. A PASS does not mean each report line was matched. Drill-down: `compare/compare_daily_payments_row_level.sql`. |
 | API integration test | API performs `SELECT` from mart; validated by inheritance. No separate Pydantic business logic. |
 | Same-day ETL freshness | Late-posted payments may lag until ETL runs. Documented on 2026-06-24. |
 | `int_insurance_payment_allocated` | Uses `insurance_finalized_date`, not `check_date` — not used for this KPI. |
@@ -77,10 +84,11 @@ alignment. See [KPI validation README](../README.md#tolerance).
 
 ---
 
-## 4. Business rules (logic specification)
+## 4. Business rules (written spec)
 
-The mart must mirror OpenDental Daily Payments. Full field mapping:
-[FIELD_MAP.md](./FIELD_MAP.md).
+[FIELD_MAP.md](./FIELD_MAP.md) is the spec the mart is written to follow. The golden dates check
+the totals that spec produces. They do not, by themselves, show that each rule below is the rule
+in the OpenDental report query.
 
 ### 4.1 Date assignment
 
@@ -99,13 +107,15 @@ Where:
 
 - **Patient:** sum of non-zero `payment_amount` on `payment_date`
 - **Insurance:** sum of `check_amount` on `check_date` (from claim payment table, not patient PayType 261/303/464)
-- **Income Transfer:** OD section must net to $0; excluded from `net_collections_amount`
-- **Zero-amount headers:** excluded from counts; do not affect dollar totals
+- **Income Transfer:** the OpenDental section must total $0.00. The compare drops it from the report net. The mart sums every non-zero payment header. A $0.00 section matches either way, so these dates do not show that the mart excludes those rows.
+- **Zero-amount headers:** the mart count uses `payment_amount <> 0`. A zero does not change the dollar total whether or not the row is filtered. The OpenDental figure on these dates is the amount.
 
 ### 4.3 Patient PayType mapping (clinic)
 
-Standard patient types (included in `patient_payment_amount`, not `other_payment_amount`):
+Standard patient types, used to split `other_payment_amount` out of the patient sum:
 69, 70, 71, 391, 412, 417, 574, 634, 676 (Check, Cash, Credit Card, Care Credit, Cherry, etc.).
+`net_collections_amount` still includes every non-zero patient header. These golden dates do not
+contain an unmapped pay type, so the list is not what the totals tested.
 
 ### 4.4 OD report parameters (all golden dates)
 
@@ -126,7 +136,7 @@ Standard patient types (included in `patient_payment_amount`, not `other_payment
    (see [scripts/README.md](./scripts/README.md) — PHI-free snapshot for compare SQL)
 4. Run warehouse compare SQL in DBeaver (`opendental_analytics`, schema `marts`).
 5. Record results in `findings/{date}.md`.
-6. Promote to `within_tolerance` when logic and totals align.
+6. Promote to `within_tolerance` when the golden totals match. Record which rules those dates do not isolate.
 
 ### 5.2 Compare layers
 
@@ -176,7 +186,7 @@ Both OD and mart zero → PASS.
 2. **Mart logic:** Prior mart omitted insurance claim payments and mis-filtered patient PayTypes.
    Rebuilt `mart_daily_payments` to union patient staging + claim payment staging.
 
-**Outcome:** Staging and mart match OD after fix. Status `within_tolerance`.
+**Outcome:** Staging and mart match the report sections after the fix. The missing claim-payment path and the patient-header grain were necessary for this date. Rules a $0.00 section cannot falsify are unchanged by that result. Status `within_tolerance`.
 
 ### 6.3 Test case: 2025-10-07 (mixed activity)
 
@@ -191,7 +201,7 @@ Both OD and mart zero → PASS.
 | Cash | $180.00 | payment type 70 |
 | Credit Card | $7,843.37 | payment type 71 |
 | Care Credit | $289.40 | payment type 391 |
-| Income Transfer | $0.00 | excluded |
+| Income Transfer | $0.00 | Section totals $0.00. The compare omits it from the report net. The mart has no separate exclusion, so this row does not show one. |
 | **Net** | **$21,747.30** | `net_collections_amount` |
 
 **Outcome:** Exact match. Status `within_tolerance`.
@@ -284,8 +294,8 @@ Every row should be **PASS**.
 | 2025-10-07 | $21,747.30 | $21,747.30 | $8,577.82 | $13,169.48 | 59 | PASS |
 | 2025-11-08 | $3,791.65 | $3,791.65 | $3,791.65 | $0.00 | 7 | PASS |
 
-**Sign-off:** Mart vs OD validates dbt logic. API SQL compare validates the service query. Live
-API smoke test validates the full path the practice manager sees.
+**Sign-off:** Mart vs OD shows the totals match on the golden dates. The service query is one
+`SELECT` of that mart row. The live smoke test shows the practice manager receives that row.
 
 ---
 
@@ -297,6 +307,7 @@ API smoke test validates the full path the practice manager sees.
 | ETL delay on current day | Do not claim same-day validation until ETL completes |
 | OD report filter drift | Document filters in golden manifest; screenshot optional |
 | Logic change in dbt | Re-run golden compare on at least one weekday + one insurance day |
+| Rules these dates do not isolate | Income-transfer exclusion, zero-dollar header exclusion, unearned turned off, and an unmapped pay type are in the field map. A $0.00 section matches either way. Row-level compare is out of scope. |
 
 **Suggested re-validation triggers:** change to `mart_daily_payments.sql`, payment/claimpayment
 staging, or OD report version upgrade.
@@ -312,14 +323,18 @@ staging, or OD report version upgrade.
 | ≥1 weekday with insurance validated | Yes (2025-10-07, 2026-06-24) |
 | ≥1 alternate scenario (weekend / patient-only) | Yes (2025-11-08) |
 | Mart vs OD net collections within tolerance | Yes (exact on all three dates) |
+| Section totals match on the exported days | Yes (2025-10-07, 2026-06-24; 2025-11-08 is one patient section) |
 | Mart vs staging reconciliation | Yes |
 | API SQL matches mart on golden dates | Yes — `compare/compare_daily_collections_api.sql` |
 | Live API smoke on golden dates | Yes — **3/3 PASS** (2026-06-26 local, `verify_daily_collections.py`) |
+| OpenDental report query compared to mart SQL | No. The sign-off sums the exported Amount column. |
+| Each field-map rule isolated by a date that would fail if the rule differed | Partial. 2026-06-24 required the claim-payment path and patient-header grain. Income transfer, zero-dollar counts, unearned off, and unmapped pay types were not isolated. |
 | Findings recorded per golden date | Yes |
 
-**Final status:** **`within_tolerance` — workflow complete.** `mart_daily_payments.net_collections_amount` is validated
-against OpenDental Daily Payments on golden dates 2026-06-24, 2025-10-07, and 2025-11-08, through
-mart, API, and frontend (`validatedKpis.ts` / Practice Manager Home).
+**Final status:** **`within_tolerance` — totals workflow complete.** On 2026-06-24, 2025-10-07, and
+2025-11-08, `mart_daily_payments.net_collections_amount` equals the OpenDental Daily Payments net,
+and the API returns that row to Practice Manager Home. The field map remains the written spec.
+These dates do not show that the mart SQL and the OpenDental report query are the same rules.
 
 ---
 

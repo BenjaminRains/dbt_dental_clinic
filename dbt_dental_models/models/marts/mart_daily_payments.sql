@@ -8,18 +8,18 @@
 }}
 
 /*
-Daily payments KPI — aligned with OpenDental Daily Payments report.
+Daily payments KPI, written to the Daily Payments field map.
 
 Grain:
 - One row per calendar payment_date.
 
-Sources (validated 2026-06-24 vs OD golden export):
+Sources:
 - Patient / practice payments: stg_opendental__payment on PayDate (payment_date).
-- Insurance claim payments (e.g. Metlife EFT): stg_opendental__claimpayment on CheckDate (check_date).
+- Insurance claim payments: stg_opendental__claimpayment on CheckDate (check_date).
 
-OD Daily Payments nets income-transfer sections to zero; non-zero patient payment headers plus
-claim check totals match the report total. Zero-amount payment headers are excluded from net
-collections and counts (they do not change dollar totals).
+Golden dates 2026-06-24, 2025-10-07, and 2025-11-08 match OpenDental Daily Payments section totals.
+That is output agreement. See validation/kpi/daily-payments/VALIDATION_REPORT.md.
+Zero-amount payment headers are omitted from the count. A zero does not change the dollar total.
 
 PayType mapping (clinic patient types on payment.PayType):
 - Patient: 69, 70, 71, 391, 412, 417, 574, 634, 676 (Check, Cash, Credit Card, Cherry, etc.)

@@ -462,7 +462,7 @@ Use `validation/kpi/` when the benchmark is an **OpenDental standard report**. T
 layers — (1) golden vs `staging`, (2) `staging` vs `marts`, (3) `marts` vs golden, (4) API SQL /
 frontend vs `marts` on the same dates. See [validation/kpi/README.md](./kpi/README.md#how-validation-works).
 
-**Example (complete):** [daily-payments/VALIDATION_REPORT.md](./kpi/daily-payments/VALIDATION_REPORT.md) — three dates vs `marts.mart_daily_payments`.
+**Example (totals complete):** [daily-payments/VALIDATION_REPORT.md](./kpi/daily-payments/VALIDATION_REPORT.md) — three dates of section and net agreement vs `marts.mart_daily_payments`. The report states which rules those dates do not isolate.
 
 Each KPI has its own folder (`daily-payments/`, `production-and-income/`, …) with
 `compare/`, `golden/`, `findings/`, and `FIELD_MAP.md`.

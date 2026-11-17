@@ -141,10 +141,11 @@ const KpiValidation: React.FC = () => {
                     >
                         Clinic role homes follow <strong>Design Principle #0</strong>: a metric may
                         appear only after its registry status is <code>within_tolerance</code>. Until
-                        then it stays on legacy report routes. Validation proves{' '}
-                        <strong>logic parity</strong> with OpenDental standard reports—same
-                        definitions, filters, exclusions, and grain—not a soft &quot;looks right&quot;
-                        label.
+                        then it stays on legacy report routes. <code>within_tolerance</code> means the
+                        golden-date totals match the OpenDental report within the registry bar. The
+                        field map is the rule set we claim. A matching total is evidence those rules
+                        produced the same dollars on the exported dates. It is not a reading of the
+                        OpenDental report source.
                     </Typography>
                     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1, mt: 2 }}>
                         {[

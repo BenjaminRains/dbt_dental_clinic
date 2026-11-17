@@ -499,6 +499,13 @@ const DailyNetCollections: React.FC = () => {
                         Boundary
                     </Typography>
                     <Typography variant="body1" paragraph sx={{ maxWidth: 760 }}>
+                        The sign-off is section totals and the net on three clinic dates. The field map
+                        is the rule set the mart is written to follow. The compares sum the exported
+                        Amount column. They do not read the OpenDental report query. Income transfer on
+                        7 October 2025 is $0.00, so that date matches whether or not those rows are
+                        filtered out. Row identity was not part of the check.
+                    </Typography>
+                    <Typography variant="body1" paragraph sx={{ maxWidth: 760 }}>
                         This sign-off is Daily Payments on clinic data. Production and Income is a
                         different report: it sums paysplits on <code>DatePay</code> and drops unearned
                         types whose definition item value is <code>X</code>. In 2025 that exclusion

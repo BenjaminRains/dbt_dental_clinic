@@ -6,8 +6,10 @@ models:
       Daily payments KPI for OpenDental Daily Payments reconciliation.
 
       Patient collections from stg_opendental__payment (PayDate). Insurance collections from
-      stg_opendental__claimpayment (CheckDate). Validated against OD Daily Payments export
-      2026-06-24 (see validation/kpi/daily-payments/compare/investigate_daily_collections_2026-06-24.sql).
+      stg_opendental__claimpayment (CheckDate). Golden dates 2026-06-24, 2025-10-07, and
+      2025-11-08 match OpenDental Daily Payments section totals. That sign-off is output
+      agreement, not a comparison of the report query to this SQL. See
+      validation/kpi/daily-payments/VALIDATION_REPORT.md.
     config:
       materialized: table
       schema: marts
@@ -31,7 +33,7 @@ models:
       - name: refund_amount
         description: "Sum of negative amounts from patient payments and claim checks."
       - name: net_collections_amount
-        description: "Daily net collections aligned with OD Daily Payments: patient_payment_amount + insurance_payment_amount."
+        description: "patient_payment_amount + insurance_payment_amount. Golden-date section totals match OD Daily Payments. See the daily-payments validation report."
       - name: payment_count
         description: "Non-zero patient payment count plus insurance claim payment count."
       - name: patient_payment_count
