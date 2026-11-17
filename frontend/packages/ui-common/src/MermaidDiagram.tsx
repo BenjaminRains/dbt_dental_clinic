@@ -6,93 +6,74 @@ interface MermaidDiagramProps {
     id?: string;
 }
 
+let renderQueue: Promise<void> = Promise.resolve();
+let renderSeq = 0;
+
+function enqueue<T>(task: () => Promise<T>): Promise<T> {
+    const run = renderQueue.then(task, task);
+    renderQueue = run.then(
+        () => undefined,
+        () => undefined,
+    );
+    return run;
+}
+
 const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, id = 'mermaid-diagram' }) => {
     const mermaidRef = useRef<HTMLDivElement>(null);
     const [isLoaded, setIsLoaded] = useState(false);
     const [error, setError] = useState<string | null>(null);
 
     useEffect(() => {
-        const loadMermaid = async () => {
-            if (!mermaidRef.current) return;
+        let cancelled = false;
+        const seq = ++renderSeq;
+        const uniqueId = `mdc${id.replace(/[^A-Za-z0-9]/g, '')}${seq}`;
 
-            try {
-                // @ts-ignore - mermaid types may not be available at compile time
-                const mermaidModule = await import('mermaid');
-                const mermaid = mermaidModule.default || mermaidModule;
+        enqueue(async () => {
+            if (cancelled || !mermaidRef.current) return;
 
-                // Initialize Mermaid
-                mermaid.initialize({
-                    startOnLoad: false,
-                    securityLevel: 'strict',
-                    theme: 'default',
-                    flowchart: {
-                        useMaxWidth: true,
-                        htmlLabels: true,
-                        curve: 'basis',
-                        nodeSpacing: 40,
-                        rankSpacing: 50,
-                        padding: 16,
-                    },
-                    themeVariables: {
-                        primaryColor: '#1976d2',
-                        primaryTextColor: '#fff',
-                        primaryBorderColor: '#1565c0',
-                        lineColor: '#666',
-                        secondaryColor: '#e3f2fd',
-                        tertiaryColor: '#f5f5f5',
-                        fontSize: '16px',
-                    },
-                });
+            // @ts-ignore - mermaid types may not be available at compile time
+            const mermaidModule = await import('mermaid');
+            const mermaid = mermaidModule.default || mermaidModule;
 
-                // Clear previous content
-                mermaidRef.current.innerHTML = '';
+            mermaid.initialize({
+                startOnLoad: false,
+                securityLevel: 'strict',
+                theme: 'default',
+                flowchart: {
+                    useMaxWidth: true,
+                    htmlLabels: true,
+                    curve: 'basis',
+                    nodeSpacing: 40,
+                    rankSpacing: 50,
+                    padding: 16,
+                },
+                themeVariables: {
+                    primaryColor: '#1976d2',
+                    primaryTextColor: '#fff',
+                    primaryBorderColor: '#1565c0',
+                    lineColor: '#666',
+                    secondaryColor: '#e3f2fd',
+                    tertiaryColor: '#f5f5f5',
+                    fontSize: '16px',
+                },
+            });
 
-                // Create a unique ID for this diagram
-                const uniqueId = `${id}-${Date.now()}`;
+            const { svg } = await mermaid.render(uniqueId, chart.trim());
+            if (cancelled || !mermaidRef.current) return;
+            mermaidRef.current.innerHTML = svg;
+            setIsLoaded(true);
+            setError(null);
+        }).catch((renderError) => {
+            if (cancelled) return;
+            console.error('Mermaid rendering error:', renderError);
+            setError('Failed to render diagram');
+            setIsLoaded(false);
+        });
 
-                // Create a new element with the mermaid class
-                const diagramElement = document.createElement('div');
-                diagramElement.className = 'mermaid';
-                diagramElement.id = uniqueId;
-                diagramElement.textContent = chart.trim();
-
-                mermaidRef.current.appendChild(diagramElement);
-
-                // Render the diagram
-                try {
-                    await mermaid.run({
-                        nodes: [diagramElement],
-                    });
-                    setIsLoaded(true);
-                    setError(null);
-                } catch (renderError) {
-                    console.error('Mermaid rendering error:', renderError);
-                    setError('Failed to render diagram');
-                    setIsLoaded(false);
-                }
-            } catch (error) {
-                console.error('Failed to load mermaid:', error);
-                setError('Failed to load Mermaid library');
-                setIsLoaded(false);
-            }
+        return () => {
+            cancelled = true;
         };
-
-        loadMermaid();
     }, [chart, id]);
-
-    if (error) {
-        return (
-            <Box
-                sx={{
-                    p: 2,
-                    textAlign: 'center',
-                    color: 'error.main',
-                }}
-            >
-                {error}
-            </Box>
-        );
-    }
 
     return (
         <Box
@@ -103,20 +84,18 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, id = 'mermaid-di
                 alignItems: 'center',
                 width: '100%',
                 overflowX: 'auto',
-                minHeight: isLoaded ? 'auto' : '400px',
-                '& .mermaid': {
-                    display: 'block',
-                    width: '100%',
-                },
+                minHeight: isLoaded ? 'auto' : 160,
+                color: error ? 'error.main' : 'inherit',
                 '& svg': {
                     width: '100% !important',
                     maxWidth: '100%',
                     height: 'auto',
                 },
             }}
-        />
+        >
+            {error}
+        </Box>
     );
 };
 
 export default MermaidDiagram;
-

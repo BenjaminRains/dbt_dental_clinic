@@ -1,5 +1,5 @@
 import React from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link as RouterLink, useNavigate } from 'react-router-dom';
 import {
     Box,
     Container,
@@ -52,6 +52,7 @@ const SIGNED_OFF_KPIS = [
         odMenuPath: 'Reports → Standard → Daily → Payments',
         signedOff: '2026-06-26',
         reportHref: `${GITHUB_MAIN}/dbt_dental_models/validation/kpi/daily-payments/VALIDATION_REPORT.md`,
+        walkthroughTo: '/daily-net-collections',
     },
     {
         name: 'Daily production by procedure',
@@ -305,17 +306,29 @@ const KpiValidation: React.FC = () => {
                                         <Typography variant="caption" color="text.secondary" display="block" sx={{ mb: 2 }}>
                                             Signed off {kpi.signedOff}
                                         </Typography>
-                                        <Button
-                                            size="small"
-                                            component={Link}
-                                            href={kpi.reportHref}
-                                            target="_blank"
-                                            rel="noopener noreferrer"
-                                            startIcon={<GitHub />}
-                                            sx={{ textTransform: 'none' }}
-                                        >
-                                            Validation report
-                                        </Button>
+                                        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1 }}>
+                                            <Button
+                                                size="small"
+                                                component={Link}
+                                                href={kpi.reportHref}
+                                                target="_blank"
+                                                rel="noopener noreferrer"
+                                                startIcon={<GitHub />}
+                                                sx={{ textTransform: 'none' }}
+                                            >
+                                                Validation report
+                                            </Button>
+                                            {'walkthroughTo' in kpi ? (
+                                                <Button
+                                                    size="small"
+                                                    component={RouterLink}
+                                                    to={kpi.walkthroughTo}
+                                                    sx={{ textTransform: 'none' }}
+                                                >
+                                                    Validation write-up
+                                                </Button>
+                                            ) : null}
+                                        </Box>
                                     </CardContent>
                                 </Card>
                             </Grid>

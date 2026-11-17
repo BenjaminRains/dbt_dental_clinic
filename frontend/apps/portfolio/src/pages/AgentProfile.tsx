@@ -219,6 +219,12 @@ Parallel pipeline – Consult Audio Whisper Pipeline:
                         </Link>
                     </li>
                     <li>
+                        Daily net collections:{' '}
+                        <Link href="https://dbtdentalclinic.com/daily-net-collections" target="_blank" rel="noopener noreferrer">
+                            https://dbtdentalclinic.com/daily-net-collections
+                        </Link>
+                    </li>
+                    <li>
                         GitHub Repo (full system):{' '}
                         <Link href="https://github.com/BenjaminRains/dbt_dental_clinic" target="_blank" rel="noopener noreferrer">
                             https://github.com/BenjaminRains/dbt_dental_clinic
