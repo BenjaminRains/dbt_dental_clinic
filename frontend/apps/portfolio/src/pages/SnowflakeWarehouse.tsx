@@ -90,7 +90,7 @@ const SnowflakeWarehouse: React.FC = () => {
                     px: 2,
                 }}
             >
-                <Container maxWidth="lg">
+                <Container maxWidth="lg" sx={{ textAlign: 'left' }}>
                     <Button
                         startIcon={<ArrowBack />}
                         onClick={() => navigate('/')}
@@ -107,11 +107,12 @@ const SnowflakeWarehouse: React.FC = () => {
                             fontWeight: 700,
                             fontSize: { xs: '2rem', md: '3rem' },
                             mb: 2,
+                            textAlign: 'center',
                         }}
                     >
                         Snowflake payments warehouse
                     </Typography>
-                    <Typography variant="h6" sx={{ opacity: 0.95, maxWidth: '800px' }}>
+                    <Typography variant="h6" sx={{ opacity: 0.95, maxWidth: '800px', textAlign: 'left' }}>
                         One dbt project builds daily collections and payment-line detail on
                         Postgres and on a small Snowflake warehouse. Synthetic demo data only.
                         Daily collections match on every date.
@@ -119,9 +120,9 @@ const SnowflakeWarehouse: React.FC = () => {
                 </Container>
             </Box>
 
-            <Container maxWidth="lg" sx={{ py: 6 }}>
+            <Container maxWidth="lg" sx={{ py: 6, textAlign: 'left' }}>
                 <Box sx={{ mb: 6 }}>
-                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3, textAlign: 'center' }}>
                         What it produces
                     </Typography>
                     <Typography variant="body1" paragraph sx={{ fontSize: '1.1rem', lineHeight: 1.8 }}>
@@ -152,7 +153,7 @@ const SnowflakeWarehouse: React.FC = () => {
                 <Divider sx={{ my: 6 }} />
 
                 <Box sx={{ mb: 6 }}>
-                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3, textAlign: 'center' }}>
                         Architecture
                     </Typography>
                     <Typography variant="body1" color="text.secondary" sx={{ mb: 3, maxWidth: 720 }}>
@@ -212,7 +213,7 @@ const SnowflakeWarehouse: React.FC = () => {
                 <Divider sx={{ my: 6 }} />
 
                 <Box sx={{ mb: 6 }}>
-                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3, textAlign: 'center' }}>
                         Parity proof
                     </Typography>
                     <Typography variant="body1" paragraph sx={{ maxWidth: 720 }}>
@@ -247,7 +248,7 @@ const SnowflakeWarehouse: React.FC = () => {
                 <Divider sx={{ my: 6 }} />
 
                 <Box sx={{ mb: 6 }}>
-                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3, textAlign: 'center' }}>
                         Cost and access
                     </Typography>
                     <Grid container spacing={3}>
@@ -300,7 +301,7 @@ const SnowflakeWarehouse: React.FC = () => {
                 <Divider sx={{ my: 6 }} />
 
                 <Box sx={{ mb: 4 }}>
-                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3 }}>
+                    <Typography variant="h4" gutterBottom sx={{ fontWeight: 'bold', mb: 3, textAlign: 'center' }}>
                         Source
                     </Typography>
                     <Grid container spacing={2}>
