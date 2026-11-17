@@ -242,6 +242,8 @@ const SnowflakeWarehouse: React.FC = () => {
                     </Table>
                     <Typography variant="body2" color="text.secondary">
                         Payment-line detail uses the same payment-split row count as the export.
+                        This match is the synthetic database copied to Snowflake. It is not the clinic
+                        sign-off of daily net collections.
                     </Typography>
                 </Box>
 

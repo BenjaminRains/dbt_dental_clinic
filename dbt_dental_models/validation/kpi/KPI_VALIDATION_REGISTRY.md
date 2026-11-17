@@ -8,11 +8,13 @@ Maps dashboard KPIs and mart models to OpenDental standard reports. Each row's *
 
 
 
-The registry tracks **logic parity**, not just number matching: `our_field_or_measure` is what we
+`our_field_or_measure` is the measure we claim equals the OpenDental definition. Tolerance checks
 
-claim equals OD's definition; `known_deltas` lists accepted rule or timing differences; tolerance
+that golden-date totals agree. A passing total is evidence on the exported dates. `known_deltas`
 
-is the check that implemented logic produces the same result as OD on golden dates.
+records accepted differences and rules those dates do not isolate. Comparing the OpenDental report
+
+query to the mart SQL is a separate step, and a totals sign-off does not include it.
 
 
 
@@ -32,7 +34,7 @@ is the check that implemented logic produces the same result as OD on golden dat
 
 | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 
-| within_tolerance | [daily-payments](./daily-payments/) | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Payments | Reports → Standard → Daily → Payments | ±0.5% or ±$10 | **Complete (2026-06-26):** 3 golden dates; layers 1–4 PASS; [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md). ETL before same-day validate; income transfers net to $0. |
+| within_tolerance | [daily-payments](./daily-payments/) | Daily net collections | `mart_daily_payments` | `net_collections_amount` | Payments | Reports → Standard → Daily → Payments | ±0.5% or ±$10 | **Totals (2026-06-26):** 3 golden dates, section totals exact, layers 1–4 PASS. Sign-off is output agreement, not a comparison of the OpenDental report query to the mart SQL. Income transfer on 2025-10-07 is $0, so exclusion is not isolated. ETL before same-day validate. [VALIDATION_REPORT.md](./daily-payments/VALIDATION_REPORT.md). |
 
 | within_tolerance | [daily-production-by-procedure](./daily-production-by-procedure/) | Daily production by procedure | `mart_daily_production_by_procedure` | `sum(total_fees)` by `production_date` / code | Production by Procedure | Reports → Standard → Daily → Production by Procedure | ±0.5% or ±$10 | **Complete (2026-07-16):** 3 golden dates; layers 0–4; [VALIDATION_REPORT.md](./daily-production-by-procedure/VALIDATION_REPORT.md). DateComplete + status 2; Sundays excluded. |
 

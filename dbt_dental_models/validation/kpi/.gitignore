@@ -5,7 +5,8 @@
 # clinic financial detail. Keep on clinic secure workstations only.
 #
 # Versioned in git: compare/*.sql, scripts/*.py, README.md, FIELD_MAP.md,
-# golden_manifest.example.yml (templates with no real data), .gitkeep stubs.
+# VALIDATION_REPORT.md, golden_manifest.example.yml (templates with no real data),
+# .gitkeep stubs.
 
 **/findings/**
 **/golden/**
@@ -18,3 +19,7 @@
 
 # Folder stubs only (contents above stay ignored)
 !**/findings/.gitkeep
+
+# Sign-off docs stay in git. Do not let a broader pattern above hide them.
+!**/VALIDATION_REPORT.md
+!**/FIELD_MAP.md

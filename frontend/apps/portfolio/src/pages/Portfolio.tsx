@@ -42,6 +42,7 @@ import {
     Verified,
     AcUnit,
     Terminal,
+    Payments,
 } from '@mui/icons-material';
 
 const GITHUB = 'https://github.com/BenjaminRains/dbt_dental_clinic';
@@ -171,6 +172,14 @@ const PRODUCTION_CAPABILITIES: CapabilityLink[] = [
         icon: <AcUnit />,
         href: '/snowflake',
         linkLabel: 'Warehouse write-up',
+        external: false,
+    },
+    {
+        title: 'Daily net collections',
+        desc: 'Clinic sign-off of daily net collections against OpenDental Daily Payments. Three golden dates match to the cent.',
+        icon: <Payments />,
+        href: '/daily-net-collections',
+        linkLabel: 'Validation write-up',
         external: false,
     },
 ];
@@ -545,6 +554,19 @@ const PortfolioV4: React.FC = () => {
                                 </Box>
                                 <Typography variant="body2" color="text.secondary">
                                     One dbt project for daily collections and payment detail on Postgres and Snowflake. Daily totals match on every date.
+                                </Typography>
+                            </CardContent>
+                        </Card>
+                    </Grid>
+                    <Grid item xs={12} sm={6} md={3}>
+                        <Card component={RouterLink} to="/daily-net-collections" variant="outlined" sx={{ height: '100%', textDecoration: 'none', color: 'inherit', display: 'block', '&:hover': { boxShadow: 3 } }}>
+                            <CardContent>
+                                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 1 }}>
+                                    <Payments sx={{ color: '#5e7086' }} />
+                                    <Typography variant="subtitle2" fontWeight="bold">Daily net collections</Typography>
+                                </Box>
+                                <Typography variant="body2" color="text.secondary">
+                                    Clinic sign-off against OpenDental Daily Payments. Three golden dates match to the cent.
                                 </Typography>
                             </CardContent>
                         </Card>
