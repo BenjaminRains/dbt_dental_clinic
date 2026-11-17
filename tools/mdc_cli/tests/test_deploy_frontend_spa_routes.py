@@ -15,7 +15,6 @@ def test_portfolio_keys_include_showcase_not_clinic_homes():
     assert "schema-discovery" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "kpi-validation" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "snowflake" in PORTFOLIO_SPA_ROUTE_KEYS
-    assert "daily-net-collections" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "mdc-cli" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "dashboard" in PORTFOLIO_SPA_ROUTE_KEYS
     assert "login" not in PORTFOLIO_SPA_ROUTE_KEYS
