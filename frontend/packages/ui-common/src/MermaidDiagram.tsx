@@ -66,6 +66,9 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, id = 'mermaid-di
         }).catch((renderError) => {
             if (cancelled) return;
             console.error('Mermaid rendering error:', renderError);
+            if (mermaidRef.current) {
+                mermaidRef.current.innerHTML = '';
+            }
             setError('Failed to render diagram');
             setIsLoaded(false);
         });
@@ -76,24 +79,26 @@ const MermaidDiagram: React.FC<MermaidDiagramProps> = ({ chart, id = 'mermaid-di
     }, [chart, id]);
 
     return (
-        <Box
-            ref={mermaidRef}
-            sx={{
-                display: 'flex',
-                justifyContent: 'center',
-                alignItems: 'center',
-                width: '100%',
-                overflowX: 'auto',
-                minHeight: isLoaded ? 'auto' : 160,
-                color: error ? 'error.main' : 'inherit',
-                '& svg': {
-                    width: '100% !important',
-                    maxWidth: '100%',
-                    height: 'auto',
-                },
-            }}
-        >
-            {error}
+        <Box sx={{ width: '100%' }}>
+            {error ? (
+                <Box sx={{ color: 'error.main', textAlign: 'center', py: 2 }}>{error}</Box>
+            ) : null}
+            <Box
+                ref={mermaidRef}
+                sx={{
+                    display: error ? 'none' : 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    width: '100%',
+                    overflowX: 'auto',
+                    minHeight: isLoaded || error ? 'auto' : 160,
+                    '& svg': {
+                        width: '100% !important',
+                        maxWidth: '100%',
+                        height: 'auto',
+                    },
+                }}
+            />
         </Box>
     );
 };
