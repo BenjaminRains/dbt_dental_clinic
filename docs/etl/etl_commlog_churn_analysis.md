@@ -45,7 +45,7 @@ This investigation identified a critical issue in the ETL pipeline's raw data in
 
 ### Documentation
 
-- `etl_pipeline/docs/PIPELINE_ARCHITECTURE.md` - Overall ETL pipeline architecture and data flow
+- `docs/etl/PIPELINE_ARCHITECTURE.md` - Overall ETL pipeline architecture and data flow
 - `docs/etl/DATA_CONTRACTS.md` - Data contract specifications and table configuration structure
 - `etl_pipeline/README.md` - ETL pipeline overview and component descriptions
 

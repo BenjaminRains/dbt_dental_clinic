@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document describes the **Python objects** and **data contracts** that flow through the OpenDental ETL pipeline. While [PIPELINE_ARCHITECTURE.md](../../etl_pipeline/docs/PIPELINE_ARCHITECTURE.md) explains the system architecture and component interactions, this document focuses on the **data structures** themselves—what they contain, how they're passed between components, and their lifecycle.
+This document describes the **Python objects** and **data contracts** that flow through the OpenDental ETL pipeline. While [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md) explains the system architecture and component interactions, this document focuses on the **data structures** themselves—what they contain, how they're passed between components, and their lifecycle.
 
 Understanding these data contracts is essential for:
 - **Development**: Knowing what objects to create and consume
@@ -1235,7 +1235,7 @@ This document provides the complete data contract specifications for the OpenDen
 - Flexible dictionary structures
 - Minimal code changes needed
 
-For architectural overview and component interactions, see [PIPELINE_ARCHITECTURE.md](../../etl_pipeline/docs/PIPELINE_ARCHITECTURE.md).
+For architectural overview and component interactions, see [PIPELINE_ARCHITECTURE.md](PIPELINE_ARCHITECTURE.md).
 
 ---
 

@@ -16,7 +16,7 @@ This document outlines the strategic development plan for building out analytica
 **Strategic Value**: Operational parity with $500/month SaaS platforms, unlimited customization ✅ ACHIEVED
 
 **Related Documentation**:
-- Technical Architecture: `etl_pipeline/docs/PIPELINE_ARCHITECTURE.md`
+- Technical Architecture: `docs/etl/PIPELINE_ARCHITECTURE.md`
 - Data Contracts: `docs/etl/DATA_CONTRACTS.md`
 - Airflow Orchestration: `airflow/README.md`
 
