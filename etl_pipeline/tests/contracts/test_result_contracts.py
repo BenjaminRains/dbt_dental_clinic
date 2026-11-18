@@ -2,7 +2,7 @@
 Result Contract Tests
 
 Tests that verify result dictionaries from orchestration and processing
-operations match the documented contracts in DATA_CONTRACTS.md.
+operations match the documented contracts in docs/etl/DATA_CONTRACTS.md.
 
 These tests validate:
 - Processing results from PipelineOrchestrator

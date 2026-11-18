@@ -46,7 +46,7 @@ This investigation identified a critical issue in the ETL pipeline's raw data in
 ### Documentation
 
 - `etl_pipeline/docs/PIPELINE_ARCHITECTURE.md` - Overall ETL pipeline architecture and data flow
-- `etl_pipeline/docs/DATA_CONTRACTS.md` - Data contract specifications and table configuration structure
+- `docs/etl/DATA_CONTRACTS.md` - Data contract specifications and table configuration structure
 - `etl_pipeline/README.md` - ETL pipeline overview and component descriptions
 
 ### Database Schemas
@@ -1055,7 +1055,7 @@ This investigation revealed a fundamental pattern that can be applied across all
 **Implementation**:
 - Add contract validation to `PostgresLoader._build_upsert_sql()`
 - Create contract definitions in `etl_pipeline/config/tables.yml`
-- Document contract requirements in `etl_pipeline/docs/DATA_CONTRACTS.md`
+- Document contract requirements in `docs/etl/DATA_CONTRACTS.md`
 
 ### 2. Turn Churn into an Ongoing Pipeline Health Metric
 
@@ -1146,7 +1146,7 @@ Tracked in [TODO.md — ETL Raw Ingestion Contract & Pipeline Health Metrics](..
 | Item | Status |
 | --- | --- |
 | Raw ingestion contract in `tables.yml` | ❌ Pending |
-| `etl_pipeline/docs/DATA_CONTRACTS.md` | ❌ Pending |
+| `docs/etl/DATA_CONTRACTS.md` | ❌ Pending |
 | `dbt_dental_models/models/monitoring/raw_table_churn_metrics.sql` | ❌ Pending |
 | Churn alerts in `etl_pipeline/monitoring/pipeline_health.py` | ❌ Pending |
 | `etl_pipeline/docs/PIPELINE_MONITORING.md` | ❌ Pending |

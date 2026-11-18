@@ -2,7 +2,7 @@
 Metadata Contract Tests
 
 Tests that verify metadata dictionaries returned from extraction and load
-operations match the documented contracts in DATA_CONTRACTS.md.
+operations match the documented contracts in docs/etl/DATA_CONTRACTS.md.
 
 These tests validate:
 - Extraction metadata from SimpleMySQLReplicator

@@ -2,7 +2,7 @@
 Table Configuration Contract Tests
 
 Tests that verify table configuration dictionaries from tables.yml
-match the documented contract in DATA_CONTRACTS.md.
+match the documented contract in docs/etl/DATA_CONTRACTS.md.
 
 These tests validate:
 - Required fields are present

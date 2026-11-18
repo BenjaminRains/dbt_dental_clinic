@@ -17,7 +17,7 @@ This document outlines the strategic development plan for building out analytica
 
 **Related Documentation**:
 - Technical Architecture: `etl_pipeline/docs/PIPELINE_ARCHITECTURE.md`
-- Data Contracts: `etl_pipeline/docs/DATA_CONTRACTS.md`
+- Data Contracts: `docs/etl/DATA_CONTRACTS.md`
 - Airflow Orchestration: `airflow/README.md`
 
 ---
